@@ -1,0 +1,25 @@
+---
+alwaysApply: false
+---
+rules:
+  - id: models.frameworks.model_card_structure
+    description: |
+      All model cards and framework documentation must strictly adhere to the standardized structure as presented in the Claude Sonnet 4.5 System Card (see: https://assets.anthropic.com/m/12f214efcc2f457a/original/Claude-Sonnet-4-5-System-Card.pdf). This structure includes, but is not limited to, the following required sections in the specified order:
+        1. Title and Version
+        2. Overview & Intended Use
+        3. Capabilities
+        4. Limitations
+        5. Safety and Mitigations
+        6. Training Data & Methodology
+        7. Evaluation
+        8. Monitoring & Maintenance
+        9. Ethical Considerations
+        10. References & Further Reading
+      - Each section must be clearly labeled, comprehensive, and reflect the latest available information.
+      - Deviations from this format are not permitted unless explicitly authorized by governance/architecture review.
+      - When updating, ensure consistency throughout and promptly apply any new organizational documentation or regulatory requirements.
+      - Rationales, design decisions, and risks must be documented wherever applicable.
+      - Subsections or additional detail should mirror the depth and transparency exemplified in the cited system card.
+    severity: error
+    references:
+      - https://assets.anthropic.com/m/12f214efcc2f457a/original/Claude-Sonnet-4-5-System-Card.pdf

@@ -1,0 +1,290 @@
+---
+description: Logging, metrics, and observability standards
+alwaysApply: true
+---
+
+# Cursor Rules: Observability Standards
+
+rules:
+  - id: observability.logging.structured_logging
+    description: |
+      All logging must use structured logging with appropriate log levels.
+      - Use Python's `logging` module for all logging
+      - Use structured logging with `extra` parameter for context
+      - Use appropriate log levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+      - Include relevant context in log messages (module_name, operation, request_id)
+      - Use consistent log message formatting across the codebase
+      - Never log sensitive information (API keys, passwords, PII)
+    severity: error
+
+  - id: observability.logging.log_levels
+    description: |
+      Log levels must be used appropriately for different scenarios.
+      - DEBUG: Detailed diagnostic information for development and debugging
+      - INFO: General informational messages about normal operation
+      - WARNING: Warning messages for potentially problematic situations
+      - ERROR: Error messages for failures that don't stop execution
+      - CRITICAL: Critical errors that may cause system failure
+      - Use `exc_info=True` when logging exceptions to include stack traces
+      - Log at the appropriate level for the audience (developers vs operators)
+    severity: error
+
+  - id: observability.logging.context
+    description: |
+      Log messages must include sufficient context for debugging.
+      - Include module name, operation name, and relevant identifiers
+      - Include request/operation context when available
+      - Use structured fields in `extra` parameter for log aggregation
+      - Include timing information for performance-critical operations
+      - Include error context (error type, message, relevant parameters)
+      - Use correlation IDs for tracing requests across modules
+    severity: error
+
+  - id: observability.logging.sensitive_data
+    description: |
+      Sensitive data must never be logged.
+      - Never log API keys, passwords, tokens, or secrets
+      - Never log PII (personally identifiable information)
+      - Sanitize data before logging (use `***REDACTED***` for sensitive fields)
+      - Use helper functions to sanitize data structures before logging
+      - Review log output to ensure no sensitive data is exposed
+      - Configure log rotation and retention policies
+    severity: error
+
+  - id: observability.metrics.collection
+    description: |
+      Metrics must be collected for all module operations.
+      - Use MetricsCollector for all module operation metrics
+      - Record execution time, success/failure, and error information
+      - Use decorators or wrappers for automatic metrics collection
+      - Track operation-level and module-level metrics
+      - Include metadata in metrics (module_name, operation, timestamp)
+      - Export metrics in a format suitable for monitoring systems
+    severity: error
+
+  - id: observability.metrics.operation_tracking
+    description: |
+      Operation metrics must track key performance indicators.
+      - Track call count, total time, and average time per operation
+      - Track success and failure counts
+      - Track min/max execution times
+      - Track error rates and error types
+      - Track last call time and activity patterns
+      - Maintain metrics history for trend analysis
+    severity: error
+
+  - id: observability.metrics.thread_safety
+    description: |
+      Metrics collection must be thread-safe.
+      - Use thread-safe data structures (locks, atomic operations)
+      - Use MetricsCollector's built-in thread safety mechanisms
+      - Ensure metrics updates don't block operation execution
+      - Handle concurrent access correctly in multi-threaded environments
+      - Test metrics collection under concurrent load
+    severity: error
+
+  - id: observability.health.health_checks
+    description: |
+      Health checks must be implemented for all modules and system components.
+      - Use HealthChecker for module health monitoring
+      - Implement health check endpoints for API services
+      - Check module availability, initialization status, and metrics
+      - Return health status (healthy, degraded, unhealthy, unknown)
+      - Include detailed health check results with diagnostics
+      - Monitor health check results and alert on failures
+    severity: error
+
+  - id: observability.health.status_levels
+    description: |
+      Health status must be determined using clear criteria.
+      - HEALTHY: All checks passed, normal operation
+      - DEGRADED: Some checks failed but system is operational
+      - UNHEALTHY: Critical checks failed, system may not function correctly
+      - UNKNOWN: Unable to determine health status
+      - Use failure rate thresholds to determine health status
+      - Include health check details and timestamps
+    severity: error
+
+  - id: observability.monitoring.alerting
+    description: |
+      Monitoring and alerting must be configured for production systems.
+      - Set up alerts for error rates exceeding thresholds
+      - Set up alerts for health check failures
+      - Set up alerts for performance degradation
+      - Configure alerting thresholds based on service level objectives
+      - Include context in alerts (module, operation, error details)
+      - Test alerting systems regularly
+    severity: warning
+
+  - id: observability.monitoring.dashboards
+    description: |
+      Metrics and health data must be available for monitoring dashboards.
+      - Export metrics in standard formats (JSON, Prometheus, etc.)
+      - Provide health check summaries and detailed results
+      - Include historical metrics for trend analysis
+      - Make metrics accessible via API endpoints
+      - Document metrics schema and available data
+    severity: warning
+
+  - id: observability.tracing.distributed_tracing
+    description: |
+      Distributed tracing should be implemented for complex operations.
+      - Use correlation IDs to trace requests across modules
+      - Include trace context in log messages
+      - Track operation dependencies and call chains
+      - Measure end-to-end latency for multi-module operations
+      - Use tracing to identify performance bottlenecks
+    severity: warning
+
+  - id: observability.performance.timing
+    description: |
+      Performance-critical operations must include timing measurements.
+      - Measure execution time for all module operations
+      - Track timing at operation and module levels
+      - Identify slow operations and optimize
+      - Set performance budgets and alert on violations
+      - Document expected performance characteristics
+    severity: warning
+
+  - id: observability.quality.metrics_accuracy
+    description: |
+      Metrics must be accurate and reliable.
+      - Ensure metrics are collected consistently
+      - Handle metrics collection failures gracefully (don't break operations)
+      - Validate metrics data before exporting
+      - Test metrics collection in test environments
+      - Monitor metrics collection for anomalies
+    severity: error
+
+examples:
+  - description: "Structured logging with context"
+    language: python
+    code: |
+      import logging
+      from typing import Any, Dict
+      
+      logger = logging.getLogger(__name__)
+      
+      
+      def execute_operation(module_name: str, operation: str, params: Dict[str, Any]):
+          """Execute operation with structured logging"""
+          logger.info(
+              f"Executing operation '{operation}' in module '{module_name}'",
+              extra={
+                  "module_name": module_name,
+                  "operation": operation,
+                  "params_keys": list(params.keys())
+              }
+          )
+          
+          try:
+              result = perform_operation(operation, params)
+              logger.info(
+                  f"Operation '{operation}' completed successfully",
+                  extra={
+                      "module_name": module_name,
+                      "operation": operation,
+                      "result_size": len(str(result))
+                  }
+              )
+              return result
+          except Exception as e:
+              logger.error(
+                  f"Operation '{operation}' failed: {e}",
+                  exc_info=True,
+                  extra={
+                      "module_name": module_name,
+                      "operation": operation,
+                      "error_type": type(e).__name__
+                  }
+              )
+              raise
+
+  - description: "Metrics collection with decorator"
+    language: python
+    code: |
+      from mavaia_core.brain.metrics import record_operation
+      import time
+      from functools import wraps
+      
+      
+      def track_operation(module_name: str):
+          """Decorator to track operation metrics"""
+          def decorator(func):
+              @wraps(func)
+              def wrapper(operation: str, params: dict[str, Any], *args, **kwargs):
+                  start_time = time.time()
+                  success = True
+                  error = None
+                  
+                  try:
+                      result = func(operation, params, *args, **kwargs)
+                      return result
+                  except Exception as e:
+                      success = False
+                      error = str(e)
+                      raise
+                  finally:
+                      execution_time = time.time() - start_time
+                      record_operation(
+                          module_name=module_name,
+                          operation=operation,
+                          execution_time=execution_time,
+                          success=success,
+                          error=error
+                      )
+              
+              return wrapper
+          return decorator
+
+  - description: "Health check implementation"
+    language: python
+    code: |
+      from mavaia_core.brain.health import get_health_checker, HealthStatus
+      
+      
+      def check_system_health():
+          """Check health of all system components"""
+          health_checker = get_health_checker()
+          
+          # Check all modules
+          all_checks = health_checker.check_all_modules()
+          
+          # Determine overall system health
+          unhealthy_count = sum(
+              1 for check in all_checks.values()
+              if check.status == HealthStatus.UNHEALTHY
+          )
+          
+          if unhealthy_count > 0:
+              return {
+                  "status": "unhealthy",
+                  "unhealthy_modules": unhealthy_count,
+                  "total_modules": len(all_checks),
+                  "details": all_checks
+              }
+          
+          degraded_count = sum(
+              1 for check in all_checks.values()
+              if check.status == HealthStatus.DEGRADED
+          )
+          
+          if degraded_count > 0:
+              return {
+                  "status": "degraded",
+                  "degraded_modules": degraded_count,
+                  "total_modules": len(all_checks),
+                  "details": all_checks
+              }
+          
+          return {
+              "status": "healthy",
+              "total_modules": len(all_checks),
+              "details": all_checks
+          }
+
+references:
+  - Python logging: https://docs.python.org/3/library/logging.html
+  - Mavaia metrics: mavaia_core/brain/metrics.py
+  - Mavaia health: mavaia_core/brain/health.py
+  - Structured logging: https://www.structlog.org/

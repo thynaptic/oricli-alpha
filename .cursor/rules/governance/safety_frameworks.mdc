@@ -1,0 +1,40 @@
+---
+alwaysApply: false
+---
+rules:
+  - id: safety.frameworks.standardized_structure
+    description: |
+      All safety framework documents, including but not limited to Mavaia Safety Framework, Cognitive Isolation Policies, Reasoning Guard Specifications, and Tool-calling Safety Boundaries, must conform to the "Hard Technical Doctrine" style and strictly adhere to the following section structure and requirements:
+        1. Threat Model
+           - Define all credible threat actors, vectors, and scenarios.
+           - Clearly enumerate assumptions, privilege boundaries, and exposure surfaces.
+           - Reference external dependencies and environmental constraints explicitly.
+        2. Safety Envelope
+           - Quantitatively and qualitatively delimit the operational parameters of system safety.
+           - Specify out-of-scope behaviors and boundary conditions with supporting rationale.
+        3. Misuse Prevention
+           - Detail prescribed measures, controls, and protocols preventing prohibited or unsafe usage.
+           - Document policy fallback procedures for anomalous behavior.
+        4. Failure Modes
+           - Enumerate all known and hypothesized failure or degradation scenarios.
+           - Cross-reference evidence from testing, incident logs, or simulations.
+        5. Verification
+           - Describe the methods, metrics, and frequency of safety assurance, including evaluation protocol references.
+           - State test coverage, auditing schedules, and evidence protocols.
+        6. Operational Safeguards
+           - Specify real-time mitigations, monitoring, and alerting practicable in deployed contexts.
+           - Define escalation pathways and auto-mitigative logic.
+        7. Deployment Constraints
+           - List all enforced and recommended restrictions for deployment environments, including isolation domains and runtime controls.
+           - Clarify adaptation requirements for different trust boundaries or geographies.
+      - No section may be omitted, merged, or reordered.
+      - Clinical, mechanistic, and evidence-driven language is mandatory; zero narrative or marketing prose.
+      - All claims, controls, or parameters must directly reference protocol, test data, or explicit mechanism.
+      - Deviations from this structure or style are strictly prohibited and require formal governance sign-off.
+    severity: error
+    references:
+      - .cursor/rules/thynaptic-publications.mdc (Hard Technical Doctrine)
+      - Claude Sonnet 4.5 System Card format exemplar
+      - (Internal) Mavaia Engineering Handbook
+      - Project-specific risk and assurance protocol documents
+

@@ -1,0 +1,303 @@
+---
+description: External service integration patterns and standards
+alwaysApply: false
+globs: mavaia_core/services/**/*.py
+---
+
+# Cursor Rules: Service Integration Standards
+
+rules:
+  - id: service_integration.patterns.interface_abstraction
+    description: |
+      External service integrations must use interface abstractions.
+      - Define clear interfaces for external service interactions
+      - Use dependency injection for service dependencies
+      - Support multiple service implementations (e.g., different providers)
+      - Document service interfaces and contracts
+      - Test service integrations with mocks and stubs
+    severity: error
+
+  - id: service_integration.patterns.error_handling
+    description: |
+      Service integration errors must be handled gracefully.
+      - Catch and handle service-specific exceptions
+      - Provide meaningful error messages for service failures
+      - Log service errors with appropriate context
+      - Return structured error responses (success, error, error_code)
+      - Implement fallback mechanisms when appropriate
+    severity: error
+
+  - id: service_integration.patterns.retry_logic
+    description: |
+      Retry logic must be implemented for transient service failures.
+      - Use exponential backoff for retries
+      - Set maximum retry attempts
+      - Distinguish between retryable and non-retryable errors
+      - Log retry attempts and outcomes
+      - Document retry policies and behavior
+    severity: error
+
+  - id: service_integration.patterns.timeouts
+    description: |
+      Timeouts must be configured for all external service calls.
+      - Set appropriate timeout values for service calls
+      - Use different timeouts for different operations
+      - Handle timeout errors gracefully
+      - Document timeout values and rationale
+      - Monitor timeout occurrences
+    severity: error
+
+  - id: service_integration.patterns.rate_limiting
+    description: |
+      Rate limiting must be implemented for external service calls.
+      - Respect service rate limits
+      - Implement client-side rate limiting when needed
+      - Handle rate limit errors appropriately
+      - Use exponential backoff on rate limit errors
+      - Document rate limit policies
+    severity: error
+
+  - id: service_integration.patterns.validation
+    description: |
+      Service inputs and outputs must be validated.
+      - Validate inputs before sending to external services
+      - Validate outputs from external services
+      - Use Pydantic models for request/response validation
+      - Handle validation errors appropriately
+      - Document validation requirements
+    severity: error
+
+  - id: service_integration.patterns.circuit_breaker
+    description: |
+      Circuit breaker pattern should be used for unreliable services.
+      - Implement circuit breaker for services with high failure rates
+      - Open circuit after threshold failures
+      - Provide fallback behavior when circuit is open
+      - Monitor circuit breaker state
+      - Document circuit breaker configuration
+    severity: warning
+
+  - id: service_integration.patterns.service_discovery
+    description: |
+      Service discovery should be used for dynamic service locations.
+      - Support service discovery mechanisms when needed
+      - Handle service endpoint changes gracefully
+      - Document service discovery configuration
+      - Test service discovery behavior
+    severity: warning
+
+  - id: service_integration.patterns.health_checks
+    description: |
+      Service health checks must be implemented.
+      - Check service availability before use
+      - Implement health check endpoints for services
+      - Monitor service health status
+      - Handle unhealthy service states appropriately
+      - Document health check procedures
+    severity: warning
+
+  - id: service_integration.patterns.versioning
+    description: |
+      Service versioning must be handled appropriately.
+      - Support service API versioning
+      - Handle service API changes and deprecations
+      - Document service version requirements
+      - Test with different service versions when applicable
+    severity: warning
+
+  - id: service_integration.patterns.security
+    description: |
+      Service integrations must be secure.
+      - Use secure authentication mechanisms (API keys, OAuth, etc.)
+      - Encrypt sensitive data in transit (HTTPS/TLS)
+      - Validate service certificates
+      - Never log or expose service credentials
+      - Rotate service credentials regularly
+    severity: error
+
+  - id: service_integration.patterns.monitoring
+    description: |
+      Service integrations must be monitored.
+      - Track service call metrics (latency, success rate, error rate)
+      - Monitor service availability and health
+      - Alert on service failures and degradations
+      - Track service usage and costs
+      - Document monitoring and alerting setup
+    severity: warning
+
+  - id: service_integration.quality.testing
+    description: |
+      Service integrations must be thoroughly tested.
+      - Test service integration with mocks
+      - Test error handling and retry logic
+      - Test timeout and rate limiting behavior
+      - Test with service simulators when available
+      - Document testing procedures
+    severity: error
+
+examples:
+  - description: "Service integration with retry and error handling"
+    language: python
+    code: |
+      import time
+      import requests
+      from typing import Dict, Any, Optional
+      from mavaia_core.exceptions import MavaiaError
+      
+      
+      class ServiceIntegrationError(MavaiaError):
+          """Base exception for service integration errors"""
+          pass
+      
+      
+      class ExternalServiceClient:
+          """Client for external service with retry and error handling"""
+          
+          def __init__(
+              self,
+              base_url: str,
+              api_key: str,
+              timeout: int = 30,
+              max_retries: int = 3,
+              retry_delay: float = 1.0
+          ):
+              self.base_url = base_url
+              self.api_key = api_key
+              self.timeout = timeout
+              self.max_retries = max_retries
+              self.retry_delay = retry_delay
+          
+          def call_service(
+              self,
+              endpoint: str,
+              params: Dict[str, Any]
+          ) -> Dict[str, Any]:
+              """Call external service with retry logic"""
+              url = f"{self.base_url}/{endpoint}"
+              headers = {"Authorization": f"Bearer {self.api_key}"}
+              
+              last_error = None
+              for attempt in range(self.max_retries):
+                  try:
+                      response = requests.get(
+                          url,
+                          params=params,
+                          headers=headers,
+                          timeout=self.timeout
+                      )
+                      response.raise_for_status()
+                      return {"success": True, "data": response.json()}
+                  
+                  except requests.exceptions.Timeout:
+                      last_error = "timeout"
+                      if attempt < self.max_retries - 1:
+                          time.sleep(self.retry_delay * (2 ** attempt))  # Exponential backoff
+                          continue
+                  
+                  except requests.exceptions.HTTPError as e:
+                      if e.response.status_code in (429, 503, 502):  # Retryable errors
+                          last_error = f"http_error_{e.response.status_code}"
+                          if attempt < self.max_retries - 1:
+                              time.sleep(self.retry_delay * (2 ** attempt))
+                              continue
+                      else:
+                          # Non-retryable error
+                          return {
+                              "success": False,
+                              "error": f"HTTP {e.response.status_code}: {str(e)}",
+                              "error_code": "http_error"
+                          }
+                  
+                  except Exception as e:
+                      return {
+                          "success": False,
+                          "error": str(e),
+                          "error_code": "unknown_error"
+                      }
+              
+              # All retries exhausted
+              return {
+                  "success": False,
+                  "error": f"Service call failed after {self.max_retries} attempts: {last_error}",
+                  "error_code": "max_retries_exceeded"
+              }
+
+  - description: "Service with circuit breaker pattern"
+    language: python
+    code: |
+      from enum import Enum
+      from datetime import datetime, timedelta
+      from typing import Dict, Any
+      
+      
+      class CircuitState(Enum):
+          CLOSED = "closed"
+          OPEN = "open"
+          HALF_OPEN = "half_open"
+      
+      
+      class CircuitBreaker:
+          """Circuit breaker for service calls"""
+          
+          def __init__(
+              self,
+              failure_threshold: int = 5,
+              timeout_seconds: int = 60,
+              half_open_timeout: int = 30
+          ):
+              self.failure_threshold = failure_threshold
+              self.timeout_seconds = timeout_seconds
+              self.half_open_timeout = half_open_timeout
+              self.state = CircuitState.CLOSED
+              self.failure_count = 0
+              self.last_failure_time: Optional[datetime] = None
+              self.last_success_time: Optional[datetime] = None
+          
+          def call(self, func, *args, **kwargs) -> Dict[str, Any]:
+              """Execute function with circuit breaker protection"""
+              if self.state == CircuitState.OPEN:
+                  if self._should_attempt_reset():
+                      self.state = CircuitState.HALF_OPEN
+                  else:
+                      return {
+                          "success": False,
+                          "error": "Circuit breaker is OPEN",
+                          "error_code": "circuit_open"
+                      }
+              
+              try:
+                  result = func(*args, **kwargs)
+                  self._on_success()
+                  return result
+              except Exception as e:
+                  self._on_failure()
+                  raise
+          
+          def _on_success(self):
+              """Handle successful call"""
+              self.failure_count = 0
+              self.last_success_time = datetime.now()
+              if self.state == CircuitState.HALF_OPEN:
+                  self.state = CircuitState.CLOSED
+          
+          def _on_failure(self):
+              """Handle failed call"""
+              self.failure_count += 1
+              self.last_failure_time = datetime.now()
+              
+              if self.failure_count >= self.failure_threshold:
+                  self.state = CircuitState.OPEN
+          
+          def _should_attempt_reset(self) -> bool:
+              """Check if circuit should attempt reset"""
+              if self.last_failure_time:
+                  time_since_failure = datetime.now() - self.last_failure_time
+                  return time_since_failure.total_seconds() >= self.timeout_seconds
+              return True
+
+references:
+  - Retry patterns: https://docs.microsoft.com/en-us/azure/architecture/patterns/retry
+  - Circuit breaker pattern: https://docs.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+  - Mavaia service implementations: mavaia_core/services/
+  - Web fetch service: mavaia_core/services/web_fetch_service.py
+  - Tool registry: mavaia_core/services/tool_registry.py

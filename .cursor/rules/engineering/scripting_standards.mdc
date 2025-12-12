@@ -1,0 +1,268 @@
+---
+description: Script and tooling standards
+alwaysApply: false
+globs: scripts/**/*
+---
+
+# Cursor Rules: Script & Tooling Standards
+
+rules:
+  - id: scripting.structure.organization
+    description: |
+      Scripts must be organized consistently.
+      - Place all scripts in the `scripts/` directory
+      - Use descriptive script names (e.g., `start_server.py`, `check_dependencies.py`)
+      - Group related scripts together
+      - Document script purpose in file header
+      - Include shebang line for executable scripts (`#!/usr/bin/env python3`)
+      - Make scripts executable when appropriate (`chmod +x`)
+    severity: error
+
+  - id: scripting.structure.documentation
+    description: |
+      Scripts must be well-documented.
+      - Include module-level docstring describing script purpose
+      - Document command-line arguments and options
+      - Document environment variables used
+      - Include usage examples in docstring
+      - Document error conditions and exit codes
+      - Keep documentation up-to-date with script changes
+    severity: error
+
+  - id: scripting.structure.error_handling
+    description: |
+      Scripts must handle errors gracefully.
+      - Use try/except blocks for error handling
+      - Provide clear, actionable error messages
+      - Use appropriate exit codes (0 for success, non-zero for failure)
+      - Log errors appropriately
+      - Clean up resources on error (use try/finally or context managers)
+      - Handle missing dependencies gracefully
+    severity: error
+
+  - id: scripting.structure.argument_parsing
+    description: |
+      Scripts must use proper argument parsing.
+      - Use argparse or click for command-line arguments
+      - Provide help text for all arguments
+      - Validate argument values
+      - Provide sensible defaults
+      - Document argument requirements
+    severity: error
+
+  - id: scripting.structure.logging
+    description: |
+      Scripts must use appropriate logging.
+      - Use Python's logging module for script output
+      - Use appropriate log levels (INFO, WARNING, ERROR)
+      - Provide progress feedback for long-running scripts
+      - Log errors with full context
+      - Support quiet/verbose modes when appropriate
+    severity: warning
+
+  - id: scripting.quality.testing
+    description: |
+      Scripts should be tested when possible.
+      - Test script functionality with unit tests
+      - Test error handling and edge cases
+      - Test with different argument combinations
+      - Document testing procedures
+      - Include example test cases
+    severity: warning
+
+  - id: scripting.quality.maintainability
+    description: |
+      Scripts must be maintainable.
+      - Use clear, descriptive variable names
+      - Break complex scripts into functions
+      - Avoid code duplication
+      - Follow Python style guidelines
+      - Include type hints when helpful
+    severity: warning
+
+  - id: scripting.shell.best_practices
+    description: |
+      Shell scripts must follow best practices.
+      - Use `set -euo pipefail` for error handling
+      - Quote variables to prevent word splitting
+      - Use functions for reusable code
+      - Document shell script behavior
+      - Use consistent indentation and formatting
+    severity: error
+
+  - id: scripting.shell.portability
+    description: |
+      Shell scripts should be portable.
+      - Use `/bin/bash` or `/usr/bin/env bash` for bash scripts
+      - Avoid bash-specific features when possible
+      - Test scripts on different platforms
+      - Document platform requirements
+    severity: warning
+
+  - id: scripting.tooling.utilities
+    description: |
+      Utility scripts must be reusable and well-documented.
+      - Create reusable utility functions
+      - Document utility script APIs
+      - Provide examples of utility usage
+      - Make utilities importable as modules
+      - Test utility functions
+    severity: warning
+
+examples:
+  - description: "Well-structured Python script"
+    language: python
+    code: |
+      #!/usr/bin/env python3
+      """
+      Server Startup Script
+      
+      Provides a convenient way to start the Mavaia API server with
+      dependency checking and error handling.
+      
+      Usage:
+          python scripts/start_server.py [--port PORT] [--host HOST]
+      
+      Environment Variables:
+          MAVAIA_API_PORT: API server port (default: 8001)
+          MAVAIA_API_KEY: API key for authentication (optional)
+          MAVAIA_REQUIRE_AUTH: Require authentication (default: false)
+      
+      Exit Codes:
+          0: Server started successfully
+          1: Missing dependencies
+          2: Server startup failed
+      """
+      
+      import argparse
+      import sys
+      import os
+      from pathlib import Path
+      
+      
+      def check_dependencies() -> bool:
+          """Check if required dependencies are installed"""
+          try:
+              import uvicorn
+              import fastapi
+              return True
+          except ImportError as e:
+              print(f"Error: Missing required dependency: {e.name}", file=sys.stderr)
+              print("\nTo install dependencies, run:", file=sys.stderr)
+              print("  pip install -e .", file=sys.stderr)
+              return False
+      
+      
+      def start_server(port: int, host: str) -> None:
+          """Start the API server"""
+          try:
+              from mavaia_core.api.server import main
+              # Configure server settings
+              os.environ["MAVAIA_API_PORT"] = str(port)
+              os.environ["MAVAIA_API_HOST"] = host
+              main()
+          except Exception as e:
+              print(f"Error starting server: {e}", file=sys.stderr)
+              import traceback
+              traceback.print_exc()
+              sys.exit(2)
+      
+      
+      def main():
+          """Main script entry point"""
+          parser = argparse.ArgumentParser(
+              description="Start Mavaia API server",
+              formatter_class=argparse.RawDescriptionHelpFormatter,
+              epilog=__doc__
+          )
+          parser.add_argument(
+              "--port",
+              type=int,
+              default=int(os.getenv("MAVAIA_API_PORT", "8001")),
+              help="API server port (default: 8001)"
+          )
+          parser.add_argument(
+              "--host",
+              type=str,
+              default=os.getenv("MAVAIA_API_HOST", "0.0.0.0"),
+              help="API server host (default: 0.0.0.0)"
+          )
+          
+          args = parser.parse_args()
+          
+          # Check dependencies
+          if not check_dependencies():
+              sys.exit(1)
+          
+          # Start server
+          start_server(args.port, args.host)
+      
+      
+      if __name__ == "__main__":
+          main()
+
+  - description: "Well-structured shell script"
+    language: bash
+    code: |
+      #!/bin/bash
+      # Mavaia Core - Server Launcher
+      # Starts both API and UI servers with proper error handling
+      #
+      # Usage: ./scripts/start_servers.sh [OPTIONS]
+      #
+      # Environment Variables:
+      #   MAVAIA_API_PORT: API server port (default: 8001)
+      #   MAVAIA_UI_PORT: UI server port (default: 5000)
+      #   MAVAIA_OPEN_BROWSER: Open browser automatically (default: true)
+      
+      set -euo pipefail
+      
+      # Configuration
+      API_PORT="${MAVAIA_API_PORT:-8001}"
+      UI_PORT="${MAVAIA_UI_PORT:-5000}"
+      OPEN_BROWSER="${MAVAIA_OPEN_BROWSER:-true}"
+      
+      # Get script directory
+      SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+      cd "$PROJECT_ROOT"
+      
+      # Cleanup function
+      cleanup() {
+          echo "[INFO] Shutting down servers..."
+          if [ -n "${API_PID:-}" ]; then
+              kill "$API_PID" 2>/dev/null || true
+          fi
+          if [ -n "${UI_PID:-}" ]; then
+              kill "$UI_PID" 2>/dev/null || true
+          fi
+          exit 0
+      }
+      
+      # Set trap for cleanup
+      trap cleanup SIGINT SIGTERM EXIT
+      
+      # Start servers
+      echo "Starting API server on port $API_PORT..."
+      python3 scripts/start_server.py --port "$API_PORT" &
+      API_PID=$!
+      
+      echo "Starting UI server on port $UI_PORT..."
+      python3 scripts/start_ui.py --port "$UI_PORT" &
+      UI_PID=$!
+      
+      # Wait for servers to be ready
+      sleep 2
+      
+      # Open browser if requested
+      if [ "$OPEN_BROWSER" = "true" ]; then
+          open "http://localhost:$UI_PORT" 2>/dev/null || true
+      fi
+      
+      # Wait for processes
+      wait
+
+references:
+  - Python argparse: https://docs.python.org/3/library/argparse.html
+  - Shell script best practices: https://google.github.io/styleguide/shellguide.html
+  - Mavaia scripts: scripts/

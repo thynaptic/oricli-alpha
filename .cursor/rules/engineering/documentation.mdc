@@ -1,0 +1,303 @@
+---
+description: Code and API documentation standards
+alwaysApply: true
+---
+
+# Cursor Rules: Documentation Standards
+
+rules:
+  - id: documentation.code.docstrings
+    description: |
+      All public functions, classes, and methods must have docstrings.
+      - Use Google-style or NumPy-style docstrings consistently
+      - Include description, parameters, return values, and exceptions
+      - Document complex algorithms and business logic
+      - Include usage examples for complex functions
+      - Keep docstrings up-to-date with code changes
+    severity: error
+
+  - id: documentation.code.type_hints
+    description: |
+      Type hints must be used for all public APIs.
+      - Use type hints for function parameters and return types
+      - Use modern typing (PEP 604, PEP 585) when possible
+      - Document complex types with type aliases
+      - Use TypedDict for dictionary structures
+      - Keep type hints accurate and complete
+    severity: error
+
+  - id: documentation.code.inline_comments
+    description: |
+      Inline comments must explain why, not what.
+      - Use comments to explain complex logic and decisions
+      - Avoid obvious comments that restate the code
+      - Document non-obvious behavior and edge cases
+      - Explain workarounds and temporary solutions
+      - Keep comments up-to-date with code changes
+    severity: warning
+
+  - id: documentation.api.openapi
+    description: |
+      API endpoints must be documented in OpenAPI/Swagger.
+      - Use FastAPI's automatic OpenAPI generation
+      - Add detailed descriptions to all endpoints
+      - Document request/response schemas
+      - Include example requests and responses
+      - Tag endpoints appropriately
+      - Keep OpenAPI documentation current
+    severity: error
+
+  - id: documentation.api.endpoint_documentation
+    description: |
+      API endpoint docstrings must be comprehensive.
+      - Document endpoint purpose and behavior
+      - Document all parameters (path, query, body)
+      - Document response format and status codes
+      - Document authentication requirements
+      - Document error conditions and responses
+      - Include usage examples
+    severity: error
+
+  - id: documentation.readme.structure
+    description: |
+      README files must follow consistent structure.
+      - Include project description and purpose
+      - Include installation and setup instructions
+      - Include usage examples
+      - Include API documentation links
+      - Include contribution guidelines
+      - Keep README up-to-date
+    severity: error
+
+  - id: documentation.readme.examples
+    description: |
+      README files must include working examples.
+      - Provide code examples for common use cases
+      - Include example requests and responses
+      - Show integration examples
+      - Test examples to ensure they work
+      - Keep examples current with API changes
+    severity: error
+
+  - id: documentation.changelog.format
+    description: |
+      Changelogs must follow consistent format.
+      - Use semantic versioning (MAJOR.MINOR.PATCH)
+      - Group changes by type (Added, Changed, Fixed, Removed)
+      - Include migration notes for breaking changes
+      - Include links to related issues/PRs
+      - Keep changelog chronological
+    severity: warning
+
+  - id: documentation.migration.guides
+    description: |
+      Migration guides must be provided for breaking changes.
+      - Document breaking changes clearly
+      - Provide step-by-step migration instructions
+      - Include before/after code examples
+      - Document deprecation timelines
+      - Link to migration guides from changelog
+    severity: warning
+
+  - id: documentation.module.documentation
+    description: |
+      Modules must be documented comprehensively.
+      - Document module purpose and capabilities
+      - Document all supported operations
+      - Document operation parameters and return values
+      - Document module dependencies and requirements
+      - Include usage examples
+      - Document module limitations and known issues
+    severity: error
+
+  - id: documentation.architecture.design_docs
+    description: |
+      Architecture and design decisions must be documented.
+      - Document architectural patterns and decisions
+      - Document design rationale and trade-offs
+      - Keep architecture documentation current
+      - Include diagrams when helpful
+      - Reference related documentation
+    severity: warning
+
+  - id: documentation.quality.accuracy
+    description: |
+      Documentation must be accurate and current.
+      - Review documentation with code changes
+      - Test code examples in documentation
+      - Update documentation for API changes
+      - Remove outdated documentation
+      - Verify documentation completeness
+    severity: error
+
+  - id: documentation.quality.clarity
+    description: |
+      Documentation must be clear and accessible.
+      - Use clear, concise language
+      - Avoid jargon and technical terms without explanation
+      - Use consistent terminology
+      - Structure documentation logically
+      - Include table of contents for long documents
+    severity: warning
+
+examples:
+  - description: "Comprehensive function docstring"
+    language: python
+    code: |
+      def execute_operation(
+          module_name: str,
+          operation: str,
+          params: dict[str, Any]
+      ) -> dict[str, Any]:
+          """
+          Execute an operation in a brain module.
+          
+          This function routes operation requests to the appropriate module
+          and handles error cases. It validates parameters before execution
+          and tracks metrics for observability.
+          
+          Args:
+              module_name: Name of the module to execute operation in
+              operation: Operation name (must be in module's operations list)
+              params: Operation parameters (validated against operation schema)
+          
+          Returns:
+              Dictionary containing operation result with the following structure:
+              - "result": The operation result data
+              - "metadata": Optional metadata about the operation
+          
+          Raises:
+              ModuleNotFoundError: If the specified module is not found
+              ValueError: If the operation is not supported by the module
+              InvalidParameterError: If parameters fail validation
+              ModuleOperationError: If the operation execution fails
+          
+          Example:
+              >>> result = execute_operation(
+              ...     "reasoning",
+              ...     "reason",
+              ...     {"query": "What is AI?", "reasoning_type": "analytical"}
+              ... )
+              >>> print(result["result"])
+              "AI is the simulation of human intelligence..."
+          """
+          pass
+
+  - description: "API endpoint documentation"
+    language: python
+    code: |
+      from fastapi import APIRouter, HTTPException
+      from pydantic import BaseModel
+      
+      
+      router = APIRouter(prefix="/v1", tags=["modules"])
+      
+      
+      class OperationRequest(BaseModel):
+          """Request model for module operation execution"""
+          operation: str
+          params: dict[str, Any]
+      
+      
+      @router.post("/modules/{module_name}/execute")
+      async def execute_module_operation(
+          module_name: str,
+          request: OperationRequest
+      ) -> dict[str, Any]:
+          """
+          Execute an operation in a brain module.
+          
+          This endpoint allows you to execute any operation supported by
+          a registered brain module. The operation and parameters are
+          validated before execution.
+          
+          **Authentication**: Optional (if MAVAIA_REQUIRE_AUTH=true, then required)
+          
+          **Parameters**:
+          - `module_name` (path): Name of the module to execute operation in
+          - `operation` (body): Operation name
+          - `params` (body): Operation parameters
+          
+          **Returns**:
+          - 200: Operation completed successfully
+          - 400: Invalid request (missing parameters, validation error)
+          - 404: Module not found
+          - 500: Operation execution failed
+          
+          **Example Request**:
+          ```json
+          {
+              "operation": "reason",
+              "params": {
+                  "query": "What is artificial intelligence?",
+                  "reasoning_type": "analytical"
+              }
+          }
+          ```
+          
+          **Example Response**:
+          ```json
+          {
+              "result": {
+                  "reasoning": "...",
+                  "conclusion": "...",
+                  "confidence": 0.95
+              },
+              "metadata": {
+                  "execution_time": 0.234,
+                  "module_version": "1.0.0"
+              }
+          }
+          ```
+          """
+          pass
+
+  - description: "Module documentation"
+    language: python
+    code: |
+      """
+      Reasoning Module
+      
+      Provides advanced reasoning capabilities including analytical, causal,
+      and logical reasoning. Supports chain-of-thought and tree-of-thought
+      reasoning patterns.
+      
+      Operations:
+      - `reason`: Perform reasoning on a query with specified reasoning type
+      - `analyze`: Analyze a problem and provide structured analysis
+      - `deduce`: Perform logical deduction from premises
+      
+      Dependencies:
+      - No external dependencies required
+      
+      Example Usage:
+          >>> from mavaia_core.brain.modules.reasoning import ReasoningModule
+          >>> module = ReasoningModule()
+          >>> module.initialize()
+          >>> result = module.execute(
+          ...     "reason",
+          ...     {
+          ...         "query": "Why is the sky blue?",
+          ...         "reasoning_type": "analytical"
+          ...     }
+          ... )
+          >>> print(result["reasoning"])
+      
+      Limitations:
+      - Reasoning quality depends on input query clarity
+      - Complex multi-step reasoning may take longer
+      - Some reasoning types may not be available in all contexts
+      """
+      
+      from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+      
+      
+      class ReasoningModule(BaseBrainModule):
+          """Reasoning module implementation"""
+          pass
+
+references:
+  - Google Python Style Guide: https://google.github.io/styleguide/pyguide.html
+  - NumPy docstring guide: https://numpydoc.readthedocs.io/
+  - FastAPI documentation: https://fastapi.tiangolo.com/tutorial/metadata/
+  - PEP 257 (Docstring Conventions): https://peps.python.org/pep-0257/

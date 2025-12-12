@@ -1,0 +1,196 @@
+---
+description: Code review and pull request standards
+alwaysApply: false
+---
+
+# Cursor Rules: Code Review & PR Standards
+
+rules:
+  - id: code_review.pr.requirements
+    description: |
+      Pull requests must meet minimum requirements before review.
+      - PRs must have clear, descriptive titles
+      - PRs must include description explaining changes and rationale
+      - PRs must link to related issues or tickets
+      - PRs must pass all CI/CD checks (tests, linting, type checking)
+      - PRs must not decrease test coverage below thresholds
+      - PRs must include appropriate documentation updates
+    severity: error
+
+  - id: code_review.pr.templates
+    description: |
+      Pull requests must use standardized templates.
+      - Use PR template with required sections
+      - Include checklist of requirements
+      - Document breaking changes clearly
+      - Include testing instructions
+      - Document migration steps if applicable
+      - Keep PR template up-to-date
+    severity: warning
+
+  - id: code_review.pr.size
+    description: |
+      Pull requests must be appropriately sized.
+      - Keep PRs focused on a single feature or fix
+      - Split large changes into multiple smaller PRs
+      - Aim for PRs that can be reviewed in <30 minutes
+      - Document rationale for large PRs
+      - Use feature flags for large feature additions
+    severity: warning
+
+  - id: code_review.review.criteria
+    description: |
+      Code reviews must evaluate specific criteria.
+      - Code correctness and functionality
+      - Adherence to coding standards and style
+      - Test coverage and quality
+      - Documentation completeness
+      - Performance implications
+      - Security considerations
+      - Architecture and design decisions
+    severity: error
+
+  - id: code_review.review.approval
+    description: |
+      Code review approval requirements must be enforced.
+      - Require at least one approval for non-critical changes
+      - Require multiple approvals for critical changes
+      - Require approval from code owners for their areas
+      - Require approval from security team for security-sensitive changes
+      - Document approval requirements in repository settings
+    severity: error
+
+  - id: code_review.review.feedback
+    description: |
+      Code review feedback must be constructive and actionable.
+      - Provide specific, actionable feedback
+      - Explain reasoning behind suggestions
+      - Suggest improvements, not just point out problems
+      - Be respectful and professional
+      - Respond to feedback promptly
+      - Resolve discussions before merging
+    severity: warning
+
+  - id: code_review.merge.policies
+    description: |
+      Merge policies must be clearly defined and enforced.
+      - Require passing CI/CD checks before merge
+      - Require code review approvals before merge
+      - Use merge strategies appropriate for project (squash, rebase, merge commit)
+      - Enforce branch protection rules
+      - Document merge policies in repository settings
+    severity: error
+
+  - id: code_review.merge.cleanup
+    description: |
+      Branches must be cleaned up after merge.
+      - Delete feature branches after merge
+      - Keep main/master branch clean
+      - Document branch retention policies
+      - Use branch naming conventions
+    severity: warning
+
+  - id: code_review.branch.naming
+    description: |
+      Branch names must follow consistent conventions.
+      - Use descriptive branch names
+      - Include issue/ticket numbers when applicable
+      - Use prefixes for branch types (feature/, fix/, hotfix/, etc.)
+      - Use kebab-case for branch names
+      - Document branch naming conventions
+    severity: warning
+
+  - id: code_review.commit.messages
+    description: |
+      Commit messages must follow conventional commit format.
+      - Use clear, descriptive commit messages
+      - Follow conventional commit format (type: description)
+      - Include issue/ticket references
+      - Explain why, not just what
+      - Use imperative mood in commit messages
+      - Keep commit messages concise but informative
+    severity: error
+
+  - id: code_review.commit.history
+    description: |
+      Commit history must be clean and meaningful.
+      - Squash or rebase commits before merging when appropriate
+      - Group related changes in single commits
+      - Avoid "WIP" or "fix typo" commits in final history
+      - Use meaningful commit messages
+      - Keep commit history linear when possible
+    severity: warning
+
+examples:
+  - description: "PR template example"
+    language: markdown
+    code: |
+      ## Description
+      
+      Brief description of changes and rationale.
+      
+      ## Related Issues
+      
+      - Closes #123
+      - Related to #456
+      
+      ## Type of Change
+      
+      - [ ] Bug fix
+      - [ ] New feature
+      - [ ] Breaking change
+      - [ ] Documentation update
+      - [ ] Performance improvement
+      - [ ] Refactoring
+      
+      ## Testing
+      
+      - [ ] Tests added/updated
+      - [ ] All tests pass
+      - [ ] Manual testing completed
+      
+      ## Checklist
+      
+      - [ ] Code follows style guidelines
+      - [ ] Self-review completed
+      - [ ] Comments added for complex code
+      - [ ] Documentation updated
+      - [ ] No new warnings generated
+      - [ ] Breaking changes documented
+      
+      ## Breaking Changes
+      
+      If this PR includes breaking changes, describe them here:
+      
+      ## Additional Notes
+      
+      Any additional information for reviewers.
+
+  - description: "Conventional commit message format"
+    language: text
+    code: |
+      feat(api): add authentication middleware
+      
+      Add authentication middleware for API endpoints with support
+      for optional and required authentication modes.
+      
+      - Implement API key validation
+      - Add authentication dependency injection
+      - Support MAVAIA_REQUIRE_AUTH environment variable
+      
+      Closes #123
+
+  - description: "Branch naming examples"
+    language: text
+    code: |
+      feature/add-metrics-tracking
+      fix/api-timeout-handling
+      hotfix/security-patch
+      refactor/module-registry
+      docs/update-api-docs
+      test/add-integration-tests
+
+references:
+  - Conventional Commits: https://www.conventionalcommits.org/
+  - GitHub PR templates: https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests
+  - Code review best practices: https://google.github.io/eng-practices/review/

@@ -1,0 +1,70 @@
+{
+  "knowledge_base_path": "knowledge_base.json",
+  "use_graph": true,
+  "use_vectors": true,
+  "similarity_threshold": 0.7,
+  "max_results": 10,
+  "graph_settings": {
+    "max_depth": 5,
+    "max_neighbors": 20,
+    "relationship_types": ["related", "causes", "part_of", "instance_of", "similar_to"]
+  },
+  "vector_settings": {
+    "embedding_model": "embedding_small",
+    "similarity_metric": "cosine",
+    "min_similarity": 0.5
+  },
+  "knowledge_domains": {
+    "general": {
+      "description": "General world knowledge",
+      "enabled": true,
+      "facts": [
+        {"fact": "The Earth orbits the Sun", "entities": ["Earth", "Sun"], "relationships": {"Earth": "orbits"}},
+        {"fact": "Water freezes at 0 degrees Celsius", "entities": ["Water", "Celsius"], "relationships": {"Water": "freezes_at"}},
+        {"fact": "Humans have 206 bones", "entities": ["Humans", "Bones"], "relationships": {"Humans": "have"}},
+        {"fact": "The speed of light is approximately 299,792,458 meters per second", "entities": ["Light", "Speed"], "relationships": {"Light": "travels_at"}},
+        {"fact": "The Great Wall of China is visible from space", "entities": ["Great Wall", "China", "Space"], "relationships": {"Great Wall": "located_in"}}
+      ]
+    },
+    "scientific": {
+      "description": "Scientific facts and concepts",
+      "enabled": true,
+      "facts": [
+        {"fact": "Photosynthesis converts light energy into chemical energy", "entities": ["Photosynthesis", "Light", "Energy"], "relationships": {"Photosynthesis": "converts"}},
+        {"fact": "DNA contains genetic information", "entities": ["DNA", "Genetic Information"], "relationships": {"DNA": "contains"}},
+        {"fact": "Gravity causes objects to fall", "entities": ["Gravity", "Objects"], "relationships": {"Gravity": "causes"}},
+        {"fact": "Atoms consist of protons, neutrons, and electrons", "entities": ["Atoms", "Protons", "Neutrons", "Electrons"], "relationships": {"Atoms": "consist_of"}},
+        {"fact": "The periodic table organizes chemical elements", "entities": ["Periodic Table", "Chemical Elements"], "relationships": {"Periodic Table": "organizes"}}
+      ]
+    },
+    "cultural": {
+      "description": "Cultural knowledge and norms",
+      "enabled": true,
+      "facts": [
+        {"fact": "Shaking hands is a common greeting in many cultures", "entities": ["Handshake", "Greeting", "Cultures"], "relationships": {"Handshake": "is_a"}},
+        {"fact": "Many cultures celebrate New Year with special traditions", "entities": ["New Year", "Traditions", "Cultures"], "relationships": {"New Year": "celebrated_by"}},
+        {"fact": "Language shapes how people think and communicate", "entities": ["Language", "Communication"], "relationships": {"Language": "shapes"}},
+        {"fact": "Art reflects cultural values and history", "entities": ["Art", "Culture", "History"], "relationships": {"Art": "reflects"}},
+        {"fact": "Food traditions vary widely across cultures", "entities": ["Food", "Traditions", "Cultures"], "relationships": {"Food": "varies_across"}}
+      ]
+    },
+    "social": {
+      "description": "Social interactions and relationships",
+      "enabled": true,
+      "facts": [
+        {"fact": "Eye contact is important in communication", "entities": ["Eye Contact", "Communication"], "relationships": {"Eye Contact": "important_for"}},
+        {"fact": "Active listening improves relationships", "entities": ["Active Listening", "Relationships"], "relationships": {"Active Listening": "improves"}},
+        {"fact": "Empathy helps understand others' perspectives", "entities": ["Empathy", "Understanding"], "relationships": {"Empathy": "helps"}},
+        {"fact": "Trust is built over time through consistent actions", "entities": ["Trust", "Actions", "Time"], "relationships": {"Trust": "built_through"}},
+        {"fact": "Social connections contribute to well-being", "entities": ["Social Connections", "Well-being"], "relationships": {"Social Connections": "contribute_to"}}
+      ]
+    }
+  },
+  "validation_rules": {
+    "check_contradictions": true,
+    "check_support": true,
+    "min_confidence": 0.5,
+    "require_source": false
+  }
+}
+

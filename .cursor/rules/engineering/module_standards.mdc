@@ -1,0 +1,113 @@
+---
+description: When creating modules for Mavaia's brain
+alwaysApply: false
+---
+# Cursor Rules: Mavaia Brain Module Standards
+
+rules:
+  - id: mavaia.module.naming_and_location
+    description: |
+      Module Python files must reside in the `brain_modules/` directory. Each module must be a class in its own file. The class name must use PascalCase and the file name must use snake_case.
+    severity: error
+
+  - id: mavaia.module.inheritance_and_structure
+    description: |
+      Each module class must inherit from `BaseBrainModule`. You must implement at minimum:
+        - a `metadata` property (returning `ModuleMetadata`)
+        - an `execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]` method
+    severity: error
+
+  - id: mavaia.module.metadata_property
+    description: |
+      The `metadata` property must return a `ModuleMetadata` instance with the following attributes:
+        - `name` (string): unique module name for routing
+        - `version` (string): semantic version
+        - `description` (string): concise summary
+        - `operations` (list of strings): supported operation names
+        - `dependencies` (list of strings): pip dependencies (may be empty)
+        - `enabled` (bool): defaults to True
+        - `model_required` (bool): True if external model required
+    severity: error
+
+  - id: mavaia.module.operation_execution
+    description: |
+      The `execute` method must:
+        - Select code paths based on the `operation` string argument (string dispatch)
+        - Raise `ValueError` for unknown operations
+        - Return operation results as a dictionary
+    severity: error
+
+  - id: mavaia.module.validation_and_initialization
+    description: |
+      Optionally implement:
+        - `validate_params(operation, params) -> bool`: For parameter validation
+        - `initialize() -> bool`: For delayed model/resource loading
+        - `cleanup() -> None`: For resource cleanup
+    severity: warning
+
+  - id: mavaia.module.parameter_handling
+    description: |
+      Input parameters for each operation must be validated. Handle errors gracefully and raise informative exceptions with helpful messages when invalid parameters are detected.
+    severity: error
+
+  - id: mavaia.module.documentation
+    description: |
+      Each public class and method must have a docstring. All supported operations and their expected parameters must be documented (in code or markdown).
+    severity: warning
+
+  - id: mavaia.module.testing
+    description: |
+      Each module must include tests, either in the `tests/` directory or directly as example code in the module.
+    severity: warning
+
+  - id: mavaia.module.discovery_rules
+    description: |
+      Module files must not be in the skiplist (e.g. `__init__.py`, `base_module.py`). Only classes inheriting from `BaseBrainModule` are auto-registered.
+    severity: error
+
+  - id: mavaia.module.best_practices
+    description: |
+      - Use semantic versioning in `metadata.version`
+      - List all dependencies in `metadata.dependencies`
+      - Use concise, relevant operation names
+      - Catch and log meaningful errors
+      - Avoid heavy computation/model loading at module import time; instead use `initialize()`
+    severity: info
+
+examples:
+  - description: "Standard module skeleton"
+    language: python
+    code: |
+      from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+      from typing import Any
+
+      class ExampleModule(BaseBrainModule):
+          """Short class docstring"""
+
+          @property
+          def metadata(self) -> ModuleMetadata:
+              return ModuleMetadata(
+                  name="example",
+                  version="1.0.0",
+                  description="Module does X",
+                  operations=["foo", "bar"],
+                  dependencies=[],
+                  enabled=True,
+                  model_required=False
+              )
+
+          def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
+              if operation == "foo":
+                  return self._foo(params)
+              elif operation == "bar":
+                  return self._bar(params)
+              else:
+                  raise ValueError(f"Unknown operation: {operation}")
+
+          def _foo(self, params: dict[str, Any]) -> dict[str, Any]:
+              # ... implementation ...
+              return {"result": "foo"}
+
+          def _bar(self, params: dict[str, Any]) -> dict[str, Any]:
+              # ... implementation ...
+              return {"result": "bar"}

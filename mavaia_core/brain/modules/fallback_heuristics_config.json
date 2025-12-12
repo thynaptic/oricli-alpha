@@ -1,0 +1,121 @@
+{
+  "fallback_chains": {
+    "low_confidence": [
+      "personality_response",
+      "conversational_defaults",
+      "generic_response"
+    ],
+    "high_confidence": [
+      "current_method",
+      "personality_response"
+    ],
+    "error": [
+      "conversational_defaults",
+      "apology_response",
+      "clarification_request"
+    ],
+    "timeout": [
+      "simple_response",
+      "acknowledgment",
+      "clarification_request"
+    ],
+    "empty_response": [
+      "personality_response",
+      "conversational_defaults",
+      "generic_greeting"
+    ],
+    "inappropriate_response": [
+      "safety_filter",
+      "conversational_defaults",
+      "neutral_response"
+    ]
+  },
+  "strategies": {
+    "confidence_threshold": 0.5,
+    "quality_threshold": 0.4,
+    "max_fallback_depth": 3,
+    "context_aware": true,
+    "adaptive_thresholds": true
+  },
+  "fallback_methods": {
+    "personality_response": {
+      "description": "Generate response using personality module",
+      "confidence_boost": 0.2,
+      "timeout": 5.0
+    },
+    "conversational_defaults": {
+      "description": "Use predefined conversational defaults",
+      "confidence_boost": 0.1,
+      "timeout": 1.0
+    },
+    "generic_response": {
+      "description": "Generic helpful response",
+      "confidence_boost": 0.0,
+      "timeout": 0.5
+    },
+    "apology_response": {
+      "description": "Apologetic response for errors",
+      "confidence_boost": -0.1,
+      "timeout": 1.0
+    },
+    "clarification_request": {
+      "description": "Ask user for clarification",
+      "confidence_boost": 0.0,
+      "timeout": 1.0
+    },
+    "simple_response": {
+      "description": "Simple acknowledgment",
+      "confidence_boost": 0.0,
+      "timeout": 0.5
+    },
+    "acknowledgment": {
+      "description": "Acknowledge user input",
+      "confidence_boost": 0.0,
+      "timeout": 0.5
+    }
+  },
+  "trigger_conditions": {
+    "low_confidence": {
+      "threshold": 0.5,
+      "priority": "medium",
+      "requires_context": false
+    },
+    "error": {
+      "priority": "high",
+      "requires_context": true
+    },
+    "timeout": {
+      "time_limit": 10.0,
+      "priority": "medium",
+      "requires_context": true
+    },
+    "empty_response": {
+      "priority": "high",
+      "requires_context": true
+    },
+    "inappropriate_response": {
+      "priority": "high",
+      "requires_context": true,
+      "requires_safety_check": true
+    }
+  },
+  "context_factors": {
+    "casual_conversation": {
+      "preferred_methods": ["personality_response", "conversational_defaults"],
+      "tolerance": "higher"
+    },
+    "formal_conversation": {
+      "preferred_methods": ["conversational_defaults", "generic_response"],
+      "tolerance": "lower"
+    },
+    "first_interaction": {
+      "preferred_methods": ["conversational_defaults", "generic_response"],
+      "tolerance": "medium"
+    },
+    "established_relationship": {
+      "preferred_methods": ["personality_response", "conversational_defaults"],
+      "tolerance": "higher"
+    }
+  }
+}
+

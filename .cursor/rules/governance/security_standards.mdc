@@ -1,0 +1,305 @@
+---
+description: Security standards and practices for Mavaia Core
+alwaysApply: true
+---
+
+# Cursor Rules: Security Standards
+
+rules:
+  - id: security.authentication.api_keys
+    description: |
+      API key management must follow strict security practices.
+      - API keys must be stored in environment variables or secure secrets management
+      - Never hardcode API keys in source code or configuration files
+      - Never log API keys or include them in error messages
+      - Use strong, randomly generated API keys (minimum 32 characters)
+      - Rotate API keys regularly and support key rotation without downtime
+      - Validate API keys using constant-time comparison to prevent timing attacks
+      - Support API key revocation and expiration
+    severity: error
+
+  - id: security.authentication.validation
+    description: |
+      Authentication validation must be secure and consistent.
+      - Validate API keys on all protected endpoints
+      - Use dependency injection for authentication to ensure consistency
+      - Return generic error messages for authentication failures (do not reveal if key exists)
+      - Implement rate limiting on authentication endpoints
+      - Log authentication failures for security monitoring
+      - Support optional authentication where appropriate (validate if provided)
+    severity: error
+
+  - id: security.data.sensitive_information
+    description: |
+      Sensitive information must be handled securely.
+      - Never log sensitive data (API keys, passwords, tokens, PII)
+      - Sanitize sensitive data in error messages and stack traces
+      - Use secure storage for sensitive configuration
+      - Encrypt sensitive data at rest when required
+      - Use secure transmission (HTTPS/TLS) for sensitive data in transit
+      - Implement data retention policies for sensitive information
+    severity: error
+
+  - id: security.data.input_sanitization
+    description: |
+      All user inputs must be validated and sanitized.
+      - Validate all inputs using Pydantic models or similar validation
+      - Sanitize inputs to prevent injection attacks (SQL, command, template injection)
+      - Validate input types, ranges, and formats
+      - Reject malformed or suspicious inputs
+      - Use parameterized queries/operations to prevent injection
+      - Limit input size to prevent resource exhaustion attacks
+    severity: error
+
+  - id: security.data.output_encoding
+    description: |
+      Output must be properly encoded to prevent injection attacks.
+      - Encode all user-generated content in responses
+      - Use appropriate encoding for different contexts (HTML, JSON, URLs)
+      - Validate and sanitize data before including in error messages
+      - Use framework-provided encoding mechanisms (FastAPI, Pydantic)
+    severity: warning
+
+  - id: security.dependencies.vulnerability_management
+    description: |
+      Dependencies must be kept secure and up-to-date.
+      - Regularly audit dependencies for known vulnerabilities
+      - Use dependency scanning tools (e.g., safety, pip-audit)
+      - Update dependencies promptly when security patches are available
+      - Pin dependency versions in requirements files
+      - Document security-related dependency updates
+      - Review and approve all new dependencies before adding
+    severity: error
+
+  - id: security.dependencies.trust
+    description: |
+      Only trusted dependencies should be used.
+      - Use well-maintained, reputable packages from PyPI
+      - Review dependency licenses for compliance
+      - Avoid dependencies with known security issues
+      - Prefer dependencies with active maintenance and security practices
+      - Document rationale for security-sensitive dependencies
+    severity: warning
+
+  - id: security.configuration.secrets_management
+    description: |
+      Secrets must be managed securely.
+      - Store secrets in environment variables or secure secrets management systems
+      - Never commit secrets to version control
+      - Use `.env` files for local development (excluded from git)
+      - Rotate secrets regularly
+      - Use different secrets for different environments
+      - Document secret requirements in deployment guides
+    severity: error
+
+  - id: security.configuration.environment
+    description: |
+      Configuration must be secure across environments.
+      - Use environment-specific configuration
+      - Validate configuration on startup
+      - Use secure defaults (e.g., require authentication in production)
+      - Document security-relevant configuration options
+      - Audit configuration changes
+    severity: warning
+
+  - id: security.api.endpoint_protection
+    description: |
+      API endpoints must be appropriately protected.
+      - Protect sensitive endpoints with authentication
+      - Implement rate limiting on public endpoints
+      - Use HTTPS in production environments
+      - Validate and sanitize all inputs
+      - Implement request size limits
+      - Use CORS appropriately (restrictive in production)
+    severity: error
+
+  - id: security.api.error_messages
+    description: |
+      API error messages must not leak sensitive information.
+      - Use generic error messages for authentication failures
+      - Do not reveal system internals in error messages
+      - Log detailed errors internally, return sanitized errors to users
+      - Use error codes for programmatic error handling
+      - Avoid exposing stack traces or internal paths in production
+    severity: error
+
+  - id: security.module.isolation
+    description: |
+      Module execution must be isolated and secure.
+      - Validate all module inputs before execution
+      - Limit resource usage (CPU, memory, time) for module operations
+      - Isolate module execution when possible (sandboxing for untrusted modules)
+      - Validate module code before loading (when loading dynamic modules)
+      - Implement module permission system for sensitive operations
+    severity: warning
+
+  - id: security.module.code_execution
+    description: |
+      Code execution must be secure and controlled.
+      - Use sandboxed environments for code execution
+      - Validate and sanitize code before execution
+      - Limit code execution resources (time, memory, network access)
+      - Audit code execution for security monitoring
+      - Implement code execution policies and restrictions
+    severity: error
+
+  - id: security.logging.sensitive_data
+    description: |
+      Logging must not expose sensitive information.
+      - Never log API keys, passwords, tokens, or PII
+      - Sanitize sensitive data in log messages
+      - Use structured logging with appropriate log levels
+      - Implement log access controls
+      - Rotate and secure log files
+      - Audit log access
+    severity: error
+
+  - id: security.logging.security_events
+    description: |
+      Security-relevant events must be logged.
+      - Log authentication failures and successes
+      - Log authorization failures
+      - Log suspicious activities (repeated failures, unusual patterns)
+      - Log security configuration changes
+      - Use appropriate log levels for security events
+      - Monitor security logs for anomalies
+    severity: warning
+
+  - id: security.audit.requirements
+    description: |
+      Security audits must be conducted regularly.
+      - Perform security code reviews for security-sensitive changes
+      - Conduct dependency vulnerability scans regularly
+      - Review authentication and authorization logic
+      - Audit configuration and secrets management
+      - Document security audit findings and remediation
+    severity: warning
+
+  - id: security.incident.response
+    description: |
+      Security incidents must be handled according to established procedures.
+      - Document security incident response procedures
+      - Report security vulnerabilities responsibly
+      - Implement security monitoring and alerting
+      - Maintain incident logs and post-mortems
+      - Update security practices based on incident learnings
+    severity: warning
+
+examples:
+  - description: "Secure API key validation"
+    language: python
+    code: |
+      import os
+      import hmac
+      import hashlib
+      from fastapi import HTTPException, Header
+      from typing import Optional
+      
+      
+      def verify_api_key_secure(
+          authorization: Optional[str] = Header(None),
+          expected_key: Optional[str] = None
+      ) -> bool:
+          """
+          Verify API key using constant-time comparison to prevent timing attacks
+          
+          Args:
+              authorization: Authorization header value
+              expected_key: Expected API key (from environment)
+          
+          Returns:
+              True if API key is valid
+          
+          Raises:
+              HTTPException: If authentication fails
+          """
+          if not expected_key:
+              expected_key = os.getenv("MAVAIA_API_KEY")
+          
+          if not expected_key:
+              # No key configured, allow if not required
+              return True
+          
+          if not authorization or not authorization.startswith("Bearer "):
+              raise HTTPException(
+                  status_code=401,
+                  detail="Invalid authorization header"
+              )
+          
+          provided_key = authorization.replace("Bearer ", "").strip()
+          
+          # Use constant-time comparison to prevent timing attacks
+          if not hmac.compare_digest(provided_key, expected_key):
+              raise HTTPException(
+                  status_code=401,
+                  detail="Invalid API key"
+              )
+          
+          return True
+
+  - description: "Input validation and sanitization"
+    language: python
+    code: |
+      from pydantic import BaseModel, validator, Field
+      from typing import Optional
+      import re
+      
+      
+      class SafeInputRequest(BaseModel):
+          """Request model with input validation and sanitization"""
+          
+          text: str = Field(..., min_length=1, max_length=10000)
+          module_name: str = Field(..., pattern=r"^[a-z0-9_]+$")
+          operation: Optional[str] = Field(None, pattern=r"^[a-z0-9_]+$")
+          
+          @validator("text")
+          def sanitize_text(cls, v):
+              """Sanitize text input"""
+              # Remove potentially dangerous characters
+              v = re.sub(r'[<>"\']', '', v)
+              # Limit length
+              if len(v) > 10000:
+                  raise ValueError("Text too long")
+              return v.strip()
+          
+          @validator("module_name", "operation")
+          def validate_identifier(cls, v):
+              """Validate identifier format"""
+              if v and not re.match(r'^[a-z0-9_]+$', v):
+                  raise ValueError("Invalid identifier format")
+              return v
+
+  - description: "Secure logging without sensitive data"
+    language: python
+    code: |
+      import logging
+      from typing import Any, Dict
+      
+      logger = logging.getLogger(__name__)
+      
+      
+      def sanitize_for_logging(data: Dict[str, Any]) -> Dict[str, Any]:
+          """Remove sensitive data from logging context"""
+          sensitive_keys = {"api_key", "password", "token", "secret", "authorization"}
+          sanitized = {}
+          for key, value in data.items():
+              if any(sensitive in key.lower() for sensitive in sensitive_keys):
+                  sanitized[key] = "***REDACTED***"
+              else:
+                  sanitized[key] = value
+          return sanitized
+      
+      
+      def log_operation(operation: str, context: Dict[str, Any]):
+          """Log operation with sanitized context"""
+          sanitized_context = sanitize_for_logging(context)
+          logger.info(
+              f"Operation: {operation}",
+              extra={"operation": operation, "context": sanitized_context}
+          )
+
+references:
+  - OWASP Top 10: https://owasp.org/www-project-top-ten/
+  - Python Security: https://python.readthedocs.io/en/latest/library/security.html
+  - FastAPI Security: https://fastapi.tiangolo.com/tutorial/security/
+  - Secrets Management: https://12factor.net/config

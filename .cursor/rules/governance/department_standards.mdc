@@ -1,0 +1,144 @@
+---
+alwaysApply: true
+---
+# Cursor Rules: Department Engineering Standards
+
+rules:
+  - id: department.core.innovation_structure
+    description: |
+      Prioritize innovative solutions that maintain architectural integrity.
+      Design with modularity, extensibility, and maintainability in mind.
+      Evaluate all changes for systemic impact on the cognitive framework.
+      Prefer elegant, well-structured solutions over expedient quick fixes.
+    severity: error
+
+  - id: department.core.industry_quality
+    description: |
+      Code must be production-ready and fully functional at all times.
+      Follow established patterns and best practices in cognitive systems engineering.
+      Code must rigorously meet standards required for review at a top-tier organization.
+    severity: error
+
+  - id: department.code.production_quality
+    description: |
+      No placeholder code, TODOs, or incomplete implementations permitted.
+      All functions must handle edge cases and error conditions explicitly.
+      Code must be performant, maintainable, and secure.
+      Type hints, docstrings, and comprehensive error handling are mandatory.
+    severity: error
+
+  - id: department.core.fallback_philosophy
+    description: |
+      Only use fallbacks when they represent the correct architectural solution.
+      Never use fallbacks to avoid fixing root causes or underlying issues.
+      If a fallback is required, document and justify its use with architectural reasoning.
+      Always address root causes directly rather than masking them.
+    severity: error
+
+  - id: department.responsibilities.brain_module_development
+    description: |
+      Follow established module architecture when designing cognitive modules.
+      Ensure seamless integration with the brain framework and consistency with BaseBrainModule.
+      Implement robust operation dispatch, input validation, and error handling.
+    severity: error
+
+  - id: department.responsibilities.proactive_enhancement
+    description: |
+      Proactively identify and address gaps in architecture, performance, or functionality.
+      Implement enhancements with consideration for both immediate needs and long-term evolution.
+    severity: warning
+
+  - id: department.responsibilities.safety_frameworks
+    description: |
+      Design and implement robust, testable, and well-documented safety mechanisms.
+      Consider edge cases, adversarial scenarios, and integrate safety checks at the right architectural layer.
+    severity: error
+
+  - id: department.responsibilities.ui_ux
+    description: |
+      UI components must be intuitive, accessible, and consistent with the cognitive architecture.
+      Always maintain established design patterns and serve both technical and end users.
+    severity: warning
+
+  - id: department.responsibilities.system_enhancement
+    description: |
+      Continuously improve performance, reliability, and maintainability.
+      Refactor for clarity and efficiency, reduce technical debt, and enhance observability and debugging.
+    severity: warning
+
+  - id: department.quality.functionality
+    description: |
+      Code must be fully functional and executable; no stubbed or incomplete methods.
+      Explicitly handle all edge cases.
+      Error messages must be clear and actionable.
+    severity: error
+
+  - id: department.quality.testing_validation
+    description: |
+      Perform comprehensive parameter validation and error handling.
+      Test all edge cases and failure scenarios.
+      Ensure correctness in isolation and integration.
+    severity: error
+
+  - id: department.quality.documentation
+    description: |
+      Write complete docstrings for all public APIs, and document design decisions.
+      Explain complex logic thoroughly, with inline comments as needed.
+    severity: error
+
+  - id: department.quality.organization
+    description: |
+      Follow project structure and naming conventions.
+      Keep code modular, cohesive, and maintain clear separation of concerns.
+      Minimize coupling between components.
+    severity: error
+
+  - id: department.problem_solving.process
+    description: |
+      1. Fully understand the problem and context before proposing solutions.
+      2. Design the architecture before writing code.
+      3. Always fix the root cause, never mask problems.
+      4. Evaluate system-wide impact of all changes.
+      5. Refine solutions based on testing and feedback.
+    severity: error
+
+  - id: department.communication
+    description: |
+      Communicate with precision and technical clarity.
+      Reference patterns and design principles.
+      Explain rationale behind decisions; address trade-offs and constraints directly.
+    severity: warning
+
+  - id: department.prohibited_practices
+    description: |
+      Prohibited:
+        - Using fallbacks to avoid fixing real issues
+        - Leaving incomplete or placeholder code
+        - Ignoring error conditions or edge cases
+        - Writing code that "works for now" without proper structure
+        - Making unconsidered changes with system-wide impact
+        - Skipping documentation or type hints
+        - Implementing quick fixes that incur technical debt
+    severity: error
+
+  - id: department.required_practices
+    description: |
+      Required:
+        - Design with architecture and structure in mind
+        - Implement functional, production-ready code
+        - Handle all error conditions explicitly
+        - Write comprehensive documentation
+        - Consider system-wide implications
+        - Follow patterns and conventions meticulously
+        - Fix root causes rather than symptoms
+        - Test thoroughly and validate all assumptions
+    severity: error
+
+  - id: department.standards.integration
+    description: |
+      These department rules must be applied together with:
+        - Python standards (PEP 8, modern typing)
+        - Module architecture standards (BaseBrainModule patterns)
+        - Internal/external publication style guidelines
+      Compliance with all relevant standards is required for code acceptance.
+    severity: error

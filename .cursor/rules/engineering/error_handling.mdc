@@ -1,0 +1,242 @@
+---
+description: Error handling and exception management standards
+alwaysApply: true
+---
+
+# Cursor Rules: Error Handling & Exception Management
+
+rules:
+  - id: error_handling.exception_hierarchy
+    description: |
+      All exceptions must use the established Mavaia exception hierarchy.
+      - Base all custom exceptions on `MavaiaError` or its subclasses
+      - Use `ModuleError` for module-related errors
+      - Use `APIError` for API-related errors
+      - Use `ClientError` for client-related errors
+      - Use `RegistryError` for registry-related errors
+      - Create specific exception classes for distinct error types
+      - Never raise generic `Exception` or `RuntimeError` without context
+    severity: error
+
+  - id: error_handling.exception_context
+    description: |
+      All exceptions must include meaningful context for debugging.
+      - Use the `context` parameter in MavaiaError to include debugging information
+      - Include relevant identifiers (module_name, operation, parameter names)
+      - Include error causes and reasons
+      - Do not include sensitive information (API keys, passwords, PII) in context
+      - Context should be sufficient to diagnose the issue without code inspection
+    severity: error
+
+  - id: error_handling.exception_messages
+    description: |
+      Exception messages must be clear, actionable, and user-friendly.
+      - Write messages that explain what went wrong and why
+      - Include actionable guidance when possible
+      - Use consistent message formatting across similar exceptions
+      - Avoid technical jargon in user-facing error messages
+      - Include relevant values in messages (parameter names, expected types)
+    severity: error
+
+  - id: error_handling.module_errors
+    description: |
+      Module errors must follow established patterns.
+      - Use `ModuleNotFoundError` when a module cannot be found
+      - Use `ModuleInitializationError` when module initialization fails
+      - Use `ModuleOperationError` when a module operation fails
+      - Include module name, operation name, and reason in all module errors
+      - Provide context about what was attempted and why it failed
+    severity: error
+
+  - id: error_handling.api_errors
+    description: |
+      API errors must be properly mapped to HTTP responses.
+      - Use `AuthenticationError` for authentication failures (maps to 401)
+      - Use `ValidationError` for request validation failures (maps to 400)
+      - Include field name and reason in validation errors
+      - Use appropriate HTTP status codes in API error responses
+      - Never expose internal implementation details in API error messages
+    severity: error
+
+  - id: error_handling.parameter_validation
+    description: |
+      Parameter validation errors must be raised with clear information.
+      - Use `InvalidParameterError` for invalid parameter values
+      - Include parameter name, value (if safe), and reason for invalidity
+      - Validate parameters early, before expensive operations
+      - Provide specific validation error messages
+      - Use Pydantic validation for API request validation
+    severity: error
+
+  - id: error_handling.error_propagation
+    description: |
+      Errors must be propagated appropriately through the call stack.
+      - Let exceptions propagate unless you can handle them meaningfully
+      - Catch specific exception types, not generic Exception
+      - Re-raise exceptions with additional context when appropriate
+      - Use exception chaining (`raise ... from ...`) to preserve original exceptions
+      - Log errors before re-raising when appropriate
+    severity: error
+
+  - id: error_handling.error_recovery
+    description: |
+      Error recovery strategies must be explicit and documented.
+      - Only catch exceptions when you can handle them meaningfully
+      - Document recovery strategies in code comments
+      - Use fallbacks only when they represent correct architectural solutions
+      - Never silently swallow exceptions without logging
+      - Implement retry logic with exponential backoff for transient errors
+    severity: error
+
+  - id: error_handling.logging_errors
+    description: |
+      Errors must be logged with appropriate context before handling.
+      - Log errors at appropriate log levels (ERROR for failures, WARNING for recoverable issues)
+      - Include full exception context in logs (use `exc_info=True` in logging)
+      - Log errors before re-raising or returning error responses
+      - Include request/operation context in error logs
+      - Do not log sensitive information (API keys, passwords, PII)
+    severity: error
+
+  - id: error_handling.user_facing_errors
+    description: |
+      User-facing error messages must be appropriate for the audience.
+      - API errors should be user-friendly and actionable
+      - Internal errors should include technical details for debugging
+      - Never expose stack traces or internal implementation details to users
+      - Provide error codes for programmatic error handling
+      - Include suggestions for resolving errors when possible
+    severity: error
+
+  - id: error_handling.error_safety
+    description: |
+      Error handling must not introduce security vulnerabilities.
+      - Never expose sensitive information in error messages
+      - Sanitize error messages before returning to users
+      - Use error codes instead of detailed messages for sensitive operations
+      - Log detailed errors internally, return sanitized errors to users
+      - Validate and sanitize all user inputs before processing
+    severity: error
+
+  - id: error_handling.exception_safety
+    description: |
+      Code must maintain exception safety guarantees.
+      - Ensure resources are cleaned up even when exceptions occur (use try/finally or context managers)
+      - Do not leave system state inconsistent after exceptions
+      - Use context managers for resource management
+      - Implement proper cleanup in exception handlers
+      - Document exception safety guarantees in docstrings
+    severity: error
+
+  - id: error_handling.error_testing
+    description: |
+      Error conditions must be explicitly tested.
+      - Test all exception types raised by code
+      - Test error messages for clarity and correctness
+      - Test error context and metadata
+      - Test error recovery and fallback mechanisms
+      - Use `pytest.raises()` for exception testing
+    severity: error
+
+examples:
+  - description: "Proper exception usage with context"
+    language: python
+    code: |
+      from mavaia_core.exceptions import ModuleOperationError, InvalidParameterError
+      
+      
+      def execute_operation(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
+          """Execute module operation with proper error handling"""
+          # Validate operation
+          if operation not in self.metadata.operations:
+              raise ValueError(
+                  f"Unknown operation: {operation}",
+                  context={"module": self.metadata.name, "operation": operation}
+              )
+          
+          # Validate parameters
+          if "text" not in params:
+              raise InvalidParameterError(
+                  parameter="text",
+                  value=None,
+                  reason="Required parameter 'text' is missing"
+              )
+          
+          # Execute operation
+          try:
+              result = self._perform_operation(operation, params)
+              return result
+          except Exception as e:
+              # Re-raise with module context
+              raise ModuleOperationError(
+                  module_name=self.metadata.name,
+                  operation=operation,
+                  reason=str(e)
+              ) from e
+
+  - description: "Error handling with logging and recovery"
+    language: python
+    code: |
+      import logging
+      from mavaia_core.exceptions import ModuleInitializationError
+      
+      logger = logging.getLogger(__name__)
+      
+      
+      def initialize_module(self) -> bool:
+          """Initialize module with error handling and logging"""
+          try:
+              # Attempt initialization
+              self._load_model()
+              self._setup_resources()
+              return True
+          except FileNotFoundError as e:
+              logger.error(
+                  f"Model file not found for module {self.metadata.name}",
+                  exc_info=True,
+                  extra={"module": self.metadata.name, "error": str(e)}
+              )
+              raise ModuleInitializationError(
+                  module_name=self.metadata.name,
+                  reason=f"Model file not found: {e}"
+              ) from e
+          except Exception as e:
+              logger.error(
+                  f"Unexpected error initializing module {self.metadata.name}",
+                  exc_info=True,
+                  extra={"module": self.metadata.name, "error": str(e)}
+              )
+              raise ModuleInitializationError(
+                  module_name=self.metadata.name,
+                  reason=f"Unexpected error: {e}"
+              ) from e
+
+  - description: "Error handling with context managers"
+    language: python
+    code: |
+      from contextlib import contextmanager
+      from mavaia_core.exceptions import ModuleOperationError
+      
+      
+      @contextmanager
+      def operation_context(module_name: str, operation: str):
+          """Context manager for module operations with error handling"""
+          try:
+              yield
+          except Exception as e:
+              raise ModuleOperationError(
+                  module_name=module_name,
+                  operation=operation,
+                  reason=str(e)
+              ) from e
+      
+      
+      def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
+          """Execute with context manager for exception safety"""
+          with operation_context(self.metadata.name, operation):
+              return self._perform_operation(operation, params)
+
+references:
+  - Mavaia exception hierarchy: mavaia_core/exceptions.py
+  - Python exception handling: https://docs.python.org/3/tutorial/errors.html
+  - Exception safety: https://en.cppreference.com/w/cpp/language/exceptions

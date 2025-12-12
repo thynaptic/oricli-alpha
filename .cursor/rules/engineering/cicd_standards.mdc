@@ -1,0 +1,295 @@
+---
+description: CI/CD pipeline and deployment standards
+alwaysApply: false
+---
+
+# Cursor Rules: CI/CD & Deployment Standards
+
+rules:
+  - id: cicd.pipeline.structure
+    description: |
+      CI/CD pipelines must follow consistent structure and stages.
+      - Define clear pipeline stages (build, test, lint, deploy)
+      - Use appropriate CI/CD platform (GitHub Actions, GitLab CI, etc.)
+      - Document pipeline configuration and stages
+      - Make pipeline configuration version-controlled
+      - Test pipeline changes in separate branches
+    severity: error
+
+  - id: cicd.pipeline.build
+    description: |
+      Build processes must be reliable and reproducible.
+      - Build artifacts must be reproducible
+      - Use dependency pinning for reproducible builds
+      - Build and package Python packages correctly
+      - Generate build artifacts (wheels, distributions)
+      - Test build process in CI/CD
+    severity: error
+
+  - id: cicd.pipeline.testing
+    description: |
+      Testing must be automated in CI/CD pipelines.
+      - Run all tests in CI/CD pipeline
+      - Run tests in isolated environments
+      - Generate test coverage reports
+      - Fail builds on test failures
+      - Run tests in parallel when possible
+    severity: error
+
+  - id: cicd.pipeline.linting
+    description: |
+      Code quality checks must be automated.
+      - Run linters (ruff, flake8, pylint) in CI/CD
+      - Run type checkers (mypy) in CI/CD
+      - Run formatters (black) and check formatting
+      - Fail builds on linting errors
+      - Document linting configuration
+    severity: error
+
+  - id: cicd.pipeline.security
+    description: |
+      Security checks must be part of CI/CD pipeline.
+      - Scan dependencies for vulnerabilities
+      - Check for secrets in code
+      - Run security linters and scanners
+      - Review security scan results
+      - Document security scanning procedures
+    severity: error
+
+  - id: cicd.deployment.environments
+    description: |
+      Deployment environments must be clearly defined.
+      - Separate development, staging, and production environments
+      - Use environment-specific configuration
+      - Never deploy directly to production from feature branches
+      - Use deployment pipelines with approvals
+      - Document environment setup and access
+    severity: error
+
+  - id: cicd.deployment.procedures
+    description: |
+      Deployment procedures must be documented and automated.
+      - Automate deployment processes
+      - Document deployment steps and requirements
+      - Use deployment scripts and tools
+      - Test deployment procedures in staging
+      - Include rollback procedures
+    severity: error
+
+  - id: cicd.deployment.rollback
+    description: |
+      Rollback procedures must be defined and tested.
+      - Document rollback procedures
+      - Test rollback procedures regularly
+      - Maintain deployment history
+      - Support quick rollback to previous versions
+      - Monitor deployments for issues
+    severity: error
+
+  - id: cicd.deployment.versioning
+    description: |
+      Versioning must follow semantic versioning.
+      - Use semantic versioning (MAJOR.MINOR.PATCH)
+      - Tag releases with version numbers
+      - Automate version bumping when appropriate
+      - Document versioning strategy
+      - Maintain changelog with versions
+    severity: error
+
+  - id: cicd.quality.artifacts
+    description: |
+      Build artifacts must be managed properly.
+      - Store build artifacts in artifact repositories
+      - Version build artifacts
+      - Document artifact structure and contents
+      - Clean up old artifacts
+      - Make artifacts available for deployment
+    severity: warning
+
+  - id: cicd.quality.monitoring
+    description: |
+      CI/CD pipelines must be monitored.
+      - Monitor pipeline execution times
+      - Alert on pipeline failures
+      - Track pipeline success rates
+      - Optimize slow pipeline stages
+      - Document pipeline performance
+    severity: warning
+
+  - id: cicd.quality.notifications
+    description: |
+      CI/CD notifications must be configured appropriately.
+      - Notify on pipeline failures
+      - Notify on successful deployments
+      - Configure notification channels (email, Slack, etc.)
+      - Avoid notification spam
+      - Document notification configuration
+    severity: warning
+
+examples:
+  - description: "GitHub Actions CI/CD pipeline example"
+    language: yaml
+    code: |
+      name: CI/CD Pipeline
+      
+      on:
+        push:
+          branches: [main, develop]
+        pull_request:
+          branches: [main]
+      
+      jobs:
+        test:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v3
+            
+            - name: Set up Python
+              uses: actions/setup-python@v4
+              with:
+                python-version: '3.11'
+            
+            - name: Install dependencies
+              run: |
+                pip install -e ".[dev]"
+            
+            - name: Run linters
+              run: |
+                ruff check mavaia_core/
+                black --check mavaia_core/
+                mypy mavaia_core/
+            
+            - name: Run tests
+              run: |
+                pytest tests/ --cov=mavaia_core --cov-report=xml
+            
+            - name: Upload coverage
+              uses: codecov/codecov-action@v3
+              with:
+                file: ./coverage.xml
+        
+        security:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v3
+            
+            - name: Run security scan
+              run: |
+                pip install safety
+                safety check
+            
+            - name: Check for secrets
+              uses: trufflesecurity/trufflehog@main
+              with:
+                path: ./
+        
+        build:
+          needs: [test, security]
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v3
+            
+            - name: Build package
+              run: |
+                pip install build
+                python -m build
+            
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v3
+              with:
+                name: dist
+                path: dist/
+        
+        deploy:
+          needs: build
+          runs-on: ubuntu-latest
+          if: github.ref == 'refs/heads/main'
+          steps:
+            - name: Deploy to production
+              run: |
+                echo "Deploy to production"
+                # Deployment steps here
+
+  - description: "Deployment script example"
+    language: python
+    code: |
+      """
+      Deployment script for Mavaia Core
+      
+      Handles deployment to different environments with proper
+      validation and rollback capabilities.
+      """
+      
+      import subprocess
+      import sys
+      from pathlib import Path
+      from typing import Literal
+      
+      
+      Environment = Literal["development", "staging", "production"]
+      
+      
+      def deploy(environment: Environment, version: str) -> bool:
+          """
+          Deploy Mavaia Core to specified environment
+          
+          Args:
+              environment: Target environment
+              version: Version to deploy
+          
+          Returns:
+              True if deployment succeeded, False otherwise
+          """
+          print(f"Deploying version {version} to {environment}")
+          
+          # Validate environment
+          if environment == "production":
+              confirm = input("Confirm production deployment (yes/no): ")
+              if confirm.lower() != "yes":
+                  print("Deployment cancelled")
+                  return False
+          
+          # Run pre-deployment checks
+          if not run_pre_deployment_checks(environment):
+              print("Pre-deployment checks failed")
+              return False
+          
+          # Deploy
+          try:
+              deploy_steps(environment, version)
+              print(f"Successfully deployed {version} to {environment}")
+              return True
+          except Exception as e:
+              print(f"Deployment failed: {e}")
+              rollback(environment)
+              return False
+      
+      
+      def run_pre_deployment_checks(environment: Environment) -> bool:
+          """Run pre-deployment validation checks"""
+          # Check dependencies
+          # Check configuration
+          # Check service health
+          return True
+      
+      
+      def deploy_steps(environment: Environment, version: str) -> None:
+          """Execute deployment steps"""
+          # Install dependencies
+          # Update configuration
+          # Restart services
+          # Verify deployment
+          pass
+      
+      
+      def rollback(environment: Environment) -> None:
+          """Rollback to previous version"""
+          print(f"Rolling back {environment} to previous version")
+          # Rollback steps
+          pass
+
+references:
+  - GitHub Actions: https://docs.github.com/en/actions
+  - GitLab CI/CD: https://docs.gitlab.com/ee/ci/
+  - Semantic Versioning: https://semver.org/
+  - Python packaging: https://packaging.python.org/

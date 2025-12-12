@@ -1,0 +1,72 @@
+---
+alwaysApply: true
+---
+rules:
+  - id: evaluation.standards.general
+    description: |
+      All evaluation protocols must be governed by a standardized, reviewable process to ensure reproducibility, coverage, and scientific rigor in cognitive system assessments. Evals must be traceable, automated, and documented.
+
+      Requirements:
+        - Every test or benchmark must have an explicit purpose, scope, and scoring criteria.
+        - Evaluation parameters (dataset, prompt, random seeds, version) must be fixed and recorded prior to execution.
+        - All output, intermediate artifacts, and system logs must be archived for post-hoc analysis.
+        - Deviations from standard procedures require formal review and justification in the evaluation log.
+        - All evaluation outputs must clearly indicate version, date, evaluator identity, and pass/fail metrics.
+
+    severity: error
+
+  - id: evaluation.standards.mmlu_like
+    description: |
+      Multi-task and multi-domain language understanding (MMLU-like) tests must follow reference practices for analog task diversity, sampling, and answer-checking.
+
+      Requirements:
+        - Datasets must be version-controlled and seeded for reproducibility.
+        - Test splits (train/validation/test) must never overlap and be independently auditable.
+        - Accuracy and detailed error analysis are mandatory, including breakdown by task type and difficulty.
+        - For each run, log model version, hyperparameters, and known limitations.
+        - Raw and aggregate results must be accessible to all governance stakeholders.
+
+    severity: error
+
+  - id: evaluation.standards.reasoning_benchmark
+    description: |
+      All Tree-of-Thought (ToT) and Chain-of-Thought (CoT) benchmarks must be explicitly designed to probe stepwise reasoning, not simply final answers.
+
+      Requirements:
+        - Intermediate thought steps, rationales, and scratchpads must be captured and archived.
+        - Correctness and alignment must be evaluated at each reasoning stage.
+        - Test harnesses shall support automated detection of reasoning failure modes or shortcutting.
+        - Benchmarks must exercise diverse reasoning types (logical, numerical, causal, analogical).
+        - Updates or extensions to the benchmarks require review and justification.
+
+    severity: error
+
+  - id: evaluation.standards.complexity_diagnostics
+    description: |
+      Reasoning complexity and cognitive routing diagnostics must be incorporated in all cognitive testing pipelines.
+
+      Requirements:
+        - Log path length, decisional branching, fallback invocations, and module hops on all test cases.
+        - Capture timing/latency for each cognitive segment and the full path.
+        - Anomalies in routing, oscillation, or dead-ends must be flagged and categorized.
+        - Metrics must be visualizable for trend and anomaly detection, and must inform refactoring decisions.
+        - Maintain a historical record of routing complexity for regression detection.
+
+    severity: error
+
+  - id: evaluation.standards.safety_tests
+    description: |
+      Comprehensive safety testing is mandatory and must precede any promotion to production.
+
+      Requirements:
+        - Test coverage must include both known and hypothesized failure and misuse scenarios.
+        - Tests must simulate adversarial inputs, abnormal routing, and cognitive overload conditions.
+        - Every safety protocol, safeguard, and envelope must be verifiable via at least one automated test.
+        - Results must explicitly reference incident logs, supporting evidence, and action items for failures.
+        - Passing all safety evals is a gate for release and is not waivable except by documented governance override.
+
+    severity: error
+
+references:
+  - https://github.com/hendrycks/test (MMLU reference)
+

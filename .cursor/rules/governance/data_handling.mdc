@@ -1,0 +1,264 @@
+---
+description: Data handling, privacy, and storage standards
+alwaysApply: true
+---
+
+# Cursor Rules: Data Handling & Privacy Standards
+
+rules:
+  - id: data_handling.storage.interfaces
+    description: |
+      All data storage must use the established storage interfaces.
+      - Use BaseStorage interface for all state persistence
+      - Implement storage backends (file, database, memory) consistently
+      - Use StorageConfig for storage configuration
+      - Implement all required abstract methods (save, load, delete, list_states, exists)
+      - Handle storage initialization and cleanup properly
+      - Document storage backend capabilities and limitations
+    severity: error
+
+  - id: data_handling.storage.state_management
+    description: |
+      State management must follow established patterns.
+      - Use state_type and state_id for organizing stored data
+      - Include metadata with all stored state (timestamps, version, etc.)
+      - Use consistent state data structures across modules
+      - Implement state versioning for backward compatibility
+      - Handle state migration when data structures change
+      - Document state schema and structure
+    severity: error
+
+  - id: data_handling.storage.persistence
+    description: |
+      State persistence must be reliable and consistent.
+      - Ensure state is saved before operation completion
+      - Handle storage failures gracefully with appropriate errors
+      - Implement retry logic for transient storage failures
+      - Validate state data before saving
+      - Implement state cleanup and expiration policies
+      - Test state persistence and recovery scenarios
+    severity: error
+
+  - id: data_handling.privacy.pii_handling
+    description: |
+      Personally Identifiable Information (PII) must be handled securely.
+      - Identify and classify PII in all data structures
+      - Never log PII in log messages or error responses
+      - Encrypt PII at rest when required
+      - Use secure transmission (HTTPS/TLS) for PII in transit
+      - Implement data retention policies for PII
+      - Document PII handling procedures
+    severity: error
+
+  - id: data_handling.privacy.data_minimization
+    description: |
+      Data collection must follow minimization principles.
+      - Collect only data necessary for functionality
+      - Don't store data longer than necessary
+      - Implement data retention and deletion policies
+      - Allow users to request data deletion
+      - Document what data is collected and why
+      - Review data collection practices regularly
+    severity: warning
+
+  - id: data_handling.privacy.consent
+    description: |
+      User consent must be obtained for data collection when required.
+      - Obtain explicit consent before collecting sensitive data
+      - Document consent in user agreements
+      - Allow users to withdraw consent and delete data
+      - Respect user privacy preferences
+      - Comply with applicable privacy regulations (GDPR, CCPA, etc.)
+    severity: warning
+
+  - id: data_handling.serialization.formats
+    description: |
+      Data serialization must use standard, reliable formats.
+      - Use JSON for configuration and state data
+      - Use consistent encoding (UTF-8) for all text data
+      - Validate serialized data structure and types
+      - Handle serialization errors gracefully
+      - Document serialization format and schema
+      - Support backward-compatible schema evolution
+    severity: error
+
+  - id: data_handling.serialization.versioning
+    description: |
+      Serialized data must include version information.
+      - Include version numbers in serialized data structures
+      - Support multiple data format versions simultaneously
+      - Implement migration logic for older data formats
+      - Document version changes and migration procedures
+      - Test backward compatibility with older data formats
+    severity: error
+
+  - id: data_handling.validation.input_validation
+    description: |
+      All input data must be validated before processing or storage.
+      - Validate data types, ranges, and formats
+      - Validate required fields and constraints
+      - Reject invalid data with clear error messages
+      - Sanitize data before storage to prevent injection attacks
+      - Use Pydantic models for structured data validation
+      - Document validation rules and constraints
+    severity: error
+
+  - id: data_handling.validation.output_validation
+    description: |
+      Output data must be validated before returning to users.
+      - Validate data structure and types before returning
+      - Ensure output matches expected schema
+      - Sanitize output to prevent injection attacks
+      - Remove sensitive data from output when appropriate
+      - Test output validation in integration tests
+    severity: error
+
+  - id: data_handling.backup.recovery
+    description: |
+      Backup and recovery procedures must be implemented for critical data.
+      - Implement regular backups for persistent state
+      - Test backup and recovery procedures regularly
+      - Document backup schedules and retention policies
+      - Store backups securely and separately from primary data
+      - Implement point-in-time recovery when possible
+      - Monitor backup success and alert on failures
+    severity: warning
+
+  - id: data_handling.encryption.at_rest
+    description: |
+      Sensitive data must be encrypted at rest when required.
+      - Encrypt sensitive data before storage
+      - Use strong encryption algorithms and keys
+      - Manage encryption keys securely
+      - Document encryption procedures and key management
+      - Test encryption and decryption procedures
+    severity: warning
+
+  - id: data_handling.encryption.in_transit
+    description: |
+      Data transmission must use secure protocols.
+      - Use HTTPS/TLS for all data transmission
+      - Validate SSL/TLS certificates
+      - Use secure connection settings (TLS 1.2+)
+      - Never transmit sensitive data over unencrypted connections
+      - Document secure transmission requirements
+    severity: error
+
+  - id: data_handling.migration.data_migration
+    description: |
+      Data migration must be handled carefully and tested thoroughly.
+      - Plan data migrations before schema changes
+      - Test migrations on non-production data first
+      - Implement rollback procedures for failed migrations
+      - Document migration procedures and requirements
+      - Monitor migration progress and handle errors
+      - Preserve data integrity during migrations
+    severity: error
+
+  - id: data_handling.quality.data_integrity
+    description: |
+      Data integrity must be maintained at all times.
+      - Validate data integrity after storage operations
+      - Use transactions for multi-step data operations
+      - Implement checksums or hashes for data validation
+      - Detect and handle data corruption
+      - Test data integrity under failure scenarios
+      - Monitor data integrity metrics
+    severity: error
+
+examples:
+  - description: "State storage with metadata"
+    language: python
+    code: |
+      from mavaia_core.brain.state_storage.base_storage import BaseStorage, StorageConfig
+      from typing import Dict, Any, Optional
+      from datetime import datetime
+      
+      
+      def save_conversation_state(
+          storage: BaseStorage,
+          conversation_id: str,
+          state_data: Dict[str, Any]
+      ) -> bool:
+          """Save conversation state with metadata"""
+          metadata = {
+              "version": 1,
+              "saved_at": datetime.now().isoformat(),
+              "conversation_id": conversation_id
+          }
+          
+          return storage.save(
+              state_type="conversation",
+              state_id=conversation_id,
+              state_data=state_data,
+              metadata=metadata
+          )
+
+  - description: "Data validation before storage"
+    language: python
+    code: |
+      from pydantic import BaseModel, validator
+      from typing import Optional
+      
+      
+      class ConversationState(BaseModel):
+          """Validated conversation state structure"""
+          conversation_id: str
+          messages: list[dict[str, Any]]
+          metadata: Optional[dict[str, Any]] = None
+          
+          @validator("conversation_id")
+          def validate_conversation_id(cls, v):
+              if not v or len(v) < 1:
+                  raise ValueError("conversation_id cannot be empty")
+              return v
+          
+          @validator("messages")
+          def validate_messages(cls, v):
+              if not isinstance(v, list):
+                  raise ValueError("messages must be a list")
+              if len(v) == 0:
+                  raise ValueError("messages cannot be empty")
+              return v
+      
+      
+      def save_validated_state(storage: BaseStorage, state: ConversationState):
+          """Save validated conversation state"""
+          # State is already validated by Pydantic
+          return storage.save(
+              state_type="conversation",
+              state_id=state.conversation_id,
+              state_data=state.dict()
+          )
+
+  - description: "PII sanitization"
+    language: python
+    code: |
+      from typing import Any, Dict
+      
+      
+      def sanitize_pii(data: Dict[str, Any]) -> Dict[str, Any]:
+          """Remove PII from data structure"""
+          pii_fields = {"email", "phone", "ssn", "credit_card", "address"}
+          sanitized = {}
+          
+          for key, value in data.items():
+              if key.lower() in pii_fields:
+                  sanitized[key] = "***REDACTED***"
+              elif isinstance(value, dict):
+                  sanitized[key] = sanitize_pii(value)
+              elif isinstance(value, list):
+                  sanitized[key] = [
+                      sanitize_pii(item) if isinstance(item, dict) else item
+                      for item in value
+                  ]
+              else:
+                  sanitized[key] = value
+          
+          return sanitized
+
+references:
+  - Mavaia storage interface: mavaia_core/brain/state_storage/base_storage.py
+  - GDPR: https://gdpr.eu/
+  - CCPA: https://oag.ca.gov/privacy/ccpa
+  - Data minimization: https://ico.org.uk/for-organisations/guide-to-data-protection/guide-to-the-general-data-protection-regulation-gdpr/principles/data-minimisation/

@@ -1,0 +1,73 @@
+---
+alwaysApply: true
+---
+rules:
+  - id: architecture.module_dependency_structure
+    description: |
+      Module dependencies must be explicit, acyclic, and declared within designated interface boundaries.
+      - Modules may only depend on public interfaces of other modules; internal details must remain encapsulated.
+      - Circular dependencies (direct or indirect) are strictly prohibited; dependency injection or interface segregation must be used to break cycles.
+      - Shared abstractions and foundational libraries must reside at the lowest architectural layer.
+      - Dependency graphs must be documented and validated on major changes.
+    severity: error
+
+  - id: architecture.cognitive_pipeline_patterns
+    description: |
+      Only approved pipeline patterns may be used for cognitive processing.
+      - All cognitive pipelines must follow the architectural blueprints (e.g., DAG, chain-of-responsibility, event-driven, with centralized orchestration where required).
+      - Custom or ad hoc pipeline structures are prohibited unless reviewed and accepted in writing by architecture governance.
+      - Input and output contracts (schemas, types, expected side effects) for each stage must be explicitly documented.
+      - Pipeline extensibility and safe interception points should be provided for future enhancement.
+    severity: error
+
+  - id: architecture.routing_rules
+    description: |
+      Routing of data and execution must conform to standardized rules.
+      - All cross-module and inter-pipeline calls must be routed through defined gateways or dispatchers.
+      - No direct calls allowed between implementation details of different modules; use designated interfaces or message buses.
+      - Routing logic must be isolated; business logic and routing are not to be intermixed.
+      - Routing decisions must be deterministic and logged for traceability.
+      - Unauthorized or undocumented dynamic routing, reflection-based invocation, or monkey-patching are prohibited.
+    severity: error
+
+  - id: architecture.evaluation_methods
+    description: |
+      All architectural mechanisms must include evaluation methods to verify correctness, performance, and compliance.
+      - Each module and pipeline must define standardized evaluation hooks (unit, integration, contract, and scenario tests).
+      - Evaluation criteria must be specified in architectural documentation and reviewed on each significant change.
+      - Automated validation (linting, static analysis, contract checks) must run as part of CI/CD.
+      - All deviations or flakiness must trigger root-cause analysis and remediation.
+    severity: error
+
+  - id: architecture.versioning_and_change_control
+    description: |
+      Architectural versioning and change control must follow strict discipline.
+      - All public architectural interfaces and cognitive pipeline contracts must employ semantic versioning.
+      - Breaking changes are only allowed with major version increments and require explicit migration guides.
+      - All changes must be logged in architectural changelogs and communicated to all stakeholders.
+      - Deprecated modules or interfaces must specify end-of-life timelines and backward-compatibility strategies.
+      - No ad hoc or undocumented architecture changes are permitted.
+    severity: error
+
+  - id: architecture.rfc_requirement
+    description: |
+      All changes to core architecture require an approved RFC (Request for Comments) before implementation.
+      - Core architecture files include: base_module.py, registry.py, orchestrator.py, server.py, client.py, and architecture rules
+      - An RFC must be filed in `.cursor/rules/governance/RFC/` before making changes to core architecture
+      - RFC must follow the standardized template format and include all required sections
+      - RFC must be in APPROVED status before changes are allowed
+      - RFC must be properly indexed in RFC_INDEX.md
+      - Changes to core architecture without an approved RFC are strictly prohibited
+      - See `.cursor/rules/governance/rfc_enforcement.mdc` for detailed RFC requirements
+    severity: error
+
+references:
+  - https://martinfowler.com/articles/enterpriseArchitecture.html
+  - https://cognitivesciencesociety.org/architectures-for-cognitive-models/
+  - https://semver.org/spec/v2.0.0.html
+  - (Internal) Mavaia Design Blueprints, Section 4 ("Cognitive Pipeline Patterns")
+  - (Internal) Mavaia Engineering Handbook, v2024.2, "Inter-module Dependency & Routing"
+  - RFC Enforcement: .cursor/rules/governance/rfc_enforcement.mdc
+  - RFC Template: .cursor/rules/governance/RFC/RFC_TEMPLATE.md
+  - RFC Documentation: .cursor/rules/governance/RFC/README.md
+

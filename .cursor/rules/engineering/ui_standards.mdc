@@ -1,0 +1,254 @@
+---
+description: UI/UX development standards
+alwaysApply: false
+globs: ui_app.py, ui_static/**/*
+---
+
+# Cursor Rules: UI/UX Development Standards
+
+rules:
+  - id: ui.structure.organization
+    description: |
+      UI code must be organized consistently.
+      - Separate frontend (static files) from backend (Flask app)
+      - Place static files in `ui_static/` directory
+      - Organize static files by type (CSS, JS, images)
+      - Use consistent file naming conventions
+      - Document UI component structure
+    severity: error
+
+  - id: ui.structure.components
+    description: |
+      UI components must follow consistent patterns.
+      - Use modular component structure
+      - Separate concerns (presentation, logic, data)
+      - Reuse components when possible
+      - Document component APIs and usage
+      - Keep components focused and single-purpose
+    severity: warning
+
+  - id: ui.communication.api
+    description: |
+      Frontend-backend communication must follow standards.
+      - Use RESTful API endpoints for data operations
+      - Use consistent request/response formats
+      - Handle API errors gracefully
+      - Implement proper error handling and user feedback
+      - Use appropriate HTTP methods and status codes
+      - Document API endpoints used by UI
+    severity: error
+
+  - id: ui.communication.streaming
+    description: |
+      Streaming responses must be handled properly.
+      - Support Server-Sent Events (SSE) for streaming
+      - Handle connection errors and reconnection
+      - Provide user feedback during streaming
+      - Handle partial responses gracefully
+      - Document streaming behavior
+    severity: warning
+
+  - id: ui.error_handling.user_feedback
+    description: |
+      Error handling must provide clear user feedback.
+      - Display user-friendly error messages
+      - Provide actionable error guidance
+      - Handle network errors gracefully
+      - Show loading states during operations
+      - Provide retry mechanisms when appropriate
+    severity: error
+
+  - id: ui.error_handling.validation
+    description: |
+      Input validation must be implemented in UI.
+      - Validate user inputs before submission
+      - Provide immediate feedback on validation errors
+      - Match backend validation rules
+      - Display clear validation error messages
+      - Prevent invalid form submissions
+    severity: error
+
+  - id: ui.testing.requirements
+    description: |
+      UI components should be tested.
+      - Test UI functionality with integration tests
+      - Test error handling and edge cases
+      - Test responsive design on different screen sizes
+      - Test accessibility features
+      - Document testing procedures
+    severity: warning
+
+  - id: ui.accessibility.standards
+    description: |
+      UI must be accessible.
+      - Use semantic HTML elements
+      - Provide alt text for images
+      - Ensure keyboard navigation works
+      - Maintain sufficient color contrast
+      - Support screen readers
+      - Test with accessibility tools
+    severity: warning
+
+  - id: ui.performance.loading
+    description: |
+      UI performance must be optimized.
+      - Minimize initial page load time
+      - Lazy load resources when appropriate
+      - Optimize images and assets
+      - Use efficient rendering techniques
+      - Monitor and optimize performance
+    severity: warning
+
+  - id: ui.quality.consistency
+    description: |
+      UI must be consistent.
+      - Use consistent styling and design patterns
+      - Maintain consistent user experience
+      - Follow established design system
+      - Use consistent terminology
+      - Document UI patterns and conventions
+    severity: warning
+
+  - id: ui.documentation.requirements
+    description: |
+      UI code must be documented.
+      - Document component purpose and usage
+      - Document API endpoints used
+      - Document user interactions and flows
+      - Include inline comments for complex logic
+      - Keep documentation up-to-date
+    severity: warning
+
+examples:
+  - description: "UI error handling pattern"
+    language: javascript
+    code: |
+      /**
+       * Handle API errors with user-friendly feedback
+       * @param {Error} error - Error object from API call
+       * @param {HTMLElement} errorContainer - Container for error message
+       */
+      function handleApiError(error, errorContainer) {
+          let message = "An error occurred. Please try again.";
+          let actionable = false;
+          
+          if (error.status === 401) {
+              message = "Authentication required. Please check your API key.";
+              actionable = true;
+          } else if (error.status === 403) {
+              message = "You don't have permission to perform this action.";
+          } else if (error.status === 404) {
+              message = "The requested resource was not found.";
+          } else if (error.status >= 500) {
+              message = "Server error. Please try again later.";
+          } else if (error.message) {
+              message = error.message;
+          }
+          
+          errorContainer.textContent = message;
+          errorContainer.style.display = "block";
+          
+          if (actionable) {
+              // Add action button or link
+              const actionButton = document.createElement("button");
+              actionButton.textContent = "Update API Key";
+              actionButton.onclick = () => showApiKeyDialog();
+              errorContainer.appendChild(actionButton);
+          }
+      }
+
+  - description: "Input validation pattern"
+    language: javascript
+    code: |
+      /**
+       * Validate form input before submission
+       * @param {HTMLFormElement} form - Form element to validate
+       * @returns {boolean} True if valid, false otherwise
+       */
+      function validateForm(form) {
+          const errors = [];
+          
+          // Validate required fields
+          const requiredFields = form.querySelectorAll("[required]");
+          requiredFields.forEach(field => {
+              if (!field.value.trim()) {
+                  errors.push({
+                      field: field.name,
+                      message: `${field.label || field.name} is required`
+                  });
+                  field.classList.add("error");
+              } else {
+                  field.classList.remove("error");
+              }
+          });
+          
+          // Validate email format
+          const emailFields = form.querySelectorAll('input[type="email"]');
+          emailFields.forEach(field => {
+              if (field.value && !isValidEmail(field.value)) {
+                  errors.push({
+                      field: field.name,
+                      message: "Invalid email format"
+                  });
+                  field.classList.add("error");
+              }
+          });
+          
+          // Display errors
+          if (errors.length > 0) {
+              displayValidationErrors(errors);
+              return false;
+          }
+          
+          return true;
+      }
+
+  - description: "Streaming response handling"
+    language: javascript
+    code: |
+      /**
+       * Handle streaming API response
+       * @param {string} url - API endpoint URL
+       * @param {Object} options - Request options
+       * @param {Function} onChunk - Callback for each chunk
+       * @param {Function} onComplete - Callback on completion
+       * @param {Function} onError - Callback on error
+       */
+      async function streamResponse(url, options, onChunk, onComplete, onError) {
+          try {
+              const response = await fetch(url, {
+                  ...options,
+                  headers: {
+                      ...options.headers,
+                      "Accept": "text/event-stream"
+                  }
+              });
+              
+              if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+              
+              const reader = response.body.getReader();
+              const decoder = new TextDecoder();
+              
+              while (true) {
+                  const { done, value } = await reader.read();
+                  
+                  if (done) {
+                      onComplete();
+                      break;
+                  }
+                  
+                  const chunk = decoder.decode(value, { stream: true });
+                  onChunk(chunk);
+              }
+          } catch (error) {
+              onError(error);
+          }
+      }
+
+references:
+  - Web Content Accessibility Guidelines: https://www.w3.org/WAI/WCAG21/quickref/
+  - MDN Web Docs: https://developer.mozilla.org/
+  - Flask static files: https://flask.palletsprojects.com/en/stable/quickstart/#static-files
+  - Mavaia UI: ui_app.py, ui_static/

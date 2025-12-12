@@ -1,0 +1,117 @@
+---
+globs: *.py
+alwaysApply: false
+---
+// Python Coding Standards Rules for Cursor (@Python 3 Docs):
+
+rules:
+  - name: "Indentation"
+    description: |
+      Always use 4 spaces per indentation level. Do not use tabs.
+
+  - name: "Maximum Line Length"
+    description: |
+      Limit all lines to a maximum of 79 characters unless using Black formatting,
+      in which case Black's line length limits are permitted.
+
+  - name: "Blank Lines"
+    description: |
+      Use blank lines to separate functions and classes, and larger code blocks inside functions.
+
+  - name: "Comments"
+    description: |
+      Use comments to explain code. Place comments on their own lines when possible.
+
+  - name: "Docstrings"
+    description: |
+      Write docstrings for all public modules, functions, classes, and methods.
+
+  - name: "Whitespace in Expressions and Statements"
+    description: |
+      Surround binary operators (assignment =, arithmetic +, -, etc.) and after commas with a single space.
+      Do not use spaces inside parentheses, brackets, or braces.
+
+  - name: "Naming Conventions"
+    description: |
+      Use UpperCamelCase for class names.
+      Use lowercase_with_underscores for function and method names.
+      The first parameter of methods should always be named 'self'.
+
+  - name: "Encoding"
+    description: |
+      Use UTF-8 (or ASCII) encoding for source files. Avoid fancy encodings.
+      Avoid non-ASCII characters in identifiers unless essential.
+
+  - name: "Pattern Matching"
+    description: |
+      Use modern Python pattern matching (match/case statements) where appropriate.
+      Pattern matching is preferred over chains of if-elif for simple structural decompositions.
+
+  - name: "Type Hints & Modern Typing"
+    description: |
+      Use modern typing conventions, including PEP 604 (using X | None) and PEP 585 (built-in collection generics like list[int]).
+      Prefer using type annotations with all public functions, methods, and variables.
+
+  - name: "F-Strings"
+    description: |
+      Use f-strings for formatting strings instead of %-formatting or str.format().
+
+  - name: "Pathlib"
+    description: |
+      Prefer using pathlib.Path for file and directory operations rather than os.path.
+
+  - name: "Class Shape"
+    description: |
+      Write clean class shapes: order attributes before methods, prefer dataclasses or __slots__ for simple data containers.
+
+  - name: "Black Formatting"
+    description: |
+      Code may be automatically formatted with Black, and Black formatting conventions override line-length and whitespace rules where applicable.
+
+  - name: "Exception Handling"
+    description: |
+      Do not write duplicate except blocks for the same exception type within a single try statement.
+      Ensure exception handling is explicit and concise.
+
+  - name: "Imports"
+    description: |
+      Do not use Frankenstein imports (avoid import * or combining unrelated imports in one line).
+      Group imports correctly: standard library first, then third-party, then local.
+      Use module imports rather than from-imports for large modules where namespace clarity is important.
+
+  - name: "Standard Library First"
+    description: |
+      Prefer using Python Standard Library modules (including recent additions) over external alternatives unless justified.
+
+  - name: "Context Managers"
+    description: |
+      Use context managers (with-statements) for resource management.
+      Implement __enter__ and __exit__ for custom managers following documentation best practices.
+
+  - name: "Portability"
+    description: |
+      Prefer feature detection over version checks.
+      Do not use legacy compatibility patterns for Python 2/3. Target Python 3.8+ features.
+
+  - name: "C Code"
+    description: |
+      If contributing C extension code to CPython, follow PEP 7 (the C style guide).
+
+  - name: "Monty Python References"
+    description: |
+      References to Monty Python sketches are allowed and encouraged in documentation comments.
+
+enforcement:
+  - Use static code analysis tools (flake8, pylint, mypy) and auto-formatters like black.
+  - Review code for readability, consistency, and adherence to PEP 8, PEP 604, PEP 585, and these rules.
+  - Reject code that does not meet Black formatting or line length requirements.
+  - Ensure correct use of pattern matching, typing, pathlib, f-strings, and modern import style.
+
+references:
+  - PEP 8: https://peps.python.org/pep-0008/
+  - PEP 604: https://peps.python.org/pep-0604/
+  - PEP 585: https://peps.python.org/pep-0585/
+  - Black: https://black.readthedocs.io/en/stable/
+  - Python Developer’s Guide: https://docs.python.org/devguide/
+  - Pattern Matching: https://docs.python.org/3/reference/compound_stmts.html#the-match-statement
+  - Coding standards in C: https://peps.python.org/pep-0007/

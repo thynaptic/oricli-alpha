@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mavaia Core Test Report - 20251211_180120_7e8855fb</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 5px;
+        }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #4CAF50;
+        }
+        .stat-card.failed {
+            border-left-color: #f44336;
+        }
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            color: #666;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+            font-weight: 600;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .status-passed {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .status-failed {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .status-skipped {
+            color: #ff9800;
+            font-weight: bold;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background-color: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+        .timestamp {
+            color: #999;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Mavaia Core Test Report</h1>
+        <div class="timestamp">
+            Test Run ID: 20251211_180120_7e8855fb<br>
+            Timestamp: 2025-12-11T18:01:20.257435<br>
+            Version: 1.0.0
+        </div>
+        
+        <h2>Executive Summary</h2>
+        <div class="summary">
+            <div class="stat-card">
+                <h3>Total Tests</h3>
+                <div class="value">50</div>
+            </div>
+            <div class="stat-card">
+                <h3>Passed</h3>
+                <div class="value" style="color: #4CAF50;">0</div>
+            </div>
+            <div class="stat-card failed">
+                <h3>Failed</h3>
+                <div class="value" style="color: #f44336;">50</div>
+            </div>
+            <div class="stat-card">
+                <h3>Success Rate</h3>
+                <div class="value">0.0%</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Time</h3>
+                <div class="value">17.22s</div>
+            </div>
+            <div class="stat-card">
+                <h3>Avg Time</h3>
+                <div class="value">0.34s</div>
+            </div>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: 0.0%;"></div>
+        </div>
+
+        <h2>Per-Module Breakdown</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Module</th>
+                    <th>Total</th>
+                    <th>Passed</th>
+                    <th>Failed</th>
+                    <th>Success Rate</th>
+                    <th>Avg Time</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr>
+                    <td>reasoning_code_generator</td>
+                    <td>50</td>
+                    <td class="status-passed">0</td>
+                    <td class="status-failed">50</td>
+                    <td>0.0%</td>
+                    <td>0.34s</td>
+                </tr>
+
+            </tbody>
+        </table>
+
+        <h2>Per-Category Breakdown</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Total</th>
+                    <th>Passed</th>
+                    <th>Failed</th>
+                    <th>Success Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr>
+                    <td>functional</td>
+                    <td>50</td>
+                    <td class="status-passed">0</td>
+                    <td class="status-failed">50</td>
+                    <td>0.0%</td>
+                </tr>
+
+            </tbody>
+        </table>
+
+        <h2>Failures</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Test ID</th>
+                    <th>Module</th>
+                    <th>Category</th>
+                    <th>Operation</th>
+                    <th>Error</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr>
+                    <td>python_001</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'nums'; Test 2: Execution failed - that() got an unexpected keyword argument 'nums'; Test 3: Execution failed - that() got an unexpected keyword argument 'nums'; Test 4: Execution failed - that() got an unexpected keyword argument 'nums'</td>
+                    <td>2.36s</td>
+                </tr>
+
+                <tr>
+                    <td>python_002</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 's'; Test 2: Execution failed - that() got an unexpected keyword argument 's'; Test 3: Execution failed - that() got an unexpected keyword argument 's'; Test 4: Execution failed - that() got an unexpected keyword argument 's'</td>
+                    <td>0.33s</td>
+                </tr>
+
+                <tr>
+                    <td>python_003</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'strs'; Test 2: Execution failed - that() got an unexpected keyword argument 'strs'; Test 3: Execution failed - that() got an unexpected keyword argument 'strs'; Test 4: Execution failed - that() got an unexpected keyword argument 'strs'</td>
+                    <td>0.32s</td>
+                </tr>
+
+                <tr>
+                    <td>python_004</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'nums'; Test 2: Execution failed - that() got an unexpected keyword argument 'nums'; Test 3: Execution failed - that() got an unexpected keyword argument 'nums'; Test 4: Execution failed - that() got an unexpected keyword argument 'nums'</td>
+                    <td>0.32s</td>
+                </tr>
+
+                <tr>
+                    <td>python_005</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'n'; Test 2: Execution failed - that() got an unexpected keyword argument 'n'; Test 3: Execution failed - that() got an unexpected keyword argument 'n'; Test 4: Execution failed - that() got an unexpected keyword argument 'n'</td>
+                    <td>0.33s</td>
+                </tr>
+
+                <tr>
+                    <td>python_006</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'list1'; Test 2: Execution failed - that() got an unexpected keyword argument 'list1'; Test 3: Execution failed - that() got an unexpected keyword argument 'list1'; Test 4: Execution failed - that() got an unexpected keyword argument 'list1'</td>
+                    <td>0.32s</td>
+                </tr>
+
+                <tr>
+                    <td>python_007</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'strs'; Test 2: Execution failed - that() got an unexpected keyword argument 'strs'; Test 3: Execution failed - that() got an unexpected keyword argument 'strs'</td>
+                    <td>0.31s</td>
+                </tr>
+
+                <tr>
+                    <td>python_008</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'operations'</td>
+                    <td>0.29s</td>
+                </tr>
+
+                <tr>
+                    <td>python_009</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 's'; Test 2: Execution failed - that() got an unexpected keyword argument 's'; Test 3: Execution failed - that() got an unexpected keyword argument 's'; Test 4: Execution failed - that() got an unexpected keyword argument 's'; Test 5: Execution failed - that() got an unexpected keyword argument 's'</td>
+                    <td>0.34s</td>
+                </tr>
+
+                <tr>
+                    <td>python_010</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'root'; Test 2: Execution failed - that() got an unexpected keyword argument 'root'</td>
+                    <td>0.29s</td>
+                </tr>
+
+                <tr>
+                    <td>python_011</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'head'; Test 2: Execution failed - that() got an unexpected keyword argument 'head'; Test 3: Execution failed - that() got an unexpected keyword argument 'head'</td>
+                    <td>0.31s</td>
+                </tr>
+
+                <tr>
+                    <td>python_012</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'nums'; Test 2: Execution failed - that() got an unexpected keyword argument 'nums'; Test 3: Execution failed - that() got an unexpected keyword argument 'nums'</td>
+                    <td>0.31s</td>
+                </tr>
+
+                <tr>
+                    <td>python_013</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 's'; Test 2: Execution failed - that() got an unexpected keyword argument 's'; Test 3: Execution failed - that() got an unexpected keyword argument 's'; Test 4: Execution failed - that() got an unexpected keyword argument 's'</td>
+                    <td>0.33s</td>
+                </tr>
+
+                <tr>
+                    <td>python_014</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'arr'; Test 2: Execution failed - that() got an unexpected keyword argument 'arr'; Test 3: Execution failed - that() got an unexpected keyword argument 'arr'; Test 4: Execution failed - that() got an unexpected keyword argument 'arr'</td>
+                    <td>0.31s</td>
+                </tr>
+
+                <tr>
+                    <td>python_015</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'n'; Test 2: Execution failed - that() got an unexpected keyword argument 'n'; Test 3: Execution failed - that() got an unexpected keyword argument 'n'; Test 4: Execution failed - that() got an unexpected keyword argument 'n'</td>
+                    <td>0.38s</td>
+                </tr>
+
+                <tr>
+                    <td>python_016</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - solution() got an unexpected keyword argument 'capacity'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_017</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'grid'; Test 2: Execution failed - that() got an unexpected keyword argument 'grid'</td>
+                    <td>0.30s</td>
+                </tr>
+
+                <tr>
+                    <td>python_018</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'nums1'; Test 2: Execution failed - that() got an unexpected keyword argument 'nums1'</td>
+                    <td>0.30s</td>
+                </tr>
+
+                <tr>
+                    <td>python_019</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'operations'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_020</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'n'; Test 2: Execution failed - that() got an unexpected keyword argument 'n'</td>
+                    <td>0.29s</td>
+                </tr>
+
+                <tr>
+                    <td>python_021</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'filename'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_022</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'graph'</td>
+                    <td>0.29s</td>
+                </tr>
+
+                <tr>
+                    <td>python_023</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'arr'; Test 2: Execution failed - that() got an unexpected keyword argument 'arr'</td>
+                    <td>0.29s</td>
+                </tr>
+
+                <tr>
+                    <td>python_024</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'nums'; Test 2: Execution failed - that() got an unexpected keyword argument 'nums'; Test 3: Execution failed - that() got an unexpected keyword argument 'nums'</td>
+                    <td>0.30s</td>
+                </tr>
+
+                <tr>
+                    <td>python_025</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 's'; Test 2: Execution failed - that() got an unexpected keyword argument 's'; Test 3: Execution failed - that() got an unexpected keyword argument 's'</td>
+                    <td>0.34s</td>
+                </tr>
+
+                <tr>
+                    <td>python_026</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'nums'; Test 2: Execution failed - that() got an unexpected keyword argument 'nums'</td>
+                    <td>0.30s</td>
+                </tr>
+
+                <tr>
+                    <td>python_027</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'operations'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_028</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'nums'; Test 2: Execution failed - that() got an unexpected keyword argument 'nums'; Test 3: Execution failed - that() got an unexpected keyword argument 'nums'</td>
+                    <td>0.31s</td>
+                </tr>
+
+                <tr>
+                    <td>python_029</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'operations'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_030</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'prices'; Test 2: Execution failed - that() got an unexpected keyword argument 'prices'; Test 3: Execution failed - that() got an unexpected keyword argument 'prices'</td>
+                    <td>0.32s</td>
+                </tr>
+
+                <tr>
+                    <td>python_031</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'graph'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_032</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'graph'</td>
+                    <td>0.37s</td>
+                </tr>
+
+                <tr>
+                    <td>python_033</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'text'; Test 2: Execution failed - that() got an unexpected keyword argument 'text'</td>
+                    <td>0.30s</td>
+                </tr>
+
+                <tr>
+                    <td>python_034</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'operations'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_035</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 's'; Test 2: Execution failed - that() got an unexpected keyword argument 's'; Test 3: Execution failed - that() got an unexpected keyword argument 's'</td>
+                    <td>0.31s</td>
+                </tr>
+
+                <tr>
+                    <td>python_036</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'n'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_037</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'graph'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_038</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'text1'; Test 2: Execution failed - that() got an unexpected keyword argument 'text1'; Test 3: Execution failed - that() got an unexpected keyword argument 'text1'</td>
+                    <td>0.31s</td>
+                </tr>
+
+                <tr>
+                    <td>python_039</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'word1'; Test 2: Execution failed - that() got an unexpected keyword argument 'word1'; Test 3: Execution failed - that() got an unexpected keyword argument 'word1'</td>
+                    <td>0.30s</td>
+                </tr>
+
+                <tr>
+                    <td>python_040</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'operations'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_041</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'text'; Test 2: Execution failed - that() got an unexpected keyword argument 'text'</td>
+                    <td>0.29s</td>
+                </tr>
+
+                <tr>
+                    <td>python_042</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'graph'</td>
+                    <td>0.29s</td>
+                </tr>
+
+                <tr>
+                    <td>python_043</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'graph'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_044</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'coins'; Test 2: Execution failed - that() got an unexpected keyword argument 'coins'; Test 3: Execution failed - that() got an unexpected keyword argument 'coins'</td>
+                    <td>0.30s</td>
+                </tr>
+
+                <tr>
+                    <td>python_045</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'weights'; Test 2: Execution failed - that() got an unexpected keyword argument 'weights'</td>
+                    <td>0.30s</td>
+                </tr>
+
+                <tr>
+                    <td>python_046</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 's'; Test 2: Execution failed - that() got an unexpected keyword argument 's'; Test 3: Execution failed - that() got an unexpected keyword argument 's'; Test 4: Execution failed - that() got an unexpected keyword argument 's'</td>
+                    <td>0.32s</td>
+                </tr>
+
+                <tr>
+                    <td>python_047</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'n'; Test 2: Execution failed - that() got an unexpected keyword argument 'n'</td>
+                    <td>0.30s</td>
+                </tr>
+
+                <tr>
+                    <td>python_048</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'html'</td>
+                    <td>0.28s</td>
+                </tr>
+
+                <tr>
+                    <td>python_049</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'json_str'; Test 2: Execution failed - that() got an unexpected keyword argument 'json_str'</td>
+                    <td>0.29s</td>
+                </tr>
+
+                <tr>
+                    <td>python_050</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - that() got an unexpected keyword argument 'query'</td>
+                    <td>0.28s</td>
+                </tr>
+
+            </tbody>
+        </table>
+
+        <h2>Performance Metrics</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr><td>Average Execution Time</td><td>0.34s</td></tr>
+                <tr><td>Min Execution Time</td><td>0.28s</td></tr>
+                <tr><td>Max Execution Time</td><td>2.36s</td></tr>
+                <tr><td>Median Execution Time</td><td>0.30s</td></tr>
+
+            </tbody>
+        </table>
+
+    </div>
+</body>
+</html>

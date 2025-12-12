@@ -1,0 +1,166 @@
+---
+alwaysApply: false
+---
+{
+  "title": "Thynaptic Publication Style Framework v2.0",
+  "purpose": "Standardize all Thynaptic research outputs—public, internal, system, and safety—using a dual-persona style framework derived from Anthropic’s Claude model documentation and adapted for cognitive-systems research.",
+  "mode": "strict",
+  "style_modes": [
+    {
+      "name": "Soft Academic",
+      "applies_to": [
+        "system cards",
+        "model cards",
+        "public technical reports",
+        "external research briefs"
+      ],
+      "tone": [
+        "approachable yet rigorous",
+        "balanced formality",
+        "gentle clarity",
+        "minimal warmth",
+        "no hype or marketing"
+      ],
+      "voice": [
+        "first-person plural ('we')",
+        "present concepts before details",
+        "short, clear paragraphs",
+        "define cognitive metaphors"
+      ],
+      "structure": [
+        "Abstract",
+        "Introduction",
+        "Architecture Summary",
+        "Capabilities Overview",
+        "Safety & Reliability Summary",
+        "Limitations",
+        "Future Directions"
+      ],
+      "examples": [
+        "In this report, we describe…",
+        "This model family was developed to…",
+        "We evaluate performance across…"
+      ]
+    },
+    {
+      "name": "Hard Technical Doctrine",
+      "applies_to": [
+        "safety specifications",
+        "internal research",
+        "governance & policy docs",
+        "evaluation frameworks",
+        "alignment frameworks"
+      ],
+      "tone": [
+        "extremely formal",
+        "clinical, zero emotional coloration",
+        "evidence-only",
+        "policy/protocol language"
+      ],
+      "voice": [
+        "mechanism-first, no metaphors",
+        "all claims reference method, data, or protocol",
+        "direct, institutional register"
+      ],
+      "structure": [
+        "Abstract",
+        "Model Training & Architecture",
+        "Evaluation Methods",
+        "Safeguards & Safety Frameworks",
+        "Honesty & Reliability Testing",
+        "Agentic Safety",
+        "Cyber Capability Analysis",
+        "Reward Hacking & Failure Modes",
+        "Behavioral Audits",
+        "Third-Party Testing",
+        "Evidence from Deployment",
+        "Risk Area Deep Dive",
+        "Limitations",
+        "Forward Research Trajectories"
+      ],
+      "examples": [
+        "We evaluate the system using a multi-stage alignment protocol…",
+        "This section defines the criteria used to assess…",
+        "We observed failure mode recurrence at…"
+      ]
+    }
+  ],
+  "thynaptic_identity": {
+    "required_terminology": [
+      "cognitive layer",
+      "inference pathway",
+      "memory graph",
+      "routing engine",
+      "local-first execution",
+      "adaptive sampling",
+      "safety envelope"
+    ],
+    "framing": [
+      "mechanistic explanations",
+      "architecture-anchored claims",
+      "research-institute voice",
+      "never use marketing or emotive language"
+    ]
+  },
+  "style_comparison_table": {
+    "columns": [
+      "Feature",
+      "Soft Academic",
+      "Hard Technical Doctrine"
+    ],
+    "rows": [
+      ["Audience", "Public, researchers", "Internal research, evaluators"],
+      ["Tone", "Polished, balanced", "Clinical, regulatory"],
+      ["Purpose", "Explain", "Specify"],
+      ["Structure", "Narrative flow", "Protocol-driven"],
+      ["Warmth", "Light", "None"],
+      ["Cognitive Terms", "Moderate", "Heavy, definitional"]
+    ]
+  },
+  "template_snippets": {
+    "Soft Academic": [
+      "We introduce the cognitive-layer architecture that enables adaptive, local-first inference. This document summarizes the system’s capabilities, safety profile, and observed limitations."
+    ],
+    "Hard Technical Doctrine": [
+      "This section defines the inference routing protocol. All evaluations follow the standardized procedure outlined in Section 4.2. Results are validated against multi-turn robustness metrics."
+    ]
+  },
+  "document_assignment_matrix": {
+    "Soft Academic": [
+      "system cards",
+      "model cards",
+      "public research announcements",
+      "product-aligned technical overviews"
+    ],
+    "Hard Technical Doctrine": [
+      "safety specifications",
+      "alignment frameworks",
+      "architecture governance",
+      "internal cognitive-systems research",
+      "evaluation protocol documents"
+    ]
+  },
+  "composition_rules": [
+    "Always use the prescribed structure and section order for the chosen style and template.",
+    "Do not add, omit, or reorder mandatory sections.",
+    "Every claim must be mechanism- or evidence-focused; contextualize findings with reference to cognitive system terms.",
+    "Use neutral tables or bulleted lists for metric results—never narrate.",
+    "If supporting data is not available, explicitly mark as 'hypothesis' in Limitations."
+  ],
+  "formatting_and_metadata": [
+    "Report numbers formatted as TR-YYYY-## (sequential).",
+    "Dates in ISO 8601 (YYYY-MM-DD).",
+    "Versions use vMAJOR.MINOR.PATCH.",
+    "Authors must list role/team when possible."
+  ],
+  "safety_and_ethics": [
+    "Never produce content that is harmful or policy-violating.",
+    "Policy, risk, or safety issues must be documented in Safety & Reliability Summary, Systemic Risks, or Governance sections, per structural assignment."
+  ],
+  "developer_instructions": [
+    "Apply these style instructions as the highest-priority constraint when writing or editing any Thynaptic report or publication.",
+    "Auto-detect deviations; revise to full compliance before returning content.",
+    "If significant ambiguity remains, append a 'Compliance Report' listing performed style checks.",
+    "Prioritize brevity, clarity, and architectural focus."
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "hedging_phrases": {
+    "high_confidence": [
+      "I'm fairly sure",
+      "I believe",
+      "I think",
+      "I'm confident that",
+      "It seems clear that"
+    ],
+    "medium_confidence": [
+      "I think",
+      "I believe",
+      "It seems",
+      "It appears",
+      "I'd say",
+      "It looks like"
+    ],
+    "low_confidence": [
+      "I'm not entirely sure",
+      "I'm not certain",
+      "It might be",
+      "Perhaps",
+      "I'm not sure but",
+      "It's possible that",
+      "Maybe"
+    ]
+  },
+  "uncertainty_markers": {
+    "mild": [
+      "maybe",
+      "perhaps",
+      "possibly",
+      "might",
+      "could",
+      "sort of",
+      "kind of"
+    ],
+    "moderate": [
+      "I think",
+      "I believe",
+      "probably",
+      "likely",
+      "I'd say",
+      "it seems",
+      "it appears"
+    ],
+    "strong": [
+      "I'm not sure",
+      "uncertain",
+      "unclear",
+      "hard to say",
+      "I'm not certain",
+      "difficult to know",
+      "I'm not entirely confident"
+    ]
+  },
+  "correction_patterns": {
+    "patterns": [
+      "Actually,",
+      "Wait, let me reconsider.",
+      "On second thought,",
+      "Actually, I think",
+      "Let me correct that -",
+      "Actually, it might be",
+      "I should clarify -",
+      "Actually, let me think about that again.",
+      "Hmm, actually",
+      "Wait, I should say"
+    ],
+    "frequency": 0.1
+  },
+  "confidence_modulation": {
+    "high_confidence_threshold": 0.8,
+    "medium_confidence_threshold": 0.5,
+    "low_confidence_threshold": 0.3,
+    "use_hedging": true,
+    "use_qualifiers": true
+  },
+  "qualifiers": {
+    "neutral": [
+      "sort of",
+      "kind of",
+      "pretty much",
+      "basically",
+      "essentially",
+      "largely",
+      "mostly"
+    ],
+    "formal": [
+      "essentially",
+      "primarily",
+      "fundamentally",
+      "largely",
+      "predominantly"
+    ],
+    "casual": [
+      "kinda",
+      "sorta",
+      "pretty much",
+      "basically",
+      "like"
+    ]
+  }
+}
+

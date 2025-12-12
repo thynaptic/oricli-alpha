@@ -1,0 +1,340 @@
+---
+description: API development standards for FastAPI endpoints and OpenAI-compatible interfaces
+alwaysApply: false
+globs: mavaia_core/api/**/*.py
+---
+
+# Cursor Rules: API Development Standards
+
+rules:
+  - id: api.structure.fastapi_patterns
+    description: |
+      All API endpoints must follow FastAPI best practices and established patterns.
+      - Use FastAPI dependency injection for shared logic (auth, validation, etc.)
+      - Use Pydantic models for request/response validation
+      - Use type hints for all function parameters and return types
+      - Group related endpoints using FastAPI routers when appropriate
+      - Use descriptive endpoint function names that indicate their purpose
+      - Document endpoints with docstrings and OpenAPI tags
+    severity: error
+
+  - id: api.structure.endpoint_naming
+    description: |
+      API endpoints must follow RESTful naming conventions.
+      - Use HTTP verbs appropriately (GET, POST, PUT, DELETE, PATCH)
+      - Use plural nouns for resource collections (e.g., `/v1/modules`, `/v1/metrics`)
+      - Use singular nouns or IDs for individual resources (e.g., `/v1/modules/{module_name}`)
+      - Use kebab-case for URL paths
+      - Version all endpoints with `/v1/` prefix
+      - Use descriptive path segments that indicate resource hierarchy
+    severity: error
+
+  - id: api.structure.openai_compatibility
+    description: |
+      OpenAI-compatible endpoints must strictly adhere to OpenAI API specifications.
+      - `/v1/chat/completions` must match OpenAI Chat Completions API format
+      - `/v1/embeddings` must match OpenAI Embeddings API format
+      - `/v1/models` must return models list in OpenAI format
+      - Request/response schemas must be compatible with OpenAI clients
+      - Error responses must follow OpenAI error format
+      - Streaming responses must use Server-Sent Events (SSE) format
+    severity: error
+
+  - id: api.validation.request_validation
+    description: |
+      All API requests must be validated using Pydantic models.
+      - Define Pydantic models for all request bodies
+      - Use field validators for complex validation logic
+      - Validate required fields, types, and constraints
+      - Provide clear validation error messages
+      - Use FastAPI's automatic validation and error responses
+      - Document validation rules in model docstrings
+    severity: error
+
+  - id: api.validation.response_formatting
+    description: |
+      API responses must follow consistent formatting standards.
+      - Use Pydantic models for all response bodies
+      - Include standard response fields (status, data, errors when applicable)
+      - Use consistent error response format across all endpoints
+      - Include request metadata (request_id, timestamp) when appropriate
+      - Document response schemas in OpenAPI documentation
+    severity: error
+
+  - id: api.error_handling.error_responses
+    description: |
+      Error responses must be consistent and informative.
+      - Use appropriate HTTP status codes (400, 401, 403, 404, 500, etc.)
+      - Return structured error responses with error codes and messages
+      - Include context in error responses (field names, validation details)
+      - Use FastAPI's HTTPException for standard HTTP errors
+      - Log errors with appropriate context before returning responses
+      - Never expose internal implementation details in error messages
+    severity: error
+
+  - id: api.error_handling.exception_mapping
+    description: |
+      Internal exceptions must be mapped to appropriate HTTP responses.
+      - Map MavaiaError exceptions to appropriate HTTP status codes
+      - Map ModuleError to 500 with module context
+      - Map AuthenticationError to 401
+      - Map ValidationError to 400
+      - Map ModuleNotFoundError to 404
+      - Use exception handlers to centralize exception-to-response mapping
+    severity: error
+
+  - id: api.authentication.patterns
+    description: |
+      Authentication must be implemented consistently across all protected endpoints.
+      - Use API key authentication via `Authorization: Bearer <token>` header
+      - Validate API keys using dependency injection
+      - Support optional authentication (validate if provided, allow if not required)
+      - Support required authentication mode (reject requests without valid key)
+      - Store API keys securely (environment variables, secrets management)
+      - Never log or expose API keys in error messages or logs
+    severity: error
+
+  - id: api.authentication.dependency_injection
+    description: |
+      Use FastAPI dependency injection for authentication logic.
+      - Create authentication dependency functions
+      - Reuse authentication dependencies across endpoints
+      - Support both optional and required authentication modes
+      - Return user/request context from authentication dependencies
+      - Document authentication requirements in endpoint docstrings
+    severity: error
+
+  - id: api.documentation.openapi
+    description: |
+      All endpoints must be properly documented in OpenAPI/Swagger.
+      - Use descriptive endpoint summaries and descriptions
+      - Tag endpoints appropriately for organization
+      - Document all request parameters, bodies, and responses
+      - Include example requests and responses
+      - Document error responses and status codes
+      - Keep OpenAPI documentation up-to-date with code changes
+    severity: error
+
+  - id: api.documentation.endpoint_docstrings
+    description: |
+      All endpoint functions must have comprehensive docstrings.
+      - Document endpoint purpose and behavior
+      - Document request parameters and their types
+      - Document response format and status codes
+      - Document authentication requirements
+      - Document error conditions and their responses
+      - Include usage examples when helpful
+    severity: warning
+
+  - id: api.versioning.strategy
+    description: |
+      API versioning must follow semantic versioning principles.
+      - All endpoints must be versioned with `/v1/` prefix
+      - Breaking changes require new version (e.g., `/v2/`)
+      - Non-breaking changes can be made within the same version
+      - Document version changes in API changelog
+      - Support multiple API versions simultaneously during transition periods
+      - Deprecate old versions with clear migration paths
+    severity: error
+
+  - id: api.middleware.cors
+    description: |
+      CORS middleware must be configured appropriately.
+      - Enable CORS for development and production environments
+      - Configure allowed origins based on environment
+      - Use specific origins in production, not wildcards
+      - Configure allowed methods and headers appropriately
+      - Document CORS configuration in deployment guides
+    severity: warning
+
+  - id: api.middleware.logging
+    description: |
+      API requests and responses must be logged appropriately.
+      - Log all incoming requests with metadata (method, path, client IP)
+      - Log request processing time
+      - Log errors with full context
+      - Do not log sensitive data (API keys, passwords, PII)
+      - Use structured logging for better observability
+      - Include request IDs for traceability
+    severity: warning
+
+  - id: api.tools.registration
+    description: |
+      Tool registration must follow established patterns.
+      - Register tools using ToolRegistry
+      - Define tool schemas with proper parameter validation
+      - Document tool handlers with clear docstrings
+      - Handle tool execution errors gracefully
+      - Return tool results in consistent format
+      - Support tool versioning and deprecation
+    severity: error
+
+  - id: api.tools.handler_patterns
+    description: |
+      Tool handlers must follow consistent patterns.
+      - Tool handlers must accept typed parameters
+      - Validate tool parameters before execution
+      - Execute tool operations using module registry
+      - Return results in standardized tool result format
+      - Handle errors and return appropriate error responses
+      - Document tool behavior and limitations
+    severity: error
+
+  - id: api.performance.response_time
+    description: |
+      API endpoints must meet performance requirements.
+      - Health check endpoints must respond in <100ms
+      - Simple read operations must respond in <500ms
+      - Complex operations must respond in <5s or support async/streaming
+      - Use async endpoints for long-running operations
+      - Implement request timeouts appropriately
+      - Monitor and alert on slow endpoints
+    severity: warning
+
+  - id: api.quality.type_safety
+    description: |
+      All API code must use type hints and type checking.
+      - Use type hints for all function parameters and return types
+      - Use Pydantic models for request/response validation
+      - Run mypy type checking in CI/CD
+      - Fix type errors before merging code
+      - Use `typing` module for complex types (Optional, List, Dict, etc.)
+    severity: error
+
+examples:
+  - description: "Standard FastAPI endpoint with authentication"
+    language: python
+    code: |
+      from fastapi import APIRouter, Depends, HTTPException, Header
+      from typing import Optional
+      from mavaia_core.types.models import ChatCompletionRequest, ChatCompletionResponse
+      from mavaia_core.exceptions import AuthenticationError
+      
+      
+      router = APIRouter(prefix="/v1", tags=["chat"])
+      
+      
+      async def verify_api_key(
+          authorization: Optional[str] = Header(None),
+          api_key: Optional[str] = None,
+          require_auth: bool = False
+      ) -> Optional[str]:
+          """
+          Verify API key from Authorization header
+          
+          Args:
+              authorization: Authorization header value
+              api_key: Expected API key
+              require_auth: Whether authentication is required
+          
+          Returns:
+              API key if valid, None if optional and not provided
+          
+          Raises:
+              HTTPException: If authentication fails
+          """
+          if not api_key:
+              if require_auth:
+                  raise HTTPException(status_code=401, detail="API key required")
+              return None
+          
+          if not authorization or not authorization.startswith("Bearer "):
+              if require_auth:
+                  raise HTTPException(status_code=401, detail="Invalid authorization header")
+              return None
+          
+          token = authorization.replace("Bearer ", "")
+          if token != api_key:
+              raise HTTPException(status_code=401, detail="Invalid API key")
+          
+          return token
+      
+      
+      @router.post("/chat/completions", response_model=ChatCompletionResponse)
+      async def create_chat_completion(
+          request: ChatCompletionRequest,
+          api_key: Optional[str] = Depends(verify_api_key)
+      ) -> ChatCompletionResponse:
+          """
+          Create a chat completion
+          
+          Args:
+              request: Chat completion request
+              api_key: Verified API key (from dependency)
+          
+          Returns:
+              Chat completion response
+          
+          Raises:
+              HTTPException: For validation or processing errors
+          """
+          # Implementation here
+          pass
+
+  - description: "Error handling with exception mapping"
+    language: python
+    code: |
+      from fastapi import FastAPI, HTTPException, Request
+      from fastapi.responses import JSONResponse
+      from mavaia_core.exceptions import (
+          MavaiaError,
+          AuthenticationError,
+          ValidationError,
+          ModuleNotFoundError
+      )
+      
+      
+      app = FastAPI()
+      
+      
+      @app.exception_handler(AuthenticationError)
+      async def authentication_error_handler(request: Request, exc: AuthenticationError):
+          """Handle authentication errors"""
+          return JSONResponse(
+              status_code=401,
+              content={
+                  "error": {
+                      "message": str(exc),
+                      "type": "authentication_error",
+                      "code": "invalid_api_key"
+                  }
+              }
+          )
+      
+      
+      @app.exception_handler(ValidationError)
+      async def validation_error_handler(request: Request, exc: ValidationError):
+          """Handle validation errors"""
+          return JSONResponse(
+              status_code=400,
+              content={
+                  "error": {
+                      "message": str(exc),
+                      "type": "validation_error",
+                      "field": exc.field,
+                      "code": "invalid_parameter"
+                  }
+              }
+          )
+      
+      
+      @app.exception_handler(ModuleNotFoundError)
+      async def module_not_found_handler(request: Request, exc: ModuleNotFoundError):
+          """Handle module not found errors"""
+          return JSONResponse(
+              status_code=404,
+              content={
+                  "error": {
+                      "message": str(exc),
+                      "type": "module_not_found",
+                      "code": "module_not_found"
+                  }
+              }
+          )
+
+references:
+  - FastAPI documentation: https://fastapi.tiangolo.com/
+  - OpenAI API reference: https://platform.openai.com/docs/api-reference
+  - Pydantic validation: https://docs.pydantic.dev/
+  - Mavaia API implementation: mavaia_core/api/server.py
+  - Mavaia OpenAI compatibility: mavaia_core/api/openai_compatible.py

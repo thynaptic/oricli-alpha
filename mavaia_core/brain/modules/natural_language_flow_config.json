@@ -1,0 +1,115 @@
+{
+  "sentence_patterns": {
+    "simple": [
+      "{subject} {verb} {object}.",
+      "{subject} is {predicate}.",
+      "{subject} {verb}.",
+      "There is {object}."
+    ],
+    "compound": [
+      "{clause1}, and {clause2}.",
+      "{clause1}, but {clause2}.",
+      "{clause1}, or {clause2}.",
+      "{clause1}; {clause2}."
+    ],
+    "complex": [
+      "{clause1}, {subordinator} {clause2}.",
+      "When {clause}, {result}.",
+      "Although {clause}, {result}.",
+      "Because {clause}, {result}."
+    ],
+    "variations": {
+      "opening_words": ["Actually,", "Well,", "So,", "Now,", "I mean,", "You know,", "Look,"],
+      "interjections": ["I think,", "I guess,", "I suppose,", "You see,", "The thing is,"],
+      "qualifiers": ["kind of", "sort of", "pretty much", "basically", "essentially"]
+    }
+  },
+  "flow_transitions": {
+    "continuation": [
+      "And",
+      "Also,",
+      "Plus,",
+      "Additionally,",
+      "What's more,",
+      "On top of that,",
+      "Not only that,"
+    ],
+    "contrast": [
+      "But",
+      "However,",
+      "Though,",
+      "Although,",
+      "On the other hand,",
+      "That said,",
+      "Still,"
+    ],
+    "cause": [
+      "Because",
+      "Since",
+      "As",
+      "Due to",
+      "Given that"
+    ],
+    "result": [
+      "So",
+      "Therefore,",
+      "Thus,",
+      "As a result,",
+      "That's why,",
+      "Which means"
+    ],
+    "emphasis": [
+      "Actually,",
+      "In fact,",
+      "Really,",
+      "Honestly,",
+      "To be honest,"
+    ],
+    "acknowledgment": [
+      "I see,",
+      "Right,",
+      "Okay,",
+      "Got it,",
+      "That makes sense,",
+      "I understand,"
+    ]
+  },
+  "rhythm_guidelines": {
+    "sentence_length_targets": {
+      "short": {"min": 3, "max": 8, "frequency": 0.3},
+      "medium": {"min": 9, "max": 15, "frequency": 0.5},
+      "long": {"min": 16, "max": 25, "frequency": 0.2}
+    },
+    "variation_preferences": {
+      "min_variation_coefficient": 0.3,
+      "prefer_mixing": true,
+      "avoid_monotony": true
+    }
+  },
+  "natural_flow_rules": {
+    "question_response_transitions": [
+      "Well,",
+      "So,",
+      "Right,",
+      "I see,",
+      "Okay,",
+      "That's a good question,",
+      "Let me think,"
+    ],
+    "topic_continuation": [
+      "And",
+      "Also,",
+      "Plus,",
+      "Speaking of which,",
+      "That reminds me,"
+    ],
+    "topic_shift": [
+      "By the way,",
+      "Speaking of,",
+      "On another note,",
+      "Changing topics a bit,",
+      "This is a bit different, but"
+    ]
+  }
+}
+

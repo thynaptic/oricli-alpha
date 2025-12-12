@@ -1,0 +1,289 @@
+---
+description: Testing standards and patterns for Mavaia Core
+alwaysApply: false
+globs: tests/**/*.py
+---
+
+# Cursor Rules: Testing Standards
+
+rules:
+  - id: testing.structure.organization
+    description: |
+      Tests must be organized following the established project structure.
+      - Unit tests: Test individual functions, methods, and classes in isolation
+      - Integration tests: Test module interactions, pipelines, and system components
+      - Test files must be in the `tests/` directory and mirror the package structure
+      - Test files must be named `test_*.py` or `*_test.py`
+      - Test classes must be named `Test*` (PascalCase)
+      - Test functions must be named `test_*` (snake_case)
+    severity: error
+
+  - id: testing.structure.fixtures
+    description: |
+      Test fixtures must follow pytest conventions and be properly scoped.
+      - Use `@pytest.fixture` decorator for all fixtures
+      - Scope fixtures appropriately: `function` (default), `class`, `module`, `session`
+      - Session-scoped fixtures for expensive setup (module discovery, database connections)
+      - Function-scoped fixtures for test-specific data
+      - Place shared fixtures in `tests/conftest.py`
+      - Document fixture purpose and usage in docstrings
+      - Use descriptive fixture names that indicate their purpose
+    severity: error
+
+  - id: testing.structure.test_classes
+    description: |
+      Test classes must be used for grouping related tests and sharing fixtures.
+      - Use test classes when multiple tests share setup/teardown logic
+      - Test class names must start with `Test` and use PascalCase
+      - Each test class should focus on a single module or component
+      - Use class-scoped fixtures for shared setup within a test class
+      - Document test class purpose in class docstring
+    severity: warning
+
+  - id: testing.coverage.requirements
+    description: |
+      All modules must have comprehensive test coverage.
+      - Each brain module must have at least one integration test
+      - All public methods and operations must be tested
+      - Edge cases and error conditions must be tested
+      - Test coverage should target 80%+ for critical modules
+      - Use pytest-cov to measure and report coverage
+      - Coverage reports must be generated for CI/CD pipelines
+    severity: error
+
+  - id: testing.patterns.module_testing
+    description: |
+      Module tests must follow the established module testing patterns.
+      - Test module initialization and metadata
+      - Test all operations declared in module metadata
+      - Test parameter validation for each operation
+      - Test error handling for invalid inputs
+      - Test module lifecycle (initialize, execute, cleanup)
+      - Use ModuleRegistry for module discovery in tests
+      - Test module integration with other modules when applicable
+    severity: error
+
+  - id: testing.patterns.integration_testing
+    description: |
+      Integration tests must verify end-to-end workflows and module interactions.
+      - Test complete pipelines (e.g., multi-agent pipeline)
+      - Test module-to-module communication
+      - Test API endpoints with real module execution
+      - Test state persistence and retrieval
+      - Test error propagation across module boundaries
+      - Use realistic test data that mirrors production scenarios
+    severity: error
+
+  - id: testing.patterns.mocking
+    description: |
+      Use mocking judiciously to isolate units under test.
+      - Mock external services (APIs, databases, file systems)
+      - Mock expensive operations (model loading, network calls)
+      - Do not mock the module being tested (test real behavior)
+      - Use `unittest.mock` or `pytest-mock` for mocking
+      - Document why mocking is necessary in test comments
+      - Prefer dependency injection over global mocks
+    severity: warning
+
+  - id: testing.patterns.test_data
+    description: |
+      Test data must be well-defined, reusable, and documented.
+      - Use fixtures for test data instead of hardcoding in tests
+      - Create realistic but minimal test data
+      - Use descriptive names for test data fixtures (e.g., `sample_query`, `sample_documents`)
+      - Document test data structure and purpose
+      - Avoid using production data in tests
+      - Use factories or builders for complex test data
+    severity: warning
+
+  - id: testing.patterns.assertions
+    description: |
+      Assertions must be clear, specific, and provide actionable failure messages.
+      - Use descriptive assertion messages
+      - Test both positive and negative cases
+      - Assert on specific fields/attributes, not entire objects when possible
+      - Use pytest's assertion introspection (avoid custom assertion helpers unless necessary)
+      - Test return types and data structures
+      - Verify side effects when applicable
+    severity: error
+
+  - id: testing.patterns.error_testing
+    description: |
+      Error conditions must be explicitly tested.
+      - Test all exception types raised by modules
+      - Test invalid parameter combinations
+      - Test boundary conditions (empty inputs, None values, extreme values)
+      - Test error messages for clarity and actionability
+      - Use `pytest.raises()` for exception testing
+      - Verify error context and metadata when available
+    severity: error
+
+  - id: testing.performance.benchmarks
+    description: |
+      Performance-critical code must include performance tests.
+      - Benchmark module operation execution times
+      - Test that operations complete within acceptable time limits
+      - Use `pytest-benchmark` for performance testing
+      - Document performance expectations in test docstrings
+      - Performance tests should be marked and can be skipped in fast test runs
+    severity: warning
+
+  - id: testing.documentation.test_docstrings
+    description: |
+      All tests must have clear docstrings explaining their purpose.
+      - Test functions must have docstrings describing what is being tested
+      - Test classes must have docstrings describing the component being tested
+      - Document test data requirements and assumptions
+      - Explain complex test logic or setup
+      - Use docstrings to document expected behavior and edge cases
+    severity: warning
+
+  - id: testing.documentation.test_organization
+    description: |
+      Test files must be well-organized with clear sections.
+      - Use section comments to group related tests (e.g., `# ============================================================================`)
+      - Group tests by operation, feature, or component
+      - Use descriptive test names that indicate what is being tested
+      - Include setup/teardown documentation when complex
+    severity: info
+
+  - id: testing.quality.isolation
+    description: |
+      Tests must be isolated and independent.
+      - Tests must not depend on execution order
+      - Tests must not share mutable state
+      - Each test must be able to run independently
+      - Use fixtures to set up and tear down test state
+      - Clean up resources (files, connections, etc.) after tests
+    severity: error
+
+  - id: testing.quality.determinism
+    description: |
+      Tests must be deterministic and reproducible.
+      - Use fixed random seeds when randomness is required
+      - Avoid time-dependent logic without mocking time
+      - Use deterministic test data
+      - Document any non-deterministic aspects and why they are acceptable
+    severity: error
+
+  - id: testing.quality.maintainability
+    description: |
+      Tests must be maintainable and follow DRY principles.
+      - Extract common test logic into helper functions or fixtures
+      - Use parameterized tests (`@pytest.mark.parametrize`) for similar test cases
+      - Avoid code duplication across tests
+      - Keep tests focused and single-purpose
+      - Refactor tests when patterns emerge
+    severity: warning
+
+  - id: testing.integration.conftest
+    description: |
+      The `conftest.py` file must contain shared test configuration and fixtures.
+      - Place session-scoped fixtures in `conftest.py`
+      - Configure pytest hooks and plugins in `conftest.py`
+      - Set up test environment and logging in `conftest.py`
+      - Document custom pytest configuration
+      - Use `conftest.py` for test-wide setup, not test-specific logic
+    severity: error
+
+examples:
+  - description: "Standard module test structure"
+    language: python
+    code: |
+      """
+      Integration tests for ExampleModule
+      
+      Tests all operations and error conditions for the example module.
+      """
+      
+      import pytest
+      from mavaia_core.brain.registry import ModuleRegistry
+      from mavaia_core.brain.modules.example import ExampleModule
+      
+      
+      @pytest.fixture(scope="session")
+      def example_module():
+          """Create and initialize example module for testing"""
+          ModuleRegistry.discover_modules()
+          module = ExampleModule()
+          module.initialize()
+          yield module
+          module.cleanup()
+      
+      
+      @pytest.fixture
+      def sample_input():
+          """Sample input data for testing"""
+          return {"text": "test input"}
+      
+      
+      class TestExampleModule:
+          """Test suite for ExampleModule"""
+          
+          def test_operation_foo(self, example_module, sample_input):
+              """Test foo operation with valid input"""
+              result = example_module.execute("foo", sample_input)
+              
+              assert result is not None
+              assert "result" in result
+              assert result["result"] == "expected_value"
+          
+          def test_operation_foo_invalid_input(self, example_module):
+              """Test foo operation with invalid input"""
+              with pytest.raises(ValueError, match="Invalid parameter"):
+                  example_module.execute("foo", {"invalid": "input"})
+          
+          @pytest.mark.parametrize("operation", ["foo", "bar"])
+          def test_all_operations(self, example_module, operation, sample_input):
+              """Test all operations with valid input"""
+              result = example_module.execute(operation, sample_input)
+              assert result is not None
+              assert "result" in result
+
+  - description: "Integration test with multiple modules"
+    language: python
+    code: |
+      """
+      Integration test for multi-module pipeline
+      """
+      
+      import pytest
+      from mavaia_core.brain.registry import ModuleRegistry
+      
+      
+      @pytest.fixture(scope="session")
+      def module_registry():
+          """Initialize module registry for integration tests"""
+          ModuleRegistry.discover_modules(verbose=True)
+          return ModuleRegistry
+      
+      
+      def test_pipeline_execution(module_registry):
+          """Test complete pipeline with multiple modules"""
+          reasoning = module_registry.get_module("reasoning")
+          cognitive = module_registry.get_module("cognitive_generator")
+          
+          # Execute reasoning
+          reasoning_result = reasoning.execute(
+              "reason",
+              {"query": "test query", "reasoning_type": "analytical"}
+          )
+          
+          # Use reasoning result in cognitive generator
+          cognitive_result = cognitive.execute(
+              "generate_response",
+              {
+                  "input_text": "test",
+                  "reasoning_tree": reasoning_result
+              }
+          )
+          
+          assert cognitive_result is not None
+          assert "response" in cognitive_result
+
+references:
+  - pytest documentation: https://docs.pytest.org/
+  - pytest fixtures: https://docs.pytest.org/en/stable/fixture.html
+  - pytest parametrize: https://docs.pytest.org/en/stable/parametrize.html
+  - Mavaia test patterns: tests/test_multi_agent_pipeline.py
+  - Mavaia conftest: tests/conftest.py

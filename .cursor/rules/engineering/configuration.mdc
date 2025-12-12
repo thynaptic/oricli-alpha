@@ -1,0 +1,278 @@
+---
+description: Configuration management standards for environment variables and config files
+alwaysApply: true
+---
+
+# Cursor Rules: Configuration Management Standards
+
+rules:
+  - id: configuration.environment.naming
+    description: |
+      Environment variables must follow consistent naming conventions.
+      - Use `MAVAIA_` prefix for all Mavaia-specific environment variables
+      - Use UPPER_SNAKE_CASE for environment variable names
+      - Use descriptive names that indicate purpose (e.g., `MAVAIA_API_KEY`, `MAVAIA_API_PORT`)
+      - Group related variables with common prefixes (e.g., `MAVAIA_API_*`, `MAVAIA_UI_*`)
+      - Document all environment variables in README or configuration documentation
+      - Use consistent naming across all environments (dev, staging, production)
+    severity: error
+
+  - id: configuration.environment.usage
+    description: |
+      Environment variables must be used appropriately for configuration.
+      - Use environment variables for secrets (API keys, passwords, tokens)
+      - Use environment variables for environment-specific settings (ports, hosts, URLs)
+      - Use environment variables for feature flags and toggles
+      - Provide sensible defaults for optional environment variables
+      - Validate environment variable values on startup
+      - Never hardcode configuration values that should be configurable
+    severity: error
+
+  - id: configuration.environment.validation
+    description: |
+      Environment variable values must be validated.
+      - Validate environment variable types (string, int, bool, etc.)
+      - Validate environment variable ranges and formats
+      - Provide clear error messages for invalid values
+      - Use type conversion functions with error handling
+      - Document expected formats and valid values
+      - Fail fast on invalid configuration at startup
+    severity: error
+
+  - id: configuration.files.structure
+    description: |
+      Configuration files must follow consistent structure and format.
+      - Use JSON format for configuration files (`.json` extension)
+      - Use UTF-8 encoding for all configuration files
+      - Place configuration files in module directories or dedicated config directory
+      - Use descriptive file names (e.g., `module_name_config.json`)
+      - Include version information in configuration files
+      - Document configuration file schema and structure
+    severity: error
+
+  - id: configuration.files.loading
+    description: |
+      Configuration files must be loaded safely and reliably.
+      - Handle missing configuration files gracefully with defaults
+      - Validate configuration file structure after loading
+      - Use try/except blocks for file loading with clear error messages
+      - Log configuration loading status and any warnings
+      - Support configuration file reloading when appropriate
+      - Document default configuration values
+    severity: error
+
+  - id: configuration.files.validation
+    description: |
+      Configuration file contents must be validated.
+      - Validate required fields are present
+      - Validate field types and formats
+      - Validate value ranges and constraints
+      - Use Pydantic models for configuration validation when appropriate
+      - Provide clear error messages for invalid configuration
+      - Document configuration validation rules
+    severity: error
+
+  - id: configuration.hierarchy.precedence
+    description: |
+      Configuration precedence must be clearly defined.
+      - Environment variables override configuration file values
+      - Command-line arguments override environment variables
+      - Document configuration precedence order
+      - Use consistent precedence across all configuration sources
+      - Log final configuration values (without secrets) on startup
+    severity: error
+
+  - id: configuration.secrets.management
+    description: |
+      Secrets must be managed securely.
+      - Never store secrets in configuration files committed to version control
+      - Use environment variables or secure secrets management for secrets
+      - Never log or expose secrets in error messages or logs
+      - Rotate secrets regularly
+      - Use different secrets for different environments
+      - Document secret requirements and management procedures
+    severity: error
+
+  - id: configuration.defaults.sensible_defaults
+    description: |
+      Sensible defaults must be provided for all configuration options.
+      - Provide defaults that work for local development
+      - Document all default values
+      - Use secure defaults for production (e.g., require authentication)
+      - Allow all configuration to be overridden
+      - Test with default configuration
+    severity: error
+
+  - id: configuration.documentation.completeness
+    description: |
+      All configuration options must be documented.
+      - Document all environment variables and their purposes
+      - Document all configuration file options and their formats
+      - Include examples of valid configuration values
+      - Document configuration precedence and override behavior
+      - Document required vs optional configuration
+      - Keep documentation up-to-date with code changes
+    severity: error
+
+  - id: configuration.environment_specific.isolation
+    description: |
+      Environment-specific configuration must be isolated.
+      - Use different configuration for development, staging, and production
+      - Never use production configuration in development
+      - Use environment variables to select configuration profiles
+      - Validate environment-specific requirements
+      - Document environment-specific configuration differences
+    severity: warning
+
+  - id: configuration.types.type_safety
+    description: |
+      Configuration values must be properly typed.
+      - Use appropriate types for configuration values (int, bool, str, etc.)
+      - Convert string environment variables to appropriate types
+      - Validate type conversions with error handling
+      - Use type hints for configuration structures
+      - Document expected types for all configuration options
+    severity: error
+
+  - id: configuration.quality.testing
+    description: |
+      Configuration must be tested.
+      - Test configuration loading with valid and invalid values
+      - Test configuration validation and error handling
+      - Test configuration precedence and overrides
+      - Test with missing configuration files and environment variables
+      - Test environment-specific configuration
+    severity: warning
+
+examples:
+  - description: "Environment variable configuration with validation"
+    language: python
+    code: |
+      import os
+      from typing import Optional
+      from pathlib import Path
+      
+      
+      class APIConfig:
+          """API configuration with environment variable support"""
+          
+          def __init__(self):
+              # API Key (secret - from environment only)
+              self.api_key: Optional[str] = os.getenv("MAVAIA_API_KEY")
+              
+              # API Port (with default)
+              api_port_str = os.getenv("MAVAIA_API_PORT", "8001")
+              try:
+                  self.api_port: int = int(api_port_str)
+                  if not (1 <= self.api_port <= 65535):
+                      raise ValueError(f"Invalid port: {self.api_port}")
+              except ValueError as e:
+                  raise ValueError(f"Invalid MAVAIA_API_PORT value: {api_port_str}") from e
+              
+              # Require Auth (boolean)
+              require_auth_str = os.getenv("MAVAIA_REQUIRE_AUTH", "false").lower()
+              self.require_auth: bool = require_auth_str in ("true", "1", "yes")
+              
+              # Modules Directory (with default)
+              modules_dir_str = os.getenv("MAVAIA_MODULES_DIR")
+              self.modules_dir: Optional[Path] = (
+                  Path(modules_dir_str) if modules_dir_str else None
+              )
+          
+          def validate(self) -> None:
+              """Validate configuration"""
+              if self.require_auth and not self.api_key:
+                  raise ValueError(
+                      "MAVAIA_REQUIRE_AUTH is true but MAVAIA_API_KEY is not set"
+                  )
+
+  - description: "Configuration file loading with defaults"
+    language: python
+    code: |
+      import json
+      from pathlib import Path
+      from typing import Dict, Any
+      import sys
+      
+      
+      def load_module_config(module_name: str) -> Dict[str, Any]:
+          """Load module configuration with defaults"""
+          config_path = Path(__file__).parent / f"{module_name}_config.json"
+          
+          # Default configuration
+          default_config = {
+              "enabled": True,
+              "timeout": 30,
+              "max_retries": 3,
+              "cache_enabled": True
+          }
+          
+          try:
+              if config_path.exists():
+                  with open(config_path, "r", encoding="utf-8") as f:
+                      file_config = json.load(f)
+                      # Merge with defaults (file config overrides defaults)
+                      config = {**default_config, **file_config}
+              else:
+                  config = default_config
+                  print(
+                      f"[{module_name}] Config file not found, using defaults",
+                      file=sys.stderr
+                  )
+              
+              # Validate configuration
+              if not isinstance(config.get("enabled"), bool):
+                  raise ValueError("'enabled' must be a boolean")
+              if not isinstance(config.get("timeout"), int) or config["timeout"] < 0:
+                  raise ValueError("'timeout' must be a non-negative integer")
+              
+              return config
+          except json.JSONDecodeError as e:
+              raise ValueError(f"Invalid JSON in config file: {e}") from e
+          except Exception as e:
+              print(
+                  f"[{module_name}] Failed to load config: {e}",
+                  file=sys.stderr
+              )
+              return default_config
+
+  - description: "Configuration with Pydantic validation"
+    language: python
+    code: |
+      from pydantic import BaseModel, Field, validator
+      from typing import Optional
+      import os
+      
+      
+      class ServerConfig(BaseModel):
+          """Server configuration with validation"""
+          
+          api_port: int = Field(default=8001, ge=1, le=65535)
+          api_host: str = Field(default="0.0.0.0")
+          api_key: Optional[str] = None
+          require_auth: bool = Field(default=False)
+          enable_cors: bool = Field(default=True)
+          modules_dir: Optional[str] = None
+          
+          @classmethod
+          def from_env(cls) -> "ServerConfig":
+              """Load configuration from environment variables"""
+              return cls(
+                  api_port=int(os.getenv("MAVAIA_API_PORT", "8001")),
+                  api_host=os.getenv("MAVAIA_API_HOST", "0.0.0.0"),
+                  api_key=os.getenv("MAVAIA_API_KEY"),
+                  require_auth=os.getenv("MAVAIA_REQUIRE_AUTH", "false").lower() == "true",
+                  enable_cors=os.getenv("MAVAIA_ENABLE_CORS", "true").lower() == "true",
+                  modules_dir=os.getenv("MAVAIA_MODULES_DIR")
+              )
+          
+          @validator("api_key")
+          def validate_api_key_if_required(cls, v, values):
+              if values.get("require_auth") and not v:
+                  raise ValueError("API key required when authentication is enabled")
+              return v
+
+references:
+  - 12-Factor App Config: https://12factor.net/config
+  - Python os.environ: https://docs.python.org/3/library/os.html#os.environ
+  - Pydantic Settings: https://docs.pydantic.dev/latest/usage/settings/
