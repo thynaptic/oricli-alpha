@@ -256,7 +256,7 @@ class CodeExecutionModule(BaseBrainModule):
         """
         # Lazy initialize on first use
         try:
-            self._ensure_initialized()
+        self._ensure_initialized()
         except RuntimeError as e:
             # Provide clear error message when Docker is not available
             error_msg = str(e)

@@ -241,22 +241,25 @@ class ModuleRegistry:
                 
                 # Import module with timeout to prevent hanging
                 try:
-                    if not cls._import_with_timeout(module_file, spec, module, timeout=3.0):
+                    # Increase timeout for modules that may have heavy imports
+                    # Some modules like python_code_embeddings import transformers/jax which can take time
+                    timeout = 10.0 if 'embedding' in module_file.name.lower() or 'model' in module_file.name.lower() else 5.0
+                    if not cls._import_with_timeout(module_file, spec, module, timeout=timeout):
                         # Always show errors, not just when verbose
-                        print(
-                            f"Failed to import {module_file.name}: import timeout (>3s)",
-                            file=sys.stderr,
-                        )
+                            print(
+                            f"Failed to import {module_file.name}: import timeout (>{timeout}s)",
+                                file=sys.stderr,
+                            )
                         failed_count += 1
                         continue
                 except Exception as e:
                     failed_count += 1
                     # Always show errors, not just when verbose
-                    error_msg = f"Failed to import {module_file.name}: {e}"
-                    print(
-                        error_msg,
-                        file=sys.stderr,
-                    )
+                        error_msg = f"Failed to import {module_file.name}: {e}"
+                        print(
+                            error_msg,
+                            file=sys.stderr,
+                        )
                     # Store error for potential re-raising if needed
                     continue
 
@@ -283,10 +286,10 @@ class ModuleRegistry:
                                 # Instance creation is taking too long, skip this module
                                 failed_count += 1
                                 # Always show errors, not just when verbose
-                                print(
+                                    print(
                                     f"Failed to initialize {name}: instance creation timeout (>2s)",
-                                    file=sys.stderr,
-                                )
+                                        file=sys.stderr,
+                                    )
                                 continue
                             
                             if instance_exception[0]:
@@ -305,20 +308,20 @@ class ModuleRegistry:
                         except Exception as e:
                             failed_count += 1
                             # Always show errors, not just when verbose
-                            error_msg = f"Failed to initialize {name}: {e}"
-                            print(
-                                error_msg,
-                                file=sys.stderr,
-                            )
+                                error_msg = f"Failed to initialize {name}: {e}"
+                                print(
+                                    error_msg,
+                                    file=sys.stderr,
+                                )
                             # Could raise ModuleInitializationError here if needed
 
             except Exception as e:
                 failed_count += 1
                 # Always show errors, not just when verbose
-                print(
+                    print(
                     f"Failed to load {module_file.name}: {e}",
-                    file=sys.stderr,
-                )
+                        file=sys.stderr,
+                    )
 
         # Mark as discovered
         cls._discovered = True

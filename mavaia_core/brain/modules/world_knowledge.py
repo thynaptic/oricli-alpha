@@ -15,8 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
 # Lazy imports to avoid timeout during module discovery
-NETWORKX_AVAILABLE = False
-nx = None
+    NETWORKX_AVAILABLE = False
+    nx = None
 EMBEDDINGS_AVAILABLE = False
 EmbeddingsModule = None
 ConceptEmbeddingsModule = None
@@ -42,16 +42,16 @@ def _lazy_import_world_knowledge_deps():
             from concept_embeddings import ConceptEmbeddingsModule as CEM
             EmbeddingsModule = EM
             ConceptEmbeddingsModule = CEM
-            EMBEDDINGS_AVAILABLE = True
-        except ImportError:
+    EMBEDDINGS_AVAILABLE = True
+except ImportError:
             pass
-    
+
     if not MEMORY_GRAPH_AVAILABLE:
-        try:
+try:
             from memory_graph import MemoryGraph as MG
             MemoryGraph = MG
-            MEMORY_GRAPH_AVAILABLE = True
-        except ImportError:
+    MEMORY_GRAPH_AVAILABLE = True
+except ImportError:
             pass
 
 

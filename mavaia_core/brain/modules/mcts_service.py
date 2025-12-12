@@ -23,13 +23,13 @@ def _lazy_import_mcts_models():
     global MCTSNode, MCTSConfiguration, MCTSResult, MCTSSearchResult, MCTSComplexityScore, ToTThoughtNode
     if MCTSNode is None:
         try:
-            from mcts_models import (
+from mcts_models import (
                 MCTSNode as MN,
                 MCTSConfiguration as MC,
                 MCTSResult as MR,
                 MCTSSearchResult as MSR,
                 MCTSComplexityScore as MCS,
-            )
+)
             from tot_models import ToTThoughtNode as TTTN
             MCTSNode = MN
             MCTSConfiguration = MC

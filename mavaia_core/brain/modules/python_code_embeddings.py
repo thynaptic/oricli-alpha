@@ -18,34 +18,60 @@ from typing import Any, Dict, List, Optional, Tuple
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError
 
-# Optional imports for advanced embeddings
-try:
-    import numpy as np
-    from sklearn.metrics.pairwise import cosine_similarity
-    HAS_NUMPY = True
-except ImportError:
-    HAS_NUMPY = False
+# Lazy imports to avoid timeout during module discovery
+# These will be imported when actually needed
+HAS_NUMPY = None
+HAS_TRANSFORMERS = None
+JAX_AVAILABLE = None
+MODEL_MANAGER_AVAILABLE = None
+FlaxAutoModel = None
+FlaxAutoTokenizer = None
+ModelManager = None
+np = None
+cosine_similarity = None
+jax = None
+jnp = None
 
-# JAX/Flax required (Python 3.14 compatible)
-try:
-    import jax
-    import jax.numpy as jnp
-    from transformers import FlaxAutoModel, FlaxAutoTokenizer
-    JAX_AVAILABLE = True
-    HAS_TRANSFORMERS = True
-except ImportError:
-    JAX_AVAILABLE = False
-    FlaxAutoModel = None
-    FlaxAutoTokenizer = None
-    HAS_TRANSFORMERS = False
-
-# Try to import model manager
-try:
-    from mavaia_core.brain.modules.model_manager import ModelManager
-    MODEL_MANAGER_AVAILABLE = True
-except ImportError:
-    MODEL_MANAGER_AVAILABLE = False
-    ModelManager = None
+def _lazy_import_dependencies():
+    """Lazy import of dependencies to avoid timeout during module discovery"""
+    global HAS_NUMPY, HAS_TRANSFORMERS, JAX_AVAILABLE, MODEL_MANAGER_AVAILABLE
+    global FlaxAutoModel, FlaxAutoTokenizer, ModelManager, np, cosine_similarity, jax, jnp
+    
+    if HAS_NUMPY is not None:
+        return  # Already imported
+    
+    # Optional imports for advanced embeddings
+    try:
+        import numpy as np
+        from sklearn.metrics.pairwise import cosine_similarity
+        HAS_NUMPY = True
+    except ImportError:
+        HAS_NUMPY = False
+        np = None
+        cosine_similarity = None
+    
+    # JAX/Flax required (Python 3.14 compatible)
+    try:
+        import jax
+        import jax.numpy as jnp
+        from transformers import FlaxAutoModel, FlaxAutoTokenizer
+        JAX_AVAILABLE = True
+        HAS_TRANSFORMERS = True
+    except ImportError:
+        JAX_AVAILABLE = False
+        HAS_TRANSFORMERS = False
+        FlaxAutoModel = None
+        FlaxAutoTokenizer = None
+        jax = None
+        jnp = None
+    
+    # Try to import model manager
+    try:
+        from mavaia_core.brain.modules.model_manager import ModelManager
+        MODEL_MANAGER_AVAILABLE = True
+    except ImportError:
+        MODEL_MANAGER_AVAILABLE = False
+        ModelManager = None
 
 
 class PythonCodeEmbeddingsModule(BaseBrainModule):
@@ -69,6 +95,8 @@ class PythonCodeEmbeddingsModule(BaseBrainModule):
     @property
     def metadata(self) -> ModuleMetadata:
         """Return module metadata."""
+        # Lazy import to check dependencies
+        _lazy_import_dependencies()
         dependencies = []
         if HAS_NUMPY:
             dependencies.append("numpy")
@@ -97,12 +125,16 @@ class PythonCodeEmbeddingsModule(BaseBrainModule):
 
     def initialize(self) -> bool:
         """Initialize the module."""
+        # Lazy import dependencies
+        _lazy_import_dependencies()
         # Try to load code-specific models if available
         self._load_code_models()
         return True
 
     def _load_code_models(self) -> None:
         """Load code-specific embedding models if available."""
+        # Ensure dependencies are imported
+        _lazy_import_dependencies()
         if not HAS_TRANSFORMERS or not JAX_AVAILABLE:
             return
         
@@ -246,6 +278,7 @@ class PythonCodeEmbeddingsModule(BaseBrainModule):
 
     def _embed_code_with_model(self, code: str) -> List[float]:
         """Generate embedding using code-specific model."""
+        _lazy_import_dependencies()
         if not self._code_model or not self._tokenizer or not JAX_AVAILABLE:
             raise ValueError("Code model not available")
         
@@ -392,6 +425,7 @@ class PythonCodeEmbeddingsModule(BaseBrainModule):
             codebase_embeddings.append(result["embedding"])
 
         # Calculate similarities
+        _lazy_import_dependencies()
         similarities = []
         if HAS_NUMPY:
             query_vec = np.array(query_embedding).reshape(1, -1)
@@ -468,6 +502,7 @@ class PythonCodeEmbeddingsModule(BaseBrainModule):
             result = self.embed_code(code)
             embeddings.append(result["embedding"])
 
+        _lazy_import_dependencies()
         if not HAS_NUMPY:
             return {
                 "success": False,

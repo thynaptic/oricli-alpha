@@ -573,14 +573,21 @@ def _get_cli_class():
                 'success': '\033[92m',
                 'error': '\033[91m',
                 'warning': '\033[93m',
-                'info': '\033[96m',
-                'prompt': '\033[95m',
-                'module': '\033[94m',
-                'category': '\033[36m',
-                'timestamp': '\033[2;37m',
-                'separator': '\033[37m',
-                'reset': '\033[0m',
-                'bold': '\033[1m',
+            'info': '\033[96m',  # Cyan
+            'prompt': '\033[95m',  # Magenta
+            'module': '\033[94m',  # Blue
+            'category': '\033[36m',  # Cyan
+            'timestamp': '\033[2;37m',  # Dim white
+            'separator': '\033[37m',  # White
+            'reset': '\033[0m',
+            'bold': '\033[1m',
+            'header': '\033[90m',  # Dark gray for box
+            'title': '\033[1;97m',  # Bold white for title
+            'stats': '\033[93m',  # Yellow for stats
+            'stats_label': '\033[96m',  # Cyan for stat labels
+            'stats_value': '\033[93m',  # Yellow for stat values
+            'success': '\033[92m',  # Green
+            'warning': '\033[93m',  # Yellow
             }
         
         def _supports_color(self) -> bool:
@@ -596,6 +603,12 @@ def _get_cli_class():
             if not self.enabled:
                 return text
             return f"{self.colors.get(color, '')}{text}{self.colors['reset']}"
+        
+        def _strip_ansi(self, text: str) -> str:
+            """Strip ANSI color codes to get actual text length"""
+            import re
+            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+            return ansi_escape.sub('', text)
         
         def status(self, symbol: str, text: str, status_type: str = 'info') -> str:
             """Format colored status with symbol"""
@@ -711,11 +724,26 @@ def _get_cli_class():
             
             try:
                 from mavaia_core.brain.registry import ModuleRegistry
-                # Quick discovery without verbose output
-                ModuleRegistry.discover_modules(background=False, verbose=False)
-                stats['modules'] = len(ModuleRegistry.list_modules())
-            except Exception:
-                pass
+                # Check if already discovered, if not, discover synchronously
+                if not ModuleRegistry._discovered:
+                    # Quick discovery without verbose output
+                    ModuleRegistry.discover_modules(background=False, verbose=False)
+                    # Wait a moment for discovery to complete if it was in progress
+                    import time
+                    timeout = 5.0
+                    start = time.time()
+                    while ModuleRegistry._discovering and (time.time() - start) < timeout:
+                        time.sleep(0.1)
+                
+                # Get module count
+                module_list = ModuleRegistry.list_modules()
+                stats['modules'] = len(module_list) if module_list else 0
+            except Exception as e:
+                # Log error but don't fail - use cached value if available
+                if hasattr(ModuleRegistry, '_modules'):
+                    stats['modules'] = len(ModuleRegistry._modules) if ModuleRegistry._modules else 0
+                else:
+                    stats['modules'] = 0
             
             try:
                 from mavaia_core.evaluation.test_data_manager import TestDataManager
@@ -748,49 +776,122 @@ def _get_cli_class():
             self._stats_cache_time = time.time()
             return stats
         
-        def _display_header(self):
-            """Display the professional header with stats"""
-            stats = self._get_stats()
+        def _display_header(self, detailed: bool = True):
+            """Display the professional header with optional stats
             
+            Args:
+                detailed: If True, show full header with stats. If False, show simple header.
+            """
             # Professional header style (OpenAI/Anthropic inspired)
-            header_lines = []
-            header_lines.append("╔" + "═" * 78 + "╗")
-            header_lines.append("║" + " " * 78 + "║")
+            # Box border - dark gray
+            print(self.color_output.colorize("╔" + "═" * 78 + "╗", 'header'))
+            print(self.color_output.colorize("║" + " " * 78 + "║", 'header'))
             
-            # Title - centered
-            title = "  THYPTIC  EVALUATION  FRAMEWORK"
+            # Title - centered, bold white
+            title = "THYNAPTIC  EVALUATION  FRAMEWORK"
             title_padding = (78 - len(title)) // 2
-            title_line = "║" + " " * title_padding + title + " " * (78 - title_padding - len(title)) + "║"
-            header_lines.append(('bold', title_line))  # Mark for special coloring
+            title_line = " " * title_padding + title + " " * (78 - title_padding - len(title))
+            title_colored = self.color_output.colorize(title_line, 'title')
+            border = self.color_output.colorize("║", 'header')
+            print(f"{border}{title_colored}{border}")
             
-            header_lines.append("║" + " " * 78 + "║")
-            header_lines.append("║" + "─" * 78 + "║")
-            header_lines.append("║" + " " * 78 + "║")
+            print(self.color_output.colorize("║" + " " * 78 + "║", 'header'))
             
-            # Stats line 1 - key metrics
-            stats_line1 = f"  Modules: {stats['modules']:<6}  Tests: {stats['tests']:<6}  Coverage: {stats['coverage']:>5.1f}%"
-            header_lines.append("║" + stats_line1 + " " * (78 - len(stats_line1)) + "║")
-            
-            # Stats line 2 - additional info
-            modules_tested = f"Modules with Tests: {stats['modules_with_tests']}"
-            if stats['last_run']:
-                last_run_short = stats['last_run'][:18] if len(stats['last_run']) > 18 else stats['last_run']
-                last_run_info = f"Last: {last_run_short} ({stats['last_success_rate']:.1f}%)"
-                stats_line2 = f"  {modules_tested:<32}  {last_run_info}"
-            else:
-                stats_line2 = f"  {modules_tested}"
-            header_lines.append("║" + stats_line2 + " " * (78 - len(stats_line2)) + "║")
-            
-            header_lines.append("║" + " " * 78 + "║")
-            header_lines.append("╚" + "═" * 78 + "╝")
-            
-            # Print header with colors
-            for line in header_lines:
-                if isinstance(line, tuple) and line[0] == 'bold':
-                    # Title with bold coloring
-                    print(self.color_output.colorize(line[1], 'bold'))
+            if detailed:
+                # Show detailed stats
+                stats = self._get_stats()
+                print(self.color_output.colorize("║" + "─" * 78 + "║", 'header'))
+                print(self.color_output.colorize("║" + " " * 78 + "║", 'header'))
+                
+                # Stats line 1 - key metrics with proper alignment
+                padding_left = "  "
+                
+                # Build stats with separate colors for labels and values
+                # Calculate positions for proper alignment
+                # Column positions: Modules at 2, Tests at 20, Coverage at 40
+                modules_label_text = "Modules:"
+                modules_value_text = str(stats['modules'])
+                modules_label = self.color_output.colorize(modules_label_text, 'stats_label')
+                modules_value = self.color_output.colorize(modules_value_text, 'stats_value')
+                
+                tests_label_text = "Tests:"
+                tests_value_text = str(stats['tests'])
+                tests_label = self.color_output.colorize(tests_label_text, 'stats_label')
+                tests_value = self.color_output.colorize(tests_value_text, 'stats_value')
+                
+                coverage_label_text = "Coverage:"
+                coverage_value_text = f"{stats['coverage']:.1f}%"
+                coverage_label = self.color_output.colorize(coverage_label_text, 'stats_label')
+                coverage_value = self.color_output.colorize(coverage_value_text, 'stats_value')
+                
+                # Build line with proper spacing (accounting for ANSI codes in length)
+                # Position: Modules at col 2, Tests at col 20, Coverage at col 40
+                modules_part = f"{modules_label_text} {modules_value_text}"
+                tests_part = f"{tests_label_text} {tests_value_text}"
+                coverage_part = f"{coverage_label_text} {coverage_value_text}"
+                
+                # Calculate spacing to align columns
+                modules_end = len(padding_left) + len(modules_part)
+                spacing1 = " " * max(1, 20 - modules_end)
+                
+                tests_start = modules_end + len(spacing1)
+                tests_end = tests_start + len(tests_part)
+                spacing2 = " " * max(1, 40 - tests_end)
+                
+                # Build the line with colored parts
+                stats_line1 = (
+                    padding_left +
+                    modules_label + " " + modules_value +
+                    spacing1 +
+                    tests_label + " " + tests_value +
+                    spacing2 +
+                    coverage_label + " " + coverage_value
+                )
+                
+                # Calculate padding (strip ANSI codes for length calculation)
+                stats_line1_plain = padding_left + modules_part + spacing1 + tests_part + spacing2 + coverage_part
+                padding_right = " " * (78 - len(stats_line1_plain))
+                print(f"{border}{stats_line1}{padding_right}{border}")
+                
+                # Stats line 2 - additional info with proper alignment
+                modules_tested_label_text = "Modules with Tests:"
+                modules_tested_value_text = str(stats['modules_with_tests'])
+                modules_tested_label = self.color_output.colorize(modules_tested_label_text, 'stats_label')
+                modules_tested_value = self.color_output.colorize(modules_tested_value_text, 'stats_value')
+                
+                if stats['last_run']:
+                    last_run_short = stats['last_run'][:18] if len(stats['last_run']) > 18 else stats['last_run']
+                    last_label_text = "Last:"
+                    last_value_text = f"{last_run_short} ({stats['last_success_rate']:.1f}%)"
+                    last_label = self.color_output.colorize(last_label_text, 'stats_label')
+                    last_value = self.color_output.colorize(last_value_text, 'stats_value')
+                    
+                    # Align "Last:" with "Coverage:" from line 1 (starts at col 40)
+                    modules_tested_part = f"{modules_tested_label_text} {modules_tested_value_text}"
+                    last_part = f"{last_label_text} {last_value_text}"
+                    
+                    modules_tested_end = len(padding_left) + len(modules_tested_part)
+                    spacing = " " * max(1, 40 - modules_tested_end)
+                    
+                    stats_line2 = (
+                        padding_left +
+                        modules_tested_label + " " + modules_tested_value +
+                        spacing +
+                        last_label + " " + last_value
+                    )
+                    
+                    stats_line2_plain = padding_left + modules_tested_part + spacing + last_part
                 else:
-                    print(self.color_output.colorize(line, 'info'))
+                    modules_tested_part = f"{modules_tested_label_text} {modules_tested_value_text}"
+                    stats_line2 = padding_left + modules_tested_label + " " + modules_tested_value
+                    stats_line2_plain = padding_left + modules_tested_part
+                
+                padding_right = " " * (78 - len(stats_line2_plain))
+                print(f"{border}{stats_line2}{padding_right}{border}")
+                
+                print(self.color_output.colorize("║" + " " * 78 + "║", 'header'))
+            
+            print(self.color_output.colorize("╚" + "═" * 78 + "╝", 'header'))
         
         def preloop(self):
             """Called once before cmdloop() starts"""
@@ -807,19 +908,41 @@ def _get_cli_class():
                 print()
                 self._first_load = False
         
+        def precmd(self, line):
+            """Called before each command execution"""
+            # Always redraw header BEFORE command executes so it stays at top
+            # Skip only for quit/exit and empty lines
+            if line and line.strip():
+                cmd_name = line.split()[0].lower() if line.strip() else ""
+                # Don't clear/redraw for quit/exit/clear (clear will redraw itself)
+                if cmd_name not in ('quit', 'exit', 'q', 'clear'):
+                    # Commands that produce output - clear screen and show header at top
+                    output_commands = {
+                        'coverage', 'run', 'list-modules', 'list-tests', 'list-results',
+                        'describe', 'explain', 'health', 'impact', 'stats', 'report',
+                        'compare', 'validate-tests', 'validate-modules', 'lm', 'lr', 'lt',
+                        'd', 'cov', 'h'  # aliases
+                    }
+                    # Check if command or its alias produces output
+                    actual_cmd = self.aliases.get(cmd_name, cmd_name) if cmd_name in self.aliases else cmd_name
+                    actual_cmd_base = actual_cmd.split()[0].lower() if actual_cmd else cmd_name
+                    
+                    if cmd_name in output_commands or actual_cmd_base in output_commands:
+                        # Clear screen and redraw SIMPLE header for commands that produce output
+                        # This ensures header is always at the top before output (without stats)
+                        self._clear_screen()
+                        self._display_header(detailed=False)
+                        print()
+            return line
+        
         def postcmd(self, stop, line):
             """Called after each command execution"""
-            # Only redraw header for certain commands that produce output
-            # Commands that clear or produce significant output should redraw
-            if line and line.strip():
-                cmd_name = line.split()[0].lower()
-                # Commands that should redraw header
-                redraw_commands = {'run', 'coverage', 'list-modules', 'list-tests', 
-                                 'list-results', 'describe', 'explain', 'health', 
-                                 'profile', 'config', 'stats'}
-                if any(cmd_name.startswith(cmd) for cmd in redraw_commands):
-                    self._display_header()
-                    print()
+            # Don't redraw header here - it should be at top from precmd
+            # Only redraw for empty lines to keep header visible
+            if not line or not line.strip():
+                # Empty line - just redraw header to keep it visible
+                self._display_header()
+                print()
             return stop
         
         def _get_config_path(self) -> Path:

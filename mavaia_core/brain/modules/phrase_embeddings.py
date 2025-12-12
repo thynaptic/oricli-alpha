@@ -23,8 +23,8 @@ except ImportError:
     PHRASE_EMBEDDINGS_AVAILABLE = False
 
 # Lazy import ModelManager to avoid timeout during module discovery
-MODEL_MANAGER_AVAILABLE = False
-ModelManager = None
+    MODEL_MANAGER_AVAILABLE = False
+    ModelManager = None
 
 def _lazy_import_model_manager():
     """Lazy import ModelManager only when needed"""

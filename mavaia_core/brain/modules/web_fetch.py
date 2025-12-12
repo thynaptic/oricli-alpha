@@ -77,9 +77,9 @@ class WebFetchModule(BaseBrainModule):
         if WebFetchService is None:
             raise RuntimeError("WebFetchService not available")
         if self._service is None:
-            try:
-                self._service = WebFetchService(**self._default_config)
-            except Exception as e:
+        try:
+            self._service = WebFetchService(**self._default_config)
+        except Exception as e:
                 print(f"[WebFetchModule] Failed to initialize service: {e}")
                 raise
     

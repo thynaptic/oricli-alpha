@@ -85,7 +85,7 @@ class MCTSRolloutService(BaseBrainModule):
                     self._state_evaluator = ModuleRegistry.get_module("tot_state_evaluator", auto_discover=True, wait_timeout=1.0)
                 if self._thought_generator is None:
                     self._thought_generator = ModuleRegistry.get_module("tot_thought_generator", auto_discover=True, wait_timeout=1.0)
-            except Exception:
+        except Exception:
                 pass
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
