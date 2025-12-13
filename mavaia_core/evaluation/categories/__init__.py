@@ -20,6 +20,7 @@ __all__ = [
     "SystemTestRunner",
     "ReasoningTestRunner",
     "SafetyTestRunner",
+    "LiveBenchTestRunner",
 ]
 
 # Cache for imported classes
@@ -49,6 +50,9 @@ def __getattr__(name: str):
         elif name == "SafetyTestRunner":
             from mavaia_core.evaluation.categories.safety_tests import SafetyTestRunner
             _imported_classes[name] = SafetyTestRunner
+        elif name == "LiveBenchTestRunner":
+            from mavaia_core.evaluation.categories.livebench_tests import LiveBenchTestRunner
+            _imported_classes[name] = LiveBenchTestRunner
     
     return _imported_classes[name]
 

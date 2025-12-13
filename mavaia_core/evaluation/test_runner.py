@@ -53,6 +53,7 @@ class TestRunner:
         self.reasoning_runner = None
         self.safety_runner = None
         self.code_generation_runner = None
+        self.livebench_runner = None
         
         # Don't block on module discovery - let it happen lazily when needed
         # Modules will be discovered when test executors try to access them
@@ -122,7 +123,27 @@ class TestRunner:
                     print("No new modules found (all modules have test files)", flush=True)
                 return []
         
-        # Get filtered test cases
+        # Special handling for LiveBench category - discover tests dynamically
+        if category == "livebench":
+            try:
+                if self.livebench_runner is None:
+                    from mavaia_core.evaluation.categories import LiveBenchTestRunner
+                    self.livebench_runner = LiveBenchTestRunner()
+                
+                # Discover LiveBench tests
+                test_cases = self.livebench_runner.discover_livebench_tests(
+                    module=module,
+                    category=None,  # Let LiveBench handle category filtering
+                    task=None,
+                    max_questions=None  # No limit by default
+                )
+                return test_cases
+            except ImportError as e:
+                if self.verbose:
+                    print(f"Warning: LiveBench not available: {e}", flush=True)
+                return []
+        
+        # Get filtered test cases from test data manager
         test_cases = self.test_data_manager.get_test_cases(
             module=module,
             category=category,
@@ -333,7 +354,7 @@ class TestRunner:
                 sys.stdout.flush()
             
             # Pre-discover modules if needed (non-blocking)
-            if category in ["functional", "module", "reasoning", "safety"]:
+            if category in ["functional", "module", "reasoning", "safety", "livebench"]:
                 # Skip if skip_modules is enabled
                 if hasattr(self, '_skip_modules') and self._skip_modules:
                     if self.verbose:
@@ -457,6 +478,25 @@ class TestRunner:
                         regular_tests,
                         timeout
                     )
+                elif category == "livebench":
+                    if self.livebench_runner is None:
+                        try:
+                            from mavaia_core.evaluation.categories import LiveBenchTestRunner
+                            self.livebench_runner = LiveBenchTestRunner()
+                        except ImportError as e:
+                            if self.verbose:
+                                print(f"  Skipping {len(regular_tests)} LiveBench tests (LiveBench not available: {e})", flush=True)
+                            category_results = []
+                        else:
+                            category_results = self.livebench_runner.run_test_suite(
+                                regular_tests,
+                                timeout
+                            )
+                    else:
+                        category_results = self.livebench_runner.run_test_suite(
+                            regular_tests,
+                            timeout
+                        )
                 else:
                     # Default to module runner
                     if self.module_runner is None:
@@ -1951,6 +1991,13 @@ def main():
             "Core system component tests. Tests ModuleRegistry, ModuleOrchestrator, "
             "StateStorage, MetricsCollector, and HealthChecker. Validates system "
             "infrastructure and component interactions."
+        ),
+        "livebench": (
+            "LiveBench benchmark tests. Tests brain modules against LiveBench's "
+            "contamination-free benchmark suite with 18 diverse tasks across 6 categories: "
+            "reasoning, math, coding, language, data analysis, and instruction following. "
+            "Uses objective ground-truth evaluation and integrates LiveBench's code runner "
+            "for safe code execution in coding tasks."
         ),
     }
     
