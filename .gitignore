@@ -117,3 +117,4 @@ checkpoints/
 # Internal Reports
 technical_reports/
 *.txt
+LiveBench/
