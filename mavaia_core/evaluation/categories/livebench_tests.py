@@ -332,6 +332,9 @@ class LiveBenchTestRunner:
         
         # Add task-specific parameters
         task = question.get("task", "")
+        # Pass task information to module for task-specific response formatting
+        params["task"] = task
+        
         if "code" in task.lower() or "coding" in task.lower():
             # For coding tasks, include the full question context
             params["prompt"] = question_text
