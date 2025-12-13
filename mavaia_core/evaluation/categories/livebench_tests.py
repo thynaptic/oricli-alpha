@@ -8,12 +8,19 @@ reasoning, math, coding, language, data analysis, and instruction following.
 
 import json
 import re
+import sys
 import time
 import traceback
-from typing import Any, Dict, List, Optional, Set
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
 from pathlib import Path
 
 # LiveBench imports
+# Add LiveBench directory to Python path if it exists
+_LIVEBENCH_PATH = Path(__file__).parent.parent.parent.parent / "LiveBench"
+if _LIVEBENCH_PATH.exists() and str(_LIVEBENCH_PATH) not in sys.path:
+    sys.path.insert(0, str(_LIVEBENCH_PATH))
+
 try:
     from livebench.common import (
         load_questions,
@@ -35,6 +42,11 @@ try:
 except ImportError as e:
     LIVEBENCH_AVAILABLE = False
     IMPORT_ERROR = str(e)
+    # Define a placeholder for type checking
+    if TYPE_CHECKING:
+        from livebench.common import MatchSingle
+    else:
+        MatchSingle = None  # type: ignore
 
 # Mavaia imports
 from mavaia_core.brain.base_module import BaseBrainModule
@@ -66,6 +78,33 @@ class LiveBenchTestRunner:
         
         # Module-to-task category mapping
         self._module_category_map: Dict[str, str] = {}
+    
+    def _check_release_date(
+        self,
+        release_date: Any,
+        valid_releases: Set[str]
+    ) -> bool:
+        """
+        Check if a release date matches any valid release
+        
+        Args:
+            release_date: Release date (can be datetime, string, or None)
+            valid_releases: Set of valid release date strings
+            
+        Returns:
+            True if release date matches a valid release
+        """
+        if release_date is None:
+            return False
+        
+        # Convert datetime to string if needed
+        if isinstance(release_date, datetime):
+            release_date_str = release_date.strftime('%Y-%m-%d')
+        else:
+            release_date_str = str(release_date)
+        
+        # Check if it matches any valid release
+        return release_date_str in valid_releases
     
     def _map_module_to_category(self, module_name: str, metadata: Any) -> Optional[str]:
         """
@@ -191,26 +230,55 @@ class LiveBenchTestRunner:
                                             questions.extend(task_questions)
             else:
                 # Load from HuggingFace
-                categories_tasks = get_categories_tasks(LIVE_BENCH_DATA_SUPER_PATH)
+                # get_categories_tasks returns a tuple: (categories_dict, tasks_dict)
+                categories_dict, tasks_dict = get_categories_tasks(LIVE_BENCH_DATA_SUPER_PATH)
                 
-                for cat_name, tasks in categories_tasks.items():
+                for cat_name, category_dataset in categories_dict.items():
                     if category and cat_name != category:
                         continue
                     
-                    for task_name, task_dataset in tasks.items():
-                        if task and task_name != task:
+                    # Get tasks for this category
+                    category_tasks = tasks_dict.get(cat_name, [])
+                    
+                    # If we have a specific task filter, use it
+                    if task:
+                        if task not in category_tasks:
                             continue
+                        category_tasks = [task]
+                    
+                    # Load questions from the category dataset
+                    # The dataset contains all questions for the category
+                    try:
+                        # Convert dataset to list of questions
+                        if hasattr(category_dataset, 'to_list'):
+                            category_questions = category_dataset.to_list()
+                        elif hasattr(category_dataset, '__iter__'):
+                            category_questions = list(category_dataset)
+                        else:
+                            category_questions = []
                         
-                        try:
-                            task_questions = load_questions(
-                                task_dataset,
-                                livebench_releases=LIVE_BENCH_RELEASES
-                            )
-                            questions.extend(task_questions)
-                        except Exception as e:
-                            # Skip tasks that fail to load
-                            print(f"Warning: Failed to load questions for {cat_name}/{task_name}: {e}")
-                            continue
+                        # Filter by task if needed
+                        if task:
+                            category_questions = [
+                                q for q in category_questions
+                                if q.get('task') == task
+                            ]
+                        
+                        # Filter by release if needed
+                        if LIVE_BENCH_RELEASES:
+                            from datetime import datetime
+                            # Convert release dates to strings for comparison
+                            # livebench_release_date can be datetime or string
+                            category_questions = [
+                                q for q in category_questions
+                                if self._check_release_date(q.get('livebench_release_date'), LIVE_BENCH_RELEASES)
+                            ]
+                        
+                        questions.extend(category_questions)
+                    except Exception as e:
+                        # Skip categories that fail to load
+                        print(f"Warning: Failed to load questions for {cat_name}: {e}")
+                        continue
             
             self._questions_cache[cache_key] = questions
             return questions
@@ -249,15 +317,18 @@ class LiveBenchTestRunner:
         params: Dict[str, Any] = {}
         
         # Common parameter mappings
+        # Always set both query and text to ensure compatibility with different modules
+        params["query"] = question_text
+        params["text"] = question_text
+        params["input"] = question_text
+        
+        # Operation-specific parameter mappings
         if "query" in (operation or "").lower() or "reason" in (operation or "").lower():
-            params["query"] = question_text
+            # Already set above, but ensure query is present
+            pass
         elif "text" in (operation or "").lower() or "input" in (operation or "").lower():
-            params["text"] = question_text
-            params["input"] = question_text
-        else:
-            # Default: use query or text
-            params["query"] = question_text
-            params["text"] = question_text
+            # Already set above
+            pass
         
         # Add task-specific parameters
         task = question.get("task", "")
@@ -687,7 +758,7 @@ class LiveBenchTestRunner:
     
     def _evaluate_with_timeout(
         self,
-        match: MatchSingle,
+        match: "MatchSingle",
         timeout: float
     ) -> Dict[str, Any]:
         """Evaluate LiveBench match with timeout"""

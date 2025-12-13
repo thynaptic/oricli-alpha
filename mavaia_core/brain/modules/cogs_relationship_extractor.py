@@ -13,7 +13,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from models.context_models import ContextObject, ContextRelationship, RelationshipType
+
+# Optional imports - models package may not be available
+try:
+    from models.context_models import ContextObject, ContextRelationship, RelationshipType
+except ImportError:
+    # Models not available - define minimal types
+    ContextObject = None
+    ContextRelationship = None
+    RelationshipType = None
 
 
 class ExtractedRelationship:

@@ -66,7 +66,9 @@ class TestRunner:
         category: Optional[str] = None,
         tags: Optional[List[str]] = None,
         tag_mode: str = "all",
-        new_only: bool = False
+        new_only: bool = False,
+        livebench_category: Optional[str] = None,
+        max_questions: Optional[int] = None
     ) -> "List[TestCase]":
         """
         Discover all test cases
@@ -133,9 +135,9 @@ class TestRunner:
                 # Discover LiveBench tests
                 test_cases = self.livebench_runner.discover_livebench_tests(
                     module=module,
-                    category=None,  # Let LiveBench handle category filtering
+                    category=livebench_category,  # Use provided LiveBench category filter
                     task=None,
-                    max_questions=None  # No limit by default
+                    max_questions=max_questions  # Use provided max questions limit
                 )
                 return test_cases
             except ImportError as e:
@@ -206,7 +208,9 @@ class TestRunner:
                 category=category,
                 tags=tags,
                 tag_mode=getattr(self, '_tag_mode', 'all'),
-                new_only=getattr(self, '_new_only', False)
+                new_only=getattr(self, '_new_only', False),
+                livebench_category=getattr(self, '_livebench_category', None),
+                max_questions=getattr(self, '_max_questions', None)
             )
             if self.verbose:
                 print(f" found {len(test_cases)} test cases", flush=True)
@@ -2042,8 +2046,29 @@ def main():
         metavar="CATEGORY",
         help=(
             "Run tests for a specific category. Available categories: "
-            "functional, reasoning, safety, api, client, system. "
+            "functional, reasoning, safety, api, client, system, livebench. "
             "Use --categories to see detailed descriptions of each category."
+        )
+    )
+    parser.add_argument(
+        "--livebench-category",
+        type=str,
+        metavar="LIVEBENCH_CATEGORY",
+        choices=["reasoning", "math", "coding", "language", "data_analysis", "instruction_following"],
+        help=(
+            "Filter LiveBench tests by specific category. Only valid when --category livebench is used. "
+            "Available LiveBench categories: reasoning, math, coding, language, data_analysis, instruction_following. "
+            "Example: --category livebench --livebench-category reasoning"
+        )
+    )
+    parser.add_argument(
+        "--max-questions",
+        type=int,
+        metavar="N",
+        help=(
+            "Maximum number of LiveBench questions to load per task. Only valid when --category livebench is used. "
+            "Useful for quick testing or limiting test execution time. "
+            "Example: --category livebench --max-questions 10"
         )
     )
     parser.add_argument(
@@ -2527,6 +2552,19 @@ def main():
         _list_archives(args.results_dir)
         return
     
+    # Validate LiveBench-specific arguments
+    if args.livebench_category and args.category != "livebench":
+        print("Error: --livebench-category can only be used with --category livebench", file=sys.stderr)
+        sys.exit(1)
+    
+    if args.max_questions is not None and args.category != "livebench":
+        print("Error: --max-questions can only be used with --category livebench", file=sys.stderr)
+        sys.exit(1)
+    
+    if args.max_questions is not None and args.max_questions < 1:
+        print("Error: --max-questions must be a positive integer", file=sys.stderr)
+        sys.exit(1)
+    
     # Handle --graph option (generate dependency graph and exit)
     if args.graph:
         _generate_dependency_graph(
@@ -2662,6 +2700,8 @@ def main():
         runner._matrix = args.matrix
         runner._profile = args.profile
         runner._watch = args.watch
+        runner._livebench_category = getattr(args, 'livebench_category', None)
+        runner._max_questions = getattr(args, 'max_questions', None)
     except Exception as e:
         print(f"Error initializing evaluation framework: {e}", file=sys.stderr)
         import traceback

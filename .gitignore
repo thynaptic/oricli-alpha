@@ -118,3 +118,13 @@ checkpoints/
 technical_reports/
 *.txt
 LiveBench/
+mavaia_core/evaluation/results/
+mavaia_core/evaluation/test_data/
+mavaia_core/evaluation/test_data_manager.py
+mavaia_core/evaluation/test_results.py
+mavaia_core/evaluation/test_runner.py
+mavaia_core/evaluation/test_reporter.py
+mavaia_core/evaluation/test_data_manager.py
+mavaia_core/evaluation/test_results.py
+mavaia_core/evaluation/test_runner.py
+mavaia_core/evaluation/test_reporter.py

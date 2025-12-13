@@ -7,7 +7,7 @@ Supports JSON storage, HTML report generation, and historical tracking.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum

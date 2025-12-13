@@ -14,7 +14,7 @@ import re
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError

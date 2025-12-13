@@ -13,9 +13,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
 # Lazy imports to avoid timeout during module discovery
-    SYMBOLIC_SOLVERS_AVAILABLE = False
-    get_solver_router = None
-    SolverRouter = None
+SYMBOLIC_SOLVERS_AVAILABLE = False
+get_solver_router = None
+SolverRouter = None
 
 def _lazy_import_symbolic_solvers():
     """Lazy import symbolic solvers only when needed"""

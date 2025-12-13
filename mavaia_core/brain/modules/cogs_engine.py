@@ -15,7 +15,7 @@ from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
 # Optional imports - models package may not be available
 try:
-from models.context_models import ContextObject, ContextRelationship, EntityType as ContextEntityType
+    from models.context_models import ContextObject, ContextRelationship, EntityType as ContextEntityType
 except ImportError:
     # Models not available - define minimal types
     ContextObject = None

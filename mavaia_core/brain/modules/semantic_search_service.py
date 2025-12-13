@@ -12,7 +12,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from models.retrieval_models import DocumentSource, SemanticRetrievalResult
+
+# Optional imports - models package may not be available
+try:
+    from models.retrieval_models import DocumentSource, SemanticRetrievalResult
+except ImportError:
+    # Models not available - define minimal types
+    DocumentSource = None
+    SemanticRetrievalResult = None
 
 
 class SemanticSearchServiceModule(BaseBrainModule):

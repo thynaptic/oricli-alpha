@@ -16,8 +16,8 @@ from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
 # Optional imports - models package may not be available
 try:
-from models.conversation_digest_models import ConversationDigest
-from models.core_types import ConversationSummaryContext
+    from models.conversation_digest_models import ConversationDigest
+    from models.core_types import ConversationSummaryContext
 except ImportError:
     # Models not available - define minimal types
     ConversationDigest = None

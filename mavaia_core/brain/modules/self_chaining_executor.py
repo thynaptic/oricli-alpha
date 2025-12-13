@@ -13,15 +13,27 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from models.reasoning_models import (
-    ReasoningStructure,
-    ExecutionContext,
-    ReasoningResult,
-    ModuleExecutionResult,
-    ExecutionPlan,
-    ExecutionStep,
-    ExecutionType,
-)
+
+# Optional imports - models package may not be available
+try:
+    from models.reasoning_models import (
+        ReasoningStructure,
+        ExecutionContext,
+        ReasoningResult,
+        ModuleExecutionResult,
+        ExecutionPlan,
+        ExecutionStep,
+        ExecutionType,
+    )
+except ImportError:
+    # Models not available - define minimal types
+    ReasoningStructure = None
+    ExecutionContext = None
+    ReasoningResult = None
+    ModuleExecutionResult = None
+    ExecutionPlan = None
+    ExecutionStep = None
+    ExecutionType = None
 
 
 class SelfChainingExecutorModule(BaseBrainModule):

@@ -57,7 +57,7 @@ if JAX_AVAILABLE:
         dropout: float = 0.1
 
         @nn.compact
-        def __call__(self, state: jnp.ndarray, training: bool = False) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        def __call__(self, state: "jnp.ndarray", training: bool = False) -> Tuple["jnp.ndarray", "jnp.ndarray"]:
             """
             Forward pass
 
@@ -97,7 +97,7 @@ if JAX_AVAILABLE:
         dropout: float = 0.1
 
         @nn.compact
-        def __call__(self, state: jnp.ndarray, training: bool = False) -> jnp.ndarray:
+        def __call__(self, state: "jnp.ndarray", training: bool = False) -> "jnp.ndarray":
             """
             Estimate state value
 
@@ -170,8 +170,8 @@ if JAX_AVAILABLE:
             self.dones = []
 
         def select_action(
-            self, state: jnp.ndarray, deterministic: bool = False, rng: Optional[jax.random.PRNGKey] = None
-        ) -> Tuple[int, jnp.ndarray, jnp.ndarray]:
+            self, state: "jnp.ndarray", deterministic: bool = False, rng: Optional["jax.random.PRNGKey"] = None
+        ) -> Tuple[int, "jnp.ndarray", "jnp.ndarray"]:
             """
             Select action and store experience
 
@@ -215,7 +215,7 @@ if JAX_AVAILABLE:
 
         def compute_returns(
             self, rewards: List[float], dones: List[bool]
-        ) -> jnp.ndarray:
+        ) -> "jnp.ndarray":
             """
             Compute discounted returns
 
@@ -395,7 +395,7 @@ class ReinforcementLearningModule(BaseBrainModule):
                 )
                 raise
 
-    def _get_embeddings(self, texts: List[str]) -> jnp.ndarray:
+    def _get_embeddings(self, texts: List[str]) -> "jnp.ndarray":
         """Get embeddings for texts using Flax model"""
         self._ensure_embedding_model_loaded()
 

@@ -12,7 +12,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from models.personality_builder_models import PersonalityBuilderData, ToneDescriptor, ResponseStyle
+
+# Optional imports - models package may not be available
+try:
+    from models.personality_builder_models import PersonalityBuilderData, ToneDescriptor, ResponseStyle
+except ImportError:
+    # Models not available - define minimal types
+    PersonalityBuilderData = None
+    ToneDescriptor = None
+    ResponseStyle = None
 
 
 class PersonalityBuilderServiceModule(BaseBrainModule):

@@ -32,15 +32,20 @@ def _check_jax_available():
             import flax.linen as n
             from flax import serialization as s
             import optax as o
-            from transformers import FlaxAutoModel as FAM, FlaxAutoTokenizer as FAT
+            # transformers is optional - only needed for embedding models
+            try:
+                from transformers import FlaxAutoModel as FAM, FlaxAutoTokenizer as FAT
+                FlaxAutoModel = FAM
+                FlaxAutoTokenizer = FAT
+            except ImportError:
+                FlaxAutoModel = None
+                FlaxAutoTokenizer = None
             
             jax = j
             jnp = jn
             nn = n
             serialization = s
             optax = o
-            FlaxAutoModel = FAM
-            FlaxAutoTokenizer = FAT
             JAX_AVAILABLE = True
         except ImportError:
             JAX_AVAILABLE = False
@@ -52,320 +57,317 @@ def _check_jax_available():
 # Ensure JAX is checked and nn is set before using it
 _check_jax_available()
 if JAX_AVAILABLE and nn is not None:
-class TransformerEncoderLayer(nn.Module):
-    """Flax implementation of Transformer Encoder Layer"""
-    d_model: int
-    nhead: int
-    dim_feedforward: int
-    dropout: float = 0.1
+    class TransformerEncoderLayer(nn.Module):
+        """Flax implementation of Transformer Encoder Layer"""
+        d_model: int
+        nhead: int
+        dim_feedforward: int
+        dropout: float = 0.1
 
-    @nn.compact
-    def __call__(self, x: jnp.ndarray, training: bool = False) -> jnp.ndarray:
-        """Forward pass"""
-        # Self-attention
-        attn_out = nn.MultiHeadAttention(
+        @nn.compact
+        def __call__(self, x: "jnp.ndarray", training: bool = False) -> "jnp.ndarray":
+            """Forward pass"""
+            # Self-attention
+            attn_out = nn.MultiHeadAttention(
             num_heads=self.nhead,
             qkv_features=self.d_model,
             dropout_rate=self.dropout,
             deterministic=not training,
-        )(x, x)
-        x = x + nn.Dropout(rate=self.dropout, deterministic=not training)(attn_out)
-        x = nn.LayerNorm()(x)
+            )(x, x)
+            x = x + nn.Dropout(rate=self.dropout, deterministic=not training)(attn_out)
+            x = nn.LayerNorm()(x)
 
-        # Feed-forward
-        ff_out = nn.Dense(self.dim_feedforward)(x)
-        ff_out = nn.relu(ff_out)
-        ff_out = nn.Dropout(rate=self.dropout, deterministic=not training)(ff_out)
-        ff_out = nn.Dense(self.d_model)(ff_out)
-        x = x + nn.Dropout(rate=self.dropout, deterministic=not training)(ff_out)
-        x = nn.LayerNorm()(x)
+            # Feed-forward
+            ff_out = nn.Dense(self.dim_feedforward)(x)
+            ff_out = nn.relu(ff_out)
+            ff_out = nn.Dropout(rate=self.dropout, deterministic=not training)(ff_out)
+            ff_out = nn.Dense(self.d_model)(ff_out)
+            x = x + nn.Dropout(rate=self.dropout, deterministic=not training)(ff_out)
+            x = nn.LayerNorm()(x)
 
-        return x
+            return x
 
-class MultiStepReasoningNetwork(nn.Module):
-    """
-    Custom architecture for chain-of-thought reasoning
-    Processes reasoning steps sequentially with attention between steps
-    """
-
-    input_dim: int = 768
-    hidden_dim: int = 512
-    num_steps: int = 5
-    num_layers: int = 3
-    dropout: float = 0.1
-
-    @nn.compact
-    def __call__(
-        self, input_embeddings: jnp.ndarray, max_steps: Optional[int] = None, training: bool = False
-    ) -> Tuple[jnp.ndarray, List[jnp.ndarray]]:
+    class MultiStepReasoningNetwork(nn.Module):
         """
-        Forward pass through multi-step reasoning
-
-        Args:
-            input_embeddings: Input embeddings (batch_size, seq_len, input_dim)
-            max_steps: Maximum number of reasoning steps
-            training: Whether in training mode
-
-        Returns:
-            final_output: Final reasoning output (batch_size, seq_len, input_dim)
-            step_outputs: List of outputs for each step
+        Custom architecture for chain-of-thought reasoning
+        Processes reasoning steps sequentially with attention between steps
         """
-        max_steps = max_steps or self.num_steps
+        input_dim: int = 768
+        hidden_dim: int = 512
+        num_steps: int = 5
+        num_layers: int = 3
+        dropout: float = 0.1
 
-        # Project input
-        x = nn.Dense(self.hidden_dim)(input_embeddings)  # (batch_size, seq_len, hidden_dim)
+        @nn.compact
+        def __call__(
+            self, input_embeddings: "jnp.ndarray", max_steps: Optional[int] = None, training: bool = False
+            ) -> Tuple["jnp.ndarray", List["jnp.ndarray"]]:
+            """
+            Forward pass through multi-step reasoning
 
-        step_outputs = []
-        current_state = x
+            Args:
+                input_embeddings: Input embeddings (batch_size, seq_len, input_dim)
+                max_steps: Maximum number of reasoning steps
+                training: Whether in training mode
 
-        # Create step processors (transformer layers)
-        for _ in range(max_steps):
-            # Process through transformer layers
-            for _ in range(self.num_layers):
-                current_state = TransformerEncoderLayer(
-                    d_model=self.hidden_dim,
-                    nhead=8,
-                    dim_feedforward=self.hidden_dim * 2,
-                    dropout=self.dropout,
-                )(current_state, training=training)
+            Returns:
+                final_output: Final reasoning output (batch_size, seq_len, input_dim)
+                step_outputs: List of outputs for each step
+            """
+            max_steps = max_steps or self.num_steps
 
-            # Cross-step attention (attend to all previous steps)
-            if len(step_outputs) > 0:
-                # Stack all previous step outputs
-                previous_steps = jnp.stack(step_outputs, axis=1)  # (batch_size, step, seq_len, hidden_dim)
-                previous_steps = jnp.mean(previous_steps, axis=2)  # Average over sequence
+            # Project input
+            x = nn.Dense(self.hidden_dim)(input_embeddings)  # (batch_size, seq_len, hidden_dim)
 
-                # Attend to previous steps
-                current_mean = jnp.mean(current_state, axis=1, keepdims=True)  # (batch_size, 1, hidden_dim)
-                attended = nn.MultiHeadAttention(
-                    num_heads=8,
-                    qkv_features=self.hidden_dim,
-                    dropout_rate=self.dropout,
-                    deterministic=not training,
-                )(current_mean, previous_steps, previous_steps)
-                # Expand attended to match current_state shape
-                attended = jnp.broadcast_to(attended, current_state.shape)
-                current_state = current_state + attended
+            step_outputs = []
+            current_state = x
 
-            step_outputs.append(current_state)
+            # Create step processors (transformer layers)
+            for _ in range(max_steps):
+                # Process through transformer layers
+                for _ in range(self.num_layers):
+                    current_state = TransformerEncoderLayer(
+                        d_model=self.hidden_dim,
+                        nhead=8,
+                        dim_feedforward=self.hidden_dim * 2,
+                        dropout=self.dropout,
+                    )(current_state, training=training)
 
-            # Check if reasoning is complete (via step gate)
-            current_mean = jnp.mean(current_state, axis=1)  # (batch_size, hidden_dim)
-            completion_prob = nn.sigmoid(
-                nn.Dense(1)(nn.relu(nn.Dense(self.hidden_dim // 2)(current_mean)))
-            )
-            if jnp.mean(completion_prob) > 0.9:  # Early stopping
-                break
+                # Cross-step attention (attend to all previous steps)
+                if len(step_outputs) > 0:
+                    # Stack all previous step outputs
+                    previous_steps = jnp.stack(step_outputs, axis=1)  # (batch_size, step, seq_len, hidden_dim)
+                    previous_steps = jnp.mean(previous_steps, axis=2)  # Average over sequence
 
-        # Final output
-        final_output = nn.Dense(self.input_dim)(current_state)
+                    # Attend to previous steps
+                    current_mean = jnp.mean(current_state, axis=1, keepdims=True)  # (batch_size, 1, hidden_dim)
+                    attended = nn.MultiHeadAttention(
+                        num_heads=8,
+                        qkv_features=self.hidden_dim,
+                        dropout_rate=self.dropout,
+                        deterministic=not training,
+                    )(current_mean, previous_steps, previous_steps)
+                    # Expand attended to match current_state shape
+                    attended = jnp.broadcast_to(attended, current_state.shape)
+                    current_state = current_state + attended
 
-        return final_output, step_outputs
+                step_outputs.append(current_state)
 
-class CausalInferenceModule(nn.Module):
-    """
-    Specialized network for causal reasoning
-    Models cause-effect relationships and counterfactuals
-    """
+                # Check if reasoning is complete (via step gate)
+                current_mean = jnp.mean(current_state, axis=1)  # (batch_size, hidden_dim)
+                completion_prob = nn.sigmoid(
+                    nn.Dense(1)(nn.relu(nn.Dense(self.hidden_dim // 2)(current_mean)))
+                )
+                if jnp.mean(completion_prob) > 0.9:  # Early stopping
+                    break
 
-    input_dim: int = 768
-    hidden_dim: int = 512
-    num_causes: int = 5
-    dropout: float = 0.1
+            # Final output
+            final_output = nn.Dense(self.input_dim)(current_state)
 
-    @nn.compact
-    def __call__(
-        self, cause_embeddings: jnp.ndarray, effect_embeddings: jnp.ndarray, training: bool = False
-    ) -> Dict[str, jnp.ndarray]:
+            return final_output, step_outputs
+
+    class CausalInferenceModule(nn.Module):
         """
-        Infer causal relationships
-
-        Args:
-            cause_embeddings: Cause embeddings (batch_size, seq_len, input_dim)
-            effect_embeddings: Effect embeddings (batch_size, seq_len, input_dim)
-            training: Whether in training mode
-
-        Returns:
-            Dict with causal scores and counterfactuals
+        Specialized network for causal reasoning
+        Models cause-effect relationships and counterfactuals
         """
-        # Cause encoder
-        x_cause = nn.Dense(self.hidden_dim)(cause_embeddings)
-        x_cause = nn.relu(x_cause)
-        x_cause = nn.Dropout(rate=self.dropout, deterministic=not training)(x_cause)
-        cause_encoded = nn.Dense(self.hidden_dim)(x_cause)
+        input_dim: int = 768
+        hidden_dim: int = 512
+        num_causes: int = 5
+        dropout: float = 0.1
 
-        # Effect encoder
-        x_effect = nn.Dense(self.hidden_dim)(effect_embeddings)
-        x_effect = nn.relu(x_effect)
-        x_effect = nn.Dropout(rate=self.dropout, deterministic=not training)(x_effect)
-        effect_encoded = nn.Dense(self.hidden_dim)(x_effect)
+        @nn.compact
+        def __call__(
+            self, cause_embeddings: "jnp.ndarray", effect_embeddings: "jnp.ndarray", training: bool = False
+        ) -> Dict[str, "jnp.ndarray"]:
+            """
+            Infer causal relationships
 
-        # Average over sequence
-        cause_repr = jnp.mean(cause_encoded, axis=1)  # (batch_size, hidden_dim)
-        effect_repr = jnp.mean(effect_encoded, axis=1)  # (batch_size, hidden_dim)
+            Args:
+                cause_embeddings: Cause embeddings (batch_size, seq_len, input_dim)
+                effect_embeddings: Effect embeddings (batch_size, seq_len, input_dim)
+                training: Whether in training mode
 
-        # Score causal relationship
-        combined = jnp.concatenate([cause_repr, effect_repr], axis=-1)
-        x_score = nn.Dense(self.hidden_dim)(combined)
-        x_score = nn.relu(x_score)
-        x_score = nn.Dropout(rate=self.dropout, deterministic=not training)(x_score)
-        causal_strength = nn.sigmoid(nn.Dense(1)(x_score))
+            Returns:
+                Dict with causal scores and counterfactuals
+            """
+            # Cause encoder
+            x_cause = nn.Dense(self.hidden_dim)(cause_embeddings)
+            x_cause = nn.relu(x_cause)
+            x_cause = nn.Dropout(rate=self.dropout, deterministic=not training)(x_cause)
+            cause_encoded = nn.Dense(self.hidden_dim)(x_cause)
 
-        # Generate counterfactual (what if cause didn't happen?)
-        x_cf = nn.Dense(self.hidden_dim)(combined)
-        x_cf = nn.relu(x_cf)
-        x_cf = nn.Dropout(rate=self.dropout, deterministic=not training)(x_cf)
-        counterfactual_effect = nn.Dense(self.input_dim)(x_cf)
+            # Effect encoder
+            x_effect = nn.Dense(self.hidden_dim)(effect_embeddings)
+            x_effect = nn.relu(x_effect)
+            x_effect = nn.Dropout(rate=self.dropout, deterministic=not training)(x_effect)
+            effect_encoded = nn.Dense(self.hidden_dim)(x_effect)
 
-        return {
+            # Average over sequence
+            cause_repr = jnp.mean(cause_encoded, axis=1)  # (batch_size, hidden_dim)
+            effect_repr = jnp.mean(effect_encoded, axis=1)  # (batch_size, hidden_dim)
+
+            # Score causal relationship
+            combined = jnp.concatenate([cause_repr, effect_repr], axis=-1)
+            x_score = nn.Dense(self.hidden_dim)(combined)
+            x_score = nn.relu(x_score)
+            x_score = nn.Dropout(rate=self.dropout, deterministic=not training)(x_score)
+            causal_strength = nn.sigmoid(nn.Dense(1)(x_score))
+
+            # Generate counterfactual (what if cause didn't happen?)
+            x_cf = nn.Dense(self.hidden_dim)(combined)
+            x_cf = nn.relu(x_cf)
+            x_cf = nn.Dropout(rate=self.dropout, deterministic=not training)(x_cf)
+            counterfactual_effect = nn.Dense(self.input_dim)(x_cf)
+
+            return {
             "causal_strength": causal_strength,
             "counterfactual_effect": counterfactual_effect,
             "cause_representation": cause_repr,
             "effect_representation": effect_repr,
-        }
+            }
 
-class AnalogicalReasoningNetwork(nn.Module):
-    """
-    Architecture optimized for analogical thinking
-    Finds analogies between source and target domains
-    """
-
-    input_dim: int = 768
-    hidden_dim: int = 512
-    analogy_dim: int = 256
-    dropout: float = 0.1
-
-    @nn.compact
-    def __call__(
-        self, source_embeddings: jnp.ndarray, target_embeddings: jnp.ndarray, training: bool = False
-    ) -> Dict[str, jnp.ndarray]:
+    class AnalogicalReasoningNetwork(nn.Module):
         """
-        Find and apply analogies
-
-        Args:
-            source_embeddings: Source domain embeddings (batch_size, seq_len, input_dim)
-            target_embeddings: Target domain embeddings (batch_size, seq_len, input_dim)
-            training: Whether in training mode
-
-        Returns:
-            Dict with analogy scores and transferred knowledge
+        Architecture optimized for analogical thinking
+        Finds analogies between source and target domains
         """
-        # Source encoder
-        x_source = nn.Dense(self.hidden_dim)(source_embeddings)
-        x_source = nn.relu(x_source)
-        x_source = nn.Dropout(rate=self.dropout, deterministic=not training)(x_source)
-        source_encoded = nn.Dense(self.analogy_dim)(x_source)
+        input_dim: int = 768
+        hidden_dim: int = 512
+        analogy_dim: int = 256
+        dropout: float = 0.1
 
-        # Target encoder
-        x_target = nn.Dense(self.hidden_dim)(target_embeddings)
-        x_target = nn.relu(x_target)
-        x_target = nn.Dropout(rate=self.dropout, deterministic=not training)(x_target)
-        target_encoded = nn.Dense(self.analogy_dim)(x_target)
+        @nn.compact
+        def __call__(
+            self, source_embeddings: "jnp.ndarray", target_embeddings: "jnp.ndarray", training: bool = False
+        ) -> Dict[str, "jnp.ndarray"]:
+            """
+                Find and apply analogies
 
-        # Average over sequence
-        source_repr = jnp.mean(source_encoded, axis=1)  # (batch_size, analogy_dim)
-        target_repr = jnp.mean(target_encoded, axis=1)  # (batch_size, analogy_dim)
+                Args:
+                source_embeddings: Source domain embeddings (batch_size, seq_len, input_dim)
+                target_embeddings: Target domain embeddings (batch_size, seq_len, input_dim)
+                training: Whether in training mode
 
-        # Map analogy
-        combined = jnp.concatenate([source_repr, target_repr], axis=-1)
-        x_map = nn.Dense(self.hidden_dim)(combined)
-        x_map = nn.relu(x_map)
-        x_map = nn.Dropout(rate=self.dropout, deterministic=not training)(x_map)
-        analogy_mapping = nn.Dense(self.analogy_dim)(x_map)
+                Returns:
+                Dict with analogy scores and transferred knowledge
+                """
+            # Source encoder
+            x_source = nn.Dense(self.hidden_dim)(source_embeddings)
+            x_source = nn.relu(x_source)
+            x_source = nn.Dropout(rate=self.dropout, deterministic=not training)(x_source)
+            source_encoded = nn.Dense(self.analogy_dim)(x_source)
 
-        # Score analogy quality
-        x_score = nn.Dense(self.hidden_dim // 2)(combined)
-        x_score = nn.relu(x_score)
-        x_score = nn.Dropout(rate=self.dropout, deterministic=not training)(x_score)
-        analogy_score = nn.sigmoid(nn.Dense(1)(x_score))
+            # Target encoder
+            x_target = nn.Dense(self.hidden_dim)(target_embeddings)
+            x_target = nn.relu(x_target)
+            x_target = nn.Dropout(rate=self.dropout, deterministic=not training)(x_target)
+            target_encoded = nn.Dense(self.analogy_dim)(x_target)
 
-        # Transfer knowledge from source to target
-        x_transfer = nn.Dense(self.hidden_dim)(combined)
-        x_transfer = nn.relu(x_transfer)
-        x_transfer = nn.Dropout(rate=self.dropout, deterministic=not training)(x_transfer)
-        transferred = nn.Dense(self.input_dim)(x_transfer)
+            # Average over sequence
+            source_repr = jnp.mean(source_encoded, axis=1)  # (batch_size, analogy_dim)
+            target_repr = jnp.mean(target_encoded, axis=1)  # (batch_size, analogy_dim)
 
-        return {
+            # Map analogy
+            combined = jnp.concatenate([source_repr, target_repr], axis=-1)
+            x_map = nn.Dense(self.hidden_dim)(combined)
+            x_map = nn.relu(x_map)
+            x_map = nn.Dropout(rate=self.dropout, deterministic=not training)(x_map)
+            analogy_mapping = nn.Dense(self.analogy_dim)(x_map)
+
+            # Score analogy quality
+            x_score = nn.Dense(self.hidden_dim // 2)(combined)
+            x_score = nn.relu(x_score)
+            x_score = nn.Dropout(rate=self.dropout, deterministic=not training)(x_score)
+            analogy_score = nn.sigmoid(nn.Dense(1)(x_score))
+
+            # Transfer knowledge from source to target
+            x_transfer = nn.Dense(self.hidden_dim)(combined)
+            x_transfer = nn.relu(x_transfer)
+            x_transfer = nn.Dropout(rate=self.dropout, deterministic=not training)(x_transfer)
+            transferred = nn.Dense(self.input_dim)(x_transfer)
+
+            return {
             "analogy_score": analogy_score,
             "analogy_mapping": analogy_mapping,
             "transferred_knowledge": transferred,
             "source_representation": source_repr,
             "target_representation": target_repr,
-        }
+            }
 
-class ReasoningEnsemble(nn.Module):
-    """
-    Ensemble of specialized reasoning models
-    Combines outputs from multiple reasoning architectures
-    """
-
-    input_dim: int = 768
-    hidden_dim: int = 512
-    num_models: int = 3
-
-    @nn.compact
-    def __call__(
-        self, input_embeddings: jnp.ndarray, reasoning_type: Optional[str] = None, training: bool = False
-    ) -> Dict[str, jnp.ndarray]:
+    class ReasoningEnsemble(nn.Module):
         """
-        Ensemble reasoning
-
-        Args:
-            input_embeddings: Input embeddings (batch_size, seq_len, input_dim)
-            reasoning_type: Optional specific reasoning type to use
-            training: Whether in training mode
-
-        Returns:
-            Dict with ensemble output and individual model outputs
+        Ensemble of specialized reasoning models
+        Combines outputs from multiple reasoning architectures
         """
-        outputs = []
+        input_dim: int = 768
+        hidden_dim: int = 512
+        num_models: int = 3
 
-        # Multi-step reasoning
-        if reasoning_type is None or reasoning_type == "multi_step":
-            multi_step_out, _ = MultiStepReasoningNetwork(
-                input_dim=self.input_dim, hidden_dim=self.hidden_dim
-            )(input_embeddings, training=training)
-            outputs.append(jnp.mean(multi_step_out, axis=1))  # (batch_size, input_dim)
+        @nn.compact
+        def __call__(
+            self, input_embeddings: "jnp.ndarray", reasoning_type: Optional[str] = None, training: bool = False
+        ) -> Dict[str, "jnp.ndarray"]:
+            """
+                Ensemble reasoning
 
-        # Causal reasoning (needs cause/effect split - simplified here)
-        if reasoning_type is None or reasoning_type == "causal":
-            # Split input as cause/effect for demonstration
-            mid = input_embeddings.shape[1] // 2
-            cause = input_embeddings[:, :mid, :]
-            effect = input_embeddings[:, mid:, :]
-            causal_out = CausalInferenceModule(
-                input_dim=self.input_dim, hidden_dim=self.hidden_dim
-            )(cause, effect, training=training)
-            outputs.append(causal_out["counterfactual_effect"])
+                Args:
+                input_embeddings: Input embeddings (batch_size, seq_len, input_dim)
+                reasoning_type: Optional specific reasoning type to use
+                training: Whether in training mode
 
-        # Analogical reasoning (needs source/target - simplified here)
-        if reasoning_type is None or reasoning_type == "analogical":
-            # Use same input as source and target for demonstration
-            analogical_out = AnalogicalReasoningNetwork(
-                input_dim=self.input_dim, hidden_dim=self.hidden_dim
-            )(input_embeddings, input_embeddings, training=training)
-            outputs.append(analogical_out["transferred_knowledge"])
+                Returns:
+                Dict with ensemble output and individual model outputs
+                """
+            outputs = []
 
-        # Combine outputs
-        if len(outputs) > 1:
-            combined = jnp.concatenate(outputs, axis=-1)  # (batch_size, input_dim * num_models)
-            x_comb = nn.Dense(self.hidden_dim)(combined)
-            x_comb = nn.relu(x_comb)
-            ensemble_output = nn.Dense(self.input_dim)(x_comb)
-        else:
-            ensemble_output = outputs[0]
+            # Multi-step reasoning
+            if reasoning_type is None or reasoning_type == "multi_step":
+                multi_step_out, _ = MultiStepReasoningNetwork(
+                    input_dim=self.input_dim, hidden_dim=self.hidden_dim
+                )(input_embeddings, training=training)
+                outputs.append(jnp.mean(multi_step_out, axis=1))  # (batch_size, input_dim)
 
-        # Apply learned weights
-        model_weights = self.param(
-            "model_weights", nn.initializers.ones, (self.num_models,)
-        ) / self.num_models
-        weighted_output = ensemble_output * jnp.sum(model_weights)
+            # Causal reasoning (needs cause/effect split - simplified here)
+            if reasoning_type is None or reasoning_type == "causal":
+                # Split input as cause/effect for demonstration
+                mid = input_embeddings.shape[1] // 2
+                cause = input_embeddings[:, :mid, :]
+                effect = input_embeddings[:, mid:, :]
+                causal_out = CausalInferenceModule(
+                    input_dim=self.input_dim, hidden_dim=self.hidden_dim
+                )(cause, effect, training=training)
+                outputs.append(causal_out["counterfactual_effect"])
 
-        return {
-            "ensemble_output": weighted_output,
-            "individual_outputs": outputs,
-            "model_weights": model_weights,
-        }
+            # Analogical reasoning (needs source/target - simplified here)
+            if reasoning_type is None or reasoning_type == "analogical":
+                # Use same input as source and target for demonstration
+                analogical_out = AnalogicalReasoningNetwork(
+                    input_dim=self.input_dim, hidden_dim=self.hidden_dim
+                )(input_embeddings, input_embeddings, training=training)
+                outputs.append(analogical_out["transferred_knowledge"])
+
+            # Combine outputs
+            if len(outputs) > 1:
+                combined = jnp.concatenate(outputs, axis=-1)  # (batch_size, input_dim * num_models)
+                x_comb = nn.Dense(self.hidden_dim)(combined)
+                x_comb = nn.relu(x_comb)
+                ensemble_output = nn.Dense(self.input_dim)(x_comb)
+            else:
+                ensemble_output = outputs[0]
+
+            # Apply learned weights
+            model_weights = self.param(
+                "model_weights", nn.initializers.ones, (self.num_models,)
+            ) / self.num_models
+            weighted_output = ensemble_output * jnp.sum(model_weights)
+
+            return {
+                "ensemble_output": weighted_output,
+                "individual_outputs": outputs,
+                "model_weights": model_weights,
+            }
+
 else:
     # Define stub classes when JAX is not available
     class TransformerEncoderLayer:
@@ -464,7 +466,7 @@ class CustomReasoningModule(BaseBrainModule):
                 )
                 raise
 
-    def _get_embeddings(self, texts: List[str]) -> jnp.ndarray:
+    def _get_embeddings(self, texts: List[str]) -> "jnp.ndarray":
         """Get embeddings for texts using Flax model"""
         self._ensure_embedding_model_loaded()
 
@@ -526,13 +528,17 @@ class CustomReasoningModule(BaseBrainModule):
 
         # Load model if needed
         if "multi_step" not in self.models:
-            self.models["multi_step"] = MultiStepReasoningNetwork()
-            # Initialize parameters
+            # Initialize parameters - create model instance and initialize
             dummy_input = jnp.zeros((1, 1, 768))  # (batch, seq, dim)
             self.rng, init_rng = jax.random.split(self.rng)
-            self.model_params["multi_step"] = self.models["multi_step"].init(
-                init_rng, dummy_input, training=False
+            # Create model instance
+            model = MultiStepReasoningNetwork()
+            # Initialize parameters - init() takes rng first, then __call__ args
+            self.model_params["multi_step"] = model.init(
+                init_rng, dummy_input, max_steps=None, training=False
             )
+            # Store the model instance for apply calls
+            self.models["multi_step"] = model
 
         # Get embeddings
         embeddings = self._get_embeddings([text])

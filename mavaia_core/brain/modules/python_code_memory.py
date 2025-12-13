@@ -22,12 +22,12 @@ from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError
 
 # Lazy imports to avoid timeout during module discovery
-    STORAGE_AVAILABLE = False
-    BaseStorage = None
+STORAGE_AVAILABLE = False
+BaseStorage = None
 StorageConfig = None
-    MemoryStorage = None
-    MEMORY_GRAPH_AVAILABLE = False
-    MemoryGraph = None
+MemoryStorage = None
+MEMORY_GRAPH_AVAILABLE = False
+MemoryGraph = None
 
 def _lazy_import_storage():
     """Lazy import storage systems only when needed"""

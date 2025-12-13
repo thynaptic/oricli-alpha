@@ -44,8 +44,8 @@ if JAX_AVAILABLE:
 
         @nn.compact
         def __call__(
-            self, tgt: jnp.ndarray, memory: jnp.ndarray, training: bool = False
-        ) -> jnp.ndarray:
+            self, tgt: "jnp.ndarray", memory: "jnp.ndarray", training: bool = False
+        ) -> "jnp.ndarray":
             """Forward pass"""
             # Self-attention
             attn_out = nn.MultiHeadAttention(
@@ -91,8 +91,8 @@ if JAX_AVAILABLE:
 
         @nn.compact
         def __call__(
-            self, query_embedding: jnp.ndarray, tool_ids: Optional[jnp.ndarray] = None, training: bool = False
-        ) -> Dict[str, jnp.ndarray]:
+            self, query_embedding: "jnp.ndarray", tool_ids: Optional["jnp.ndarray"] = None, training: bool = False
+        ) -> Dict[str, "jnp.ndarray"]:
             """
             Forward pass through differentiable planner
 
@@ -242,7 +242,7 @@ class GradientPlanOptimizerModule(BaseBrainModule):
                 )
                 raise
 
-    def _get_embeddings(self, texts: List[str]) -> jnp.ndarray:
+    def _get_embeddings(self, texts: List[str]) -> "jnp.ndarray":
         """Get embeddings for texts using Flax model"""
         self._ensure_embedding_model_loaded()
 

@@ -47,8 +47,8 @@ if JAX_AVAILABLE:
 
         @nn.compact
         def __call__(
-            self, query_embeddings: jnp.ndarray, training: bool = False
-        ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+            self, query_embeddings: "jnp.ndarray", training: bool = False
+        ) -> Tuple["jnp.ndarray", "jnp.ndarray", "jnp.ndarray"]:
             """
             Forward pass
 
@@ -185,7 +185,7 @@ class ToolRoutingModule(BaseBrainModule):
                 )
                 raise
 
-    def _get_embeddings(self, texts: List[str]) -> jnp.ndarray:
+    def _get_embeddings(self, texts: List[str]) -> "jnp.ndarray":
         """Get embeddings for texts using Flax model"""
         self._ensure_embedding_model_loaded()
         

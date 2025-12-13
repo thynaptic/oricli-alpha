@@ -13,12 +13,21 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from models.supervised_self_consistency_models import (
-    SupervisedResponse,
-    CandidateResponse,
-    SupervisionScore,
-    ComplexityScore,
-)
+
+# Optional imports - models package may not be available
+try:
+    from models.supervised_self_consistency_models import (
+        SupervisedResponse,
+        CandidateResponse,
+        SupervisionScore,
+        ComplexityScore,
+    )
+except ImportError:
+    # Models not available - define minimal types
+    SupervisedResponse = None
+    CandidateResponse = None
+    SupervisionScore = None
+    ComplexityScore = None
 
 
 class SupervisedSelfConsistencyServiceModule(BaseBrainModule):

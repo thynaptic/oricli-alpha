@@ -16,12 +16,21 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from models.personality_builder_models import (
-    PersonalityPlugin,
-    PersonalityPluginList,
-    PersonalityTemplate,
-    PersonalityBuilderData,
-)
+
+# Optional imports - models package may not be available
+try:
+    from models.personality_builder_models import (
+        PersonalityPlugin,
+        PersonalityPluginList,
+        PersonalityTemplate,
+        PersonalityBuilderData,
+    )
+except ImportError:
+    # Models not available - define minimal types
+    PersonalityPlugin = None
+    PersonalityPluginList = None
+    PersonalityTemplate = None
+    PersonalityBuilderData = None
 
 
 class PersonalityBuilderStorageServiceModule(BaseBrainModule):

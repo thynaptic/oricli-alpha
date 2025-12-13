@@ -14,7 +14,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from models.personality_models import PersonalityConfiguration, PersonalityConfigurations
+
+# Optional imports - models package may not be available
+try:
+    from models.personality_models import PersonalityConfiguration, PersonalityConfigurations
+except ImportError:
+    # Models not available - define minimal types
+    PersonalityConfiguration = None
+    PersonalityConfigurations = None
 
 
 class PersonalityConfigurationLoaderModule(BaseBrainModule):

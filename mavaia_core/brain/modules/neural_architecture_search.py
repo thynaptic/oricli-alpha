@@ -118,70 +118,70 @@ class SearchSpace:
 
 # Only define Flax-based classes if JAX is available
 if JAX_AVAILABLE and nn is not None:
-class TransformerEncoderLayer(nn.Module):
-    """Flax implementation of Transformer Encoder Layer"""
-    d_model: int
-    nhead: int
-    dim_feedforward: int
-    dropout: float = 0.1
-    activation: str = "relu"
+    class TransformerEncoderLayer(nn.Module):
+        """Flax implementation of Transformer Encoder Layer"""
+        d_model: int
+        nhead: int
+        dim_feedforward: int
+        dropout: float = 0.1
+        activation: str = "relu"
 
-    @nn.compact
-    def __call__(self, x: jnp.ndarray, training: bool = False) -> jnp.ndarray:
-        """Forward pass"""
-        # Self-attention
-        attn_out = nn.MultiHeadAttention(
-            num_heads=self.nhead,
-            qkv_features=self.d_model,
-            dropout_rate=self.dropout,
-            deterministic=not training,
-        )(x, x)
-        x = x + nn.Dropout(rate=self.dropout, deterministic=not training)(attn_out)
-        x = nn.LayerNorm()(x)
+        @nn.compact
+        def __call__(self, x: "jnp.ndarray", training: bool = False) -> "jnp.ndarray":
+            """Forward pass"""
+            # Self-attention
+            attn_out = nn.MultiHeadAttention(
+                num_heads=self.nhead,
+                qkv_features=self.d_model,
+                dropout_rate=self.dropout,
+                deterministic=not training,
+            )(x, x)
+            x = x + nn.Dropout(rate=self.dropout, deterministic=not training)(attn_out)
+            x = nn.LayerNorm()(x)
 
-        # Feed-forward
-        ff_out = nn.Dense(self.dim_feedforward)(x)
-        if self.activation == "relu":
-            ff_out = nn.relu(ff_out)
-        elif self.activation == "gelu":
-            ff_out = nn.gelu(ff_out)
-        elif self.activation == "tanh":
-            ff_out = nn.tanh(ff_out)
-        ff_out = nn.Dropout(rate=self.dropout, deterministic=not training)(ff_out)
-        ff_out = nn.Dense(self.d_model)(ff_out)
-        x = x + nn.Dropout(rate=self.dropout, deterministic=not training)(ff_out)
-        x = nn.LayerNorm()(x)
+            # Feed-forward
+            ff_out = nn.Dense(self.dim_feedforward)(x)
+            if self.activation == "relu":
+                ff_out = nn.relu(ff_out)
+            elif self.activation == "gelu":
+                ff_out = nn.gelu(ff_out)
+            elif self.activation == "tanh":
+                ff_out = nn.tanh(ff_out)
+            ff_out = nn.Dropout(rate=self.dropout, deterministic=not training)(ff_out)
+            ff_out = nn.Dense(self.d_model)(ff_out)
+            x = x + nn.Dropout(rate=self.dropout, deterministic=not training)(ff_out)
+            x = nn.LayerNorm()(x)
 
-        return x
+            return x
 
-class CandidateModel(nn.Module):
-    """Flax model built from architecture candidate"""
-    candidate: ArchitectureCandidate
-    input_dim: int
-    output_dim: int
+    class CandidateModel(nn.Module):
+        """Flax model built from architecture candidate"""
+        candidate: ArchitectureCandidate
+        input_dim: int
+        output_dim: int
 
-    @nn.compact
-    def __call__(self, x: jnp.ndarray, training: bool = False) -> jnp.ndarray:
-        """Forward pass"""
-        # Input projection
-        x = nn.Dense(self.candidate.hidden_dim)(x)
+        @nn.compact
+        def __call__(self, x: "jnp.ndarray", training: bool = False) -> "jnp.ndarray":
+            """Forward pass"""
+            # Input projection
+            x = nn.Dense(self.candidate.hidden_dim)(x)
 
-        # Transformer layers
-        for _ in range(self.candidate.num_layers):
-            x = TransformerEncoderLayer(
-                d_model=self.candidate.hidden_dim,
-                nhead=self.candidate.num_heads,
-                dim_feedforward=self.candidate.hidden_dim * 2,
-                dropout=self.candidate.dropout,
-                activation=self.candidate.activation,
-            )(x, training=training)
+            # Transformer layers
+            for _ in range(self.candidate.num_layers):
+                x = TransformerEncoderLayer(
+                    d_model=self.candidate.hidden_dim,
+                    nhead=self.candidate.num_heads,
+                    dim_feedforward=self.candidate.hidden_dim * 2,
+                    dropout=self.candidate.dropout,
+                    activation=self.candidate.activation,
+                )(x, training=training)
 
-        # Average pooling
-        x = jnp.mean(x, axis=1)  # (batch_size, hidden_dim)
+            # Average pooling
+            x = jnp.mean(x, axis=1)  # (batch_size, hidden_dim)
 
-        # Output projection
-        x = nn.Dense(self.output_dim)(x)
-        return x
+            # Output projection
+            x = nn.Dense(self.output_dim)(x)
+            return x
 else:
     # Define stub classes when JAX is not available
     class TransformerEncoderLayer:
@@ -238,8 +238,8 @@ class EvolutionaryNAS:
         candidate: ArchitectureCandidate,
         input_dim: int,
         output_dim: int,
-        train_data: List[Tuple[jnp.ndarray, jnp.ndarray]],
-        eval_data: List[Tuple[jnp.ndarray, jnp.ndarray]],
+        train_data: List[Tuple["jnp.ndarray", "jnp.ndarray"]],
+        eval_data: List[Tuple["jnp.ndarray", "jnp.ndarray"]],
         epochs: int = 5,
     ) -> float:
         """
@@ -352,8 +352,8 @@ class EvolutionaryNAS:
         self,
         input_dim: int,
         output_dim: int,
-        train_data: List[Tuple[jnp.ndarray, jnp.ndarray]],
-        eval_data: List[Tuple[jnp.ndarray, jnp.ndarray]],
+        train_data: List[Tuple["jnp.ndarray", "jnp.ndarray"]],
+        eval_data: List[Tuple["jnp.ndarray", "jnp.ndarray"]],
         generations: int = 10,
         epochs_per_candidate: int = 5,
     ) -> ArchitectureCandidate:

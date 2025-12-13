@@ -12,7 +12,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from models.model_tier_map_models import ModelTierMap
+
+# Optional imports - models package may not be available
+try:
+    from models.model_tier_map_models import ModelTierMap
+except ImportError:
+    # Models not available - define minimal types
+    ModelTierMap = None
 
 
 class ModelRoutingDecision:

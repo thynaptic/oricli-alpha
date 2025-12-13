@@ -6,11 +6,11 @@ from typing import Dict, Any, Optional, List
 
 # Try relative imports first (when imported as part of package), fallback to absolute
 try:
-from .solver_manager import get_solver_manager, SolverManager
-from .z3_solver import Z3Solver
-from .pysat_solver import PySATSolver
-from .sympy_solver import SymPySolver
-from .prolog_bridge import PrologBridge
+    from .solver_manager import get_solver_manager, SolverManager
+    from .z3_solver import Z3Solver
+    from .pysat_solver import PySATSolver
+    from .sympy_solver import SymPySolver
+    from .prolog_bridge import PrologBridge
 except ImportError:
     # Fallback to absolute imports if relative imports fail
     from mavaia_core.brain.modules.symbolic_solvers.solver_manager import get_solver_manager, SolverManager

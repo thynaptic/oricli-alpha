@@ -43,7 +43,7 @@ if JAX_AVAILABLE:
         dropout: float = 0.1
 
         @nn.compact
-        def __call__(self, plan_features: jnp.ndarray, training: bool = False) -> Dict[str, jnp.ndarray]:
+        def __call__(self, plan_features: "jnp.ndarray", training: bool = False) -> Dict[str, "jnp.ndarray"]:
             """
             Score a plan
 
@@ -151,7 +151,7 @@ class PlanOptimizerModule(BaseBrainModule):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def _extract_plan_features(self, plan: Dict[str, Any]) -> jnp.ndarray:
+    def _extract_plan_features(self, plan: Dict[str, Any]) -> "jnp.ndarray":
         """
         Extract feature vector from a plan
 
