@@ -654,6 +654,35 @@ class LiveBenchTestRunner:
                 result.result_data = {"module_result": module_result}
                 return result
             
+            # Apply meta-evaluator to repair and validate response
+            try:
+                meta_evaluator = self.registry.get_module("meta_evaluator")
+                if meta_evaluator:
+                    # Extract question text
+                    question_text = ""
+                    if "turns" in question and question["turns"]:
+                        if isinstance(question["turns"], list):
+                            question_text = question["turns"][0] if question["turns"] else ""
+                        else:
+                            question_text = str(question["turns"])
+                    
+                    task_type = question.get("task", "")
+                    question_count = question_text.count("?") if question_text else 0
+                    
+                    eval_result = meta_evaluator.execute("evaluate_and_repair", {
+                        "response": response_text,
+                        "question_text": question_text,
+                        "task_type": task_type,
+                        "question_count": question_count,
+                        "question_metadata": question
+                    })
+                    
+                    if eval_result.get("success"):
+                        response_text = eval_result.get("repaired_response", response_text)
+            except Exception as e:
+                # If meta-evaluator fails, continue with original response
+                print(f"[LiveBenchTestRunner] Meta-evaluator error: {e}", file=sys.stderr)
+            
             # Format response for LiveBench evaluation
             answer = self._format_response_for_livebench(response_text, question)
             
