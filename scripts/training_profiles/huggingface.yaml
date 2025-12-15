@@ -1,0 +1,14 @@
+# HuggingFace Training Profile
+# Train on HuggingFace datasets for diverse content
+description: "Train on HuggingFace datasets for diverse content from the HuggingFace Hub"
+source: huggingface
+categories:
+  - fiction
+  - non_fiction
+  - technical
+epochs: 15
+max_books: 5
+max_text_size: 200000
+data_percentage: 0.8
+model_type: both
+

@@ -1,0 +1,28 @@
+name: cleaning_run
+description: >
+  Optimized 2-hour training session for when Mike leaves to clean.
+  Uses multi-source balanced data with safe API calls, high-quality text,
+  and controlled dataset size for reliable completion.
+
+sources:
+  - gutenberg
+  - wikipedia
+  - openlibrary
+categories:
+  - fiction
+  - philosophy
+  - technical
+  - classic
+  - poetry
+  
+model_type: both
+
+epochs: 9999                # unlimited, overridden by time limit
+train_for_minutes: 120      # auto-stops at 2 hours
+max_books: 6
+max_text_size: 800000       # 0.8M chars cap for predictable training time
+data_percentage: 0.8        # 80% of each dataset
+
+# Sample generation on completion
+sample_after_training: true
+sample_model_type: both

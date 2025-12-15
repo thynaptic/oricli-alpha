@@ -1,0 +1,14 @@
+# OpenLibrary Training Profile
+# Train on OpenLibrary/Internet Archive books
+description: "Train on OpenLibrary/Internet Archive books for diverse literature"
+source: openlibrary
+categories:
+  - fiction
+  - classic
+  - non_fiction
+epochs: 15
+max_books: 5
+max_text_size: 200000
+data_percentage: 0.8
+model_type: both
+

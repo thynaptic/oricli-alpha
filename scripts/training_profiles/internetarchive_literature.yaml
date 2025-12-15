@@ -1,0 +1,17 @@
+# Internet Archive Literature Training Profile
+# Internet Archive items focused on literature and fiction
+description: "Internet Archive items focused on literature, fiction, and narrative content"
+source: internetarchive
+categories:
+  - fiction
+  - classic
+  - poetry
+  - drama
+  - adventure
+  - mystery
+epochs: 15
+max_books: 6
+max_text_size: 250000
+data_percentage: 0.9
+model_type: both
+

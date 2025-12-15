@@ -1,0 +1,13 @@
+# Wikipedia Fast Training Profile
+# Quick Wikipedia training for rapid iteration
+description: "Quick Wikipedia training with limited articles for rapid iteration"
+source: wikipedia
+categories:
+  - technical
+  - non_fiction
+epochs: 5
+max_books: 3
+max_text_size: 50000
+data_percentage: 0.3
+model_type: character
+

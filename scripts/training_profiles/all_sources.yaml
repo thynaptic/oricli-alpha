@@ -1,0 +1,20 @@
+# All Sources Training Profile
+# Train on all available data sources for maximum diversity
+description: "Train on all available data sources (Gutenberg, Wikipedia, LibriVox, OpenLibrary) for maximum diversity"
+source:
+  - gutenberg
+  - wikipedia
+  - librivox
+  - openlibrary
+categories:
+  - fiction
+  - technical
+  - classic
+  - non_fiction
+  - philosophy
+epochs: 25
+max_books: 5
+max_text_size: null  # No limit
+data_percentage: 1.0
+model_type: both
+

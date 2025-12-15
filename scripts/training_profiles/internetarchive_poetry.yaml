@@ -1,0 +1,13 @@
+# Internet Archive Poetry Training Profile
+# Poetry collections from Internet Archive
+description: "Poetry collections and verse from Internet Archive"
+source: internetarchive
+categories:
+  - poetry
+  - classic
+epochs: 12
+max_books: 5
+max_text_size: 150000
+data_percentage: 0.7
+model_type: character
+

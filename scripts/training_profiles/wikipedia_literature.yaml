@@ -1,0 +1,17 @@
+# Wikipedia Literature Training Profile
+# Wikipedia articles focused on literature and fiction
+description: "Wikipedia articles focused on literature, fiction, and narrative content"
+source: wikipedia
+categories:
+  - fiction
+  - classic
+  - poetry
+  - drama
+  - adventure
+  - mystery
+epochs: 15
+max_books: 6
+max_text_size: 250000
+data_percentage: 0.9
+model_type: both
+

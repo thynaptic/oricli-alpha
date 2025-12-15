@@ -1,0 +1,13 @@
+# HuggingFace Technical Training Profile
+# Technical datasets from HuggingFace
+description: "Technical datasets from HuggingFace for science, code, and technology content"
+source: huggingface
+categories:
+  - technical
+  - non_fiction
+epochs: 15
+max_books: 5
+max_text_size: 200000
+data_percentage: 0.8
+model_type: word
+

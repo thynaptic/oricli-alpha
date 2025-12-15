@@ -65,6 +65,11 @@ docs/.doctrees/
 .env.*.local
 *.env
 
+# API Keys and Secrets
+**/api_keys.json
+**/secrets.json
+**/*_secrets.json
+
 # mypy
 .mypy_cache/
 .dmypy.json

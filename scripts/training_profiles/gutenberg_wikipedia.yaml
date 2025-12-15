@@ -1,0 +1,16 @@
+# Gutenberg + Wikipedia Training Profile
+# Combine classic literature (Gutenberg) with modern content (Wikipedia)
+description: "Combine classic literature from Gutenberg with modern content from Wikipedia"
+source:
+  - gutenberg
+  - wikipedia
+categories:
+  - classic
+  - fiction
+  - technical
+epochs: 18
+max_books: 4
+max_text_size: 300000
+data_percentage: 0.9
+model_type: both
+

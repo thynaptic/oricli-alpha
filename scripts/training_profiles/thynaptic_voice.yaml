@@ -1,0 +1,44 @@
+name: thynaptic_voice
+description: >
+  Shapes Mavaia’s voice toward the Thynaptic Research writing style:
+  precise, analytical, technical, and structured. Inspired by Anthropic,
+  DeepMind, and arXiv scientific reasoning styles. Uses science-heavy and
+  technical datasets to strengthen coherence and research-grade text
+  generation.
+
+# Multiple high-signal sources
+sources:
+  - wikipedia
+  - openlibrary
+  - huggingface
+
+# Categories tuned for research prose
+categories:
+  - technical
+  - science
+  - philosophy
+  - non_fiction
+  - classic
+
+model_type: both
+
+# Deep-learning profile
+epochs: 9999               # unlimited; time stops it
+train_for_hours: 3         # recommended deep shaping pass
+max_books: 12
+max_text_size: 1500000     # 1.5M characters for dense high-quality text
+data_percentage: 0.9       # use most of the extracted text
+
+# HuggingFace dataset search terms
+search:
+  - "scientific"
+  - "machine learning"
+  - "research"
+  - "mathematics"
+  - "technical writing"
+  - "philosophy"
+  - "cognitive science"
+
+# Auto-sample after training
+sample_after_training: true
+sample_model_type: both

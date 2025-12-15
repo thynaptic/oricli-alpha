@@ -1,0 +1,21 @@
+# HuggingFace Comprehensive Training Profile
+# Comprehensive HuggingFace training with maximum datasets across all categories
+description: "Comprehensive HuggingFace training with maximum datasets across all categories"
+source: huggingface
+categories:
+  - fiction
+  - non_fiction
+  - technical
+  - philosophy
+  - poetry
+  - drama
+  - adventure
+  - mystery
+  - science_fiction
+  - classic
+epochs: 20
+max_books: 10
+max_text_size: null  # No limit
+data_percentage: 1.0
+model_type: both
+

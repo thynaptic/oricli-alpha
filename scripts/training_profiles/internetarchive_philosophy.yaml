@@ -1,0 +1,13 @@
+# Internet Archive Philosophy Training Profile
+# Philosophical works from Internet Archive
+description: "Philosophical works and intellectual content from Internet Archive"
+source: internetarchive
+categories:
+  - philosophy
+  - non_fiction
+epochs: 15
+max_books: 5
+max_text_size: 200000
+data_percentage: 0.8
+model_type: word
+

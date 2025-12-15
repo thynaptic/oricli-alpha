@@ -1,12 +1,52 @@
 #!/usr/bin/env python3
 """
 Training Script for Neural Text Generator
-Downloads Project Gutenberg data, preprocesses, and trains character/word models
+Downloads data from multiple sources (Gutenberg, Wikipedia, LibriVox, OpenLibrary, Internet Archive, HuggingFace),
+preprocesses, and trains character/word models
+
+Data Sources:
+    --source: Specify data source(s) to use
+        - gutenberg: Project Gutenberg books (default)
+        - wikipedia: Wikipedia articles
+        - librivox: LibriVox audiobooks
+        - openlibrary: OpenLibrary/Internet Archive books
+        - internetarchive: Internet Archive items (uses internetarchive library)
+        - huggingface: HuggingFace datasets (uses datasets library)
+    Can specify multiple sources: --source gutenberg wikipedia
+    Use --list-sources to see all available sources
+    
+    For HuggingFace: Set HF_TOKEN or MAVAIA_HUGGINGFACE_TOKEN environment variable
+    for private datasets. API keys can also be stored in mavaia_core/data/api_keys.json
 
 Training Profiles:
     Profiles are loaded from YAML files in scripts/training_profiles/
     Users can create custom profiles by adding YAML files to that directory.
     See scripts/training_profiles/README.md for profile format documentation.
+
+Examples:
+    # Train with Gutenberg (default)
+    python scripts/train_neural_text_generator.py --epochs 10
+    
+    # Train with Wikipedia
+    python scripts/train_neural_text_generator.py --source wikipedia --epochs 10
+    
+    # Train with multiple sources
+    python scripts/train_neural_text_generator.py --source gutenberg wikipedia --epochs 10
+    
+    # Use specific articles from Wikipedia
+    python scripts/train_neural_text_generator.py --source wikipedia --book-ids "Artificial intelligence" "Machine learning"
+    
+    # Use Internet Archive with specific items
+    python scripts/train_neural_text_generator.py --source internetarchive --book-ids "TripDown1905" "goodytwoshoes00newyiala"
+    
+    # Use Internet Archive with category search
+    python scripts/train_neural_text_generator.py --source internetarchive --categories fiction classic
+    
+    # Use HuggingFace with specific datasets
+    python scripts/train_neural_text_generator.py --source huggingface --book-ids "wikitext" "bookcorpus"
+    
+    # Use HuggingFace with category search
+    python scripts/train_neural_text_generator.py --source huggingface --categories technical fiction
 """
 
 import sys
@@ -237,9 +277,16 @@ def main():
     )
     parser.add_argument(
         "--book-ids",
-        type=int,
+        type=str,
         nargs="+",
-        help="Project Gutenberg book IDs to use for training",
+        help="Source-specific item IDs to use for training. "
+             "For Gutenberg: book IDs (e.g., 84 1342). "
+             "For Wikipedia: article titles (e.g., 'Artificial intelligence' 'Machine learning'). "
+             "For LibriVox: LibriVox book IDs. "
+             "For OpenLibrary: work IDs or ISBNs (e.g., OL82563W). "
+             "For Internet Archive: IA item identifiers (e.g., 'TripDown1905'). "
+             "For HuggingFace: Dataset names (e.g., 'wikitext', 'bookcorpus', 'openwebtext'). "
+             "Works with all data sources.",
     )
     parser.add_argument(
         "--categories",
@@ -301,8 +348,55 @@ def main():
         action="store_true",
         help="List all available training profiles and exit",
     )
+    parser.add_argument(
+        "--source",
+        type=str,
+        nargs="+",
+        help="Data source(s) to use: gutenberg, wikipedia, librivox, openlibrary, internetarchive, huggingface. "
+             "Can specify multiple sources (e.g., --source gutenberg wikipedia). "
+             "Default: gutenberg",
+    )
+    parser.add_argument(
+        "--list-sources",
+        action="store_true",
+        help="List all available data sources and exit",
+    )
+    parser.add_argument(
+        "--search",
+        type=str,
+        help="Search term for HuggingFace dataset search (only works with --source huggingface). "
+             "Searches HuggingFace Hub for datasets matching the term.",
+    )
 
     args = parser.parse_args()
+    
+    # Handle --list-sources
+    if args.list_sources:
+        from mavaia_core.brain.modules.neural_text_generator_data import NeuralTextGeneratorData
+        
+        print("Available Data Sources:")
+        print("=" * 80)
+        
+        sources = NeuralTextGeneratorData.list_available_sources()
+        if not sources:
+            print("\nNo data sources found.")
+            return 0
+        
+        for source_name in sorted(sources):
+            source_info = NeuralTextGeneratorData.get_source_info(source_name)
+            if source_info:
+                print(f"\n{source_name.upper()}")
+                print(f"  Supports categories: {source_info['supports_categories']}")
+                print(f"  Supports item IDs: {source_info['supports_book_ids']}")
+                if source_info['categories']:
+                    print(f"  Available categories: {', '.join(source_info['categories'])}")
+        
+        print("\n" + "=" * 80)
+        print("\nUsage: python scripts/train_neural_text_generator.py --source <source_name>")
+        print("You can specify multiple sources: --source gutenberg wikipedia")
+        print("\nAll existing arguments (--book-ids, --categories, --max-books, etc.)")
+        print("work with all data sources.")
+        return 0
     
     # Handle --list-profiles
     if args.list_profiles:
@@ -415,32 +509,7 @@ def main():
     else:
         sample_only = False
         # Training mode
-        print("=" * 80)
-        print("Neural Text Generator Training")
-        print("=" * 80)
-        if args.profile:
-            print(f"Profile: {args.profile}")
-        print(f"Model type: {train_params.get('model_type', 'both')}")
-        if train_params.get("categories"):
-            print(f"Categories: {', '.join(train_params['categories'])}")
-        if train_params.get("book_ids"):
-            print(f"Book IDs: {train_params['book_ids']}")
-        if train_params.get("train_for_hours"):
-            print(f"Training time: {train_params['train_for_hours']} hours")
-        elif train_params.get("train_for_minutes"):
-            print(f"Training time: {train_params['train_for_minutes']} minutes")
-        elif train_params.get("epochs"):
-            print(f"Epochs: {train_params['epochs']}")
-        if train_params.get("max_text_size"):
-            print(f"Max text size: {train_params['max_text_size']:,} characters")
-        if train_params.get("max_books"):
-            print(f"Max books: {train_params['max_books']}")
-        data_pct = train_params.get("data_percentage", 1.0)
-        if data_pct < 1.0:
-            print(f"Data percentage: {data_pct*100:.1f}%")
-        print(f"Continue training: {train_params.get('continue_training', False)}")
-        print()
-
+        
         # Build training parameters with profile defaults, overridden by explicit arguments
         train_params = {}
         
@@ -452,6 +521,13 @@ def main():
             })
         
         # Override with explicit arguments (explicit args take precedence over profile)
+        # Source: use explicit arg if provided, otherwise profile/default
+        if args.source:
+            # If multiple sources, use list; if single, use string
+            train_params["source"] = args.source if len(args.source) > 1 else args.source[0]
+        elif "source" not in train_params:
+            train_params["source"] = "gutenberg"  # Default
+        
         # Model type: use explicit arg if provided, otherwise profile/default
         if args.model_type is not None:
             train_params["model_type"] = args.model_type
@@ -498,6 +574,40 @@ def main():
         # Max books: explicit argument always overrides
         if args.max_books:
             train_params["max_books"] = args.max_books
+        
+        # Search: explicit argument always overrides
+        if args.search:
+            train_params["search"] = args.search
+        
+        # Print training configuration
+        print("=" * 80)
+        print("Neural Text Generator Training")
+        print("=" * 80)
+        if args.profile:
+            print(f"Profile: {args.profile}")
+        print(f"Data source(s): {train_params.get('source', 'gutenberg')}")
+        print(f"Model type: {train_params.get('model_type', 'both')}")
+        if train_params.get("categories"):
+            print(f"Categories: {', '.join(train_params['categories'])}")
+        if train_params.get("book_ids"):
+            print(f"Item IDs: {train_params['book_ids']}")
+        if train_params.get("train_for_hours"):
+            print(f"Training time: {train_params['train_for_hours']} hours")
+        elif train_params.get("train_for_minutes"):
+            print(f"Training time: {train_params['train_for_minutes']} minutes")
+        elif train_params.get("epochs"):
+            print(f"Epochs: {train_params['epochs']}")
+        if train_params.get("max_text_size"):
+            print(f"Max text size: {train_params['max_text_size']:,} characters")
+        if train_params.get("max_books"):
+            print(f"Max items per source: {train_params['max_books']}")
+        if train_params.get("search"):
+            print(f"Search term: {train_params['search']}")
+        data_pct = train_params.get("data_percentage", 1.0)
+        if data_pct < 1.0:
+            print(f"Data percentage: {data_pct*100:.1f}%")
+        print(f"Continue training: {train_params.get('continue_training', False)}")
+        print()
 
         print("Starting training...")
         result = generator.execute("train_model", train_params)

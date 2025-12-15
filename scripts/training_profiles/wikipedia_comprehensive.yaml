@@ -1,0 +1,21 @@
+# Wikipedia Comprehensive Training Profile
+# Comprehensive Wikipedia training with maximum articles
+description: "Comprehensive Wikipedia training with maximum articles across all categories"
+source: wikipedia
+categories:
+  - fiction
+  - non_fiction
+  - technical
+  - philosophy
+  - poetry
+  - drama
+  - adventure
+  - mystery
+  - science_fiction
+  - classic
+epochs: 20
+max_books: 10
+max_text_size: null  # No limit
+data_percentage: 1.0
+model_type: both
+

@@ -1,0 +1,17 @@
+# Multi-Source Training Profile
+# Train on multiple data sources for diverse content
+description: "Train on multiple data sources (Gutenberg + Wikipedia) for diverse content"
+source:
+  - gutenberg
+  - wikipedia
+categories:
+  - fiction
+  - technical
+  - classic
+  - non_fiction
+epochs: 20
+max_books: 5
+max_text_size: null  # No limit
+data_percentage: 1.0
+model_type: both
+

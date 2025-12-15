@@ -1,0 +1,13 @@
+# Internet Archive Fast Training Profile
+# Quick Internet Archive training for rapid iteration
+description: "Quick Internet Archive training with limited items for rapid iteration"
+source: internetarchive
+categories:
+  - fiction
+  - classic
+epochs: 5
+max_books: 3
+max_text_size: 50000
+data_percentage: 0.3
+model_type: character
+

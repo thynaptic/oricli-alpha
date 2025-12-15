@@ -1,0 +1,13 @@
+# Internet Archive Technical Training Profile
+# Technical Internet Archive items focused training
+description: "Technical Internet Archive items focused training for science and technology content"
+source: internetarchive
+categories:
+  - technical
+  - non_fiction
+epochs: 15
+max_books: 5
+max_text_size: 200000
+data_percentage: 0.8
+model_type: word
+

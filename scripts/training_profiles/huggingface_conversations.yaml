@@ -1,0 +1,14 @@
+# HuggingFace ChatGPT & Claude Conversations Training Profile
+# Train on ChatGPT and Claude conversation datasets from HuggingFace
+description: "Train on ChatGPT and Claude conversation datasets from HuggingFace Hub for conversational text generation. Searches for chatgpt, claude, and conversation datasets."
+source: huggingface
+search: "chatgpt claude conversation"
+categories:
+  - fiction
+  - non_fiction
+epochs: 20
+max_books: 10
+max_text_size: 1000000
+data_percentage: 0.9
+model_type: word
+

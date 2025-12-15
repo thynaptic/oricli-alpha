@@ -1,0 +1,14 @@
+# Internet Archive Science Training Profile
+# Science and technical content from Internet Archive
+description: "Science, technology, and technical content from Internet Archive"
+source: internetarchive
+categories:
+  - technical
+  - science_fiction
+  - non_fiction
+epochs: 15
+max_books: 5
+max_text_size: 200000
+data_percentage: 0.8
+model_type: word
+

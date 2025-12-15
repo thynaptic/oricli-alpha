@@ -1,0 +1,14 @@
+# Internet Archive Training Profile
+# Train on Internet Archive items using the internetarchive library
+description: "Train on Internet Archive items for diverse public domain content"
+source: internetarchive
+categories:
+  - fiction
+  - classic
+  - non_fiction
+epochs: 15
+max_books: 5
+max_text_size: 200000
+data_percentage: 0.8
+model_type: both
+

@@ -1,0 +1,12 @@
+# Wikipedia Technical Training Profile
+# Technical Wikipedia articles focused training
+description: "Technical Wikipedia articles focused training for science and technology content"
+source: wikipedia
+categories:
+  - technical
+epochs: 15
+max_books: 5
+max_text_size: 200000
+data_percentage: 0.8
+model_type: word
+

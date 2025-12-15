@@ -1,0 +1,41 @@
+# Sleep Training Profile
+# Long-running training session ideal for overnight runs.
+# Uses a balanced mix of high-quality sources and broad categories.
+
+name: sleep_train
+description: >
+  Training session to run while sleeping.
+  Uses a mix of sources and categories to train the model.
+
+sources:
+  - gutenberg
+  - wikipedia
+  - openlibrary
+
+categories:
+  - fiction
+  - non_fiction
+  - classic
+  - technical
+  - philosophy
+  - poetry
+  - drama
+  - adventure
+  - mystery
+  - science_fiction
+  - classic
+
+model_type: both
+
+# Very long epoch ceiling — actual runtime capped by train_for_hours
+epochs: 9999
+train_for_hours: 6
+
+max_books: 6
+max_text_size: 150000
+data_percentage: 0.7
+
+continue_training: false
+
+sample_after_training: true
+sample_model_type: both

@@ -1,7 +1,7 @@
 """
 Neural Text Generator Module
 Local RNN/LSTM text generation with character-level and word-level models
-Trained on Project Gutenberg books for natural language generation
+Supports multiple data sources: Project Gutenberg, Wikipedia, LibriVox, OpenLibrary, Internet Archive, HuggingFace
 """
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -64,7 +64,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         return ModuleMetadata(
             name="neural_text_generator",
             version="1.0.0",
-            description="Local RNN/LSTM text generation with character-level and word-level models",
+            description="Local RNN/LSTM text generation with character-level and word-level models. "
+                        "Supports multiple data sources: Gutenberg, Wikipedia, LibriVox, OpenLibrary, Internet Archive, HuggingFace.",
             operations=[
                 "train_model",
                 "generate_text",
@@ -177,15 +178,18 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         Args:
             params:
                 - model_type: "character", "word", or "both" (default: "both")
-                - book_ids: List of Gutenberg book IDs (optional)
+                - source: Data source name(s) - "gutenberg", "wikipedia", "librivox", "openlibrary", 
+                          "internetarchive", "huggingface", or list of sources (default: "gutenberg")
+                - book_ids: List of source-specific IDs (Gutenberg IDs, article titles, etc.) (optional)
                 - categories: List of categories to load (e.g., ["fiction", "technical"])
                 - epochs: Number of training epochs (optional, overridden by time limits)
                 - continue_training: Whether to continue from existing model (optional)
                 - train_for_minutes: Maximum training time in minutes (optional)
                 - train_for_hours: Maximum training time in hours (optional)
                 - max_text_size: Maximum text size in characters (optional)
-                - max_books: Maximum number of books to load (optional)
+                - max_books: Maximum number of items to load per source (optional)
                 - data_percentage: Percentage of data to use (0.0-1.0, optional)
+                - search: Search term for HuggingFace dataset search (optional, HuggingFace only)
         
         Returns:
             Training result dictionary
@@ -197,6 +201,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             }
 
         model_type = params.get("model_type", self.config.get("model_type", "both"))
+        source = params.get("source", "gutenberg")  # Default to gutenberg for backward compatibility
         book_ids = params.get("book_ids")
         categories = params.get("categories")
         epochs = params.get("epochs", self.config.get("training", {}).get("epochs", 10))
@@ -206,6 +211,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         max_text_size = params.get("max_text_size")
         max_books = params.get("max_books", self.config.get("data", {}).get("max_books", 3))
         data_percentage = params.get("data_percentage", 1.0)
+        search = params.get("search")
 
         # Calculate time limit in seconds
         time_limit_seconds = None
@@ -216,12 +222,14 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
         try:
             # Load and preprocess data
-            print("[NeuralTextGenerator] Loading training data...", file=sys.stderr)
-            raw_text = NeuralTextGeneratorData.load_gutenberg_data(
+            print(f"[NeuralTextGenerator] Loading training data from source(s): {source}...", file=sys.stderr)
+            raw_text = NeuralTextGeneratorData.load_data(
+                source=source,
                 book_ids=book_ids,
                 max_books=max_books,
                 categories=categories,
                 max_text_size=max_text_size,
+                search=search,
             )
             
             # Apply data percentage if specified
@@ -371,11 +379,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 
                 # Save checkpoint after each epoch
                 try:
-                    checkpoint_path = self.model_dir / "checkpoints" / f"{self.model_type}_model_epoch_{epoch+1}.h5"
+                    checkpoint_path = self.model_dir / "checkpoints" / f"{self.model_type}_model_epoch_{epoch+1}.keras"
                     self.model.save(checkpoint_path)
                     
                     # Also save as latest model (for easy loading after interruption)
-                    latest_path = self.model_dir / f"{self.model_type}_model_latest.h5"
+                    latest_path = self.model_dir / f"{self.model_type}_model_latest.keras"
                     self.model.save(latest_path)
                     
                     print(
@@ -531,11 +539,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 
                 # Save checkpoint after each epoch
                 try:
-                    checkpoint_path = self.model_dir / "checkpoints" / f"{self.model_type}_model_epoch_{epoch+1}.h5"
+                    checkpoint_path = self.model_dir / "checkpoints" / f"{self.model_type}_model_epoch_{epoch+1}.keras"
                     self.model.save(checkpoint_path)
                     
                     # Also save as latest model (for easy loading after interruption)
-                    latest_path = self.model_dir / f"{self.model_type}_model_latest.h5"
+                    latest_path = self.model_dir / f"{self.model_type}_model_latest.keras"
                     self.model.save(latest_path)
                     
                     print(
@@ -852,14 +860,17 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
         if model_type in ["character", "both"]:
             # Try to load latest checkpoint first, then final model
-            char_model_latest = self.model_dir / "char_model_latest.h5"
-            char_model_path = self.model_dir / "char_model.h5"
+            # Support both .keras (new) and .h5 (legacy) formats
+            char_model_latest_keras = self.model_dir / "char_model_latest.keras"
+            char_model_latest_h5 = self.model_dir / "char_model_latest.h5"
+            char_model_path_keras = self.model_dir / "char_model.keras"
+            char_model_path_h5 = self.model_dir / "char_model.h5"
             char_meta_path = self.model_dir / "char_model.json"
 
-            # Try latest checkpoint first (from interrupted training)
-            if char_model_latest.exists():
+            # Try latest checkpoint first (from interrupted training) - prefer .keras
+            if char_model_latest_keras.exists():
                 try:
-                    self.char_model = keras.models.load_model(char_model_latest)
+                    self.char_model = keras.models.load_model(char_model_latest_keras)
                     # Try to load metadata if available
                     if char_meta_path.exists():
                         with open(char_meta_path, "r", encoding="utf-8") as f:
@@ -877,13 +888,29 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     results["character"] = {"success": True, "source": "latest_checkpoint"}
                     self._models_loaded = True
                 except Exception as e:
-                    # Fall through to try final model
+                    # Fall through to try .h5 format or final model
                     pass
             
-            # Try final model if latest didn't work
-            if "character" not in results and char_model_path.exists() and char_meta_path.exists():
+            # Try .h5 format if .keras not found (backward compatibility)
+            if "character" not in results and char_model_latest_h5.exists():
                 try:
-                    self.char_model = keras.models.load_model(char_model_path)
+                    self.char_model = keras.models.load_model(char_model_latest_h5)
+                    if char_meta_path.exists():
+                        with open(char_meta_path, "r", encoding="utf-8") as f:
+                            metadata = json.load(f)
+                            self.char_vocab = metadata.get("vocab", {})
+                            self.char_vocab_reverse = {
+                                idx: char for char, idx in self.char_vocab.items()
+                            }
+                    results["character"] = {"success": True, "source": "latest_checkpoint_h5"}
+                    self._models_loaded = True
+                except Exception as e:
+                    pass
+            
+            # Try final model if latest didn't work - prefer .keras
+            if "character" not in results and char_model_path_keras.exists() and char_meta_path.exists():
+                try:
+                    self.char_model = keras.models.load_model(char_model_path_keras)
                     with open(char_meta_path, "r", encoding="utf-8") as f:
                         metadata = json.load(f)
                         self.char_vocab = metadata.get("vocab", {})
@@ -893,7 +920,22 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     results["character"] = {"success": True}
                     self._models_loaded = True
                 except Exception as e:
-                    results["character"] = {"success": False, "error": str(e)}
+                    # Try .h5 format for backward compatibility
+                    if char_model_path_h5.exists() and char_meta_path.exists():
+                        try:
+                            self.char_model = keras.models.load_model(char_model_path_h5)
+                            with open(char_meta_path, "r", encoding="utf-8") as f:
+                                metadata = json.load(f)
+                                self.char_vocab = metadata.get("vocab", {})
+                                self.char_vocab_reverse = {
+                                    idx: char for char, idx in self.char_vocab.items()
+                                }
+                            results["character"] = {"success": True, "source": "h5_format"}
+                            self._models_loaded = True
+                        except Exception as e2:
+                            results["character"] = {"success": False, "error": str(e2)}
+                    else:
+                        results["character"] = {"success": False, "error": str(e)}
             else:
                 results["character"] = {
                     "success": False,
@@ -902,14 +944,17 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
         if model_type in ["word", "both"]:
             # Try to load latest checkpoint first, then final model
-            word_model_latest = self.model_dir / "word_model_latest.h5"
-            word_model_path = self.model_dir / "word_model.h5"
+            # Support both .keras (new) and .h5 (legacy) formats
+            word_model_latest_keras = self.model_dir / "word_model_latest.keras"
+            word_model_latest_h5 = self.model_dir / "word_model_latest.h5"
+            word_model_path_keras = self.model_dir / "word_model.keras"
+            word_model_path_h5 = self.model_dir / "word_model.h5"
             word_meta_path = self.model_dir / "word_model.json"
 
-            # Try latest checkpoint first (from interrupted training)
-            if word_model_latest.exists():
+            # Try latest checkpoint first (from interrupted training) - prefer .keras
+            if word_model_latest_keras.exists():
                 try:
-                    self.word_model = keras.models.load_model(word_model_latest)
+                    self.word_model = keras.models.load_model(word_model_latest_keras)
                     # Try to load metadata if available
                     if word_meta_path.exists():
                         with open(word_meta_path, "r", encoding="utf-8") as f:
@@ -925,13 +970,27 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     results["word"] = {"success": True, "source": "latest_checkpoint"}
                     self._models_loaded = True
                 except Exception as e:
-                    # Fall through to try final model
+                    # Fall through to try .h5 format or final model
                     pass
             
-            # Try final model if latest didn't work
-            if "word" not in results and word_model_path.exists() and word_meta_path.exists():
+            # Try .h5 format if .keras not found (backward compatibility)
+            if "word" not in results and word_model_latest_h5.exists():
                 try:
-                    self.word_model = keras.models.load_model(word_model_path)
+                    self.word_model = keras.models.load_model(word_model_latest_h5)
+                    if word_meta_path.exists():
+                        with open(word_meta_path, "r", encoding="utf-8") as f:
+                            metadata = json.load(f)
+                            self.word_vocab = metadata.get("vocab", {})
+                            self.word_vocab_reverse = metadata.get("vocab_reverse", {})
+                    results["word"] = {"success": True, "source": "latest_checkpoint_h5"}
+                    self._models_loaded = True
+                except Exception as e:
+                    pass
+            
+            # Try final model if latest didn't work - prefer .keras
+            if "word" not in results and word_model_path_keras.exists() and word_meta_path.exists():
+                try:
+                    self.word_model = keras.models.load_model(word_model_path_keras)
                     with open(word_meta_path, "r", encoding="utf-8") as f:
                         metadata = json.load(f)
                         self.word_vocab = metadata.get("vocab", {})
@@ -939,7 +998,20 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     results["word"] = {"success": True}
                     self._models_loaded = True
                 except Exception as e:
-                    results["word"] = {"success": False, "error": str(e)}
+                    # Try .h5 format for backward compatibility
+                    if word_model_path_h5.exists() and word_meta_path.exists():
+                        try:
+                            self.word_model = keras.models.load_model(word_model_path_h5)
+                            with open(word_meta_path, "r", encoding="utf-8") as f:
+                                metadata = json.load(f)
+                                self.word_vocab = metadata.get("vocab", {})
+                                self.word_vocab_reverse = metadata.get("vocab_reverse", {})
+                            results["word"] = {"success": True, "source": "h5_format"}
+                            self._models_loaded = True
+                        except Exception as e2:
+                            results["word"] = {"success": False, "error": str(e2)}
+                    else:
+                        results["word"] = {"success": False, "error": str(e)}
             else:
                 results["word"] = {"success": False, "error": "Model file not found"}
 
@@ -967,7 +1039,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if model_type in ["character", "both"]:
             if self.char_model is not None and self.char_vocab is not None:
                 try:
-                    char_model_path = self.model_dir / "char_model.h5"
+                    char_model_path = self.model_dir / "char_model.keras"
                     char_meta_path = self.model_dir / "char_model.json"
 
                     self.char_model.save(char_model_path)
@@ -994,7 +1066,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if model_type in ["word", "both"]:
             if self.word_model is not None and self.word_vocab is not None:
                 try:
-                    word_model_path = self.model_dir / "word_model.h5"
+                    word_model_path = self.model_dir / "word_model.keras"
                     word_meta_path = self.model_dir / "word_model.json"
 
                     self.word_model.save(word_model_path)

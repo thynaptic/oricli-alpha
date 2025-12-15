@@ -1,0 +1,15 @@
+# Internet Archive Adventure Training Profile
+# Adventure and mystery stories from Internet Archive
+description: "Adventure stories, mysteries, and thrilling narratives from Internet Archive"
+source: internetarchive
+categories:
+  - adventure
+  - mystery
+  - fiction
+  - science_fiction
+epochs: 15
+max_books: 6
+max_text_size: 250000
+data_percentage: 0.85
+model_type: both
+

@@ -1,0 +1,15 @@
+# Internet Archive Classic Training Profile
+# Classic literature from Internet Archive
+description: "Classic literature and timeless works from Internet Archive"
+source: internetarchive
+categories:
+  - classic
+  - fiction
+  - poetry
+  - drama
+epochs: 18
+max_books: 6
+max_text_size: 300000
+data_percentage: 0.9
+model_type: both
+

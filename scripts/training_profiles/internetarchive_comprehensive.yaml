@@ -1,0 +1,21 @@
+# Internet Archive Comprehensive Training Profile
+# Comprehensive Internet Archive training with maximum items across all categories
+description: "Comprehensive Internet Archive training with maximum items across all categories"
+source: internetarchive
+categories:
+  - fiction
+  - non_fiction
+  - technical
+  - philosophy
+  - poetry
+  - drama
+  - adventure
+  - mystery
+  - science_fiction
+  - classic
+epochs: 20
+max_books: 10
+max_text_size: null  # No limit
+data_percentage: 1.0
+model_type: both
+
