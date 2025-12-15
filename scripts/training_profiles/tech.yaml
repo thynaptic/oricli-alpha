@@ -1,0 +1,12 @@
+# Tech Training Profile
+# Technical content focused training
+description: "Technical content focused training"
+categories:
+  - technical
+  - non_fiction
+  - science_fiction
+epochs: 15
+max_books: 5
+max_text_size: 200000
+data_percentage: 0.8
+model_type: word

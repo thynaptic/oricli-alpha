@@ -1,0 +1,11 @@
+# Fast Training Profile
+# Quick training with limited data for rapid iteration
+description: "Quick training with limited data for rapid iteration"
+categories:
+  - fiction
+  - classic
+epochs: 5
+max_books: 2
+max_text_size: 50000
+data_percentage: 0.3
+model_type: character

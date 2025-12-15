@@ -1,0 +1,13 @@
+# Classic Training Profile
+# Classic literature focused training
+description: "Classic literature focused training"
+categories:
+  - classic
+  - fiction
+  - drama
+  - poetry
+epochs: 12
+max_books: 6
+max_text_size: 300000
+data_percentage: 0.9
+model_type: both

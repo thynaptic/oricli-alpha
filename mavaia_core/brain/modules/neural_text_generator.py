@@ -296,6 +296,21 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         self.char_vocab = NeuralTextGeneratorData.build_character_vocabulary(text)
         self.char_vocab_reverse = {idx: char for char, idx in self.char_vocab.items()}
         vocab_size = len(self.char_vocab)
+        
+        # Save vocabulary immediately so it's available even if training is interrupted
+        try:
+            char_meta_path = self.model_dir / "char_model.json"
+            metadata = {
+                "vocab": self.char_vocab,
+                "config": self.config.get("character_model", {}),
+            }
+            with open(char_meta_path, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2)
+        except Exception as e:
+            print(
+                f"[NeuralTextGenerator] Warning: Could not save vocabulary: {e}",
+                file=sys.stderr,
+            )
 
         # Convert to arrays
         X, y = NeuralTextGeneratorData.sequences_to_arrays_char(
@@ -333,14 +348,17 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         # Train with time limit support
         batch_size = self.config.get("training", {}).get("batch_size", 64)
         
-        # Custom callback for time-based training
-        class TimeLimitCallback(keras.callbacks.Callback):
-            def __init__(self, time_limit: Optional[float], start_time: float):
+        # Custom callback for time-based training and checkpoint saving
+        class TrainingCallback(keras.callbacks.Callback):
+            def __init__(self, time_limit: Optional[float], start_time: float, model_dir: Path, model_type: str):
                 self.time_limit = time_limit
                 self.start_time = start_time
                 self.should_stop = False
+                self.model_dir = model_dir
+                self.model_type = model_type
 
             def on_epoch_end(self, epoch, logs=None):
+                # Check time limit
                 if self.time_limit:
                     elapsed = time.time() - self.start_time
                     if elapsed >= self.time_limit:
@@ -350,10 +368,28 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         )
                         self.model.stop_training = True
                         self.should_stop = True
+                
+                # Save checkpoint after each epoch
+                try:
+                    checkpoint_path = self.model_dir / "checkpoints" / f"{self.model_type}_model_epoch_{epoch+1}.h5"
+                    self.model.save(checkpoint_path)
+                    
+                    # Also save as latest model (for easy loading after interruption)
+                    latest_path = self.model_dir / f"{self.model_type}_model_latest.h5"
+                    self.model.save(latest_path)
+                    
+                    print(
+                        f"[NeuralTextGenerator] Checkpoint saved: epoch {epoch+1}",
+                        file=sys.stderr,
+                    )
+                except Exception as e:
+                    print(
+                        f"[NeuralTextGenerator] Warning: Could not save checkpoint: {e}",
+                        file=sys.stderr,
+                    )
 
         callbacks = []
-        if time_limit_seconds:
-            callbacks.append(TimeLimitCallback(time_limit_seconds, start_time))
+        callbacks.append(TrainingCallback(time_limit_seconds, start_time, self.model_dir, "character"))
         
         # Adjust epochs if time limit is very short
         effective_epochs = epochs
@@ -419,6 +455,22 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             NeuralTextGeneratorData.build_word_vocabulary(text, min_frequency=2)
         )
         vocab_size = len(self.word_vocab)
+        
+        # Save vocabulary immediately so it's available even if training is interrupted
+        try:
+            word_meta_path = self.model_dir / "word_model.json"
+            metadata = {
+                "vocab": self.word_vocab,
+                "vocab_reverse": self.word_vocab_reverse,
+                "config": self.config.get("word_model", {}),
+            }
+            with open(word_meta_path, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2)
+        except Exception as e:
+            print(
+                f"[NeuralTextGenerator] Warning: Could not save vocabulary: {e}",
+                file=sys.stderr,
+            )
 
         # Convert to arrays
         X, y = NeuralTextGeneratorData.sequences_to_arrays_word(
@@ -456,14 +508,17 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         # Train with time limit support
         batch_size = self.config.get("training", {}).get("batch_size", 64)
         
-        # Custom callback for time-based training
-        class TimeLimitCallback(keras.callbacks.Callback):
-            def __init__(self, time_limit: Optional[float], start_time: float):
+        # Custom callback for time-based training and checkpoint saving
+        class TrainingCallback(keras.callbacks.Callback):
+            def __init__(self, time_limit: Optional[float], start_time: float, model_dir: Path, model_type: str):
                 self.time_limit = time_limit
                 self.start_time = start_time
                 self.should_stop = False
+                self.model_dir = model_dir
+                self.model_type = model_type
 
             def on_epoch_end(self, epoch, logs=None):
+                # Check time limit
                 if self.time_limit:
                     elapsed = time.time() - self.start_time
                     if elapsed >= self.time_limit:
@@ -473,10 +528,28 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         )
                         self.model.stop_training = True
                         self.should_stop = True
+                
+                # Save checkpoint after each epoch
+                try:
+                    checkpoint_path = self.model_dir / "checkpoints" / f"{self.model_type}_model_epoch_{epoch+1}.h5"
+                    self.model.save(checkpoint_path)
+                    
+                    # Also save as latest model (for easy loading after interruption)
+                    latest_path = self.model_dir / f"{self.model_type}_model_latest.h5"
+                    self.model.save(latest_path)
+                    
+                    print(
+                        f"[NeuralTextGenerator] Checkpoint saved: epoch {epoch+1}",
+                        file=sys.stderr,
+                    )
+                except Exception as e:
+                    print(
+                        f"[NeuralTextGenerator] Warning: Could not save checkpoint: {e}",
+                        file=sys.stderr,
+                    )
 
         callbacks = []
-        if time_limit_seconds:
-            callbacks.append(TimeLimitCallback(time_limit_seconds, start_time))
+        callbacks.append(TrainingCallback(time_limit_seconds, start_time, self.model_dir, "word"))
         
         # Adjust epochs if time limit is very short
         effective_epochs = epochs
@@ -778,10 +851,37 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         results = {}
 
         if model_type in ["character", "both"]:
+            # Try to load latest checkpoint first, then final model
+            char_model_latest = self.model_dir / "char_model_latest.h5"
             char_model_path = self.model_dir / "char_model.h5"
             char_meta_path = self.model_dir / "char_model.json"
 
-            if char_model_path.exists() and char_meta_path.exists():
+            # Try latest checkpoint first (from interrupted training)
+            if char_model_latest.exists():
+                try:
+                    self.char_model = keras.models.load_model(char_model_latest)
+                    # Try to load metadata if available
+                    if char_meta_path.exists():
+                        with open(char_meta_path, "r", encoding="utf-8") as f:
+                            metadata = json.load(f)
+                            self.char_vocab = metadata.get("vocab", {})
+                            self.char_vocab_reverse = {
+                                idx: char for char, idx in self.char_vocab.items()
+                            }
+                    else:
+                        # If no metadata, try to rebuild from model (may not work)
+                        print(
+                            "[NeuralTextGenerator] Warning: No metadata found, model may not work correctly",
+                            file=sys.stderr,
+                        )
+                    results["character"] = {"success": True, "source": "latest_checkpoint"}
+                    self._models_loaded = True
+                except Exception as e:
+                    # Fall through to try final model
+                    pass
+            
+            # Try final model if latest didn't work
+            if "character" not in results and char_model_path.exists() and char_meta_path.exists():
                 try:
                     self.char_model = keras.models.load_model(char_model_path)
                     with open(char_meta_path, "r", encoding="utf-8") as f:
@@ -801,10 +901,35 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 }
 
         if model_type in ["word", "both"]:
+            # Try to load latest checkpoint first, then final model
+            word_model_latest = self.model_dir / "word_model_latest.h5"
             word_model_path = self.model_dir / "word_model.h5"
             word_meta_path = self.model_dir / "word_model.json"
 
-            if word_model_path.exists() and word_meta_path.exists():
+            # Try latest checkpoint first (from interrupted training)
+            if word_model_latest.exists():
+                try:
+                    self.word_model = keras.models.load_model(word_model_latest)
+                    # Try to load metadata if available
+                    if word_meta_path.exists():
+                        with open(word_meta_path, "r", encoding="utf-8") as f:
+                            metadata = json.load(f)
+                            self.word_vocab = metadata.get("vocab", {})
+                            self.word_vocab_reverse = metadata.get("vocab_reverse", {})
+                    else:
+                        # If no metadata, try to rebuild from model (may not work)
+                        print(
+                            "[NeuralTextGenerator] Warning: No metadata found, model may not work correctly",
+                            file=sys.stderr,
+                        )
+                    results["word"] = {"success": True, "source": "latest_checkpoint"}
+                    self._models_loaded = True
+                except Exception as e:
+                    # Fall through to try final model
+                    pass
+            
+            # Try final model if latest didn't work
+            if "word" not in results and word_model_path.exists() and word_meta_path.exists():
                 try:
                     self.word_model = keras.models.load_model(word_model_path)
                     with open(word_meta_path, "r", encoding="utf-8") as f:

@@ -1,0 +1,13 @@
+# Balanced Training Profile
+# Balanced mix of content types for general purpose
+description: "Balanced mix of content types for general purpose"
+categories:
+  - fiction
+  - non_fiction
+  - classic
+  - technical
+epochs: 10
+max_books: 5
+max_text_size: 150000
+data_percentage: 0.7
+model_type: both

@@ -1,0 +1,14 @@
+# Comprehensive Training Profile
+# Comprehensive training with maximum data
+description: "Comprehensive training with maximum data"
+categories:
+  - fiction
+  - non_fiction
+  - technical
+  - philosophy
+  - classic
+epochs: 20
+max_books: 10
+max_text_size: null  # No limit
+data_percentage: 1.0
+model_type: both

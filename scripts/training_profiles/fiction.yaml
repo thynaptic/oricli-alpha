@@ -1,0 +1,14 @@
+# Fiction Training Profile
+# Fiction and narrative focused training
+description: "Fiction and narrative focused training"
+categories:
+  - fiction
+  - adventure
+  - mystery
+  - science_fiction
+  - drama
+epochs: 15
+max_books: 7
+max_text_size: 250000
+data_percentage: 0.85
+model_type: both
