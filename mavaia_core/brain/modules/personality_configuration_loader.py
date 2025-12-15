@@ -2,6 +2,9 @@
 Personality Configuration Loader
 Loads personality configurations from JSON files for extensible personality system
 Converted from Swift PersonalityConfigurationLoader.swift
+
+DEPRECATED: This module is deprecated. Use universal_voice_engine instead.
+The personality-based system has been replaced with a universal voice that adapts contextually.
 """
 
 from typing import Any, Dict, Optional
@@ -34,10 +37,16 @@ class PersonalityConfigurationLoaderModule(BaseBrainModule):
 
     @property
     def metadata(self) -> ModuleMetadata:
+        import warnings
+        warnings.warn(
+            "personality_configuration_loader module is deprecated. Use universal_voice_engine instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return ModuleMetadata(
             name="personality_configuration_loader",
             version="1.0.0",
-            description="Loads personality configurations from JSON files for extensible personality system",
+            description="[DEPRECATED] Loads personality configurations from JSON files for extensible personality system. Use universal_voice_engine instead.",
             operations=[
                 "load_configurations",
                 "get_configuration",

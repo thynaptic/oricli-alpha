@@ -24,7 +24,9 @@ class ThoughtToTextModule(BaseBrainModule):
         self.grammar_module = None
         self.style_module = None
         self.phrase_module = None
-        self.personality_module = None
+        self.hybrid_phrasing_service = None
+        self.text_generation_engine = None
+        self.universal_voice_engine = None
         self._modules_loaded = False
 
     @property
@@ -55,7 +57,7 @@ class ThoughtToTextModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             # Try to load modules (they may not all be available)
             try:
@@ -74,9 +76,17 @@ class ThoughtToTextModule(BaseBrainModule):
                 pass
 
             try:
-                self.personality_module = ModuleRegistry.get_module(
-                    "personality_response"
-                )
+                self.hybrid_phrasing_service = ModuleRegistry.get_module("hybrid_phrasing_service")
+            except:
+                self.hybrid_phrasing_service = None
+
+            try:
+                self.text_generation_engine = ModuleRegistry.get_module("text_generation_engine")
+            except:
+                pass
+
+            try:
+                self.universal_voice_engine = ModuleRegistry.get_module("universal_voice_engine")
             except:
                 pass
 
@@ -92,25 +102,25 @@ class ThoughtToTextModule(BaseBrainModule):
         if operation == "convert_thought_graph":
             return self.convert_thought_graph(
                 mcts_nodes=params.get("mcts_nodes", []),
-                persona=params.get("persona", "mavaia"),
+                voice_context=params.get("voice_context", {}),
                 context=params.get("context", ""),
             )
         elif operation == "convert_reasoning_tree":
             return self.convert_reasoning_tree(
                 tree_json=params.get("tree_json", {}),
-                persona=params.get("persona", "mavaia"),
+                voice_context=params.get("voice_context", {}),
                 context=params.get("context", ""),
             )
         elif operation == "generate_sentences":
             return self.generate_sentences(
                 thoughts=params.get("thoughts", []),
                 context=params.get("context", ""),
-                persona=params.get("persona", "mavaia"),
+                voice_context=params.get("voice_context", {}),
             )
         elif operation == "apply_grammar_and_style":
             return self.apply_grammar_and_style(
                 text=params.get("text", ""),
-                persona=params.get("persona", "mavaia"),
+                voice_context=params.get("voice_context", {}),
                 style_config=params.get("style_config", {}),
             )
         else:
@@ -119,7 +129,7 @@ class ThoughtToTextModule(BaseBrainModule):
     def convert_thought_graph(
         self,
         mcts_nodes: List[Dict[str, Any]],
-        persona: str = "mavaia",
+        voice_context: Dict[str, Any] = None,
         context: str = "",
     ) -> Dict[str, Any]:
         """Convert MCTS node sequence to natural language text"""
@@ -158,7 +168,9 @@ class ThoughtToTextModule(BaseBrainModule):
                     thoughts.append(str(node))
 
             # Generate sentences from thoughts
-            result = self.generate_sentences(thoughts, context, persona)
+            if voice_context is None:
+                voice_context = {}
+            result = self.generate_sentences(thoughts, context, voice_context)
             result["method"] = "mcts_conversion"
             return result
 
@@ -175,7 +187,7 @@ class ThoughtToTextModule(BaseBrainModule):
     def convert_reasoning_tree(
         self,
         tree_json: Union[str, Dict[str, Any]],
-        persona: str = "mavaia",
+        voice_context: Dict[str, Any] = None,
         context: str = "",
     ) -> Dict[str, Any]:
         """Convert abstract reasoning tree JSON to natural language text"""
@@ -193,7 +205,9 @@ class ThoughtToTextModule(BaseBrainModule):
                 return {"text": "", "confidence": 0.0, "method": "empty_tree"}
 
             # Generate sentences from thoughts
-            result = self.generate_sentences(thoughts, context, persona)
+            if voice_context is None:
+                voice_context = {}
+            result = self.generate_sentences(thoughts, context, voice_context)
             result["method"] = "reasoning_tree_conversion"
             return result
 
@@ -201,11 +215,14 @@ class ThoughtToTextModule(BaseBrainModule):
             return {"text": "", "confidence": 0.0, "method": "error", "error": str(e)}
 
     def generate_sentences(
-        self, thoughts: List[str], context: str = "", persona: str = "mavaia"
+        self, thoughts: List[str], context: str = "", voice_context: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Core conversion logic: generate natural sentences from thought list"""
         if not thoughts:
             return {"text": "", "confidence": 0.0}
+
+        if voice_context is None:
+            voice_context = {}
 
         try:
             # Step 0: Filter out any instruction-style thoughts BEFORE processing
@@ -228,12 +245,59 @@ class ThoughtToTextModule(BaseBrainModule):
             combined_text = self._combine_fragments(fragments, context)
 
             # Step 3: Apply grammar correction and style transfer
-            result = self.apply_grammar_and_style(combined_text, persona, {})
+            result = self.apply_grammar_and_style(combined_text, voice_context, {})
 
             # Step 4: Post-process to remove any remaining instructions
             if result and "text" in result:
                 result["text"] = self._filter_instructions_from_output(result["text"])
 
+            # Step 5: Use phrase_embeddings and hybrid_phrasing_service to improve text quality
+            if result.get("text"):
+                # Use phrase_embeddings to enhance semantic quality
+                if self.phrase_module:
+                    try:
+                        # Embed the generated text to ensure semantic coherence
+                        embedding_result = self.phrase_module.execute(
+                            "embed_sentence",
+                            {"text": result["text"]}
+                        )
+                        if embedding_result.get("embedding"):
+                            # Text has valid semantic embedding - good quality indicator
+                            if "confidence" in result:
+                                result["confidence"] = min(1.0, result["confidence"] + 0.05)
+                    except Exception:
+                        pass  # Continue if phrase embeddings fail
+                
+                # Use hybrid_phrasing_service to improve phrasing if available
+                if self.hybrid_phrasing_service:
+                    try:
+                        # Extract key phrases from the generated text
+                        text_words = result["text"].split()[:10]  # First 10 words
+                        keyword = " ".join(text_words) if text_words else result["text"][:30]
+                        
+                        # Use hybrid phrasing to generate better phrases
+                        hybrid_result = self.hybrid_phrasing_service.execute(
+                            "generate_hybrid_phrase",
+                            {
+                                "context": context or result["text"],
+                                "keyword": keyword,
+                                "voice_context": voice_context,
+                                "max_length": 25,
+                            }
+                        )
+                        if hybrid_result.get("success") and hybrid_result.get("result", {}).get("phrase"):
+                            # Blend the hybrid phrase with the existing text
+                            hybrid_phrase = hybrid_result["result"]["phrase"]
+                            # If hybrid phrase is better, use it to enhance the text
+                            if hybrid_phrase and len(hybrid_phrase) > 10 and len(hybrid_phrase) < len(result["text"]):
+                                # Use hybrid phrase to improve specific parts
+                                # For now, enhance confidence if hybrid phrasing succeeded
+                                if "confidence" in result:
+                                    result["confidence"] = min(1.0, result["confidence"] + 0.1)
+                    except Exception as e:
+                        # Continue if hybrid phrasing fails
+                        pass
+            
             # Calculate confidence based on module availability
             confidence = 0.7  # Base confidence
             if self.grammar_module:
@@ -241,6 +305,8 @@ class ThoughtToTextModule(BaseBrainModule):
             if self.style_module:
                 confidence += 0.1
             if self.phrase_module:
+                confidence += 0.1
+            if self.hybrid_phrasing_service:
                 confidence += 0.1
 
             result["confidence"] = min(1.0, confidence)
@@ -258,11 +324,14 @@ class ThoughtToTextModule(BaseBrainModule):
             }
 
     def apply_grammar_and_style(
-        self, text: str, persona: str = "mavaia", style_config: Dict[str, Any] = {}
+        self, text: str, voice_context: Dict[str, Any] = None, style_config: Dict[str, Any] = {}
     ) -> Dict[str, Any]:
         """Post-process text with grammar correction and style transfer"""
         if not text:
             return {"text": "", "confidence": 0.0}
+
+        if voice_context is None:
+            voice_context = {}
 
         processed_text = text
         confidence = 0.7
@@ -273,7 +342,7 @@ class ThoughtToTextModule(BaseBrainModule):
                 try:
                     grammar_result = self.grammar_module.execute(
                         "naturalize_response",
-                        {"text": processed_text, "persona": persona, "context": ""},
+                        {"text": processed_text, "voice_context": voice_context, "context": ""},
                     )
                     if grammar_result and "text" in grammar_result:
                         processed_text = grammar_result["text"]

@@ -229,50 +229,20 @@ class ReasoningModule(BaseBrainModule):
             )
         else:
             # Generate multiple reasoning steps for better thought generation
-            reasoning_prompts = {
-                "analytical": [
-                    f"Analyzing the query: {query}",
-                    "Breaking down the key components and requirements",
-                    "Considering different perspectives and approaches",
-                    "Evaluating potential solutions or responses",
-                    "Synthesizing the analysis into a coherent understanding",
-                ],
-                "creative": [
-                    f"Exploring creative angles for: {query}",
-                    "Considering unconventional perspectives",
-                    "Brainstorming multiple possibilities",
-                    "Connecting ideas in novel ways",
-                    "Formulating an imaginative response",
-                ],
-                "strategic": [
-                    f"Developing a strategic approach for: {query}",
-                    "Identifying key objectives and constraints",
-                    "Evaluating different strategic options",
-                    "Selecting the most effective approach",
-                    "Planning the implementation",
-                ],
-                "diagnostic": [
-                    f"Diagnosing the issue in: {query}",
-                    "Identifying symptoms and patterns",
-                    "Analyzing potential root causes",
-                    "Evaluating different diagnostic hypotheses",
-                    "Determining the most likely explanation",
-                ],
-                "comparative": [
-                    f"Comparing elements in: {query}",
-                    "Identifying key similarities",
-                    "Highlighting important differences",
-                    "Evaluating relative strengths and weaknesses",
-                    "Drawing comparative conclusions",
-                ],
-            }
-
-            steps = reasoning_prompts.get(
-                reasoning_type, reasoning_prompts["analytical"]
-            )
-            reasoning = ". ".join(steps)
+            # Generate actual reasoning instead of meta-reasoning
+            # Use context if available, otherwise generate actual answer
+            if context and len(context) > 0:
+                # Use context to generate actual reasoning
+                context_summary = " ".join([c[:200] for c in context[:3] if c])
+                reasoning = f"Based on the available information: {context_summary[:300]}"
+            else:
+                # Don't call cognitive_generator from here - it would create infinite recursion
+                # cognitive_generator already orchestrates reasoning module, so calling it back
+                # would create a loop. Instead, return empty and let the CoT process handle it
+                # or use context if available
+                reasoning = ""
         
-        if context:
+        if context and reasoning:
             context_text = "\n".join(f"- {c[:100]}" for c in context[:3])
             reasoning += f". Context considered: {context_text}"
         

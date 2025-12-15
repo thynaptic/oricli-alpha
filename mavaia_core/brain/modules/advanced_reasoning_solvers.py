@@ -5,7 +5,9 @@ Specialized solvers for complex reasoning puzzles: zebra puzzles, spatial reason
 
 from typing import Dict, Any, Optional, List, Tuple
 import sys
+import json
 from pathlib import Path
+from datetime import datetime
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -199,6 +201,927 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
             "answer": response_text,
             "solver_used": "z3_fallback_heuristic",
             "note": "Generated fallback answers from puzzle structure"
+        }
+    
+    def _save_failed_puzzle(
+        self,
+        puzzle_text: str,
+        colors: List[str],
+        nationalities: List[str],
+        drinks: List[str],
+        pets: List[str],
+        detected_attributes: Optional[Dict[str, List[str]]],
+        constraint_count: int,
+        reason: str = "unsat"
+    ) -> None:
+        """
+        Save failed puzzle to file for analysis
+        
+        Args:
+            puzzle_text: The puzzle text
+            colors: List of colors
+            nationalities: List of nationalities
+            drinks: List of drinks
+            pets: List of pets
+            detected_attributes: Detected attributes dictionary
+            constraint_count: Number of constraints parsed
+            reason: Reason for failure (unsat, unknown, etc.)
+        """
+        try:
+            # Create debug directory if it doesn't exist
+            debug_dir = Path(__file__).parent.parent.parent / "evaluation" / "debug_failed_puzzles"
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            filename = debug_dir / f"failed_puzzle_{reason}_{timestamp}.json"
+            
+            # Prepare data to save
+            puzzle_data = {
+                "timestamp": datetime.now().isoformat(),
+                "reason": reason,
+                "puzzle_text": puzzle_text,
+                "constraint_count": constraint_count,
+                "colors": colors,
+                "nationalities": nationalities,
+                "drinks": drinks,
+                "pets": pets,
+                "detected_attributes": detected_attributes,
+            }
+            
+            # Save to file
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(puzzle_data, f, indent=2, ensure_ascii=False)
+            
+            print(f"[CustomReasoningModule] Saved failed puzzle to: {filename}", file=sys.stderr)
+        except Exception as e:
+            print(f"[CustomReasoningModule] Failed to save puzzle for analysis: {e}", file=sys.stderr)
+    
+    def _solve_with_lenient_solver(
+        self,
+        puzzle_text: str,
+        colors: List[str],
+        nationalities: List[str],
+        drinks: List[str],
+        pets: List[str],
+        detected_attributes: Optional[Dict[str, List[str]]],
+        attribute_names: Optional[List[str]],
+        num_people: int = 5
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Lenient constraint solver that handles partial constraints
+        
+        This solver uses a more flexible approach:
+        1. Extracts all possible constraints (even if incomplete)
+        2. Builds a partial solution from available constraints
+        3. Uses heuristics to fill in missing information
+        4. Returns solution with confidence score
+        
+        Args:
+            puzzle_text: The puzzle text
+            colors: List of colors
+            nationalities: List of nationalities
+            drinks: List of drinks
+            pets: List of pets
+            detected_attributes: Detected attributes dictionary
+            attribute_names: Attribute names list
+            num_people: Number of people/houses
+            
+        Returns:
+            Dictionary with solution and confidence, or None if no solution possible
+        """
+        import re
+        from collections import defaultdict
+        
+        # Build constraint graph from puzzle text
+        # This is more lenient than Z3 - we'll accept partial constraints
+        
+        # Extract all sentences
+        sentences = re.split(r'(?:\d+\.\s*|[.!?]\s+|\n)', puzzle_text)
+        
+        # Track what we know about each position
+        position_info = {}  # position -> {attr: value}
+        relationships = []  # List of (attr1, value1, attr2, value2) relationships
+        position_assignments = {}  # position -> {attr: value}
+        
+        text_lower = puzzle_text.lower()
+        
+        # Extract direct position assignments
+        for sentence in sentences:
+            s_lower = sentence.lower().strip()
+            if not s_lower or len(s_lower) < 5:
+                continue
+            
+            # Pattern: "X is in house Y" or "House Y is X"
+            pos_match = re.search(r'\b(house|position)\s+(\d+)\b', s_lower)
+            if pos_match:
+                pos = int(pos_match.group(2))
+                if 1 <= pos <= num_people:
+                    if pos not in position_info:
+                        position_info[pos] = {}
+                    
+                    # Check for attribute values
+                    if detected_attributes:
+                        for attr_name, attr_values in detected_attributes.items():
+                            for value in attr_values:
+                                if value.lower() in s_lower:
+                                    position_info[pos][attr_name] = value
+                    
+                    # Check standard attributes
+                    for color in colors:
+                        if color in s_lower:
+                            position_info[pos]["color"] = color
+                    for nat in nationalities:
+                        if nat.lower() in s_lower:
+                            position_info[pos]["nationality"] = nat
+                    for drink in drinks:
+                        if drink in s_lower:
+                            position_info[pos]["drink"] = drink
+                    for pet in pets:
+                        if pet in s_lower:
+                            position_info[pos]["pet"] = pet
+        
+        # Track relative position constraints
+        relative_positions = []  # List of (attr1, value1, attr2, value2, direction) where direction is "right" or "left"
+        
+        # Track OR constraints for lenient solver
+        or_constraints_list = []  # List of (main_attr, main_value, other_attrs_values)
+        
+        # Track parity constraints
+        parity_constraints_list = []  # List of ((attr1, value1), (attr2, value2))
+        
+        # Extract relationships (e.g., "X drinks Y")
+        for sentence in sentences:
+            s_lower = sentence.lower().strip()
+            if not s_lower or len(s_lower) < 5:
+                continue
+            
+            # First, check detected attributes for relationships
+            if detected_attributes and attribute_names:
+                # Pattern: "person who watches/plays/likes/has X is to the right of person who has Y"
+                # Pattern: "X is to the immediate right/left of Y" or "X is somewhere to the right of Y"
+                if "immediate right" in s_lower or "immediate left" in s_lower or "right of" in s_lower or "left of" in s_lower or "somewhere to the right" in s_lower:
+                    # Extract attribute values mentioned
+                    found_values = []
+                    for attr_name, attr_values in detected_attributes.items():
+                        for value in attr_values:
+                            value_lower = value.lower()
+                            # Check for various verb patterns
+                            patterns = [
+                                f"watches {value_lower}", f"plays {value_lower}", f"likes {value_lower}",
+                                f"has {value_lower}", f"owns {value_lower}", f"travels by {value_lower}",
+                                f"who {value_lower}", f"person who {value_lower}"
+                            ]
+                            if any(pattern in s_lower for pattern in patterns) or value_lower in s_lower:
+                                found_values.append((attr_name, value))
+                    
+                    # Create relationships between found values based on position in sentence
+                    if len(found_values) >= 2:
+                        # Check which comes before "to the right/left"
+                        right_pos = s_lower.find("to the right")
+                        left_pos = s_lower.find("to the left")
+                        if right_pos > 0 or left_pos > 0:
+                            split_pos = max(right_pos, left_pos)
+                            before = s_lower[:split_pos]
+                            after = s_lower[split_pos:]
+                            
+                            # Find which value appears before and after
+                            for i, (attr1, val1) in enumerate(found_values):
+                                for j, (attr2, val2) in enumerate(found_values):
+                                    if i != j:
+                                        val1_in_before = val1.lower() in before
+                                        val2_in_before = val2.lower() in before
+                                        val1_in_after = val1.lower() in after
+                                        val2_in_after = val2.lower() in after
+                                        
+                                        if val1_in_before and val2_in_after:
+                                            relationships.append((attr1, val1, attr2, val2))
+                                            # Also track relative position
+                                            if "right" in s_lower:
+                                                relative_positions.append((attr1, val1, attr2, val2, "right"))
+                                            elif "left" in s_lower:
+                                                relative_positions.append((attr1, val1, attr2, val2, "left"))
+                                        elif val2_in_before and val1_in_after:
+                                            relationships.append((attr2, val2, attr1, val1))
+                                            # Also track relative position
+                                            if "right" in s_lower:
+                                                relative_positions.append((attr2, val2, attr1, val1, "right"))
+                                            elif "left" in s_lower:
+                                                relative_positions.append((attr2, val2, attr1, val1, "left"))
+                
+                # Pattern: "person who watches/plays/likes/has X" - find relationships
+                for attr_name, attr_values in detected_attributes.items():
+                    for value in attr_values:
+                        value_lower = value.lower()
+                        # Check for various verb patterns
+                        patterns = [
+                            f"watches {value_lower}", f"plays {value_lower}", f"likes {value_lower}",
+                            f"has {value_lower}", f"owns {value_lower}", f"travels by {value_lower}",
+                            f"who {value_lower}", f"person who {value_lower}"
+                        ]
+                        if any(pattern in s_lower for pattern in patterns) or value_lower in s_lower:
+                            # Find other attributes mentioned in same sentence
+                            for other_attr_name, other_attr_values in detected_attributes.items():
+                                if other_attr_name != attr_name:
+                                    for other_value in other_attr_values:
+                                        other_value_lower = other_value.lower()
+                                        if other_value_lower in s_lower and value_lower != other_value_lower:
+                                            # Check if they're in a relationship pattern
+                                            if "same as" in s_lower or "same" in s_lower:
+                                                # Same person has both attributes
+                                                relationships.append((attr_name, value, other_attr_name, other_value))
+                                            elif "and" in s_lower:
+                                                # Both attributes together
+                                                relationships.append((attr_name, value, other_attr_name, other_value))
+                                            elif "or" in s_lower:
+                                                # OR constraint - store separately
+                                                # Find main entity (the one that is "the same as")
+                                                same_as_pos = s_lower.find("is the same as")
+                                                if same_as_pos > 0:
+                                                    before_same = s_lower[:same_as_pos]
+                                                    # Check if this value is the main entity
+                                                    if any(pattern in before_same for pattern in patterns):
+                                                        # This is the main entity
+                                                        or_constraints_list.append((attr_name, value, [(other_attr_name, other_value)]))
+                                                    else:
+                                                        # This might be an "other" entity
+                                                        pass
+                
+                # Pattern: "parity positions" - same evenness/oddness
+                if "parity" in s_lower or "same parity" in s_lower:
+                    # Extract two attribute values that have same parity
+                    found_values = []
+                    for attr_name, attr_values in detected_attributes.items():
+                        for value in attr_values:
+                            value_lower = value.lower()
+                            patterns = [f"plays {value_lower}", f"likes {value_lower}", f"has {value_lower}", f"watches {value_lower}"]
+                            if any(pattern in s_lower for pattern in patterns) or value_lower in s_lower:
+                                found_values.append((attr_name, value))
+                    
+                    if len(found_values) >= 2:
+                        # Mark that these should be at same parity positions
+                        # Store as special constraint for later processing
+                        parity_constraints = getattr(self, '_parity_constraints', [])
+                        if not hasattr(self, '_parity_constraints'):
+                            self._parity_constraints = []
+                        self._parity_constraints.append((found_values[0], found_values[1]))
+            
+            # Pattern: "X drinks Y" or "X has Y" (standard attributes)
+            if "drinks" in s_lower or "drink" in s_lower:
+                for nat in nationalities:
+                    if nat.lower() in s_lower:
+                        for drink in drinks:
+                            if drink in s_lower and nat.lower() != drink:
+                                relationships.append(("nationality", nat, "drink", drink))
+            
+            if "has" in s_lower or "owns" in s_lower:
+                for nat in nationalities:
+                    if nat.lower() in s_lower:
+                        for pet in pets:
+                            if pet in s_lower and nat.lower() != pet:
+                                relationships.append(("nationality", nat, "pet", pet))
+            
+            # Pattern: "X lives in Y house"
+            lives_match = re.search(r'(\w+)\s+(?:lives|is)\s+in\s+the\s+(\w+)\s+house', s_lower)
+            if lives_match:
+                entity1 = lives_match.group(1).lower()
+                entity2 = lives_match.group(2).lower()
+                for nat in nationalities:
+                    if nat.lower() == entity1:
+                        for color in colors:
+                            if color == entity2:
+                                relationships.append(("nationality", nat, "color", color))
+            
+            # Pattern: "X is next to Y" or "X is adjacent to Y"
+            if "next to" in s_lower or "adjacent" in s_lower or "beside" in s_lower:
+                # Extract entities mentioned
+                found_entities = []
+                for nat in nationalities:
+                    if nat.lower() in s_lower:
+                        found_entities.append(("nationality", nat))
+                for color in colors:
+                    if color in s_lower:
+                        found_entities.append(("color", color))
+                for drink in drinks:
+                    if drink in s_lower:
+                        found_entities.append(("drink", drink))
+                for pet in pets:
+                    if pet in s_lower:
+                        found_entities.append(("pet", pet))
+                
+                # If we found two entities, they're adjacent (but we can't determine exact positions)
+                # This is informational - we'll use it in heuristics
+                if len(found_entities) >= 2:
+                    # Mark as adjacent relationship (we'll use this in answer generation)
+                    pass
+            
+            # Pattern: "X is to the left/right of Y"
+            if "to the left of" in s_lower or "to the right of" in s_lower:
+                # Extract entities
+                found_entities = []
+                for nat in nationalities:
+                    if nat.lower() in s_lower:
+                        found_entities.append(("nationality", nat))
+                for color in colors:
+                    if color in s_lower:
+                        found_entities.append(("color", color))
+                
+                # If we found entities, note the relationship
+                if len(found_entities) >= 2:
+                    # Mark as relative position (we'll use this in heuristics)
+                    pass
+        
+        # Build partial solution from constraints
+        solution = {}  # position -> {attr: value}
+        used_values = defaultdict(set)  # attr -> set of used values
+        
+        # First, apply direct position assignments
+        for pos in range(1, num_people + 1):
+            solution[pos] = {}
+            if pos in position_info:
+                for attr, value in position_info[pos].items():
+                    solution[pos][attr] = value
+                    used_values[attr].add(value)
+        
+        # Apply OR constraints first (they help determine which attributes are together)
+        for or_const in or_constraints_list:
+            main_attr, main_value, other_attrs_values = or_const
+            # For each position, if it has main_value, it should have one of the other values
+            # OR all of them if "both" is mentioned
+            for pos in range(1, num_people + 1):
+                if pos in solution and main_attr in solution[pos] and str(solution[pos][main_attr]).lower() == str(main_value).lower():
+                    # This position has main_value, so it should have at least one of the other values
+                    # Try to assign one of them
+                    for other_attr, other_value in other_attrs_values:
+                        if other_attr not in solution[pos]:
+                            if other_attr not in used_values or other_value not in used_values.get(other_attr, set()):
+                                solution[pos][other_attr] = other_value
+                                if other_attr not in used_values:
+                                    used_values[other_attr] = set()
+                                used_values[other_attr].add(other_value)
+                                break  # Assign first available
+        
+        # Apply parity constraints
+        for parity_const in parity_constraints_list:
+            (attr1, value1), (attr2, value2) = parity_const
+            # Find positions of value1 and value2
+            pos1_candidates = []
+            pos2_candidates = []
+            for pos in range(1, num_people + 1):
+                if pos in solution:
+                    if attr1 in solution[pos] and str(solution[pos][attr1]).lower() == str(value1).lower():
+                        pos1_candidates.append(pos)
+                    if attr2 in solution[pos] and str(solution[pos][attr2]).lower() == str(value2).lower():
+                        pos2_candidates.append(pos)
+            
+            # They must be at same parity (both even or both odd)
+            if pos1_candidates and pos2_candidates:
+                # Filter to same parity
+                even_pos1 = [p for p in pos1_candidates if p % 2 == 0]
+                odd_pos1 = [p for p in pos1_candidates if p % 2 == 1]
+                even_pos2 = [p for p in pos2_candidates if p % 2 == 0]
+                odd_pos2 = [p for p in pos2_candidates if p % 2 == 1]
+                
+                # If we can narrow it down, update
+                if len(even_pos1) == 1 and len(even_pos2) == 1:
+                    pos1, pos2 = even_pos1[0], even_pos2[0]
+                    if pos1 == pos2:
+                        # They're at the same position - ensure both attributes are set
+                        if pos1 in solution:
+                            if attr1 not in solution[pos1]:
+                                solution[pos1][attr1] = value1
+                            if attr2 not in solution[pos1]:
+                                solution[pos1][attr2] = value2
+                elif len(odd_pos1) == 1 and len(odd_pos2) == 1:
+                    pos1, pos2 = odd_pos1[0], odd_pos2[0]
+                    if pos1 == pos2:
+                        if pos1 in solution:
+                            if attr1 not in solution[pos1]:
+                                solution[pos1][attr1] = value1
+                            if attr2 not in solution[pos1]:
+                                solution[pos1][attr2] = value2
+        
+        # Apply relative position constraints first (they help narrow down positions)
+        for rel_pos in relative_positions:
+            attr1, value1, attr2, value2, direction = rel_pos
+            # Find positions of value1 and value2
+            pos1_candidates = []
+            pos2_candidates = []
+            
+            for pos in range(1, num_people + 1):
+                if pos in solution:
+                    if attr1 in solution[pos] and str(solution[pos][attr1]).lower() == str(value1).lower():
+                        pos1_candidates.append(pos)
+                    if attr2 in solution[pos] and str(solution[pos][attr2]).lower() == str(value2).lower():
+                        pos2_candidates.append(pos)
+            
+            # If we found candidates, apply position constraint
+            if pos1_candidates and pos2_candidates:
+                if direction == "right":
+                    # value1 must be at a position > value2's position
+                    # Remove invalid combinations
+                    valid_pos1 = [p1 for p1 in pos1_candidates if any(p1 > p2 for p2 in pos2_candidates)]
+                    valid_pos2 = [p2 for p2 in pos2_candidates if any(p1 > p2 for p1 in pos1_candidates)]
+                    # If we can narrow it down, update solution
+                    if len(valid_pos1) == 1 and len(valid_pos2) == 1:
+                        pos1, pos2 = valid_pos1[0], valid_pos2[0]
+                        if pos1 > pos2:
+                            # Ensure attributes are set at these positions
+                            if pos1 in solution and attr1 not in solution[pos1]:
+                                solution[pos1][attr1] = value1
+                            if pos2 in solution and attr2 not in solution[pos2]:
+                                solution[pos2][attr2] = value2
+                elif direction == "left":
+                    # value1 must be at a position < value2's position
+                    valid_pos1 = [p1 for p1 in pos1_candidates if any(p1 < p2 for p2 in pos2_candidates)]
+                    valid_pos2 = [p2 for p2 in pos2_candidates if any(p1 < p2 for p1 in pos1_candidates)]
+                    if len(valid_pos1) == 1 and len(valid_pos2) == 1:
+                        pos1, pos2 = valid_pos1[0], valid_pos2[0]
+                        if pos1 < pos2:
+                            if pos1 in solution and attr1 not in solution[pos1]:
+                                solution[pos1][attr1] = value1
+                            if pos2 in solution and attr2 not in solution[pos2]:
+                                solution[pos2][attr2] = value2
+        
+        # Apply relationships to infer more assignments
+        # First pass: apply direct relationships
+        for rel in relationships:
+            attr1, value1, attr2, value2 = rel
+            
+            # Find position with attr1 = value1, set attr2 = value2
+            found = False
+            for pos in range(1, num_people + 1):
+                if attr1 in solution[pos] and solution[pos][attr1] == value1:
+                    if attr2 not in solution[pos]:
+                        # Check if value2 is already used
+                        if attr2 not in used_values or value2 not in used_values[attr2]:
+                            solution[pos][attr2] = value2
+                            if attr2 not in used_values:
+                                used_values[attr2] = set()
+                            used_values[attr2].add(value2)
+                            found = True
+                            break
+            
+            # If not found by direct match, try to find by value matching (case-insensitive)
+            if not found:
+                for pos in range(1, num_people + 1):
+                    pos_value = solution[pos].get(attr1)
+                    if pos_value and str(pos_value).lower() == str(value1).lower():
+                        if attr2 not in solution[pos]:
+                            if attr2 not in used_values or value2 not in used_values[attr2]:
+                                solution[pos][attr2] = value2
+                                if attr2 not in used_values:
+                                    used_values[attr2] = set()
+                                used_values[attr2].add(value2)
+                                break
+        
+        # Second pass: handle "same as" relationships (same person has multiple attributes)
+        # Also handle reverse relationships (if A has B, then B is with A)
+        for rel in relationships:
+            attr1, value1, attr2, value2 = rel
+            # Try reverse: find position with attr2 = value2, set attr1 = value1
+            for pos in range(1, num_people + 1):
+                if attr2 in solution[pos] and str(solution[pos][attr2]).lower() == str(value2).lower():
+                    if attr1 not in solution[pos]:
+                        if attr1 not in used_values or value1 not in used_values[attr1]:
+                            solution[pos][attr1] = value1
+                            if attr1 not in used_values:
+                                used_values[attr1] = set()
+                            used_values[attr1].add(value1)
+                            break
+        
+        # Use simple backtracking to fill in remaining positions if we have detected attributes
+        # This helps ensure we satisfy all constraints
+        if detected_attributes and len(relationships) > 0:
+            # Try to solve using constraint propagation
+            def is_valid_assignment(pos, attr_name, value, current_solution):
+                """Check if assigning value to attr_name at position pos is valid"""
+                # Check if value is already used at another position
+                for other_pos in range(1, num_people + 1):
+                    if other_pos != pos and other_pos in current_solution:
+                        if current_solution[other_pos].get(attr_name) == value:
+                            return False
+                return True
+            
+            def check_relative_positions(current_solution, rel_positions):
+                """Check if current solution satisfies relative position constraints"""
+                for rel_pos in rel_positions:
+                    attr1, value1, attr2, value2, direction = rel_pos
+                    pos1 = None
+                    pos2 = None
+                    
+                    # Find positions of value1 and value2
+                    for pos in range(1, num_people + 1):
+                        if pos in current_solution:
+                            if attr1 in current_solution[pos] and str(current_solution[pos][attr1]).lower() == str(value1).lower():
+                                pos1 = pos
+                            if attr2 in current_solution[pos] and str(current_solution[pos][attr2]).lower() == str(value2).lower():
+                                pos2 = pos
+                    
+                    if pos1 is not None and pos2 is not None:
+                        if direction == "right" and pos1 <= pos2:
+                            return False
+                        elif direction == "left" and pos1 >= pos2:
+                            return False
+                return True
+            
+            def check_or_constraints(current_solution, or_constraints):
+                """Check if current solution satisfies OR constraints"""
+                for or_const in or_constraints:
+                    main_attr, main_value, other_attrs_values = or_const
+                    # Find position with main_value
+                    main_pos = None
+                    for pos in range(1, num_people + 1):
+                        if pos in current_solution and main_attr in current_solution[pos]:
+                            if str(current_solution[pos][main_attr]).lower() == str(main_value).lower():
+                                main_pos = pos
+                                break
+                    
+                    if main_pos is not None:
+                        # Check if at least one of the other values is at the same position
+                        found_match = False
+                        for other_attr, other_value in other_attrs_values:
+                            if other_attr in current_solution.get(main_pos, {}):
+                                if str(current_solution[main_pos][other_attr]).lower() == str(other_value).lower():
+                                    found_match = True
+                                    break
+                        # If "or both" is mentioned, we allow all to be together, but at least one must match
+                        # For now, we require at least one match
+                        if not found_match and len(other_attrs_values) > 0:
+                            # Not a hard failure - OR means at least one should match
+                            # But if none match and solution is complete, it's invalid
+                            all_filled = all(
+                                len(current_solution.get(pos, {})) >= len(detected_attributes)
+                                for pos in range(1, num_people + 1)
+                            )
+                            if all_filled:
+                                return False
+                return True
+            
+            def check_parity_constraints(current_solution, parity_constraints):
+                """Check if current solution satisfies parity constraints"""
+                for parity_const in parity_constraints:
+                    (attr1, value1), (attr2, value2) = parity_const
+                    pos1 = None
+                    pos2 = None
+                    
+                    # Find positions
+                    for pos in range(1, num_people + 1):
+                        if pos in current_solution:
+                            if attr1 in current_solution[pos] and str(current_solution[pos][attr1]).lower() == str(value1).lower():
+                                pos1 = pos
+                            if attr2 in current_solution[pos] and str(current_solution[pos][attr2]).lower() == str(value2).lower():
+                                pos2 = pos
+                    
+                    if pos1 is not None and pos2 is not None:
+                        # Check same parity (both even or both odd)
+                        if (pos1 % 2) != (pos2 % 2):
+                            return False
+                return True
+            
+            def solve_backtrack(pos, current_solution, used_vals):
+                """Simple backtracking solver with constraint checking"""
+                if pos > num_people:
+                    # Check all constraints before returning success
+                    if (check_relative_positions(current_solution, relative_positions) and
+                        check_or_constraints(current_solution, or_constraints_list) and
+                        check_parity_constraints(current_solution, parity_constraints_list)):
+                        return True
+                    return False
+                
+                if pos not in current_solution:
+                    current_solution[pos] = {}
+                
+                # Try to fill missing attributes
+                for attr_name, attr_values in detected_attributes.items():
+                    if attr_name not in current_solution[pos]:
+                        for value in attr_values:
+                            if value not in used_vals.get(attr_name, set()):
+                                if is_valid_assignment(pos, attr_name, value, current_solution):
+                                    # Try this assignment
+                                    current_solution[pos][attr_name] = value
+                                    if attr_name not in used_vals:
+                                        used_vals[attr_name] = set()
+                                    used_vals[attr_name].add(value)
+                                    
+                                    # Check relationships
+                                    valid = True
+                                    assigned_attrs = []  # Track what we assigned due to relationships
+                                    for rel in relationships:
+                                        attr1, val1, attr2, val2 = rel
+                                        # If we have attr1=val1 at this position, we should have attr2=val2
+                                        if attr1 == attr_name and str(value).lower() == str(val1).lower():
+                                            if attr2 not in current_solution[pos]:
+                                                # Check if val2 is available
+                                                if val2 not in used_vals.get(attr2, set()):
+                                                    current_solution[pos][attr2] = val2
+                                                    if attr2 not in used_vals:
+                                                        used_vals[attr2] = set()
+                                                    used_vals[attr2].add(val2)
+                                                    assigned_attrs.append((attr2, val2))
+                                                else:
+                                                    valid = False
+                                                    break
+                                    
+                                    if valid:
+                                        # Check constraints so far (only check if we have enough info)
+                                        # Don't check OR/parity until solution is more complete
+                                        if pos >= num_people or check_relative_positions(current_solution, relative_positions):
+                                            # Continue to next position
+                                            if solve_backtrack(pos + 1, current_solution, used_vals):
+                                                return True
+                                    
+                                    # Backtrack
+                                    del current_solution[pos][attr_name]
+                                    used_vals[attr_name].discard(value)
+                                    for assigned_attr, assigned_val in assigned_attrs:
+                                        if assigned_attr in current_solution[pos]:
+                                            del current_solution[pos][assigned_attr]
+                                        used_vals[assigned_attr].discard(assigned_val)
+                        # If we couldn't assign any value, this branch fails
+                        if attr_name not in current_solution[pos]:
+                            return False
+                
+                # Move to next position
+                return solve_backtrack(pos + 1, current_solution, used_vals)
+            
+            # Try backtracking
+            try:
+                backtrack_solution = {pos: dict(solution.get(pos, {})) for pos in range(1, num_people + 1)}
+                backtrack_used = {attr: set(used_values.get(attr, set())) for attr in used_values}
+                if solve_backtrack(1, backtrack_solution, backtrack_used):
+                    solution = backtrack_solution
+            except Exception:
+                pass  # Fall back to greedy assignment
+        
+        # Fill in remaining positions with available values
+        # First, use detected attributes if available
+        if detected_attributes:
+            for pos in range(1, num_people + 1):
+                for attr_name, attr_values in detected_attributes.items():
+                    if attr_name not in solution[pos]:
+                        # Find unused value
+                        for value in attr_values:
+                            if value not in used_values.get(attr_name, set()):
+                                solution[pos][attr_name] = value
+                                if attr_name not in used_values:
+                                    used_values[attr_name] = set()
+                                used_values[attr_name].add(value)
+                                break
+        
+        # Then fill standard attributes
+        for pos in range(1, num_people + 1):
+            # Fill missing attributes
+            for attr, values in [("color", colors), ("nationality", nationalities), 
+                                ("drink", drinks), ("pet", pets)]:
+                if attr not in solution[pos]:
+                    # Find unused value
+                    for value in values:
+                        if value not in used_values.get(attr, set()):
+                            solution[pos][attr] = value
+                            if attr not in used_values:
+                                used_values[attr] = set()
+                            used_values[attr].add(value)
+                            break
+        
+        # Calculate confidence based on how many constraints we used
+        total_constraints = len(position_info) + len(relationships)
+        # Higher confidence if we have more constraints and more complete solution
+        complete_positions = sum(1 for pos in solution.values() if len(pos) >= 2)
+        confidence = min(1.0, (total_constraints / 10.0) * 0.7 + (complete_positions / num_people) * 0.3)
+        
+        # Extract questions and build answers
+        questions = re.findall(r'(?:At\s+what|[Ww]ho|[Ww]hat|[Ww]here|[Ww]hich|[Ww]hose).*?\?', puzzle_text)
+        expected_count = len(questions) if questions else num_people
+        
+        # Build answers from solution using detected attributes
+        answers = []
+        for i, question in enumerate(questions[:expected_count] if questions else [None] * expected_count):
+            q_lower = question.lower() if question else ""
+            answer = None
+            
+            # Use detected attributes if available
+            if detected_attributes and attribute_names:
+                # Map question to attribute based on keywords
+                target_attr = None
+                condition_attr = None
+                condition_value = None
+                
+                # Check what attribute the question is asking about
+                for attr_name in attribute_names:
+                    attr_lower = attr_name.lower()
+                    if attr_name.lower() in q_lower or any(kw in q_lower for kw in attr_name.split('_')):
+                        target_attr = attr_name
+                        break
+                
+                # Check for position in question
+                pos_match = re.search(r'(?:position|house)\s+(\d+)', q_lower)
+                if pos_match:
+                    pos = int(pos_match.group(1))
+                    if pos in solution and target_attr:
+                        answer = solution[pos].get(target_attr)
+                        if not answer and detected_attributes.get(target_attr):
+                            # Use first available value
+                            answer = detected_attributes[target_attr][(pos-1) % len(detected_attributes[target_attr])]
+                
+                # Check for condition in question (e.g., "person who has ferret", "person who likes magic-tricks", "person who plays rugby")
+                if not answer:
+                    # First, try to find condition attribute and value
+                    condition_attr = None
+                    condition_value = None
+                    
+                    for attr_name, attr_values in detected_attributes.items():
+                        for value in attr_values:
+                            value_lower = value.lower()
+                            # Check for various patterns: "has X", "likes X", "plays X", "watches X"
+                            patterns = [
+                                f"has {value_lower}", f"likes {value_lower}", f"plays {value_lower}",
+                                f"watches {value_lower}", f"owns {value_lower}", f"who {value_lower}",
+                                f"person who {value_lower}", f"who {value_lower}"
+                            ]
+                            if any(pattern in q_lower for pattern in patterns):
+                                condition_attr = attr_name
+                                condition_value = value
+                                break
+                        if condition_attr:
+                            break
+                    
+                    # If we found a condition, find the position with that condition
+                    if condition_attr and condition_value:
+                        for pos in range(1, num_people + 1):
+                            if pos in solution:
+                                # Check if this position has the condition value (case-insensitive)
+                                pos_value = solution[pos].get(condition_attr)
+                                if pos_value and str(pos_value).lower() == str(condition_value).lower():
+                                    # Found the position, now get the target attribute
+                                    if target_attr:
+                                        answer = solution[pos].get(target_attr)
+                                        if not answer and detected_attributes.get(target_attr):
+                                            answer = detected_attributes[target_attr][(pos-1) % len(detected_attributes[target_attr])]
+                                    elif "sport" in q_lower:
+                                        answer = solution[pos].get("sport")
+                                    elif "hobby" in q_lower:
+                                        answer = solution[pos].get("hobby")
+                                    elif "pet" in q_lower:
+                                        answer = solution[pos].get("pet")
+                                    break
+                    
+                    # If still no answer, try searching all attributes
+                    if not answer:
+                        for attr_name, attr_values in detected_attributes.items():
+                            for value in attr_values:
+                                value_lower = value.lower()
+                                if value_lower in q_lower and len(value_lower) > 2:
+                                    # Found a value mentioned in question, find its position
+                                    for pos in range(1, num_people + 1):
+                                        if pos in solution and attr_name in solution[pos]:
+                                            if str(solution[pos][attr_name]).lower() == value_lower:
+                                                # Found position, get target attribute
+                                                if target_attr:
+                                                    answer = solution[pos].get(target_attr)
+                                                elif "sport" in q_lower:
+                                                    answer = solution[pos].get("sport")
+                                                elif "hobby" in q_lower:
+                                                    answer = solution[pos].get("hobby")
+                                                elif "pet" in q_lower:
+                                                    answer = solution[pos].get("pet")
+                                                elif "position" in q_lower or "at what" in q_lower:
+                                                    answer = str(pos)
+                                                break
+                                        if answer:
+                                            break
+                                    if answer:
+                                        break
+                            if answer:
+                                break
+                
+                # If still no answer, try to infer from question type
+                if not answer:
+                    if "what" in q_lower and target_attr and detected_attributes.get(target_attr):
+                        # Generic "what" question about an attribute
+                        answer = detected_attributes[target_attr][i % len(detected_attributes[target_attr])]
+                    elif "who" in q_lower or "which person" in q_lower:
+                        # "Who" question - return position or person identifier
+                        if i < num_people:
+                            answer = str(i + 1)
+                        else:
+                            answer = f"Person {i+1}"
+                    elif "where" in q_lower or "which position" in q_lower or "which house" in q_lower:
+                        # Position question
+                        answer = str(i + 1)
+            
+            # Fallback to standard attributes if detected attributes didn't work
+            if not answer:
+                if "who" in q_lower:
+                    # Find position from question context
+                    house_match = re.search(r'(?:house|position)\s+(\d+)', q_lower)
+                    if house_match:
+                        pos = int(house_match.group(1))
+                        if pos in solution:
+                            answer = solution[pos].get("nationality", nationalities[(pos-1) % len(nationalities)] if nationalities else f"Person {pos}")
+                    else:
+                        # "Who drinks X?" - find person with that drink
+                        for pos in range(1, num_people + 1):
+                            if pos in solution:
+                                for attr, value in solution[pos].items():
+                                    if attr in ["drink", "pet"] and value.lower() in q_lower:
+                                        answer = solution[pos].get("nationality", nationalities[(pos-1) % len(nationalities)] if nationalities else f"Person {pos}")
+                                        break
+                            if answer:
+                                break
+                        if not answer:
+                            answer = nationalities[i % len(nationalities)] if nationalities else f"Person {i+1}"
+                
+                elif "what" in q_lower:
+                    # "What does X drink?" or "What color is house X?"
+                    house_match = re.search(r'(?:house|position)\s+(\d+)', q_lower)
+                    if house_match:
+                        pos = int(house_match.group(1))
+                        if pos in solution:
+                            if "drink" in q_lower:
+                                answer = solution[pos].get("drink", drinks[(pos-1) % len(drinks)] if drinks else "water")
+                            elif "color" in q_lower:
+                                answer = solution[pos].get("color", colors[(pos-1) % len(colors)] if colors else "red")
+                            elif "pet" in q_lower:
+                                answer = solution[pos].get("pet", pets[(pos-1) % len(pets)] if pets else "dog")
+                            else:
+                                # Check all attributes
+                                for attr, value in solution[pos].items():
+                                    if attr.lower() in q_lower or value.lower() in q_lower:
+                                        answer = value
+                                        break
+                                if not answer:
+                                    answer = f"House {pos}"
+                    else:
+                        # Check for condition-based question
+                        for pos in range(1, num_people + 1):
+                            if pos in solution:
+                                for attr, value in solution[pos].items():
+                                    if value.lower() in q_lower:
+                                        # Found matching value, now get what's asked
+                                        if "movie" in q_lower or "genre" in q_lower:
+                                            answer = solution[pos].get("movie_genre") or solution[pos].get("genre")
+                                        elif "pet" in q_lower:
+                                            answer = solution[pos].get("pet")
+                                        elif "transport" in q_lower:
+                                            answer = solution[pos].get("transport")
+                                        else:
+                                            # Return any other attribute
+                                            for other_attr, other_value in solution[pos].items():
+                                                if other_attr != attr:
+                                                    answer = other_value
+                                                    break
+                                        break
+                                if answer:
+                                    break
+                        if not answer:
+                            answer = f"House {i+1}"
+                
+                elif "where" in q_lower or "which house" in q_lower or "which position" in q_lower:
+                    # Position question
+                    answer = str(i + 1)
+                
+                else:
+                    answer = f"House {i+1}"
+            
+            # Clean up answer
+            if answer:
+                answer = str(answer).strip()
+                # Remove common prefixes
+                answer = re.sub(r'^(the|a|an)\s+', '', answer, flags=re.IGNORECASE)
+                answer = answer.strip()
+            
+            answers.append(answer if answer else f"House {i+1}")
+        
+        # Ensure we have exactly expected_count answers
+        while len(answers) < expected_count:
+            answers.append(f"House {len(answers) + 1}")
+        
+        answer_str = ", ".join(answers[:expected_count])
+        
+        # Check if puzzle wants ***X*** format
+        puzzle_lower = puzzle_text.lower()
+        wants_star_format = "***" in puzzle_text or "single word" in puzzle_lower or "single digit" in puzzle_lower or re.search(r'format.*\*\*\*', puzzle_text, re.IGNORECASE)
+        
+        if wants_star_format and len(answers) == 1:
+            # Single answer in ***X*** format
+            response_text = f"***{answers[0]}***"
+        elif wants_star_format and len(answers) > 1:
+            # Multiple answers but puzzle wants star format - use first answer
+            response_text = f"***{answers[0]}***"
+        else:
+            # Standard format: comma-separated in <solution> tags
+            response_text = f"<solution>{answer_str}</solution>"
+        
+        return {
+            "success": True,
+            "response": response_text,
+            "text": response_text,
+            "answer": response_text,
+            "solver_used": "lenient_solver",
+            "confidence": confidence,
+            "position_map": solution,
+            "note": f"Lenient solver solution with {confidence:.2f} confidence"
         }
     
     def _validate_answer_quality(
@@ -810,11 +1733,11 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                     questions = re.findall(r'([Ww]ho|[Ww]hat|[Ww]here|[Ww]hich|[Ww]hose).*?\?', puzzle_text)
                     
                     # Extract entities mentioned in puzzle
-                    entitiesentities = parsed_constraints.get("entities", [])
+                    entities = parsed_constraints.get("entities", [])
                     constraints = parsed_constraints.get("constraints", [])
                     
                     # Try to build a simple model from constraints
-                    default_modeldefault_model = {}
+                    default_model = {}
                     text_lower = puzzle_text.lower()
                     
                     # Extract common zebra puzzle entities
@@ -864,12 +1787,12 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                                 default_model[f"house_{i}_pet"] = found_pets[(i-1) % len(found_pets)]
                 else:
                     # For other puzzle types, use entity-based model
-                    entitiesentities = parsed_constraints.get("entities", [])
-                    default_modeldefault_model = {}
-                
+                    entities = parsed_constraints.get("entities", [])
+                    default_model = {}
+                    
                     # Create assignments based on entities
-                for i, entity in enumerate(entities[:10]):
-                    default_model[entity.lower().replace(" ", "_")] = str(i + 1)
+                    for i, entity in enumerate(entities[:10]):
+                        default_model[entity.lower().replace(" ", "_")] = str(i + 1)
                 
                 # If no entities, create generic model
                 if not default_model:
@@ -1147,7 +2070,7 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
         
         for sentence in sentences:
             s_lower = sentence.lower().strip()
-            if not s_lower or len(s_lower) < 10:  # Skip very short sentences
+            if not s_lower or len(s_lower) < 5:  # More lenient - allow shorter sentences
                 continue
             
             # Pattern 1: Direct position assignment "X lives in house Y" or "House Y is X"
@@ -1278,7 +2201,7 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                     for attr_type, idx1 in found_entities:
                         for attr_type2, idx2 in found_entities:
                             if attr_type == attr_type2 and idx1 != idx2:
-                                var_listvar_list = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[attr_type]
+                                var_list = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[attr_type]
                                 if "right" in s_lower or "somewhere to the right" in s_lower:
                                     # Entity with idx1 is to the right of entity with idx2
                                     # This means idx1's position > idx2's position
@@ -1572,13 +2495,416 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                         for k, drink in enumerate(drinks):
                             if drink in s_lower and pet != drink:
                                 solver.add(z3.Or([z3.And(pet_pos[m] == j, drink_pos[m] == k) for m in range(num_people)]))
+            
+            # Pattern 10.5: "but not both" constraints - "X is Y OR X is Z, but not both"
+            if "but not both" in s_lower and ("or" in s_lower or "is" in s_lower):
+                if detected_attributes and attribute_names:
+                    # Pattern: "X is Y OR X is Z, but not both"
+                    # This means: (X is Y) XOR (X is Z) - exactly one is true
+                    main_entity = None
+                    other_entities = []
+                    
+                    # Find the main entity (appears before "is" and "or")
+                    or_pos = s_lower.find(" or ")
+                    if or_pos > 0:
+                        before_or = s_lower[:or_pos]
+                        after_or = s_lower[or_pos + 4:]
+                        
+                        # Find main entity in before_or
+                        for attr_name, attr_values in detected_attributes.items():
+                            if attr_name in attribute_names:
+                                for value in attr_values:
+                                    value_lower = value.lower()
+                                    patterns = [f"is {value_lower}", f"has {value_lower}", f"watches {value_lower}", f"plays {value_lower}", f"likes {value_lower}"]
+                                    if any(pattern in before_or for pattern in patterns):
+                                        attr_idx = attribute_names.index(attr_name)
+                                        standard_attr_type = ["color", "nat", "drink", "pet"][attr_idx % 4]
+                                        entity_list = [colors, nationalities, drinks, pets][attr_idx % 4]
+                                        mapped_idx = attr_values.index(value) % len(entity_list) if entity_list else 0
+                                        main_entity = (standard_attr_type, mapped_idx, attr_name, value)
+                                        break
+                                if main_entity:
+                                    break
+                        
+                        # Find other entities after "or"
+                        if main_entity:
+                            # Split by comma to handle "but not both"
+                            after_or_clean = after_or.split(",")[0].strip()
+                            for attr_name, attr_values in detected_attributes.items():
+                                if attr_name in attribute_names:
+                                    for value in attr_values:
+                                        value_lower = value.lower()
+                                        patterns = [f"is {value_lower}", f"has {value_lower}", f"watches {value_lower}", f"plays {value_lower}", f"likes {value_lower}"]
+                                        if any(pattern in after_or_clean for pattern in patterns):
+                                            attr_idx = attribute_names.index(attr_name)
+                                            standard_attr_type = ["color", "nat", "drink", "pet"][attr_idx % 4]
+                                            entity_list = [colors, nationalities, drinks, pets][attr_idx % 4]
+                                            mapped_idx = attr_values.index(value) % len(entity_list) if entity_list else 0
+                                            other_entities.append((standard_attr_type, mapped_idx, attr_name, value))
+                                            break
+                            
+                            # Create XOR constraint: main_entity is at same position as exactly one of other_entities
+                            if main_entity and len(other_entities) >= 1:
+                                main_std_attr, main_idx, main_attr_name, main_val = main_entity
+                                main_var_list = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[main_std_attr]
+                                
+                                # XOR: (main at same pos as other1) XOR (main at same pos as other2)
+                                xor_constraints = []
+                                for other_std_attr, other_idx, other_attr_name, other_val in other_entities:
+                                    other_var_list = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[other_std_attr]
+                                    # They're at the same position
+                                    same_pos_constraint = z3.Or([z3.And(main_var_list[k] == main_idx, other_var_list[k] == other_idx) for k in range(num_people)])
+                                    xor_constraints.append(same_pos_constraint)
+                                
+                                if len(xor_constraints) == 2:
+                                    # XOR: exactly one is true
+                                    solver.add(z3.Xor(xor_constraints[0], xor_constraints[1]))
+                                    print(f"[CustomReasoningModule] Added XOR constraint: {main_attr_name}={main_val} same as exactly one of {[f'{a}={v}' for _, _, a, v in other_entities]}", file=sys.stderr)
+                                elif len(xor_constraints) == 1:
+                                    # Just one alternative - this means main is NOT at same position as other
+                                    solver.add(z3.Not(xor_constraints[0]))
+            
+            # Pattern 11: OR constraints - "X is the same as Y OR X is the same as Z OR both"
+            # Pattern: "The person who plays X is the same as the person who likes Y OR the person who plays X is the same as the person who has Z OR both"
+            if "or" in s_lower and ("same as" in s_lower or "same" in s_lower) and ("person who" in s_lower or "the person" in s_lower):
+                if detected_attributes and attribute_names:
+                    # Extract: "person who plays X" - this is the main entity
+                    # Pattern can be: "person who plays X is the same as person who likes Y or person who plays X is the same as person who has Z"
+                    main_attr = None
+                    main_value = None
+                    other_attrs_values = []
+                    
+                    # Find the main entity - it appears before the first "is the same as"
+                    # But it might also be repeated before subsequent "is the same as"
+                    same_as_pos = s_lower.find("is the same as")
+                    if same_as_pos > 0:
+                        before_same = s_lower[:same_as_pos]
+                        
+                        # Find main entity (the one that is "the same as" others)
+                        for attr_name, attr_values in detected_attributes.items():
+                            if attr_name in attribute_names:
+                                for value in attr_values:
+                                    value_lower = value.lower()
+                                    patterns = [f"plays {value_lower}", f"likes {value_lower}", f"has {value_lower}", f"watches {value_lower}"]
+                                    if any(pattern in before_same for pattern in patterns):
+                                        main_attr = attr_name
+                                        main_value = value
+                                        break
+                                if main_attr:
+                                    break
+                        
+                        # Find all "is the same as" parts
+                        if main_attr and main_value:
+                            # Split sentence by "is the same as" to find all parts
+                            parts = s_lower.split("is the same as")
+                            if len(parts) > 1:
+                                # First part has main entity, subsequent parts have other entities
+                                for i, part in enumerate(parts[1:], 1):
+                                    # Extract entity from this part (before next "or" or "is the same as")
+                                    # Remove "the person who" prefix if present
+                                    part_clean = part.replace("the person who", "").replace("person who", "").strip()
+                                    
+                                    # Find next "or" or "is the same as"
+                                    next_or = part_clean.find(" or ")
+                                    next_same = part_clean.find("is the same as")
+                                    end_pos = min(next_or, next_same) if next_or > 0 and next_same > 0 else (next_or if next_or > 0 else (next_same if next_same > 0 else len(part_clean)))
+                                    
+                                    entity_part = part_clean[:end_pos].strip()
+                                    
+                                    # Extract entity from this part
+                                    for attr_name, attr_values in detected_attributes.items():
+                                        if attr_name in attribute_names and attr_name != main_attr:
+                                            for value in attr_values:
+                                                value_lower = value.lower()
+                                                patterns = [f"plays {value_lower}", f"likes {value_lower}", f"has {value_lower}", f"watches {value_lower}"]
+                                                if any(pattern in entity_part for pattern in patterns) or value_lower in entity_part:
+                                                    if (attr_name, value) not in other_attrs_values:
+                                                        other_attrs_values.append((attr_name, value))
+                                                    break
+                            
+                                # Create OR constraint: main_attr=main_value at same position as any other_attr=other_value
+                            if main_attr and main_value and other_attrs_values:
+                                # Map to Z3 variables
+                                main_attr_idx = attribute_names.index(main_attr) if main_attr in attribute_names else 0
+                                main_standard_attr = ["color", "nat", "drink", "pet"][main_attr_idx % 4]
+                                main_entity_list = [colors, nationalities, drinks, pets][main_attr_idx % 4]
+                                main_attr_values = detected_attributes.get(main_attr, [])
+                                main_value_idx = main_attr_values.index(main_value) if main_value in main_attr_values else 0
+                                main_z3_idx = main_value_idx % len(main_entity_list) if main_entity_list else 0
+                                main_var_list = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[main_standard_attr]
+                                
+                                or_constraints = []
+                                for other_attr, other_value in other_attrs_values:
+                                    other_attr_idx = attribute_names.index(other_attr) if other_attr in attribute_names else 0
+                                    other_standard_attr = ["color", "nat", "drink", "pet"][other_attr_idx % 4]
+                                    other_entity_list = [colors, nationalities, drinks, pets][other_attr_idx % 4]
+                                    other_attr_values = detected_attributes.get(other_attr, [])
+                                    other_value_idx = other_attr_values.index(other_value) if other_value in other_attr_values else 0
+                                    other_z3_idx = other_value_idx % len(other_entity_list) if other_entity_list else 0
+                                    other_var_list = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[other_standard_attr]
+                                    
+                                    # They're at the same position: main at position k AND other at position k
+                                    or_constraints.append(z3.Or([z3.And(main_var_list[k] == main_z3_idx, other_var_list[k] == other_z3_idx) for k in range(num_people)]))
+                                
+                                # Also handle "or both" - if "both" is mentioned, add constraint that all are at same position
+                                if "or both" in s_lower and len(other_attrs_values) >= 2:
+                                    # All three (main + two others) are at same position
+                                    other_attr1, other_value1 = other_attrs_values[0]
+                                    other_attr2, other_value2 = other_attrs_values[1]
+                                    other_attr1_idx = attribute_names.index(other_attr1) if other_attr1 in attribute_names else 0
+                                    other_attr2_idx = attribute_names.index(other_attr2) if other_attr2 in attribute_names else 0
+                                    other_standard_attr1 = ["color", "nat", "drink", "pet"][other_attr1_idx % 4]
+                                    other_standard_attr2 = ["color", "nat", "drink", "pet"][other_attr2_idx % 4]
+                                    other_entity_list1 = [colors, nationalities, drinks, pets][other_attr1_idx % 4]
+                                    other_entity_list2 = [colors, nationalities, drinks, pets][other_attr2_idx % 4]
+                                    other_attr_values1 = detected_attributes.get(other_attr1, [])
+                                    other_attr_values2 = detected_attributes.get(other_attr2, [])
+                                    other_value1_idx = other_attr_values1.index(other_value1) if other_value1 in other_attr_values1 else 0
+                                    other_value2_idx = other_attr_values2.index(other_value2) if other_value2 in other_attr_values2 else 0
+                                    other_z3_idx1 = other_value1_idx % len(other_entity_list1) if other_entity_list1 else 0
+                                    other_z3_idx2 = other_value2_idx % len(other_entity_list2) if other_entity_list2 else 0
+                                    other_var_list1 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[other_standard_attr1]
+                                    other_var_list2 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[other_standard_attr2]
+                                    
+                                    # All three at same position: main AND other1 AND other2 all at position k
+                                    or_constraints.append(z3.Or([z3.And(
+                                        main_var_list[k] == main_z3_idx,
+                                        other_var_list1[k] == other_z3_idx1,
+                                        other_var_list2[k] == other_z3_idx2
+                                    ) for k in range(num_people)]))
+                                
+                                if or_constraints:
+                                    solver.add(z3.Or(or_constraints))
+                                    print(f"[CustomReasoningModule] Added OR constraint: {main_attr}={main_value} same as {[f'{a}={v}' for a, v in other_attrs_values]}", file=sys.stderr)
+            
+            # Pattern 11.5: "not anywhere to the right/left" - means "to the left/right" or "same position"
+            if "not anywhere to the right" in s_lower or "not anywhere to the left" in s_lower:
+                if detected_attributes and attribute_names:
+                    # Extract entities
+                    found_entities = []
+                    for attr_name, attr_values in detected_attributes.items():
+                        if attr_name in attribute_names:
+                            for value in attr_values:
+                                value_lower = value.lower()
+                                patterns = [f"has {value_lower}", f"watches {value_lower}", f"plays {value_lower}", f"likes {value_lower}", f"is {value_lower}"]
+                                if any(pattern in s_lower for pattern in patterns) or value_lower in s_lower:
+                                    attr_idx = attribute_names.index(attr_name)
+                                    standard_attr_type = ["color", "nat", "drink", "pet"][attr_idx % 4]
+                                    entity_list = [colors, nationalities, drinks, pets][attr_idx % 4]
+                                    mapped_idx = attr_values.index(value) % len(entity_list) if entity_list else 0
+                                    found_entities.append((standard_attr_type, mapped_idx))
+                    
+                    if len(found_entities) >= 2:
+                        var_list1 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[found_entities[0][0]]
+                        var_list2 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[found_entities[1][0]]
+                        idx1 = found_entities[0][1]
+                        idx2 = found_entities[1][1]
+                        
+                        if "not anywhere to the right" in s_lower:
+                            # entity1 is NOT to the right of entity2, so entity1 <= entity2 position
+                            # This means: entity1 at position k, entity2 at position j where k <= j
+                            # We need to find which position each entity is at, then compare
+                            # Create position variables
+                            pos1 = z3.Int(f"pos1_{idx1}")
+                            pos2 = z3.Int(f"pos2_{idx2}")
+                            solver.add(pos1 >= 0, pos1 < num_people)
+                            solver.add(pos2 >= 0, pos2 < num_people)
+                            # pos1 is the position where var_list1 has idx1
+                            solver.add(z3.Or([z3.And(var_list1[k] == idx1, pos1 == k) for k in range(num_people)]))
+                            # pos2 is the position where var_list2 has idx2
+                            solver.add(z3.Or([z3.And(var_list2[j] == idx2, pos2 == j) for j in range(num_people)]))
+                            # pos1 <= pos2
+                            solver.add(pos1 <= pos2)
+                        elif "not anywhere to the left" in s_lower:
+                            # entity1 is NOT to the left of entity2, so entity1 >= entity2 position
+                            pos1 = z3.Int(f"pos1_{idx1}")
+                            pos2 = z3.Int(f"pos2_{idx2}")
+                            solver.add(pos1 >= 0, pos1 < num_people)
+                            solver.add(pos2 >= 0, pos2 < num_people)
+                            solver.add(z3.Or([z3.And(var_list1[k] == idx1, pos1 == k) for k in range(num_people)]))
+                            solver.add(z3.Or([z3.And(var_list2[j] == idx2, pos2 == j) for j in range(num_people)]))
+                            solver.add(pos1 >= pos2)
+            
+            # Pattern 11.6: "somewhere between" - entity1 is between entity2 and entity3
+            if "somewhere between" in s_lower:
+                if detected_attributes and attribute_names:
+                    # Extract three entities: entity1 is between entity2 and entity3
+                    found_entities = []
+                    for attr_name, attr_values in detected_attributes.items():
+                        if attr_name in attribute_names:
+                            for value in attr_values:
+                                value_lower = value.lower()
+                                patterns = [f"has {value_lower}", f"watches {value_lower}", f"plays {value_lower}", f"likes {value_lower}", f"is {value_lower}"]
+                                if any(pattern in s_lower for pattern in patterns) or value_lower in s_lower:
+                                    attr_idx = attribute_names.index(attr_name)
+                                    standard_attr_type = ["color", "nat", "drink", "pet"][attr_idx % 4]
+                                    entity_list = [colors, nationalities, drinks, pets][attr_idx % 4]
+                                    mapped_idx = attr_values.index(value) % len(entity_list) if entity_list else 0
+                                    found_entities.append((standard_attr_type, mapped_idx))
+                    
+                    if len(found_entities) >= 3:
+                        # Find which entity is "between" - usually the first one mentioned
+                        between_entity = found_entities[0]
+                        entity2 = found_entities[1]
+                        entity3 = found_entities[2]
+                        
+                        var_list_between = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[between_entity[0]]
+                        var_list2 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[entity2[0]]
+                        var_list3 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[entity3[0]]
+                        idx_between = between_entity[1]
+                        idx2 = entity2[1]
+                        idx3 = entity3[1]
+                        
+                        # Between means: pos2 < pos_between < pos3 OR pos3 < pos_between < pos2
+                        # Create position variables
+                        pos_between = z3.Int(f"pos_between_{idx_between}")
+                        pos2_var = z3.Int(f"pos2_{idx2}")
+                        pos3_var = z3.Int(f"pos3_{idx3}")
+                        solver.add(pos_between >= 0, pos_between < num_people)
+                        solver.add(pos2_var >= 0, pos2_var < num_people)
+                        solver.add(pos3_var >= 0, pos3_var < num_people)
+                        # Find positions
+                        solver.add(z3.Or([z3.And(var_list_between[j] == idx_between, pos_between == j) for j in range(num_people)]))
+                        solver.add(z3.Or([z3.And(var_list2[i] == idx2, pos2_var == i) for i in range(num_people)]))
+                        solver.add(z3.Or([z3.And(var_list3[k] == idx3, pos3_var == k) for k in range(num_people)]))
+                        # Between constraint: (pos2 < pos_between < pos3) OR (pos3 < pos_between < pos2)
+                        solver.add(z3.Or([
+                            z3.And(pos2_var < pos_between, pos_between < pos3_var),
+                            z3.And(pos3_var < pos_between, pos_between < pos2_var)
+                        ]))
+            
+            # Pattern 12.5: "different parity positions" - X and Y have different parity
+            if "different parity" in s_lower or ("parity" in s_lower and "different" in s_lower):
+                if detected_attributes and attribute_names:
+                    found_entities = []
+                    for attr_name, attr_values in detected_attributes.items():
+                        if attr_name in attribute_names:
+                            for value in attr_values:
+                                value_lower = value.lower()
+                                patterns = [f"has {value_lower}", f"watches {value_lower}", f"plays {value_lower}", f"likes {value_lower}", f"is {value_lower}"]
+                                if any(pattern in s_lower for pattern in patterns) or value_lower in s_lower:
+                                    attr_idx = attribute_names.index(attr_name)
+                                    standard_attr_type = ["color", "nat", "drink", "pet"][attr_idx % 4]
+                                    entity_list = [colors, nationalities, drinks, pets][attr_idx % 4]
+                                    mapped_idx = attr_values.index(value) % len(entity_list) if entity_list else 0
+                                    found_entities.append((standard_attr_type, mapped_idx))
+                    
+                    if len(found_entities) >= 2:
+                        var_list1 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[found_entities[0][0]]
+                        var_list2 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[found_entities[1][0]]
+                        idx1 = found_entities[0][1]
+                        idx2 = found_entities[1][1]
+                        # Different parity: one even, one odd
+                        even_positions = [k for k in range(num_people) if k % 2 == 0]
+                        odd_positions = [k for k in range(num_people) if k % 2 == 1]
+                        # Either entity1 at even and entity2 at odd, or vice versa
+                        constraint1 = z3.Or([
+                            z3.And(var_list1[k] == idx1, var_list2[j] == idx2)
+                            for k in even_positions for j in odd_positions
+                        ])
+                        constraint2 = z3.Or([
+                            z3.And(var_list1[k] == idx1, var_list2[j] == idx2)
+                            for k in odd_positions for j in even_positions
+                        ])
+                        solver.add(z3.Or([constraint1, constraint2]))
+            
+            # Pattern 12: Parity positions - "X and Y have the same parity positions"
+            # Only apply if we have clear parity mention
+            if "parity" in s_lower and "same parity" in s_lower:
+                # Extract two attribute values that have same parity
+                found_entities = []
+                if detected_attributes and attribute_names:
+                    for attr_name, attr_values in detected_attributes.items():
+                        if attr_name in attribute_names:
+                            attr_idx = attribute_names.index(attr_name)
+                            standard_attr_type = ["color", "nat", "drink", "pet"][attr_idx % 4]
+                            entity_list = [colors, nationalities, drinks, pets][attr_idx % 4]
+                            for i, value in enumerate(attr_values):
+                                value_lower = value.lower()
+                                patterns = [f"plays {value_lower}", f"likes {value_lower}", f"has {value_lower}", f"watches {value_lower}"]
+                                if any(pattern in s_lower for pattern in patterns) or value_lower in s_lower:
+                                    mapped_idx = i % len(entity_list) if entity_list else 0
+                                    found_entities.append((standard_attr_type, mapped_idx))
+                
+                # If we found two entities of different attribute types, they must be at same parity
+                if len(found_entities) >= 2 and found_entities[0][0] != found_entities[1][0]:
+                    var_list1 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[found_entities[0][0]]
+                    var_list2 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[found_entities[1][0]]
+                    idx1 = found_entities[0][1]
+                    idx2 = found_entities[1][1]
+                    # Both must be at even positions (0, 2, 4) or both at odd positions (1, 3)
+                    even_positions = [k for k in range(num_people) if k % 2 == 0]
+                    odd_positions = [k for k in range(num_people) if k % 2 == 1]
+                    even_constraint = z3.Or([z3.And(var_list1[k] == idx1, var_list2[k] == idx2) for k in even_positions])
+                    odd_constraint = z3.Or([z3.And(var_list1[k] == idx1, var_list2[k] == idx2) for k in odd_positions])
+                    solver.add(z3.Or([even_constraint, odd_constraint]))
+            
+            # Pattern 11: Generic "X and Y" relationships (if both appear in same sentence)
+            # This catches constraints that might not match other patterns
+            if detected_attributes and attribute_names:
+                # Look for any two attribute values mentioned together
+                found_values = []
+                for attr_name, attr_values in detected_attributes.items():
+                    if attr_name in attribute_names:
+                        for i, value in enumerate(attr_values):
+                            value_lower = value.lower()
+                            if value_lower in s_lower and len(value_lower) > 2:
+                                attr_idx = attribute_names.index(attr_name)
+                                standard_attr_type = ["color", "nat", "drink", "pet"][attr_idx % 4]
+                                entity_list = [colors, nationalities, drinks, pets][attr_idx % 4]
+                                mapped_idx = i % len(entity_list) if entity_list else 0
+                                found_values.append((standard_attr_type, mapped_idx))
+                
+                # If we found two values of different types, they might be related
+                if len(found_values) >= 2:
+                    for i, (attr1_type, idx1) in enumerate(found_values):
+                        for j, (attr2_type, idx2) in enumerate(found_values):
+                            if i != j and attr1_type != attr2_type:
+                                # They might be at the same position (common in puzzles)
+                                var_list1 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[attr1_type]
+                                var_list2 = {"color": color_pos, "nat": nat_pos, "drink": drink_pos, "pet": pet_pos}[attr2_type]
+                                # Add soft constraint: they might be together
+                                # But don't force it - just add as possibility
+                                # Actually, skip this - it might add too many incorrect constraints
         
         # Try to solve with timeout (30 seconds for complex puzzles)
         solver.set("timeout", 30000)  # 30 seconds in milliseconds
         # Also set other solver parameters for better constraint solving
         solver.set("smt.random_seed", 42)
         solver.set("smt.arith.solver", 2)  # Use better arithmetic solver
+        
+        # Log constraint information before solving
+        constraint_count = len([c for c in solver.assertions()])
+        if constraint_count < 5:
+            print(f"[CustomReasoningModule] Warning: Only {constraint_count} constraints parsed - puzzle may be under-constrained", file=sys.stderr)
+        
+        # Log detected attributes and entity lists
+        if detected_attributes:
+            print(f"[CustomReasoningModule] Detected attributes: {list(detected_attributes.keys())}", file=sys.stderr)
+            for attr_name, attr_values in detected_attributes.items():
+                print(f"[CustomReasoningModule]   {attr_name}: {attr_values}", file=sys.stderr)
+        
+        print(f"[CustomReasoningModule] Entity lists - Colors: {colors[:5]}, Nationalities: {nationalities[:5]}, Drinks: {drinks[:5]}, Pets: {pets[:5]}", file=sys.stderr)
+        print(f"[CustomReasoningModule] Total constraints added to Z3 solver: {constraint_count}", file=sys.stderr)
+        
+        # Log solver state before checking
+        try:
+            assertions = solver.assertions()
+            print(f"[CustomReasoningModule] Z3 solver has {len(assertions)} assertions", file=sys.stderr)
+            if len(assertions) < 10:
+                print(f"[CustomReasoningModule] First few assertions: {[str(a) for a in assertions[:5]]}", file=sys.stderr)
+        except Exception as e:
+            print(f"[CustomReasoningModule] Could not log solver assertions: {e}", file=sys.stderr)
+        
         result = solver.check()
+        
+        # Log solver result
+        if result == z3.sat:
+            print(f"[CustomReasoningModule] Z3 solver found solution (SAT)", file=sys.stderr)
+        elif result == z3.unsat:
+            print(f"[CustomReasoningModule] Z3 solver found constraints unsatisfiable (UNSAT)", file=sys.stderr)
+        elif result == z3.unknown:
+            print(f"[CustomReasoningModule] Z3 solver could not determine satisfiability (UNKNOWN)", file=sys.stderr)
         
         if result == z3.sat:
             model = solver.model()
@@ -1732,21 +3058,107 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                         cleaned_answers.append(f"House {i + 1}")
                 
                 answer_str = ", ".join(cleaned_answers[:expected_answer_count])
+                
+                # Check if puzzle wants ***X*** format
+                puzzle_lower = puzzle_text.lower()
+                wants_star_format = "***" in puzzle_text or "single word" in puzzle_lower or "single digit" in puzzle_lower or re.search(r'format.*\*\*\*', puzzle_text, re.IGNORECASE)
+                
+                if wants_star_format and len(cleaned_answers) == 1:
+                    # Single answer in ***X*** format
+                    formatted_answer = f"***{cleaned_answers[0]}***"
+                elif wants_star_format and len(cleaned_answers) > 1:
+                    # Multiple answers but puzzle wants star format - use first answer
+                    formatted_answer = f"***{cleaned_answers[0]}***"
+                else:
+                    # Standard format: comma-separated in <solution> tags
+                    formatted_answer = f"<solution>{answer_str}</solution>"
+                
                 return {
                     "success": True,
-                    "response": f"<solution>{answer_str}</solution>",
-                    "text": f"<solution>{answer_str}</solution>",
-                    "answer": f"<solution>{answer_str}</solution>",
+                    "response": formatted_answer,
+                    "text": formatted_answer,
+                    "answer": formatted_answer,
                     "solver_used": "z3_enhanced",
                     "position_map": position_map
                 }
         elif result == z3.unsat:
             print(f"[CustomReasoningModule] Z3 solver found constraints unsatisfiable (unsat)", file=sys.stderr)
-            # Generate fallback answers based on puzzle structure
+            # Log puzzle text for analysis
+            puzzle_preview = puzzle_text[:500] if len(puzzle_text) > 500 else puzzle_text
+            print(f"[CustomReasoningModule] UNSAT puzzle preview: {puzzle_preview}...", file=sys.stderr)
+            
+            # Save failed puzzle to file for analysis
+            self._save_failed_puzzle(puzzle_text, colors, nationalities, drinks, pets, detected_attributes, constraint_count)
+            
+            # Try lenient solver as fallback
+            print(f"[CustomReasoningModule] Attempting lenient solver as fallback...", file=sys.stderr)
+            lenient_result = self._solve_with_lenient_solver(
+                puzzle_text, colors, nationalities, drinks, pets,
+                detected_attributes, attribute_names, num_people
+            )
+            
+            if lenient_result and lenient_result.get("success"):
+                confidence = lenient_result.get("confidence", 0.0)
+                print(f"[CustomReasoningModule] Lenient solver found solution with confidence {confidence:.2f}", file=sys.stderr)
+                
+                # Apply meta-evaluator to repair and validate
+                response_text = self._apply_meta_evaluator(
+                    lenient_result.get("response", ""),
+                    puzzle_text,
+                    task_type="zebra_puzzle",
+                    params={"question_count": 5, "confidence": confidence}
+                )
+                
+                return {
+                    "success": True,
+                    "response": response_text,
+                    "text": response_text,
+                    "answer": response_text,
+                    "solver_used": "lenient_solver",
+                    "confidence": confidence,
+                    "position_map": lenient_result.get("position_map", {})
+                }
+            
+            # If lenient solver also fails, use basic fallback
+            print(f"[CustomReasoningModule] Lenient solver failed, using basic fallback", file=sys.stderr)
             return self._generate_zebra_fallback_answers(puzzle_text, colors, nationalities, drinks, pets)
         elif result == z3.unknown:
             print(f"[CustomReasoningModule] Z3 solver could not determine satisfiability (unknown, possibly timeout)", file=sys.stderr)
-            # Generate fallback answers based on puzzle structure
+            
+            # Save failed puzzle to file for analysis
+            self._save_failed_puzzle(puzzle_text, colors, nationalities, drinks, pets, detected_attributes, constraint_count, reason="unknown")
+            
+            # Try lenient solver as fallback
+            print(f"[CustomReasoningModule] Attempting lenient solver as fallback for UNKNOWN result...", file=sys.stderr)
+            lenient_result = self._solve_with_lenient_solver(
+                puzzle_text, colors, nationalities, drinks, pets,
+                detected_attributes, attribute_names, num_people
+            )
+            
+            if lenient_result and lenient_result.get("success"):
+                confidence = lenient_result.get("confidence", 0.0)
+                print(f"[CustomReasoningModule] Lenient solver found solution with confidence {confidence:.2f}", file=sys.stderr)
+                
+                # Apply meta-evaluator to repair and validate
+                response_text = self._apply_meta_evaluator(
+                    lenient_result.get("response", ""),
+                    puzzle_text,
+                    task_type="zebra_puzzle",
+                    params={"question_count": 5, "confidence": confidence}
+                )
+                
+                return {
+                    "success": True,
+                    "response": response_text,
+                    "text": response_text,
+                    "answer": response_text,
+                    "solver_used": "lenient_solver",
+                    "confidence": confidence,
+                    "position_map": lenient_result.get("position_map", {})
+                }
+            
+            # If lenient solver also fails, use basic fallback
+            print(f"[CustomReasoningModule] Lenient solver failed, using basic fallback", file=sys.stderr)
             return self._generate_zebra_fallback_answers(puzzle_text, colors, nationalities, drinks, pets)
         
         return None
@@ -1929,24 +3341,24 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                         else:
                             answer = position_map[house_num]["nationality"].title()
                 elif q_parsed["target_value"]:
-                        # "Who drinks X?" or "Who owns X?" - find by attribute value
-                        target_value = q_parsed["target_value"]
+                    # "Who drinks X?" or "Who owns X?" - find by attribute value
+                    target_value = q_parsed["target_value"]
+                    
+                    # Determine which attribute to search based on question context
+                    search_attr = None
+                    if "drink" in question_lower or "drinks" in question_lower:
+                        search_attr = "drink"
+                    elif "own" in question_lower or "owns" in question_lower or "pet" in question_lower:
+                        search_attr = "pet"
+                    elif "color" in question_lower:
+                        search_attr = "color"
+                    elif "nationality" in question_lower or "person" in question_lower:
+                        search_attr = "nationality"
                         
-                        # Determine which attribute to search based on question context
-                        search_attr = None
-                        if "drink" in question_lower or "drinks" in question_lower:
-                            search_attr = "drink"
-                        elif "own" in question_lower or "owns" in question_lower or "pet" in question_lower:
-                            search_attr = "pet"
-                        elif "color" in question_lower:
-                            search_attr = "color"
-                        elif "nationality" in question_lower or "person" in question_lower:
-                            search_attr = "nationality"
-                        
-                        # Try to find the person with matching attribute value
-                        if search_attr:
+                    # Try to find the person with matching attribute value
+                    if search_attr:
                         # First try standard attributes
-                            for pos, attrs in position_map.items():
+                        for pos, attrs in position_map.items():
                                 attr_value = attrs.get(search_attr, "")
                                 if str(attr_value).lower() == target_value.lower():
                                     # Found the person, get their nationality
@@ -1956,42 +3368,42 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                                     else:
                                         answer = str(attrs.get("nationality", nationalities[(pos - 1) % len(nationalities)] if nationalities else f"Person {pos}")).title()
                                     break
-                        
-                        # If not found, try all attributes
-                        if not answer:
-                            for pos, attrs in position_map.items():
-                                # Check all attributes (both detected and standard)
-                                for attr_key, attr_value in attrs.items():
+                    
+                    # If not found, try all attributes
+                    if not answer:
+                        for pos, attrs in position_map.items():
+                            # Check all attributes (both detected and standard)
+                            for attr_key, attr_value in attrs.items():
                                     if str(attr_value).lower() == target_value.lower():
                                         # Found the value, now get the person attribute
                                         if detected_attributes and attribute_names and len(attribute_names) > 1:
                                             person_attr = attribute_names[1] if len(attribute_names) > 1 else "nationality"
                                             answer = str(attrs.get(person_attr, attrs.get("nationality", nationalities[(pos - 1) % len(nationalities)] if nationalities else f"Person {pos}"))).title()
-                                    else:
+                                        else:
+                                            answer = str(attrs.get("nationality", nationalities[(pos - 1) % len(nationalities)] if nationalities else f"Person {pos}")).title()
+                                        break
+                            if answer:
+                                break
+                    
+                    # Fallback: try standard attributes with word boundary matching
+                    if not answer:
+                        for drink in drinks:
+                            if drink.lower() == target_value.lower() or target_value.lower() in drink.lower() or drink.lower() in target_value.lower():
+                                for pos, attrs in position_map.items():
+                                    if str(attrs.get("drink", "")).lower() == drink.lower():
                                         answer = str(attrs.get("nationality", nationalities[(pos - 1) % len(nationalities)] if nationalities else f"Person {pos}")).title()
-                                    break
+                                        break
                                 if answer:
                                     break
-                        
-                        # Fallback: try standard attributes with word boundary matching
-                        if not answer:
-                            for drink in drinks:
-                                if drink.lower() == target_value.lower() or target_value.lower() in drink.lower() or drink.lower() in target_value.lower():
-                                    for pos, attrs in position_map.items():
-                                        if str(attrs.get("drink", "")).lower() == drink.lower():
-                                            answer = str(attrs.get("nationality", nationalities[(pos - 1) % len(nationalities)] if nationalities else f"Person {pos}")).title()
-                                            break
-                                    if answer:
+                    if not answer:
+                        for pet in pets:
+                            if pet.lower() == target_value.lower() or target_value.lower() in pet.lower() or pet.lower() in target_value.lower():
+                                for pos, attrs in position_map.items():
+                                    if str(attrs.get("pet", "")).lower() == pet.lower():
+                                        answer = str(attrs.get("nationality", nationalities[(pos - 1) % len(nationalities)] if nationalities else f"Person {pos}")).title()
                                         break
-                        if not answer:
-                            for pet in pets:
-                                if pet.lower() == target_value.lower() or target_value.lower() in pet.lower() or pet.lower() in target_value.lower():
-                                    for pos, attrs in position_map.items():
-                                        if str(attrs.get("pet", "")).lower() == pet.lower():
-                                            answer = str(attrs.get("nationality", nationalities[(pos - 1) % len(nationalities)] if nationalities else f"Person {pos}")).title()
-                                            break
-                                    if answer:
-                                        break
+                                if answer:
+                                    break
                 else:
                     # No specific target - use first person as default
                     answer = str(position_map[1].get("nationality", nationalities[0] if nationalities else "Person 1")).title() if 1 in position_map else (nationalities[0] if nationalities else "Person 1")
@@ -4308,6 +5720,10 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
         Returns:
             Parsed grid array or None if parsing fails
         """
+        # Input validation
+        if not text or not isinstance(text, str):
+            return None
+        
         import re
         import json
         
@@ -4404,15 +5820,41 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
             examples: List of (input_grid, output_grid) pairs
             
         Returns:
-            Analysis with common patterns, transformations, conflicts
+            Dictionary with analysis results including transformations and patterns
+        
+        Raises:
+            ValueError: If examples is empty or invalid
         """
+        # Input validation
         if not examples:
             return {
-                "common_patterns": [],
                 "transformations": [],
-                "conflicts": [],
-                "consistency_score": 0.0
+                "common_patterns": [],
+                "consistency_score": 0.0,
+                "error": "No examples provided"
             }
+        if not isinstance(examples, list):
+            raise TypeError("examples must be a list")
+        
+        # Validate each example
+        valid_examples = []
+        for example in examples:
+            if not isinstance(example, (tuple, list)) or len(example) != 2:
+                continue
+            input_grid, output_grid = example
+            if self._validate_grid(input_grid) and self._validate_grid(output_grid):
+                valid_examples.append((input_grid, output_grid))
+        
+        if not valid_examples:
+            return {
+                "transformations": [],
+                "common_patterns": [],
+                "consistency_score": 0.0,
+                "error": "No valid examples found"
+            }
+        
+        # Use only valid examples
+        examples = valid_examples
         
         # Extract patterns from each example
         all_patterns = []
@@ -4900,11 +6342,30 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
         
         Returns:
             Dictionary with solution
+        
+        Raises:
+            ValueError: If required parameters are invalid
         """
+        # Input validation
+        if text is None:
+            text = ""
+        if not isinstance(text, str):
+            text = str(text)
+        if params is None:
+            params = {}
+        if not isinstance(params, dict):
+            raise TypeError("params must be a dictionary")
+        
         # Extract grids from params if provided
         input_grids = params.get("input_grids", [])
         output_grids = params.get("output_grids", [])
         test_input = params.get("test_input", None)
+        
+        # Validate grid types
+        if input_grids is not None and not isinstance(input_grids, list):
+            input_grids = []
+        if output_grids is not None and not isinstance(output_grids, list):
+            output_grids = []
         
         # If grids not provided, try to parse from text
         if not input_grids and not output_grids:
@@ -5625,7 +7086,15 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                     first_entity, (x, y) = list(assignments.items())[0]
                     answer = first_entity
                 else:
-                    answer = "1"  # Default numeric answer
+                    # No assignments available - return None to indicate failure
+                    # This will be handled by the calling code with proper fallback
+                    return {
+                        "success": False,
+                        "error": "Unable to determine answer from spatial reasoning - no entities found in grid",
+                        "response": "",
+                        "text": "",
+                        "answer": "",
+                    }
             
             # Normalize answer to match LiveBench format
             # LiveBench expects: single word/number, bolded, or boxed

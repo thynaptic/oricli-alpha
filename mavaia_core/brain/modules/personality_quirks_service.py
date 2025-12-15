@@ -1,6 +1,9 @@
 """
 Personality Quirks Service - Manages Mavaia's personality quirks, signature phrases, and response style
 Converted from Swift PersonalityQuirksService.swift
+
+DEPRECATED: This module is deprecated. Use universal_voice_engine instead.
+The personality-based system has been replaced with a universal voice that adapts contextually.
 """
 
 from typing import Any, Dict, List, Optional
@@ -27,10 +30,16 @@ class PersonalityQuirksServiceModule(BaseBrainModule):
 
     @property
     def metadata(self) -> ModuleMetadata:
+        import warnings
+        warnings.warn(
+            "personality_quirks_service module is deprecated. Use universal_voice_engine instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return ModuleMetadata(
             name="personality_quirks_service",
             version="1.0.0",
-            description="Manages Mavaia's personality quirks, signature phrases, and response style",
+            description="[DEPRECATED] Manages Mavaia's personality quirks, signature phrases, and response style. Use universal_voice_engine instead.",
             operations=[
                 "apply_quirks",
                 "adapt_personality",

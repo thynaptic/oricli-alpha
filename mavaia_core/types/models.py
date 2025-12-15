@@ -98,7 +98,7 @@ class ChatCompletionRequest(BaseModel):
     use_reasoning: Optional[bool] = Field(default=True, description="Use reasoning layer")
     
     # Tool calling support
-    tools: Optional[List[ToolDefinition]] = Field(default=None, description="Available tools for tool calling")
+    tools: Optional[List["ToolDefinition"]] = Field(default=None, description="Available tools for tool calling")
     tool_choice: Optional[str] = Field(default=None, description="Tool choice mode: 'auto', 'required', 'none', or tool name")
 
 

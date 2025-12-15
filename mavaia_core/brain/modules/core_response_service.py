@@ -54,6 +54,7 @@ class CoreResponseServiceModule(BaseBrainModule):
         self.safety_framework = None
         self.tool_calling_agent = None
         self.conversational_orchestrator = None
+        self.universal_voice_engine = None
         self._tools_registered = False
         self._safety_services_registered = False
         self._modules_loaded = False
@@ -94,6 +95,12 @@ class CoreResponseServiceModule(BaseBrainModule):
 
             # Load cognitive generator
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
+            
+            # Load universal voice engine for tone detection
+            try:
+                self.universal_voice_engine = ModuleRegistry.get_module("universal_voice_engine")
+            except Exception:
+                pass
             
             # Load tool registration
             self.tool_registration = ModuleRegistry.get_module("tool_registration_service")
@@ -174,6 +181,44 @@ class CoreResponseServiceModule(BaseBrainModule):
 
         return "\n\n".join(context_parts)
 
+    def _build_voice_context(
+        self,
+        input_text: str,
+        context: str = "",
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Detect tone from user input and build voice_context"""
+        if conversation_history is None:
+            conversation_history = []
+        
+        # Use universal_voice_engine to detect tone if available
+        if self.universal_voice_engine:
+            try:
+                tone_result = self.universal_voice_engine.execute(
+                    "detect_tone_cues",
+                    {
+                        "input_text": input_text,
+                        "conversation_history": conversation_history,
+                        "context": context,
+                    }
+                )
+                if tone_result.get("success"):
+                    return tone_result.get("voice_context", {})
+            except Exception:
+                pass
+        
+        # Default voice context (Mavaia base)
+        return {
+            "base_personality": "mavaia",
+            "tone": "neutral",
+            "formality_level": 0.5,
+            "technical_level": 0.3,
+            "empathy_level": 0.6,
+            "conversation_topic": "general",
+            "user_history": [],
+            "adaptation_confidence": 0.5,
+        }
+
     def _convert_conversation_history(self, messages: Optional[List[Dict[str, str]]]) -> List[Dict[str, str]]:
         """Convert ConversationMessage array to history format for cognitive generator"""
         if not messages:
@@ -226,6 +271,7 @@ class CoreResponseServiceModule(BaseBrainModule):
         """Generate a simple response"""
         input_text = params.get("input", "")
         context = params.get("context", "")
+        conversation_history = params.get("conversation_history", [])
 
         if not self.cognitive_generator:
             return {
@@ -234,11 +280,15 @@ class CoreResponseServiceModule(BaseBrainModule):
                 "text": "",
             }
 
+        # Detect tone and build voice_context
+        voice_context = self._build_voice_context(input_text, context, conversation_history)
+
         try:
             result = self.cognitive_generator.execute("generate_response", {
                 "input": input_text,
                 "context": context or "You are a helpful assistant.",
-                "persona": params.get("persona", "mavaia"),
+                "voice_context": voice_context,
+                "conversation_history": conversation_history,
             })
 
             return {
@@ -273,13 +323,16 @@ class CoreResponseServiceModule(BaseBrainModule):
         # Convert conversation messages to history format
         history = self._convert_conversation_history(conversation_messages)
 
+        # Detect tone and build voice_context
+        voice_context = self._build_voice_context(input_text, combined_context, history)
+
         # Use conversational orchestrator if available, otherwise fall back to cognitive generator
         if self.conversational_orchestrator:
             try:
                 result = self.conversational_orchestrator.execute("generate_conversational_response", {
                     "input": input_text,
                     "context": combined_context,
-                    "persona": params.get("persona", "mavaia"),
+                    "voice_context": voice_context,
                     "conversation_id": params.get("conversation_id"),
                     "external_history": history,
                 })
@@ -299,7 +352,7 @@ class CoreResponseServiceModule(BaseBrainModule):
         return self._generate_response({
             "input": input_text,
             "context": combined_context,
-            "persona": params.get("persona", "mavaia"),
+            "conversation_history": history,
         })
 
     def _generate_response_with_tools(self, params: Dict[str, Any]) -> Dict[str, Any]:

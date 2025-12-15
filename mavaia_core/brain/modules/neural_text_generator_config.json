@@ -1,0 +1,48 @@
+{
+  "model_type": "both",
+  "character_model": {
+    "hidden_size": 256,
+    "num_layers": 2,
+    "embedding_size": 128,
+    "dropout": 0.2
+  },
+  "word_model": {
+    "hidden_size": 512,
+    "num_layers": 2,
+    "embedding_size": 256,
+    "dropout": 0.2
+  },
+  "training": {
+    "batch_size": 64,
+    "sequence_length": 100,
+    "learning_rate": 0.001,
+    "epochs": 10,
+    "validation_split": 0.2,
+    "early_stopping_patience": 3
+  },
+  "generation": {
+    "temperature": 0.7,
+    "max_length": 500,
+    "top_k": 50,
+    "top_p": 0.9,
+    "default_model": "character"
+  },
+  "data": {
+    "gutenberg_book_ids": [84, 1342, 11],
+    "max_books": 3,
+    "categories": ["fiction", "classic"],
+    "max_text_size": null,
+    "data_percentage": 1.0,
+    "preprocessing": {
+      "lowercase": true,
+      "remove_special": true
+    }
+  },
+  "training_limits": {
+    "train_for_minutes": null,
+    "train_for_hours": null,
+    "max_text_size": null,
+    "data_percentage": 1.0
+  }
+}
+

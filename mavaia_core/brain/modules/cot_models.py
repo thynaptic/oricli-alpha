@@ -271,3 +271,38 @@ class ReflectionIssue:
             suggestion=data.get("suggestion"),
         )
 
+
+@dataclass
+class CoTStageResult:
+    """Result from a CoT reasoning stage (decomposition, reasoning, or synthesis)"""
+
+    stage_name: str  # "decomposition", "reasoning", or "synthesis"
+    output: Any  # Stage-specific output (dict, list, str)
+    execution_time: float
+    success: bool
+    error: str | None = None
+    metadata: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for serialization"""
+        return {
+            "stage_name": self.stage_name,
+            "output": self.output,
+            "execution_time": self.execution_time,
+            "success": self.success,
+            "error": self.error,
+            "metadata": self.metadata or {},
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CoTStageResult":
+        """Create from dictionary"""
+        return cls(
+            stage_name=data["stage_name"],
+            output=data["output"],
+            execution_time=data["execution_time"],
+            success=data["success"],
+            error=data.get("error"),
+            metadata=data.get("metadata"),
+        )
+

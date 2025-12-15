@@ -1119,7 +1119,14 @@ class CustomReasoningModule(BaseBrainModule):
             
             # For other questions, provide a more thoughtful response
             # Use the reasoning process to inform the answer
-            return f"Based on {reasoning_steps} steps of reasoning, {original_text} The analysis suggests a comprehensive answer considering multiple factors."
+            # Don't return meta-reasoning - return the actual reasoning content
+            # If we have actual reasoning content, use it; otherwise return empty
+            # to let other modules handle it
+            if original_text and len(original_text.strip()) > 50:
+                return original_text.strip()
+            else:
+                # Return empty to prevent meta-reasoning
+                return ""
         else:
             # Not a question - provide processing summary
             return f"After {reasoning_steps} steps of reasoning, I processed: {original_text[:200]}"

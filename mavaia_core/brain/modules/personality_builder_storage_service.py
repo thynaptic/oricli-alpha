@@ -2,6 +2,9 @@
 Personality Builder Storage Service
 Storage service for personality builder plugins and templates
 Converted from Swift PersonalityBuilderStorageService.swift
+
+DEPRECATED: This module is deprecated. Use universal_voice_engine instead.
+The personality-based system has been replaced with a universal voice that adapts contextually.
 """
 
 from typing import Any, Dict, List, Optional
@@ -44,10 +47,16 @@ class PersonalityBuilderStorageServiceModule(BaseBrainModule):
 
     @property
     def metadata(self) -> ModuleMetadata:
+        import warnings
+        warnings.warn(
+            "personality_builder_storage_service module is deprecated. Use universal_voice_engine instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return ModuleMetadata(
             name="personality_builder_storage_service",
             version="1.0.0",
-            description="Storage service for personality builder plugins and templates",
+            description="[DEPRECATED] Storage service for personality builder plugins and templates. Use universal_voice_engine instead.",
             operations=[
                 "load_plugins",
                 "save_plugins",

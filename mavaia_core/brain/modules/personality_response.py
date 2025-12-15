@@ -2,6 +2,9 @@
 Personality Response Module - Generate personality-specific responses using example-based selection
 Plug-and-play module that generates responses in each Mavaia personality's voice
 No LLM dependencies - uses example-based selection and template generation
+
+DEPRECATED: This module is deprecated. Use universal_voice_engine and text_generation_engine instead.
+The personality-based system has been replaced with a universal voice that adapts contextually.
 """
 
 from typing import Any
@@ -26,10 +29,16 @@ class PersonalityResponseModule(BaseBrainModule):
 
     @property
     def metadata(self) -> ModuleMetadata:
+        import warnings
+        warnings.warn(
+            "personality_response module is deprecated. Use universal_voice_engine and text_generation_engine instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return ModuleMetadata(
             name="personality_response",
             version="2.0.0",
-            description="Generate personality-specific responses using example-based selection (no LLM dependencies)",
+            description="[DEPRECATED] Generate personality-specific responses using example-based selection (no LLM dependencies). Use universal_voice_engine instead.",
             operations=["generate", "generate_variations"],
             dependencies=[],
             model_required=False,

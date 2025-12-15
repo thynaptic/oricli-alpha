@@ -2,6 +2,9 @@
 Personality Builder Service
 Service for converting personality builder data to training configuration
 Converted from Swift PersonalityBuilderService.swift
+
+DEPRECATED: This module is deprecated. Use universal_voice_engine instead.
+The personality-based system has been replaced with a universal voice that adapts contextually.
 """
 
 from typing import Any, Dict, List, Optional
@@ -31,10 +34,16 @@ class PersonalityBuilderServiceModule(BaseBrainModule):
 
     @property
     def metadata(self) -> ModuleMetadata:
+        import warnings
+        warnings.warn(
+            "personality_builder_service module is deprecated. Use universal_voice_engine instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return ModuleMetadata(
             name="personality_builder_service",
             version="1.0.0",
-            description="Service for converting personality builder data to training configuration",
+            description="[DEPRECATED] Service for converting personality builder data to training configuration. Use universal_voice_engine instead.",
             operations=[
                 "validate_personality",
                 "build_personality",

@@ -272,11 +272,26 @@ class WebSearchModule(BaseBrainModule):
             
             with DDGS() as ddgs:
                 # Perform text search
-                results = list(ddgs.text(
-                    query,
-                    max_results=max_results * 2,  # Get more results for filtering
-                    **search_params
-                ))
+                # Try with different parameters if first attempt fails
+                try:
+                    results = list(ddgs.text(
+                        query,
+                        max_results=max_results * 2,  # Get more results for filtering
+                        **search_params
+                    ))
+                except Exception as e:
+                    # If search fails, try without extra parameters
+                    try:
+                        results = list(ddgs.text(query, max_results=max_results * 2))
+                    except Exception:
+                        # If still fails, return empty results with error info
+                        return {
+                            "success": False,
+                            "error": f"search_failed: {str(e)}",
+                            "error_code": "search_failed",
+                            "results": [],
+                            "count": 0,
+                        }
             
             # Format results
             formatted_results = []

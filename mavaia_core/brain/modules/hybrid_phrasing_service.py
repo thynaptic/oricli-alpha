@@ -39,7 +39,7 @@ class HybridPhrasingServiceModule(BaseBrainModule):
         self.markov_builder = None
         self.python_brain_service = None
         self.embedding_cache = None
-        self.config_manager = None
+        self.universal_voice_engine = None
         self._modules_loaded = False
 
     @property
@@ -67,12 +67,16 @@ class HybridPhrasingServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.markov_builder = ModuleRegistry.get_module("markov_chain_builder")
             self.python_brain_service = ModuleRegistry.get_module("python_brain_service")
             self.embedding_cache = ModuleRegistry.get_module("phrase_embedding_cache_service")
-            self.config_manager = ModuleRegistry.get_module("hybrid_phrasing_config")
+            
+            try:
+                self.universal_voice_engine = ModuleRegistry.get_module("universal_voice_engine")
+            except Exception:
+                pass
 
             self._modules_loaded = True
         except Exception as e:
@@ -95,35 +99,33 @@ class HybridPhrasingServiceModule(BaseBrainModule):
         """Generate hybrid phrase blending Markov chains and phrase embeddings"""
         context = params.get("context", "")
         keyword = params.get("keyword")
-        personality_id = params.get("personality_id")
+        voice_context = params.get("voice_context", {})
         max_length = params.get("max_length", 15)
 
-        if not personality_id:
-            return {
-                "success": False,
-                "error": "Personality ID is required",
-            }
+        # Get configuration from voice_context or use defaults
+        # Voice context can influence candidate counts and thresholds
+        formality = voice_context.get("formality_level", 0.5)
+        technical = voice_context.get("technical_level", 0.3)
+        
+        # Adjust counts based on voice context
+        # More formal/technical = more candidates for precision
+        base_markov_count = 5
+        base_embedding_count = 5
+        if formality > 0.7 or technical > 0.6:
+            base_markov_count = 7
+            base_embedding_count = 7
+        
+        markov_count = params.get("markov_count", base_markov_count)
+        embedding_count = params.get("embedding_count", base_embedding_count)
+        similarity_threshold = params.get("similarity_threshold", 0.7)
 
-        # Get configuration for this personality
-        config = {}
-        if self.config_manager:
-            config_result = self.config_manager.execute(
-                "get_configuration",
-                {"personality_id": personality_id}
-            )
-            config = config_result.get("result", {})
-
-        markov_count = config.get("markov_candidate_count", 5)
-        embedding_count = config.get("embedding_candidate_count", 5)
-        similarity_threshold = config.get("similarity_threshold", 0.7)
-
-        # Generate candidates
+        # Generate candidates (no personality_id needed)
         markov_candidates = self._generate_markov_candidates(
-            context, keyword, personality_id, markov_count, max_length
+            context, keyword, voice_context, markov_count, max_length
         )
 
         embedding_candidates = self._generate_embedding_candidates(
-            context, keyword, personality_id, embedding_count, similarity_threshold
+            context, keyword, voice_context, embedding_count, similarity_threshold
         )
 
         # Combine all candidates
@@ -137,7 +139,7 @@ class HybridPhrasingServiceModule(BaseBrainModule):
 
         # Score all candidates
         scored_candidates = self._score_candidates_internal(
-            all_candidates, context, personality_id
+            all_candidates, context, voice_context
         )
 
         # Rank candidates by hybrid score
@@ -167,7 +169,7 @@ class HybridPhrasingServiceModule(BaseBrainModule):
         """Score phrase candidates"""
         candidates_data = params.get("candidates", [])
         context = params.get("context", "")
-        personality_id = params.get("personality_id", "")
+        voice_context = params.get("voice_context", {})
 
         candidates = [
             PhraseCandidate(
@@ -180,7 +182,7 @@ class HybridPhrasingServiceModule(BaseBrainModule):
             for c in candidates_data
         ]
 
-        scored = self._score_candidates_internal(candidates, context, personality_id)
+        scored = self._score_candidates_internal(candidates, context, voice_context)
 
         return {
             "success": True,
@@ -202,7 +204,7 @@ class HybridPhrasingServiceModule(BaseBrainModule):
         self,
         context: str,
         keyword: Optional[str],
-        personality_id: str,
+        voice_context: Dict[str, Any],
         count: int,
         max_length: int,
     ) -> List[PhraseCandidate]:
@@ -214,37 +216,47 @@ class HybridPhrasingServiceModule(BaseBrainModule):
 
         for _ in range(count):
             try:
+                # Build params without personality_id
                 if keyword:
+                    markov_params = {
+                        "keyword": keyword,
+                        "length": max_length,
+                    }
+                    # Add voice_context if markov_builder supports it
+                    if voice_context:
+                        markov_params["voice_context"] = voice_context
+                    
                     result = self.markov_builder.execute(
                         "generate_phrase",
-                        {
-                            "keyword": keyword,
-                            "length": max_length,
-                            "personality_id": personality_id,
-                        }
+                        markov_params
                     )
                 else:
                     # Complete phrase from context
                     context_words = context.split()
                     if context_words:
                         start_words = " ".join(context_words[-3:])
+                        markov_params = {
+                            "start": start_words,
+                            "max_length": max_length,
+                        }
+                        # Add voice_context if markov_builder supports it
+                        if voice_context:
+                            markov_params["voice_context"] = voice_context
+                        
                         result = self.markov_builder.execute(
                             "complete_phrase",
-                            {
-                                "start": start_words,
-                                "max_length": max_length,
-                                "personality_id": personality_id,
-                            }
+                            markov_params
                         )
                     else:
                         continue
 
-                phrase = result.get("result", {}).get("phrase")
+                phrase = result.get("result", {}).get("phrase") or result.get("phrase")
                 if phrase:
+                    probability = result.get("result", {}).get("probability") or result.get("probability", 0.5)
                     candidates.append(
                         PhraseCandidate(
                             text=phrase,
-                            markov_probability=result.get("result", {}).get("probability", 0.5),
+                            markov_probability=probability,
                             semantic_score=0.0,  # Will be calculated later
                             hybrid_score=0.0,  # Will be calculated later
                             source="markov",
@@ -259,7 +271,7 @@ class HybridPhrasingServiceModule(BaseBrainModule):
         self,
         context: str,
         keyword: Optional[str],
-        personality_id: str,
+        voice_context: Dict[str, Any],
         count: int,
         similarity_threshold: float,
     ) -> List[PhraseCandidate]:
@@ -270,23 +282,36 @@ class HybridPhrasingServiceModule(BaseBrainModule):
             return candidates
 
         try:
+            # Build params without personality_id
+            embedding_params = {
+                "query": keyword or context,
+                "count": count,
+                "similarity_threshold": similarity_threshold,
+            }
+            # Add voice_context if embedding_cache supports it
+            if voice_context:
+                embedding_params["voice_context"] = voice_context
+            
             result = self.embedding_cache.execute(
                 "find_similar_phrases",
-                {
-                    "query": keyword or context,
-                    "personality_id": personality_id,
-                    "count": count,
-                    "similarity_threshold": similarity_threshold,
-                }
+                embedding_params
             )
 
-            similar_phrases = result.get("result", {}).get("phrases", [])
+            similar_phrases = result.get("result", {}).get("phrases", []) or result.get("phrases", [])
             for phrase_data in similar_phrases:
+                # Handle both dict and direct similarity value
+                if isinstance(phrase_data, dict):
+                    text = phrase_data.get("text", "")
+                    similarity = phrase_data.get("similarity", 0.0)
+                else:
+                    text = str(phrase_data)
+                    similarity = 0.5  # Default similarity
+                
                 candidates.append(
                     PhraseCandidate(
-                        text=phrase_data.get("text", ""),
+                        text=text,
                         markov_probability=0.0,
-                        semantic_score=phrase_data.get("similarity", 0.0),
+                        semantic_score=similarity,
                         hybrid_score=0.0,  # Will be calculated later
                         source="embedding",
                     )
@@ -300,17 +325,28 @@ class HybridPhrasingServiceModule(BaseBrainModule):
         self,
         candidates: List[PhraseCandidate],
         context: str,
-        personality_id: str,
+        voice_context: Dict[str, Any],
     ) -> List[PhraseCandidate]:
         """Score candidates with multi-level semantic scoring"""
         scored = []
 
+        # Adjust weights based on voice context if available
+        markov_weight = 0.4
+        semantic_weight = 0.6
+        
+        if voice_context:
+            # More technical/formal = slightly favor semantic (precision)
+            technical = voice_context.get("technical_level", 0.3)
+            formality = voice_context.get("formality_level", 0.5)
+            if technical > 0.6 or formality > 0.7:
+                markov_weight = 0.35
+                semantic_weight = 0.65
+
         for candidate in candidates:
             # Calculate hybrid score (weighted combination)
-            # Default weights: 0.4 for markov, 0.6 for semantic
             hybrid_score = (
-                0.4 * candidate.markov_probability +
-                0.6 * candidate.semantic_score
+                markov_weight * candidate.markov_probability +
+                semantic_weight * candidate.semantic_score
             )
 
             scored.append(

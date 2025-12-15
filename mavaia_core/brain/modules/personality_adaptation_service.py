@@ -1,6 +1,9 @@
 """
 Personality Adaptation Service - Service for tracking and adapting personality based on user communication patterns
 Converted from Swift PersonalityAdaptationService.swift
+
+DEPRECATED: This module is deprecated. Use universal_voice_engine instead.
+The personality-based system has been replaced with a universal voice that adapts contextually.
 """
 
 from typing import Any, Dict, List, Optional
@@ -25,10 +28,16 @@ class PersonalityAdaptationServiceModule(BaseBrainModule):
 
     @property
     def metadata(self) -> ModuleMetadata:
+        import warnings
+        warnings.warn(
+            "personality_adaptation_service module is deprecated. Use universal_voice_engine instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return ModuleMetadata(
             name="personality_adaptation_service",
             version="1.0.0",
-            description="Service for tracking and adapting personality based on user communication patterns",
+            description="[DEPRECATED] Service for tracking and adapting personality based on user communication patterns. Use universal_voice_engine instead.",
             operations=[
                 "adapt_to_user",
                 "update_personality",

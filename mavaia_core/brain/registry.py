@@ -243,7 +243,9 @@ class ModuleRegistry:
                 try:
                     # Increase timeout for modules that may have heavy imports
                     # Some modules like python_code_embeddings import transformers/jax which can take time
-                    timeout = 10.0 if 'embedding' in module_file.name.lower() or 'model' in module_file.name.lower() else 5.0
+                    # custom_reasoning_networks is large and may need more time
+                    heavy_import_modules = ['embedding', 'model', 'custom_reasoning', 'advanced_reasoning']
+                    timeout = 15.0 if any(keyword in module_file.name.lower() for keyword in heavy_import_modules) else 5.0
                     if not cls._import_with_timeout(module_file, spec, module, timeout=timeout):
                         # Always show errors, not just when verbose
                         print(

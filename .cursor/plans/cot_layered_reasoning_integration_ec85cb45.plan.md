@@ -4,31 +4,31 @@ overview: Integrate IBM-style layered reasoning stages (decomposition → reason
 todos:
   - id: add_stage_models
     content: Add CoTStageResult dataclass to cot_models.py for tracking stage outputs
-    status: in_progress
+    status: completed
   - id: add_decomposition_stage
     content: Implement _decomposition_stage method in chain_of_thought.py that integrates DecompositionModule
-    status: pending
+    status: completed
   - id: add_reasoning_stage
     content: Implement _reasoning_stage method in chain_of_thought.py that integrates ReasoningModule
-    status: pending
+    status: completed
   - id: enhance_synthesis_stage
     content: Enhance _synthesis_stage method to integrate SynthesisAgent for reasoning synthesis
-    status: pending
+    status: completed
   - id: refactor_execute_cot
     content: Refactor _execute_cot to use explicit stage orchestration (decomposition → reasoning → synthesis)
-    status: pending
+    status: completed
   - id: add_stage_initialization
     content: Add lazy loading of DecompositionModule, ReasoningModule, and SynthesisAgent in initialize() method
-    status: pending
+    status: completed
   - id: add_stage_metrics
     content: Add stage-level metrics collection (stage.decomposition, stage.reasoning, stage.synthesis) using record_operation
-    status: pending
+    status: completed
   - id: enhance_complexity_gating
     content: Enhance complexity-based gating logic to skip full CoT for easy queries (complexity score < threshold)
-    status: pending
+    status: completed
   - id: validate_integration
     content: Test stage integration with fallbacks, backward compatibility, metrics, and gating
-    status: pending
+    status: completed
 ---
 
 # CoT Layered Reasoning Stages Integration
