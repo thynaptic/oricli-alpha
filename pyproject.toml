@@ -46,12 +46,19 @@ dev = [
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.0.0",
+    # Used by MemoryBridgeService tests / local development
+    "cryptography>=41.0.0",
+    "lmdb>=1.4.1",
 ]
 search = [
     "duckduckgo-search>=4.0.0",
 ]
 sandbox = [
     "docker>=6.0.0",
+]
+memory = [
+    "cryptography>=41.0.0",
+    "lmdb>=1.4.1",
 ]
 data = [
     "numpy>=1.23.0",
