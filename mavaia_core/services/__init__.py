@@ -10,6 +10,15 @@ from mavaia_core.services.web_fetch_service import (
     ContentExtractor,
     CitationGenerator,
 )
+from mavaia_core.services.memory_bridge_service import (
+    MemoryBridgeService,
+    MemoryBridgeConfig,
+    MemoryCategory,
+    MemoryBridgeError,
+    MemoryBridgeDependencyError,
+    MemoryBridgeConfigError,
+    MemoryBridgeOperationError,
+)
 
 __all__ = [
     "ToolRegistry",
@@ -19,5 +28,12 @@ __all__ = [
     "URLValidator",
     "ContentExtractor",
     "CitationGenerator",
+    "MemoryBridgeService",
+    "MemoryBridgeConfig",
+    "MemoryCategory",
+    "MemoryBridgeError",
+    "MemoryBridgeDependencyError",
+    "MemoryBridgeConfigError",
+    "MemoryBridgeOperationError",
 ]
 
