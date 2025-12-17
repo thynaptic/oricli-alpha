@@ -1207,17 +1207,84 @@ class HuggingFaceSource(BaseDataSource):
             return []
     
     def _load_dataset_text(self, dataset_name: str, cache_file: Path, max_text_size: Optional[int] = None) -> Optional[str]:
-        """Load text from a HuggingFace dataset"""
+        """
+        Load text from a HuggingFace dataset
+        
+        Supports full dataset paths like "Anthropic/AnthropicInterviewer" or simple names like "wikitext".
+        Automatically handles different dataset configurations and splits.
+        
+        Args:
+            dataset_name: Dataset identifier (e.g., "wikitext", "Anthropic/AnthropicInterviewer")
+            cache_file: Path to cache file for storing loaded text
+            max_text_size: Maximum text size to load (None = no limit)
+        
+        Returns:
+            Combined text from dataset or None if loading failed
+        """
         if not HUGGINGFACE_AVAILABLE:
             return None
         
         try:
-            # Try to load dataset
-            # Common text columns: text, content, article, sentence, etc.
-            dataset = load_dataset(dataset_name, split="train", streaming=False)
+            # Try to load dataset - handle different formats
+            # Some datasets require config names, others don't
+            dataset = None
+            error_msg = None
+            
+            # First, try loading with "train" split (most common)
+            try:
+                dataset = load_dataset(dataset_name, split="train", streaming=False)
+            except Exception as e1:
+                error_msg = str(e1)
+                # If that fails, try loading without split (gets all splits)
+                try:
+                    dataset_dict = load_dataset(dataset_name, streaming=False)
+                    # Try to find train split
+                    if "train" in dataset_dict:
+                        dataset = dataset_dict["train"]
+                    elif len(dataset_dict) > 0:
+                        # Use first available split
+                        first_split = list(dataset_dict.keys())[0]
+                        dataset = dataset_dict[first_split]
+                        print(
+                            f"[HuggingFaceSource] Using split '{first_split}' for dataset {dataset_name}",
+                            file=sys.stderr,
+                        )
+                    else:
+                        raise ValueError(f"No splits available in dataset {dataset_name}")
+                except Exception as e2:
+                    # If that also fails, try with default config
+                    try:
+                        dataset_dict = load_dataset(dataset_name, split="train", streaming=False)
+                        dataset = dataset_dict
+                    except Exception as e3:
+                        # Last attempt: try loading with trust_remote_code for custom datasets
+                        try:
+                            dataset = load_dataset(
+                                dataset_name,
+                                split="train",
+                                streaming=False,
+                                trust_remote_code=True,
+                            )
+                        except Exception as e4:
+                            print(
+                                f"[HuggingFaceSource] Failed to load dataset {dataset_name}: {error_msg}",
+                                file=sys.stderr,
+                            )
+                            print(
+                                f"[HuggingFaceSource] Attempted: default split, all splits, and trust_remote_code=True",
+                                file=sys.stderr,
+                            )
+                            return None
+            
+            if dataset is None:
+                return None
             
             all_text = []
-            text_columns = ["text", "content", "article", "sentence", "body", "passage"]
+            text_columns = [
+                "text", "content", "article", "sentence", "body", "passage",
+                "input", "output", "prompt", "response", "message", "messages",
+                "conversation", "dialogue", "transcript", "transcription"
+            ]
             
             # Find text column
             text_column = None
@@ -1229,27 +1296,98 @@ class HuggingFaceSource(BaseDataSource):
             if not text_column:
                 # Use first column that looks like text
                 for col in dataset.column_names:
-                    if dataset[0][col] and isinstance(dataset[0][col], str) and len(dataset[0][col]) > 10:
-                        text_column = col
-                        break
+                    if len(dataset) > 0:
+                        sample_value = dataset[0].get(col)
+                        if sample_value and isinstance(sample_value, str) and len(sample_value) > 10:
+                            text_column = col
+                            break
             
             if not text_column:
-                # Fallback: concatenate all string columns
-                text_parts = []
+                # Fallback: try to find any string column
                 for col in dataset.column_names:
-                    if isinstance(dataset[0][col], str):
-                        text_parts.append(col)
-                if text_parts:
-                    text_column = text_parts[0]
-                else:
-                    return None
+                    if len(dataset) > 0:
+                        sample_value = dataset[0].get(col)
+                        if isinstance(sample_value, str):
+                            text_column = col
+                            break
+            
+            if not text_column:
+                # Last resort: check if dataset has nested structures (like conversations)
+                # Try to extract text from nested fields
+                if len(dataset) > 0:
+                    first_example = dataset[0]
+                    # Check for common nested structures
+                    for col in dataset.column_names:
+                        value = first_example.get(col)
+                        if isinstance(value, list) and len(value) > 0:
+                            # Might be a list of messages/conversations
+                            if isinstance(value[0], dict):
+                                # Try to extract text from dict items
+                                for item in value:
+                                    if isinstance(item, dict):
+                                        # Look for text-like keys
+                                        for key in ["text", "content", "message", "role", "value"]:
+                                            if key in item and isinstance(item[key], str):
+                                                # Found nested text - we'll handle this specially
+                                                text_column = col
+                                                break
+                                        if text_column:
+                                            break
+                        if text_column:
+                            break
+            
+            if not text_column:
+                print(
+                    f"[HuggingFaceSource] Could not find text column in dataset {dataset_name}. "
+                    f"Available columns: {dataset.column_names}",
+                    file=sys.stderr,
+                )
+                return None
+            
+            print(
+                f"[HuggingFaceSource] Using column '{text_column}' for dataset {dataset_name}",
+                file=sys.stderr,
+            )
             
             # Extract text from dataset
-            for example in dataset:
-                if text_column in example and example[text_column]:
-                    text = str(example[text_column]).strip()
-                    if text:
-                        all_text.append(text)
+            for idx, example in enumerate(dataset):
+                try:
+                    if text_column in example:
+                        value = example[text_column]
+                        
+                        # Handle different value types
+                        if isinstance(value, str):
+                            text = value.strip()
+                            if text:
+                                all_text.append(text)
+                        elif isinstance(value, list):
+                            # Handle list of strings or list of dicts
+                            for item in value:
+                                if isinstance(item, str):
+                                    text = item.strip()
+                                    if text:
+                                        all_text.append(text)
+                                elif isinstance(item, dict):
+                                    # Extract text from dict (e.g., conversation messages)
+                                    for key in ["text", "content", "message", "value"]:
+                                        if key in item and isinstance(item[key], str):
+                                            text = item[key].strip()
+                                            if text:
+                                                all_text.append(text)
+                                            break
+                    else:
+                        # Try to extract from nested structure
+                        # This handles cases where the column contains nested data
+                        pass
+                
+                except Exception as e:
+                    # Skip problematic examples but continue
+                    if idx < 5:  # Only log first few errors to avoid spam
+                        print(
+                            f"[HuggingFaceSource] Warning: Skipping example {idx} in {dataset_name}: {e}",
+                            file=sys.stderr,
+                        )
+                    continue
                 
                 # Limit total text size
                 if max_text_size:
@@ -1257,11 +1395,29 @@ class HuggingFaceSource(BaseDataSource):
                     if current_size >= max_text_size:
                         break
             
+            if not all_text:
+                print(
+                    f"[HuggingFaceSource] No text extracted from dataset {dataset_name}",
+                    file=sys.stderr,
+                )
+                return None
+            
             combined_text = "\n\n".join(all_text)
             
             # Save to cache
-            with open(cache_file, "w", encoding="utf-8") as f:
-                f.write(combined_text)
+            try:
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    f.write(combined_text)
+            except Exception as e:
+                print(
+                    f"[HuggingFaceSource] Warning: Could not save cache for {dataset_name}: {e}",
+                    file=sys.stderr,
+                )
+            
+            print(
+                f"[HuggingFaceSource] Loaded {len(all_text)} examples ({len(combined_text):,} characters) from {dataset_name}",
+                file=sys.stderr,
+            )
             
             return combined_text
             
@@ -1270,6 +1426,14 @@ class HuggingFaceSource(BaseDataSource):
                 f"[HuggingFaceSource] Failed to load dataset {dataset_name}: {e}",
                 file=sys.stderr,
             )
+            import traceback
+            if "not found" in str(e).lower() or "does not exist" in str(e).lower():
+                print(
+                    f"[HuggingFaceSource] Hint: Make sure the dataset name is correct. "
+                    f"For datasets with organization (e.g., 'Anthropic/AnthropicInterviewer'), "
+                    f"use the full path: 'organization/dataset_name'",
+                    file=sys.stderr,
+                )
             return None
     
     def load_data(
@@ -1301,11 +1465,22 @@ class HuggingFaceSource(BaseDataSource):
         
         # If specific dataset names provided, use those (takes precedence over search)
         if book_ids:
+            print(
+                f"[HuggingFaceSource] Loading {len(book_ids[:max_books])} specified dataset(s)...",
+                file=sys.stderr,
+            )
             for dataset_name in book_ids[:max_books]:
-                # Clean dataset name (remove org/ if present, handle full paths)
+                # Clean dataset name - preserve full paths like "Anthropic/AnthropicInterviewer"
                 dataset_id = str(dataset_name).strip()
                 
-                cache_file = cache_dir / f"{dataset_id.replace('/', '_')}.txt"
+                # Create safe cache filename (replace / with _ but keep original for loading)
+                safe_filename = dataset_id.replace('/', '_').replace('\\', '_')
+                cache_file = cache_dir / f"{safe_filename}.txt"
+                
+                print(
+                    f"[HuggingFaceSource] Loading dataset: {dataset_id}",
+                    file=sys.stderr,
+                )
                 
                 # Try cache first
                 if cache_file.exists():
@@ -1314,14 +1489,23 @@ class HuggingFaceSource(BaseDataSource):
                             text = f.read()
                             if text:
                                 all_text.append(text)
+                                print(
+                                    f"[HuggingFaceSource] ✓ Loaded {dataset_id} from cache ({len(text):,} characters)",
+                                    file=sys.stderr,
+                                )
                                 continue
                     except Exception:
                         pass
                 
-                # Load dataset
+                # Load dataset from HuggingFace Hub
                 text = self._load_dataset_text(dataset_id, cache_file, max_text_size)
                 if text:
                     all_text.append(text)
+                else:
+                    print(
+                        f"[HuggingFaceSource] ✗ Failed to load dataset {dataset_id}",
+                        file=sys.stderr,
+                    )
         else:
             # Search for datasets
             dataset_names = []

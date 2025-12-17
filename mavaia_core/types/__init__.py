@@ -1,24 +1,6 @@
 """
-Mavaia Core Types - Request/response models
+Mavaia Core Types - Namespace package initializer.
+Avoid importing heavy models at package import time.
 """
 
-from mavaia_core.types.models import (
-    ChatCompletionRequest,
-    ChatCompletionResponse,
-    ChatMessage,
-    EmbeddingRequest,
-    EmbeddingResponse,
-    ModelInfo,
-    ModelsListResponse,
-)
-
-__all__ = [
-    "ChatCompletionRequest",
-    "ChatCompletionResponse",
-    "ChatMessage",
-    "EmbeddingRequest",
-    "EmbeddingResponse",
-    "ModelInfo",
-    "ModelsListResponse",
-]
-
+__all__ = []

@@ -1,0 +1,23 @@
+# GPT-Neo Transformer Training Profile
+# Fine-tune GPT-Neo model on custom data sources
+description: "Fine-tune GPT-Neo transformer model on custom data sources"
+model_type: transformer
+source: gutenberg
+transformer_config:
+  model_name: EleutherAI/gpt-neo-125M
+  tokenizer_name: null
+  max_length: 2048
+  batch_size: 4
+  gradient_accumulation_steps: 2
+  learning_rate: 3e-5
+  warmup_steps: 200
+  save_steps: 500
+  eval_steps: 500
+  logging_steps: 100
+  fp16: true
+  use_cache: true
+epochs: 2
+max_books: 2
+max_text_size: 1000000
+data_percentage: 1.0
+

@@ -1,0 +1,30 @@
+# Comprehensive Transformer Training Profile
+# Fine-tune transformer model on multiple data sources
+description: "Fine-tune transformer model on multiple data sources for comprehensive training"
+model_type: transformer
+source:
+  - gutenberg
+  - wikipedia
+  - openlibrary
+transformer_config:
+  model_name: gpt2
+  tokenizer_name: null
+  max_length: 1024
+  batch_size: 8
+  gradient_accumulation_steps: 1
+  learning_rate: 5e-5
+  warmup_steps: 100
+  save_steps: 500
+  eval_steps: 500
+  logging_steps: 100
+  fp16: false
+  use_cache: true
+epochs: 5
+max_books: 5
+max_text_size: 1000000
+data_percentage: 0.8
+categories:
+  - fiction
+  - non_fiction
+  - technical
+

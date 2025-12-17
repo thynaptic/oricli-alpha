@@ -1,0 +1,23 @@
+# All Models Training Profile
+# Train character, word, and transformer models together
+description: "Train character-level, word-level, and transformer models together"
+model_type: both
+source: gutenberg
+transformer_config:
+  model_name: gpt2
+  tokenizer_name: null
+  max_length: 1024
+  batch_size: 8
+  gradient_accumulation_steps: 1
+  learning_rate: 5e-5
+  warmup_steps: 100
+  save_steps: 500
+  eval_steps: 500
+  logging_steps: 100
+  fp16: false
+  use_cache: true
+epochs: 3
+max_books: 3
+max_text_size: 500000
+data_percentage: 1.0
+

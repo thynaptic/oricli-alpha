@@ -1,0 +1,17 @@
+# Training selection based on comics
+# Created via interactive profile creator
+description: Training selection based on comics
+source:
+- huggingface
+- openlibrary
+categories:
+- fiction
+- drama
+- adventure
+- mystery
+model_type: transformer
+epochs: 10
+max_books: 5
+max_text_size: 120000
+data_percentage: 1.0
+search: comic OR comics OR comic-book
