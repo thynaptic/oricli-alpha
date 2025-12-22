@@ -5,17 +5,17 @@ Converted from Swift ShellSandboxService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import os
 import subprocess
 import stat
 from pathlib import Path
 from datetime import datetime
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 
 class SandboxProcessInfo:
@@ -61,15 +61,11 @@ class FileMetadata:
         }
 
 
-class ShellSandboxError(Exception):
-    """Shell sandbox error"""
-    pass
-
-
 class ShellSandboxServiceModule(BaseBrainModule):
     """Safe shell command execution service"""
 
     def __init__(self):
+        super().__init__()
         # Allowed commands with their safe flags
         self.allowed_commands = {
             "ls", "pwd", "whoami", "date", "uname",
@@ -81,6 +77,14 @@ class ShellSandboxServiceModule(BaseBrainModule):
             ">", ">>", "|", "&", ";", "&&", "||",
             "rm", "sudo", "chmod", "chown", "kill", "delete",
             "mv", "cp", "mkdir", "rmdir", "touch",
+        ]
+
+        # Allowed roots for filesystem reads (resolved path must be within one of these)
+        self._allowed_roots: List[Path] = [
+            Path.home(),
+            Path("/workspace"),
+            Path("/tmp"),
+            Path("/var/tmp"),
         ]
 
     @property
@@ -105,20 +109,25 @@ class ShellSandboxServiceModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
-        if operation == "list_folder":
-            return self._list_folder(params)
-        elif operation == "list_running_processes":
-            return self._list_running_processes(params)
-        elif operation == "read_file_metadata":
-            return self._read_file_metadata(params)
-        elif operation == "execute_safe_command":
-            return self._execute_safe_command(params)
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
+        match operation:
+            case "list_folder":
+                return self._list_folder(params)
+            case "list_running_processes":
+                return self._list_running_processes(params)
+            case "read_file_metadata":
+                return self._read_file_metadata(params)
+            case "execute_safe_command":
+                return self._execute_safe_command(params)
+            case _:
+                raise InvalidParameterError("operation", str(operation), "Unknown operation for shell_sandbox_service")
 
     def _list_folder(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """List folder contents"""
         path = params.get("path", "")
+        if path is None:
+            path = ""
+        if not isinstance(path, str):
+            raise InvalidParameterError("path", str(type(path).__name__), "path must be a string")
 
         # Validate path
         if not self._is_valid_path(path):
@@ -149,15 +158,28 @@ class ShellSandboxServiceModule(BaseBrainModule):
                 },
             }
         except Exception as e:
+            logger.debug(
+                "list_folder failed",
+                exc_info=True,
+                extra={"module_name": "shell_sandbox_service", "operation": "list_folder", "error_type": type(e).__name__},
+            )
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Failed to list folder",
             }
 
     def _list_running_processes(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """List running processes"""
         filter_name = params.get("filter_name")
         max_results = params.get("max_results", 50)
+        if filter_name is not None and not isinstance(filter_name, str):
+            raise InvalidParameterError("filter_name", str(type(filter_name).__name__), "filter_name must be a string")
+        try:
+            max_results_int = int(max_results)
+        except (TypeError, ValueError):
+            raise InvalidParameterError("max_results", str(max_results), "max_results must be an integer")
+        if max_results_int < 1:
+            raise InvalidParameterError("max_results", str(max_results_int), "max_results must be >= 1")
 
         try:
             # Use ps command with safe flags only
@@ -180,7 +202,7 @@ class ShellSandboxServiceModule(BaseBrainModule):
             for i, line in enumerate(lines):
                 if i == 0:
                     continue  # Skip header
-                if len(processes) >= max_results:
+                if len(processes) >= max_results_int:
                     break
 
                 components = line.strip().split()
@@ -208,14 +230,27 @@ class ShellSandboxServiceModule(BaseBrainModule):
                 },
             }
         except Exception as e:
+            logger.debug(
+                "list_running_processes failed",
+                exc_info=True,
+                extra={
+                    "module_name": "shell_sandbox_service",
+                    "operation": "list_running_processes",
+                    "error_type": type(e).__name__,
+                },
+            )
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Failed to list processes",
             }
 
     def _read_file_metadata(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Read file metadata"""
         path = params.get("path", "")
+        if path is None:
+            path = ""
+        if not isinstance(path, str):
+            raise InvalidParameterError("path", str(type(path).__name__), "path must be a string")
 
         # Validate path
         if not self._is_valid_path(path):
@@ -250,15 +285,30 @@ class ShellSandboxServiceModule(BaseBrainModule):
                 "result": metadata.to_dict(),
             }
         except Exception as e:
+            logger.debug(
+                "read_file_metadata failed",
+                exc_info=True,
+                extra={"module_name": "shell_sandbox_service", "operation": "read_file_metadata", "error_type": type(e).__name__},
+            )
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Failed to read file metadata",
             }
 
     def _execute_safe_command(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a safe shell command"""
         command = params.get("command", "")
         arguments = params.get("arguments", [])
+        if command is None:
+            command = ""
+        if arguments is None:
+            arguments = []
+        if not isinstance(command, str):
+            raise InvalidParameterError("command", str(type(command).__name__), "command must be a string")
+        if not isinstance(arguments, list):
+            raise InvalidParameterError("arguments", str(type(arguments).__name__), "arguments must be a list")
+        if not all(isinstance(a, str) for a in arguments):
+            raise InvalidParameterError("arguments", "non-string", "all arguments must be strings")
 
         # Validate command
         if command not in self.allowed_commands:
@@ -298,9 +348,14 @@ class ShellSandboxServiceModule(BaseBrainModule):
                 "error": "Command execution timed out",
             }
         except Exception as e:
+            logger.debug(
+                "execute_safe_command failed",
+                exc_info=True,
+                extra={"module_name": "shell_sandbox_service", "operation": "execute_safe_command", "error_type": type(e).__name__},
+            )
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Command execution failed",
             }
 
     def _is_valid_path(self, path: str) -> bool:
@@ -308,13 +363,25 @@ class ShellSandboxServiceModule(BaseBrainModule):
         if not path:
             return False
 
-        # Block absolute paths outside user directory (simplified)
-        # In real implementation, would have more sophisticated validation
-        if path.startswith("/") and not path.startswith(os.path.expanduser("~")):
-            # Allow some system paths for read-only operations
-            allowed_system_paths = ["/tmp", "/var/tmp"]
-            if not any(path.startswith(p) for p in allowed_system_paths):
-                return False
+        if "\x00" in path:
+            return False
 
-        return True
+        try:
+            resolved = Path(path).expanduser().resolve()
+        except Exception:
+            return False
+
+        # Reject traversal-like segments early (defense-in-depth)
+        if ".." in Path(path).parts:
+            return False
+
+        # Resolved path must live under one of the allowed roots
+        for root in self._allowed_roots:
+            try:
+                resolved.relative_to(root)
+                return True
+            except ValueError:
+                continue
+
+        return False
 

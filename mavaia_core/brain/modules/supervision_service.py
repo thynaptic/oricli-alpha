@@ -4,19 +4,21 @@ Converted from Swift SupervisionService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import json
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class SupervisionServiceModule(BaseBrainModule):
     """Service to evaluate candidate responses using model-based supervision and internal scoring"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self.internal_scoring = None
         self._modules_loaded = False
@@ -46,41 +48,132 @@ class SupervisionServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
             # Internal scoring would be a separate module if needed
 
             self._modules_loaded = True
         except Exception as e:
-            # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load dependent modules for supervision_service",
+                exc_info=True,
+                extra={"module_name": "supervision_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
         self._ensure_modules_loaded()
 
-        if operation == "supervise_reasoning":
-            return self._supervise_reasoning(params)
-        elif operation == "validate_output":
-            return self._validate_output(params)
-        elif operation == "supervise_candidates":
-            return self._supervise_candidates(params)
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
+        match operation:
+            case "supervise_reasoning":
+                return self._supervise_reasoning(params)
+            case "validate_output":
+                return self._validate_output(params)
+            case "supervise_candidates":
+                return self._supervise_candidates(params)
+            case _:
+                raise InvalidParameterError("operation", str(operation), "Unknown operation for supervision_service")
+
+    def _extract_text(self, result: Any) -> str:
+        """Best-effort extraction of text from common generator result shapes."""
+        if isinstance(result, str):
+            return result
+        if isinstance(result, dict):
+            if isinstance(result.get("text"), str):
+                return result["text"]
+            res = result.get("result")
+            if isinstance(res, dict):
+                if isinstance(res.get("text"), str):
+                    return res["text"]
+                if isinstance(res.get("response"), str):
+                    return res["response"]
+                if isinstance(res.get("summary"), str):
+                    return res["summary"]
+            if isinstance(res, str):
+                return res
+        return ""
+
+    def _clamp01(self, value: Any, default: float) -> float:
+        try:
+            f = float(value)
+        except (TypeError, ValueError):
+            return default
+        if f < 0.0:
+            return 0.0
+        if f > 1.0:
+            return 1.0
+        return f
+
+    def _heuristic_scores(self, output: str, query: str, context: str) -> Dict[str, float]:
+        """
+        Produce deterministic scores without a model.
+
+        This is intentionally conservative and based on simple signals (length, overlap, consistency cues).
+        """
+        out = (output or "").strip()
+        q = (query or "").strip()
+        if not out:
+            return {"correctness": 0.0, "reasoning_quality": 0.0, "consistency": 0.0, "overall": 0.0}
+
+        # Length-based quality proxy (avoid rewarding verbosity too much).
+        length = len(out)
+        length_score = 0.2
+        if length >= 200:
+            length_score = 0.7
+        elif length >= 80:
+            length_score = 0.5
+        elif length >= 30:
+            length_score = 0.35
+
+        # Query overlap proxy (basic relevance).
+        q_words = {w for w in q.lower().split() if len(w) > 3}
+        out_words = {w for w in out.lower().split() if len(w) > 3}
+        overlap = len(q_words & out_words)
+        overlap_score = min(1.0, overlap / 6.0) if q_words else 0.5
+
+        # Consistency proxy: penalize obvious contradictions/hedging.
+        lower = out.lower()
+        contradiction_penalty = 0.0
+        if "contradict" in lower or "inconsistent" in lower:
+            contradiction_penalty = 0.2
+        if "i don't know" in lower or "not sure" in lower:
+            contradiction_penalty = max(contradiction_penalty, 0.15)
+
+        correctness = max(0.0, overlap_score - contradiction_penalty * 0.5)
+        reasoning_quality = max(0.0, length_score - contradiction_penalty * 0.4)
+        consistency = max(0.0, 0.8 - contradiction_penalty)
+        overall = (correctness + reasoning_quality + consistency) / 3.0
+        return {
+            "correctness": self._clamp01(correctness, 0.0),
+            "reasoning_quality": self._clamp01(reasoning_quality, 0.0),
+            "consistency": self._clamp01(consistency, 0.0),
+            "overall": self._clamp01(overall, 0.0),
+        }
 
     def _supervise_reasoning(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Supervise reasoning output"""
         output = params.get("output", "")
         query = params.get("query", "")
         context = params.get("context", "")
+        if output is None:
+            output = ""
+        if query is None:
+            query = ""
+        if context is None:
+            context = ""
+        if not isinstance(output, str):
+            raise InvalidParameterError("output", str(type(output).__name__), "output must be a string")
+        if not isinstance(query, str):
+            raise InvalidParameterError("query", str(type(query).__name__), "query must be a string")
+        if not isinstance(context, str):
+            raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
 
         if not self.cognitive_generator:
-            return {
-                "success": False,
-                "error": "Cognitive generator not available",
-                "is_valid": True,
-            }
+            scores = self._heuristic_scores(output=output, query=query, context=context)
+            logger.debug(
+                "cognitive_generator unavailable; using heuristic supervision",
+                extra={"module_name": "supervision_service"},
+            )
+            return {"success": True, "is_valid": True, "scores": scores, "method": "heuristic"}
 
         try:
             # Build supervision prompt
@@ -104,25 +197,48 @@ class SupervisionServiceModule(BaseBrainModule):
                 "context": "You are a supervisor evaluating reasoning quality.",
             })
 
-            # Parse response (simplified)
-            response_text = result.get("text", "")
-            # In full implementation, would parse JSON response
+            response_text = self._extract_text(result)
+            parsed: Dict[str, Any] = {}
+            try:
+                # Allow models to include extra text around JSON; extract first {...}.
+                start = response_text.find("{")
+                end = response_text.rfind("}")
+                if start != -1 and end != -1 and end > start:
+                    parsed = json.loads(response_text[start : end + 1])
+            except Exception:
+                parsed = {}
 
+            if not parsed:
+                # Fall back to deterministic heuristic scoring if parsing fails
+                scores = self._heuristic_scores(output=output, query=query, context=context)
+                return {"success": True, "is_valid": True, "scores": scores, "method": "heuristic_fallback"}
+
+            scores = {
+                "correctness": self._clamp01(parsed.get("correctness"), 0.5),
+                "reasoning_quality": self._clamp01(parsed.get("reasoning_quality"), 0.5),
+                "consistency": self._clamp01(parsed.get("consistency"), 0.5),
+                "overall": self._clamp01(parsed.get("overall"), 0.5),
+            }
+            # If overall missing, derive it.
+            if "overall" not in parsed:
+                scores["overall"] = self._clamp01(
+                    (scores["correctness"] + scores["reasoning_quality"] + scores["consistency"]) / 3.0,
+                    0.5,
+                )
+
+            return {"success": True, "is_valid": True, "scores": scores, "method": "model"}
+        except Exception as e:
+            logger.debug(
+                "supervise_reasoning failed; using heuristic scores",
+                exc_info=True,
+                extra={"module_name": "supervision_service", "error_type": type(e).__name__},
+            )
+            scores = self._heuristic_scores(output=output, query=query, context=context)
             return {
                 "success": True,
                 "is_valid": True,
-                "scores": {
-                    "correctness": 0.7,
-                    "reasoning_quality": 0.7,
-                    "consistency": 0.7,
-                    "overall": 0.7,
-                },
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "is_valid": True,  # Default to valid if supervision fails
+                "scores": scores,
+                "method": "heuristic_fallback",
             }
 
     def _validate_output(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -134,6 +250,18 @@ class SupervisionServiceModule(BaseBrainModule):
         candidates = params.get("candidates", [])
         query = params.get("query", "")
         context = params.get("context")
+        if candidates is None:
+            candidates = []
+        if query is None:
+            query = ""
+        if context is None:
+            context = ""
+        if not isinstance(candidates, list):
+            raise InvalidParameterError("candidates", str(type(candidates).__name__), "candidates must be a list")
+        if not isinstance(query, str):
+            raise InvalidParameterError("query", str(type(query).__name__), "query must be a string")
+        if not isinstance(context, str):
+            raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
 
         if not candidates:
             return {
@@ -144,6 +272,8 @@ class SupervisionServiceModule(BaseBrainModule):
 
         scores = []
         for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
             candidate_id = candidate.get("id", "")
             candidate_text = candidate.get("text", "")
 
