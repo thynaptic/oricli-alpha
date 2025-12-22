@@ -43,13 +43,14 @@ class SynthesisAgentModule(BaseBrainModule):
             name="synthesis_agent",
             version="1.0.0",
             description="Generates answers from ranked documents",
-            operations=["synthesize"],
+            # Keep `process_synthesis` as a compatibility alias (older pipeline modules may call it).
+            operations=["synthesize", "process_synthesis"],
             dependencies=[],
             model_required=False,
         )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        if operation != "synthesize":
+        if operation not in {"synthesize", "process_synthesis"}:
             raise InvalidParameterError(
                 parameter="operation",
                 value=operation,

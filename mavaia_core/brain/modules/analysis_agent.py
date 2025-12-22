@@ -5,15 +5,20 @@ Uses ReasoningModule when available; falls back to heuristic summary.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class AnalysisAgentModule(BaseBrainModule):
     """Performs analysis over documents leveraging reasoning module."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.reasoning = None
         self._modules_ensured = False
 
@@ -25,7 +30,12 @@ class AnalysisAgentModule(BaseBrainModule):
         try:
             from mavaia_core.brain.registry import ModuleRegistry
             self.reasoning = ModuleRegistry.get_module("reasoning", auto_discover=True, wait_timeout=1.0)
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to load reasoning for analysis_agent",
+                exc_info=True,
+                extra={"module_name": "analysis_agent", "dependency": "reasoning", "error_type": type(e).__name__},
+            )
             self.reasoning = None
 
     @property
@@ -44,7 +54,11 @@ class AnalysisAgentModule(BaseBrainModule):
         self._ensure_modules()
         
         if operation != "analyze":
-            raise ValueError(f"Unsupported operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unsupported operation for analysis_agent",
+            )
 
         query: str = params.get("query", "") or ""
         documents: List[Dict[str, Any]] = params.get("documents") or []
@@ -57,7 +71,11 @@ class AnalysisAgentModule(BaseBrainModule):
                 )
                 return {"success": True, "analysis": result.get("reasoning", ""), "metadata": result}
             except Exception as e:
-                return {"success": False, "error": str(e)}
+                logger.debug(
+                    "Reasoning failed in analysis_agent; using heuristic analysis",
+                    exc_info=True,
+                    extra={"module_name": "analysis_agent", "dependency": "reasoning", "error_type": type(e).__name__},
+                )
 
         # Fallback heuristic summary
         summary_parts = []

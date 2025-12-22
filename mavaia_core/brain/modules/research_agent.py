@@ -5,15 +5,20 @@ Simplified orchestration using reasoning + document_orchestration when present.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ResearchAgentModule(BaseBrainModule):
     """Runs multi-pass research: generate sub-queries, gather docs, summarize."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.reasoning = None
         self.doc_orch = None
         self._modules_ensured = False
@@ -26,12 +31,22 @@ class ResearchAgentModule(BaseBrainModule):
         try:
             from mavaia_core.brain.registry import ModuleRegistry
             self.reasoning = ModuleRegistry.get_module("reasoning", auto_discover=True, wait_timeout=1.0)
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to load reasoning for research_agent",
+                exc_info=True,
+                extra={"module_name": "research_agent", "dependency": "reasoning", "error_type": type(e).__name__},
+            )
             self.reasoning = None
         try:
             from mavaia_core.brain.registry import ModuleRegistry
             self.doc_orch = ModuleRegistry.get_module("document_orchestration", auto_discover=True, wait_timeout=1.0)
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to load document_orchestration for research_agent",
+                exc_info=True,
+                extra={"module_name": "research_agent", "dependency": "document_orchestration", "error_type": type(e).__name__},
+            )
             self.doc_orch = None
 
     @property
@@ -47,13 +62,20 @@ class ResearchAgentModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         if operation != "research":
-            raise ValueError(f"Unsupported operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unsupported operation for research_agent",
+            )
 
         # Lazy load modules only when execute is called
         self._ensure_modules()
 
         query: str = params.get("query", "") or ""
-        max_passes = int(params.get("max_passes", 3) or 3)
+        try:
+            max_passes = int(params.get("max_passes", 3) or 3)
+        except (TypeError, ValueError):
+            max_passes = 3
 
         sub_queries = self._derive_sub_queries(query)
         documents: List[Dict[str, Any]] = []
@@ -65,7 +87,12 @@ class ResearchAgentModule(BaseBrainModule):
                     {"text": query, "queries": sub_queries, "max_docs": params.get("limit", 10)},
                 )
                 documents = doc_result.get("documents") or doc_result.get("results") or []
-            except Exception:
+            except Exception as e:
+                logger.debug(
+                    "document_orchestration failed; continuing with empty documents",
+                    exc_info=True,
+                    extra={"module_name": "research_agent", "dependency": "document_orchestration", "error_type": type(e).__name__},
+                )
                 documents = []
 
         summary = self._summarize(query, documents)
@@ -87,8 +114,12 @@ class ResearchAgentModule(BaseBrainModule):
                 steps = result.get("reasoning_steps") or []
                 if isinstance(steps, list):
                     return [str(s) for s in steps if s]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "reasoning decomposition failed; using heuristic sub-queries",
+                    exc_info=True,
+                    extra={"module_name": "research_agent", "dependency": "reasoning", "error_type": type(e).__name__},
+                )
         return [query, f"{query} key facts", f"{query} recent updates"]
 
     def _summarize(self, query: str, documents: List[Dict[str, Any]]) -> str:

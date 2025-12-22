@@ -5,16 +5,10 @@ Converted from Swift PersistentMemoryService.swift
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from enum import Enum
 import logging
 from typing import Any, Dict, List, Optional
-import sys
 import math
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError
@@ -39,22 +33,41 @@ if MemoryType is None:
 
 
 if MemoryEntry is None:
-    @dataclass
     class MemoryEntry:
-        """Fallback MemoryEntry implementation when models are unavailable."""
+        """
+        Fallback MemoryEntry implementation when models are unavailable.
 
-        id: str
-        type: str
-        content: str
-        importance: float
-        conversation_id: Optional[str] = None
-        message_id: Optional[str] = None
-        tags: List[str] = field(default_factory=list)
-        keywords: List[str] = field(default_factory=list)
-        emotional_tone: Optional[str] = None
-        summary: Optional[str] = None
-        last_accessed: float = 0.0
-        _embedding: Optional[List[float]] = None
+        Note: this is intentionally a plain class (not a dataclass) so it remains
+        safe to import under dynamic module loading that doesn't pre-register the
+        module in `sys.modules`.
+        """
+
+        def __init__(
+            self,
+            *,
+            id: str,
+            type: str,
+            content: str,
+            importance: float,
+            conversation_id: Optional[str] = None,
+            message_id: Optional[str] = None,
+            tags: Optional[List[str]] = None,
+            keywords: Optional[List[str]] = None,
+            emotional_tone: Optional[str] = None,
+        ) -> None:
+            self.id = id
+            self.type = type
+            self.content = content
+            self.importance = float(importance)
+            self.conversation_id = conversation_id
+            self.message_id = message_id
+            self.tags = list(tags or [])
+            self.keywords = list(keywords or [])
+            self.emotional_tone = emotional_tone
+            self.summary: Optional[str] = None
+            self.last_accessed: float = 0.0
+            self._embedding: Optional[List[float]] = None
+            self.cleanup_priority: float = 1.0 - max(0.0, min(1.0, float(self.importance)))
 
         def set_embedding(self, embedding: List[float]) -> None:
             self._embedding = embedding

@@ -5,12 +5,16 @@ Normalizes user input, extracts keywords, and formulates precise search queries.
 Part of the Perplexity Multi-Agent Pipeline implementation.
 """
 
+from __future__ import annotations
+
+import logging
 import re
 from typing import Any, Dict, List, Optional, Set
-from pathlib import Path
-import sys
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class QueryAgent(BaseBrainModule):
@@ -26,6 +30,7 @@ class QueryAgent(BaseBrainModule):
 
     def __init__(self):
         """Initialize the Query Agent"""
+        super().__init__()
         self._query_complexity = None
         self._intent_categorizer = None
         self._world_knowledge = None
@@ -70,21 +75,38 @@ class QueryAgent(BaseBrainModule):
             # Lazy load optional dependencies
             try:
                 self._query_complexity = ModuleRegistry.get_module("query_complexity")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency query_complexity",
+                    exc_info=True,
+                    extra={"module_name": "query_agent", "dependency": "query_complexity", "error_type": type(e).__name__},
+                )
 
             try:
                 self._intent_categorizer = ModuleRegistry.get_module("intent_categorizer")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency intent_categorizer",
+                    exc_info=True,
+                    extra={"module_name": "query_agent", "dependency": "intent_categorizer", "error_type": type(e).__name__},
+                )
 
             try:
                 self._world_knowledge = ModuleRegistry.get_module("world_knowledge")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency world_knowledge",
+                    exc_info=True,
+                    extra={"module_name": "query_agent", "dependency": "world_knowledge", "error_type": type(e).__name__},
+                )
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "ModuleRegistry not available; query_agent will run without dependencies",
+                exc_info=True,
+                extra={"module_name": "query_agent", "error_type": type(e).__name__},
+            )
             return True  # Can work without dependencies
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -116,7 +138,11 @@ class QueryAgent(BaseBrainModule):
                 query = params.get("query", "")
                 return self.process_query(query)
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for query_agent",
+                )
 
     def normalize_query(self, query: str) -> Dict[str, Any]:
         """
@@ -205,8 +231,12 @@ class QueryAgent(BaseBrainModule):
                     e.get("entity", "") for e in found_entities
                     if e.get("entity")
                 ]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "world_knowledge entity extraction failed",
+                    exc_info=True,
+                    extra={"module_name": "query_agent", "dependency": "world_knowledge", "error_type": type(e).__name__},
+                )
 
         # Extract key phrases (2-3 word combinations)
         key_phrases = []
@@ -368,7 +398,12 @@ class QueryAgent(BaseBrainModule):
                 )
                 complexity_score = complexity_result.get("overall", 0.0)
                 complexity_factors = complexity_result.get("factors", {})
-            except Exception:
+            except Exception as e:
+                logger.debug(
+                    "query_complexity analysis failed; falling back to heuristic complexity",
+                    exc_info=True,
+                    extra={"module_name": "query_agent", "dependency": "query_complexity", "error_type": type(e).__name__},
+                )
                 # Fallback: simple heuristics
                 word_count = len(normalized.split())
                 complexity_score = min(1.0, word_count / 20.0)
@@ -416,8 +451,12 @@ class QueryAgent(BaseBrainModule):
                     {"intent": query}
                 )
                 intent_category = intent_result.get("category", "casual_conversation")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "intent_categorizer failed; leaving intent_category unset",
+                    exc_info=True,
+                    extra={"module_name": "query_agent", "dependency": "intent_categorizer", "error_type": type(e).__name__},
+                )
 
         return {
             "intent": intent,
