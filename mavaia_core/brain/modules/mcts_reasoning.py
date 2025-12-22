@@ -7,21 +7,21 @@ and backpropagation. Ported from Swift MCTSService.swift
 
 import time
 import math
-import sys
-from pathlib import Path
 from typing import Any
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mcts_models import (
+from mavaia_core.brain.modules.mcts_models import (
     MCTSNode,
     MCTSTreeState,
     MCTSConfiguration,
     MCTSResult,
 )
-from tot_models import ToTThoughtNode
+from mavaia_core.brain.modules.tot_models import ToTThoughtNode
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 
 class MCTSReasoning(BaseBrainModule):
@@ -34,6 +34,7 @@ class MCTSReasoning(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._cognitive_generator = None
         self._memory_graph = None
 
@@ -59,8 +60,6 @@ class MCTSReasoning(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from module_registry import ModuleRegistry
-
             # Lazy load cognitive generator
             self._cognitive_generator = ModuleRegistry.get_module(
                 "cognitive_generator"
@@ -69,11 +68,20 @@ class MCTSReasoning(BaseBrainModule):
             # Lazy load memory graph (optional)
             try:
                 self._memory_graph = ModuleRegistry.get_module("memory_graph")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency 'memory_graph' unavailable for mcts_reasoning",
+                    exc_info=True,
+                    extra={"module_name": "mcts_reasoning", "error_type": type(e).__name__},
+                )
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to initialize mcts_reasoning dependencies",
+                exc_info=True,
+                extra={"module_name": "mcts_reasoning", "error_type": type(e).__name__},
+            )
             return False
 
     def execute(
@@ -94,7 +102,11 @@ class MCTSReasoning(BaseBrainModule):
         elif operation == "format_reasoning_output":
             return self._format_reasoning_output(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for mcts_reasoning",
+            )
 
     def _execute_mcts(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -111,8 +123,12 @@ class MCTSReasoning(BaseBrainModule):
             Dictionary with MCTSResult data
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -204,8 +220,10 @@ class MCTSReasoning(BaseBrainModule):
         if not self._cognitive_generator:
             self.initialize()
             if not self._cognitive_generator:
-                raise RuntimeError(
-                    "Cognitive generator module not available"
+                raise ModuleOperationError(
+                    module_name="mcts_reasoning",
+                    operation="execute_mcts",
+                    reason="Cognitive generator module not available",
                 )
 
         start_time = time.time()
@@ -235,9 +253,9 @@ class MCTSReasoning(BaseBrainModule):
             # Check timeout
             elapsed = time.time() - start_time
             if elapsed > configuration.max_search_time:
-                print(
-                    f"[MCTS] Search timeout reached after {elapsed:.2f} seconds",
-                    file=sys.stderr,
+                logger.info(
+                    "MCTS search timeout reached",
+                    extra={"module_name": "mcts_reasoning", "elapsed_s": round(float(elapsed), 6)},
                 )
                 break
 
@@ -501,9 +519,10 @@ Generate {count} diverse next steps or alternative approaches. Each should be a 
             return child_nodes
 
         except Exception as e:
-            print(
-                f"[MCTS] Error generating thoughts: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Error generating thoughts",
+                exc_info=True,
+                extra={"module_name": "mcts_reasoning", "error_type": type(e).__name__},
             )
             return []
 
@@ -643,8 +662,12 @@ Final Answer:
             Dictionary with should_activate boolean
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         # Simple heuristic: MCTS for complex queries
         # Can be enhanced with complexity detector

@@ -6,26 +6,26 @@ multi-module orchestration
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import sys
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class UnifiedInterfaceModule(BaseBrainModule):
     """Unified interface for all cognitive operations"""
 
     def __init__(self):
+        super().__init__()
         self.module_registry = None
         self._initialize_module_registry()
 
     def _initialize_module_registry(self) -> None:
         """Initialize module registry for routing"""
         try:
-            from module_registry import ModuleRegistry
-
             self.module_registry = ModuleRegistry
         except ImportError:
             # Fallback if registry not available
@@ -81,7 +81,11 @@ class UnifiedInterfaceModule(BaseBrainModule):
                 return self.format_output(result, metadata)
 
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for unified_interface",
+                )
 
     def process_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Process a request through the unified interface"""
