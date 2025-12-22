@@ -537,7 +537,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 console = Console(stderr=True)
                 console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] Loading training data from source(s): [green]{source}[/green]...")
             else:
-                print(f"[Mavaia-Trainer] Loading training data from source(s): {source}...", file=sys.stderr)
+                logger.info(
+                    "Loading training data from source(s)",
+                    extra={"module_name": "neural_text_generator", "source": source},
+                )
             
             raw_text = NeuralTextGeneratorData.load_data(
                 source=source,
@@ -568,7 +571,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if RICH_AVAILABLE:
                     console.print(f"[bold red][Mavaia-Trainer][/bold red] [red]✗[/red] {error_msg}")
                 else:
-                    print(f"[Mavaia-Trainer] Error: {error_msg}", file=sys.stderr)
+                    logger.error(
+                        "No data loaded from source(s)",
+                        extra={"module_name": "neural_text_generator", "source": source},
+                    )
                 return {
                     "success": False,
                     "error": error_msg,
@@ -581,9 +587,13 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if RICH_AVAILABLE:
                     console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] Using [yellow]{data_percentage*100:.1f}%[/yellow] of data ([cyan]{text_length:,}[/cyan] characters)")
                 else:
-                    print(
-                        f"[Mavaia-Trainer] Using {data_percentage*100:.1f}% of data ({text_length:,} characters)",
-                        file=sys.stderr,
+                    logger.info(
+                        "Using subset of data",
+                        extra={
+                            "module_name": "neural_text_generator",
+                            "data_percentage": float(data_percentage),
+                            "text_length": int(text_length),
+                        },
                     )
             
             preprocess_config = self.config.get("data", {}).get("preprocessing", {})
@@ -599,7 +609,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if RICH_AVAILABLE:
                     console.print(f"[bold red][Mavaia-Trainer][/bold red] [red]✗[/red] {error_msg}")
                 else:
-                    print(f"[Mavaia-Trainer] Error: {error_msg}", file=sys.stderr)
+                    logger.error(
+                        "No text remaining after preprocessing",
+                        extra={"module_name": "neural_text_generator", "source": source},
+                    )
                 return {
                     "success": False,
                     "error": error_msg,
@@ -611,7 +624,15 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if RICH_AVAILABLE:
                     console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] Applying learned adaptive policy for [cyan]{device}[/cyan] + [cyan]{model_type}[/cyan] (success count: {policy.get('success_count', 0)})")
                 else:
-                    print(f"[Mavaia-Trainer] Applying learned adaptive policy for {device} + {model_type} (success count: {policy.get('success_count', 0)})", file=sys.stderr)
+                    logger.info(
+                        "Applying learned adaptive policy",
+                        extra={
+                            "module_name": "neural_text_generator",
+                            "device": device,
+                            "model_type": model_type,
+                            "success_count": int(policy.get("success_count", 0) or 0),
+                        },
+                    )
                 
                 # Apply policy to params (user params take precedence)
                 params = self._apply_adaptive_policy(params, policy)
@@ -648,7 +669,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if RICH_AVAILABLE:
                     console.print("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]character-level[/green] model...")
                 else:
-                    print("[Mavaia-Trainer] Training character-level model...", file=sys.stderr)
+                    logger.info(
+                        "Training character-level model",
+                        extra={"module_name": "neural_text_generator"},
+                    )
                 char_result = self._train_character_model(
                     text, epochs, continue_training, time_limit_seconds
                 )
@@ -661,7 +685,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if RICH_AVAILABLE:
                     console.print("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]word-level[/green] model...")
                 else:
-                    print("[Mavaia-Trainer] Training word-level model...", file=sys.stderr)
+                    logger.info(
+                        "Training word-level model",
+                        extra={"module_name": "neural_text_generator"},
+                    )
                 word_result = self._train_word_model(
                     text, epochs, continue_training, time_limit_seconds
                 )
@@ -699,9 +726,9 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         if RICH_AVAILABLE:
                             console.print(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] Time limit reached ([cyan]{elapsed:.1f}s[/cyan]), skipping transformer model")
                         else:
-                            print(
-                                f"[Mavaia-Trainer] Time limit reached ({elapsed:.1f}s), skipping transformer model",
-                                file=sys.stderr,
+                            logger.info(
+                                "Time limit reached; skipping transformer model",
+                                extra={"module_name": "neural_text_generator", "elapsed_s": round(float(elapsed), 3)},
                             )
                         results["transformer"] = {
                             "success": False,
@@ -712,16 +739,19 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         if RICH_AVAILABLE:
                             console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] Remaining time for transformer model: [yellow]{remaining_time_limit:.1f}s[/yellow]")
                         else:
-                            print(
-                                f"[Mavaia-Trainer] Remaining time for transformer model: {remaining_time_limit:.1f}s",
-                                file=sys.stderr,
+                            logger.info(
+                                "Remaining time for transformer model",
+                                extra={"module_name": "neural_text_generator", "remaining_s": round(float(remaining_time_limit), 3)},
                             )
                 
                 if remaining_time_limit is None or remaining_time_limit > 0:
                     if RICH_AVAILABLE:
                         console.print("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]transformer[/green] model...")
                     else:
-                        print("[Mavaia-Trainer] Training transformer model...", file=sys.stderr)
+                        logger.info(
+                            "Training transformer model",
+                            extra={"module_name": "neural_text_generator"},
+                        )
                     
                     # Check if transformers and torch are available
                     if not TRANSFORMERS_AVAILABLE or not TORCH_AVAILABLE:
@@ -737,7 +767,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         if RICH_AVAILABLE:
                             console.print(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] {error_msg}")
                         else:
-                            print(f"[Mavaia-Trainer] Warning: {error_msg}", file=sys.stderr)
+                            logger.warning(
+                                "Transformer training dependencies unavailable",
+                                extra={"module_name": "neural_text_generator", "missing": missing},
+                            )
                         results["transformer"] = {
                             "success": False,
                             "error": error_msg,
@@ -758,7 +791,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         if RICH_AVAILABLE:
                             console.print(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] {error_msg}")
                         else:
-                            print(f"[Mavaia-Trainer] Warning: {error_msg}", file=sys.stderr)
+                            logger.warning(
+                                "Transformer training not implemented in this module",
+                                extra={"module_name": "neural_text_generator"},
+                            )
                         results["transformer"] = {
                             "success": False,
                             "error": error_msg,
@@ -780,7 +816,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if RICH_AVAILABLE:
                     console.print(f"[bold red][Mavaia-Trainer][/bold red] [red]✗[/red] {error_msg}")
                 else:
-                    print(f"[Mavaia-Trainer] Error: {error_msg}", file=sys.stderr)
+                    logger.error(
+                        "No models trained successfully",
+                        extra={"module_name": "neural_text_generator", "model_type": model_type},
+                    )
                 return {
                     "success": False,
                     "error": error_msg,
@@ -818,7 +857,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if RICH_AVAILABLE:
                     console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] Saved adaptive policy for future training")
                 else:
-                    print("[Mavaia-Trainer] Saved adaptive policy for future training", file=sys.stderr)
+                    logger.info(
+                        "Saved adaptive policy for future training",
+                        extra={"module_name": "neural_text_generator"},
+                    )
 
             return {
                 "success": True,
@@ -869,9 +911,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             with open(char_meta_path, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, indent=2)
         except Exception as e:
-            print(
-                f"[Mavaia-Trainer] Warning: Could not save vocabulary: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Could not save character vocabulary metadata",
+                exc_info=True,
+                extra={"module_name": "neural_text_generator", "error_type": type(e).__name__},
             )
 
         # Convert to arrays
@@ -924,9 +967,9 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if self.time_limit:
                     elapsed = time.time() - self.start_time
                     if elapsed >= self.time_limit:
-                        print(
-                            f"\n[Mavaia-Trainer] Time limit reached ({elapsed:.1f}s), stopping training",
-                            file=sys.stderr,
+                        logger.info(
+                            "Time limit reached; stopping Keras training",
+                            extra={"module_name": "neural_text_generator", "elapsed_s": round(float(elapsed), 3)},
                         )
                         self.model.stop_training = True
                         self.should_stop = True
@@ -940,14 +983,15 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     latest_path = self.model_dir / f"{self.model_type}_model_latest.keras"
                     self.model.save(latest_path)
                     
-                    print(
-                        f"[Mavaia-Trainer] Checkpoint saved: epoch {epoch+1}",
-                        file=sys.stderr,
+                    logger.info(
+                        "Keras checkpoint saved",
+                        extra={"module_name": "neural_text_generator", "epoch": int(epoch + 1), "model_type": self.model_type},
                     )
                 except Exception as e:
-                    print(
-                        f"[Mavaia-Trainer] Warning: Could not save checkpoint: {e}",
-                        file=sys.stderr,
+                    logger.warning(
+                        "Could not save Keras checkpoint",
+                        exc_info=True,
+                        extra={"module_name": "neural_text_generator", "model_type": self.model_type, "error_type": type(e).__name__},
                     )
 
         callbacks = []
@@ -960,10 +1004,13 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             estimated_epoch_time = 30.0
             max_epochs_by_time = int(time_limit_seconds / estimated_epoch_time) + 1
             effective_epochs = min(epochs, max_epochs_by_time)
-            print(
-                f"[Mavaia-Trainer] Time limit: {time_limit_seconds:.1f}s, "
-                f"adjusting to {effective_epochs} epochs max",
-                file=sys.stderr,
+            logger.info(
+                "Time limit applied; adjusting epochs",
+                extra={
+                    "module_name": "neural_text_generator",
+                    "time_limit_s": round(float(time_limit_seconds), 3),
+                    "effective_epochs": int(effective_epochs),
+                },
             )
 
         history = self.char_model.fit(
@@ -1029,9 +1076,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             with open(word_meta_path, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, indent=2)
         except Exception as e:
-            print(
-                f"[Mavaia-Trainer] Warning: Could not save vocabulary: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Could not save word vocabulary metadata",
+                exc_info=True,
+                extra={"module_name": "neural_text_generator", "error_type": type(e).__name__},
             )
 
         # Convert to arrays
@@ -1084,9 +1132,9 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if self.time_limit:
                     elapsed = time.time() - self.start_time
                     if elapsed >= self.time_limit:
-                        print(
-                            f"\n[Mavaia-Trainer] Time limit reached ({elapsed:.1f}s), stopping training",
-                            file=sys.stderr,
+                        logger.info(
+                            "Time limit reached; stopping Keras training",
+                            extra={"module_name": "neural_text_generator", "elapsed_s": round(float(elapsed), 3)},
                         )
                         self.model.stop_training = True
                         self.should_stop = True
@@ -1100,14 +1148,15 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     latest_path = self.model_dir / f"{self.model_type}_model_latest.keras"
                     self.model.save(latest_path)
                     
-                    print(
-                        f"[Mavaia-Trainer] Checkpoint saved: epoch {epoch+1}",
-                        file=sys.stderr,
+                    logger.info(
+                        "Keras checkpoint saved",
+                        extra={"module_name": "neural_text_generator", "epoch": int(epoch + 1), "model_type": self.model_type},
                     )
                 except Exception as e:
-                    print(
-                        f"[Mavaia-Trainer] Warning: Could not save checkpoint: {e}",
-                        file=sys.stderr,
+                    logger.warning(
+                        "Could not save Keras checkpoint",
+                        exc_info=True,
+                        extra={"module_name": "neural_text_generator", "model_type": self.model_type, "error_type": type(e).__name__},
                     )
 
         callbacks = []
