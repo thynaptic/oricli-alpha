@@ -4,14 +4,16 @@ Explicit style transfer models for personality switching
 """
 
 from typing import Dict, Any, Optional, List
-import sys
-from pathlib import Path
 import re
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import (
+    InvalidParameterError,
+    ModuleInitializationError,
+)
+
+logger = logging.getLogger(__name__)
 
 # JAX/Flax required (Python 3.14 compatible)
 try:
@@ -31,6 +33,7 @@ class StyleTransferModule(BaseBrainModule):
     """Transform text to match target style metrics while preserving personality"""
 
     def __init__(self, model_name: str = "t5-small"):
+        super().__init__()
         self.model_name = model_name
         self.transfer_pipeline = None
         self.tokenizer = None
@@ -61,18 +64,29 @@ class StyleTransferModule(BaseBrainModule):
         """Lazy load model using Flax backend"""
         if self.transfer_pipeline is None and STYLE_TRANSFER_AVAILABLE:
             if not JAX_AVAILABLE or not FlaxAutoModelForSeq2SeqLM:
-                raise ImportError("JAX/Flax is required for StyleTransferModule. Install with: pip install jax jaxlib flax")
+                raise ModuleInitializationError(
+                    module_name="style_transfer",
+                    reason="JAX/Flax is required for style transfer model loading",
+                )
             
             try:
                 self.tokenizer = FlaxAutoTokenizer.from_pretrained(self.model_name)
                 self.model = FlaxAutoModelForSeq2SeqLM.from_pretrained(self.model_name)
                 self.transfer_pipeline = {"backend": "flax", "model": self.model, "tokenizer": self.tokenizer}
-                print(
-                    f"[StyleTransferModule] Flax model loaded: {self.model_name}",
-                    file=sys.stderr,
+                logger.info(
+                    "Style transfer Flax model loaded",
+                    extra={"module_name": "style_transfer", "model_name": str(self.model_name)},
                 )
             except Exception as e:
-                raise ImportError(f"Failed to load Flax model {self.model_name}: {e}")
+                logger.debug(
+                    "Failed to load Flax model for style_transfer",
+                    exc_info=True,
+                    extra={"module_name": "style_transfer", "error_type": type(e).__name__},
+                )
+                raise ModuleInitializationError(
+                    module_name="style_transfer",
+                    reason="Failed to load Flax model/tokenizer",
+                ) from e
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a style transfer operation"""
@@ -93,7 +107,11 @@ class StyleTransferModule(BaseBrainModule):
                 personality=params.get("personality", ""),
             )
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation for style_transfer",
+            )
 
     def _transfer_style(
         self, text: str, target_style: Dict[str, Any]
@@ -155,9 +173,10 @@ class StyleTransferModule(BaseBrainModule):
                         "method": "model_based",
                     }
                 except Exception as e:
-                    print(
-                        f"[StyleTransferModule] Model transfer failed: {e}",
-                        file=sys.stderr,
+                    logger.debug(
+                        "Model-based style transfer failed; using rule-based fallback",
+                        exc_info=True,
+                        extra={"module_name": "style_transfer", "error_type": type(e).__name__},
                     )
 
         # Fallback to rule-based transfer
