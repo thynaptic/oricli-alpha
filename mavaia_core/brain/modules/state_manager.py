@@ -11,11 +11,15 @@ from datetime import datetime, timedelta
 import json
 import sys
 import uuid
+import logging
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -78,9 +82,10 @@ class StateManagerModule(BaseBrainModule):
             self._load_persisted_state()
             return True
         except Exception as e:
-            print(
-                f"[StateManagerModule] Failed to load persisted state: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load persisted state; continuing with empty caches",
+                exc_info=True,
+                extra={"module_name": "state_manager", "error_type": type(e).__name__},
             )
             return True  # Continue even if loading fails
 
@@ -132,7 +137,11 @@ class StateManagerModule(BaseBrainModule):
                 return self.restore_snapshot(state_type, state_id, snapshot_id)
 
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for state_manager",
+                )
 
     def get_state(
         self, state_type: str, state_id: Optional[str] = None
@@ -435,9 +444,10 @@ class StateManagerModule(BaseBrainModule):
             with open(state_file, "w", encoding="utf-8") as f:
                 json.dump(state_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(
-                f"[StateManagerModule] Failed to persist state: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to persist state",
+                exc_info=True,
+                extra={"module_name": "state_manager", "state_type": state_type, "state_id": state_id},
             )
 
     def _load_state_from_file(
@@ -452,9 +462,10 @@ class StateManagerModule(BaseBrainModule):
                 with open(state_file, "r", encoding="utf-8") as f:
                     return json.load(f)
         except Exception as e:
-            print(
-                f"[StateManagerModule] Failed to load state: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load state",
+                exc_info=True,
+                extra={"module_name": "state_manager", "state_type": state_type, "state_id": state_id},
             )
         return None
 
@@ -476,9 +487,10 @@ class StateManagerModule(BaseBrainModule):
                     if state_data:
                         self.state_cache[cache_key] = state_data
         except Exception as e:
-            print(
-                f"[StateManagerModule] Failed to load persisted state: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load persisted state directory",
+                exc_info=True,
+                extra={"module_name": "state_manager"},
             )
 
     def _persist_transitions(
@@ -498,9 +510,10 @@ class StateManagerModule(BaseBrainModule):
             with open(transitions_file, "w", encoding="utf-8") as f:
                 json.dump(transitions_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(
-                f"[StateManagerModule] Failed to persist transitions: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to persist transitions",
+                exc_info=True,
+                extra={"module_name": "state_manager", "state_type": state_type, "state_id": state_id},
             )
 
     def _load_transitions_from_file(
@@ -521,9 +534,10 @@ class StateManagerModule(BaseBrainModule):
                         StateTransition(**t) for t in transitions_data
                     ]
         except Exception as e:
-            print(
-                f"[StateManagerModule] Failed to load transitions: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load transitions",
+                exc_info=True,
+                extra={"module_name": "state_manager", "state_type": state_type, "state_id": state_id},
             )
         return []
 
@@ -553,9 +567,10 @@ class StateManagerModule(BaseBrainModule):
             with open(snapshots_file, "w", encoding="utf-8") as f:
                 json.dump(snapshots_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(
-                f"[StateManagerModule] Failed to persist snapshot: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to persist snapshots",
+                exc_info=True,
+                extra={"module_name": "state_manager", "state_type": state_type, "state_id": state_id},
             )
 
     def _load_snapshots_from_file(
@@ -574,9 +589,10 @@ class StateManagerModule(BaseBrainModule):
                     snapshots_data = json.load(f)
                     return [StateSnapshot(**s) for s in snapshots_data]
         except Exception as e:
-            print(
-                f"[StateManagerModule] Failed to load snapshots: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load snapshots",
+                exc_info=True,
+                extra={"module_name": "state_manager", "state_type": state_type, "state_id": state_id},
             )
         return []
 
