@@ -7,20 +7,17 @@ The personality-based system has been replaced with a universal voice that adapt
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 
 class PersonalityAdaptationServiceModule(BaseBrainModule):
     """Service for tracking and adapting personality based on user communication patterns"""
 
     def __init__(self):
+        super().__init__()
         self._profiles: Dict[str, Dict[str, Any]] = {}
         self._fast_adaptation_alpha = 0.4
         self._gradual_adaptation_alpha = 0.15
@@ -63,7 +60,11 @@ class PersonalityAdaptationServiceModule(BaseBrainModule):
         elif operation == "update_profile":
             return self._update_profile(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for personality_adaptation_service",
+            )
 
     def _adapt_to_user(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Adapt personality to user"""
