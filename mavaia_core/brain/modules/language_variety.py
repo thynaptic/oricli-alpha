@@ -7,19 +7,20 @@ from typing import Dict, Any, List, Optional
 import json
 import re
 import random
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class LanguageVarietyModule(BaseBrainModule):
     """Natural language variety to avoid repetition"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.synonyms = {}
         self.variation_patterns = {}
@@ -88,8 +89,10 @@ class LanguageVarietyModule(BaseBrainModule):
                     "casual": ["ya know", "I guess", "I suppose", "pretty much"],
                 }
         except Exception as e:
-            print(
-                f"[LanguageVarietyModule] Failed to load config: {e}", file=sys.stderr
+            logger.warning(
+                "Failed to load language_variety config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "language_variety", "error_type": type(e).__name__},
             )
             self.synonyms = {}
             self.variation_patterns = {}
@@ -100,24 +103,66 @@ class LanguageVarietyModule(BaseBrainModule):
         if operation == "avoid_repetition":
             text = params.get("text", "")
             previous_texts = params.get("previous_texts", [])
+            if text is None:
+                text = ""
+            if previous_texts is None:
+                previous_texts = []
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(previous_texts, list):
+                raise InvalidParameterError(
+                    "previous_texts", str(type(previous_texts).__name__), "previous_texts must be a list"
+                )
             return self.avoid_repetition(text, previous_texts)
         elif operation == "use_synonyms":
             text = params.get("text", "")
             formality = params.get("formality", "neutral")
+            if text is None:
+                text = ""
+            if formality is None:
+                formality = "neutral"
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(formality, str):
+                raise InvalidParameterError("formality", str(type(formality).__name__), "formality must be a string")
             return self.use_synonyms(text, formality)
         elif operation == "add_variety":
             text = params.get("text", "")
+            if text is None:
+                text = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
             return self.add_variety(text)
         elif operation == "insert_discourse_fillers":
             text = params.get("text", "")
             formality = params.get("formality", "neutral")
+            if text is None:
+                text = ""
+            if formality is None:
+                formality = "neutral"
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(formality, str):
+                raise InvalidParameterError("formality", str(type(formality).__name__), "formality must be a string")
             return self.insert_discourse_fillers(text, formality)
         elif operation == "vary_expressions":
             text = params.get("text", "")
             context = params.get("context", "")
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
             return self.vary_expressions(text, context)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for language_variety",
+            )
 
     def avoid_repetition(
         self, text: str, previous_texts: List[str] = None
