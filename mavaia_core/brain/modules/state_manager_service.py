@@ -4,6 +4,7 @@ Converted from Swift StateManagerService.swift
 """
 
 from typing import Any, Dict, List, Optional
+import logging
 import sys
 from pathlib import Path
 
@@ -11,6 +12,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class StateManagerServiceModule(BaseBrainModule):
@@ -56,7 +60,11 @@ class StateManagerServiceModule(BaseBrainModule):
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load optional state_manager module",
+                exc_info=True,
+                extra={"module_name": "state_manager_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -77,7 +85,11 @@ class StateManagerServiceModule(BaseBrainModule):
         elif operation == "restore_snapshot":
             return self._restore_snapshot(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for state_manager_service",
+            )
 
     def _get_state(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get current state"""
@@ -90,8 +102,12 @@ class StateManagerServiceModule(BaseBrainModule):
                     "state_type": state_type,
                     "state_id": state_id,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "state_manager.get_state failed; returning empty state",
+                    exc_info=True,
+                    extra={"module_name": "state_manager_service", "error_type": type(e).__name__},
+                )
 
         # Fallback: return empty state
         return {
@@ -112,8 +128,12 @@ class StateManagerServiceModule(BaseBrainModule):
                     "state_id": state_id,
                     "state_data": state_data,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "state_manager.update_state failed; returning provided state_data",
+                    exc_info=True,
+                    extra={"module_name": "state_manager_service", "error_type": type(e).__name__},
+                )
 
         return {
             "success": True,
@@ -139,8 +159,12 @@ class StateManagerServiceModule(BaseBrainModule):
                     "reason": reason,
                     "metadata": metadata,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "state_manager.transition_state failed; returning to_state",
+                    exc_info=True,
+                    extra={"module_name": "state_manager_service", "error_type": type(e).__name__},
+                )
 
         return {
             "success": True,
@@ -158,8 +182,12 @@ class StateManagerServiceModule(BaseBrainModule):
                     "state_type": state_type,
                     "state_ids": state_ids,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "state_manager.merge_states failed; returning empty merged_state",
+                    exc_info=True,
+                    extra={"module_name": "state_manager_service", "error_type": type(e).__name__},
+                )
 
         return {
             "success": True,
@@ -179,8 +207,12 @@ class StateManagerServiceModule(BaseBrainModule):
                     "state_id": state_id,
                     "limit": limit,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "state_manager.get_state_history failed; returning empty history",
+                    exc_info=True,
+                    extra={"module_name": "state_manager_service", "error_type": type(e).__name__},
+                )
 
         return {
             "success": True,
@@ -198,8 +230,12 @@ class StateManagerServiceModule(BaseBrainModule):
                     "state_type": state_type,
                     "state_id": state_id,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "state_manager.create_snapshot failed; returning empty snapshot_id",
+                    exc_info=True,
+                    extra={"module_name": "state_manager_service", "error_type": type(e).__name__},
+                )
 
         return {
             "success": True,
@@ -219,8 +255,12 @@ class StateManagerServiceModule(BaseBrainModule):
                     "state_id": state_id,
                     "snapshot_id": snapshot_id,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "state_manager.restore_snapshot failed; returning success without details",
+                    exc_info=True,
+                    extra={"module_name": "state_manager_service", "error_type": type(e).__name__},
+                )
 
         return {
             "success": True,

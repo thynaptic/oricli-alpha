@@ -4,6 +4,7 @@ Converted from Swift ToolCallingAgentService.swift
 """
 
 from typing import Any, Dict, List, Optional
+import logging
 import sys
 from pathlib import Path
 
@@ -11,8 +12,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 from tool_calling_models import ToolCall, ToolCallFunction, ToolResult, AgentLoopResult
 
+logger = logging.getLogger(__name__)
 
 class ToolCallingAgentServiceModule(BaseBrainModule):
     """Service for multi-turn tool calling (agent loop)"""
@@ -59,7 +62,11 @@ class ToolCallingAgentServiceModule(BaseBrainModule):
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load one or more tool calling dependencies",
+                exc_info=True,
+                extra={"module_name": "tool_calling_agent_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -72,7 +79,11 @@ class ToolCallingAgentServiceModule(BaseBrainModule):
         elif operation == "execute_iterative_loop":
             return self._execute_iterative_loop(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for tool_calling_agent_service",
+            )
 
     def _execute_agent_loop(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute agent loop with tool calling (plan-based or iterative)"""
@@ -88,8 +99,12 @@ class ToolCallingAgentServiceModule(BaseBrainModule):
                     "available_tools": tools,
                 })
                 should_plan = should_plan_result.get("should_plan", False)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Plan service should_create_plan failed; continuing with iterative loop",
+                    exc_info=True,
+                    extra={"module_name": "tool_calling_agent_service", "error_type": type(e).__name__},
+                )
 
         if should_plan:
             return self._execute_plan_based_loop(params)
@@ -176,6 +191,11 @@ class ToolCallingAgentServiceModule(BaseBrainModule):
             }
         except Exception as e:
             # Fall back to iterative execution if plan execution fails
+            logger.debug(
+                "Plan-based loop failed; falling back to iterative loop",
+                exc_info=True,
+                extra={"module_name": "tool_calling_agent_service", "error_type": type(e).__name__},
+            )
             return self._execute_iterative_loop(params)
 
     def _execute_iterative_loop(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -281,8 +301,12 @@ class ToolCallingAgentServiceModule(BaseBrainModule):
                         "tool_calls": tool_calls,
                     })
                     all_tool_results.extend(tool_results.get("results", []))
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        "Tool execution failed; continuing without tool results",
+                        exc_info=True,
+                        extra={"module_name": "tool_calling_agent_service", "error_type": type(e).__name__},
+                    )
 
             # Add tool results to conversation
             for result in all_tool_results[-len(tool_calls):]:

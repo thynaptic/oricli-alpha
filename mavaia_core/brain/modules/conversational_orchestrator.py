@@ -5,6 +5,7 @@ Converted from Swift ConversationalOrchestrator.swift
 """
 
 from typing import Any, Dict, List, Optional
+import logging
 import sys
 import time
 from pathlib import Path
@@ -13,7 +14,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
+logger = logging.getLogger(__name__)
 
 class ConversationalOrchestratorModule(BaseBrainModule):
     """Orchestrates all conversational Python modules for comprehensive conversation handling"""
@@ -69,7 +72,11 @@ class ConversationalOrchestratorModule(BaseBrainModule):
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load one or more conversational dependencies",
+                exc_info=True,
+                extra={"module_name": "conversational_orchestrator", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -86,7 +93,11 @@ class ConversationalOrchestratorModule(BaseBrainModule):
         elif operation == "enrich_with_knowledge":
             return self._enrich_with_knowledge(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for conversational_orchestrator",
+            )
 
     def _generate_conversational_response(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Generate a conversational response using all available components"""
@@ -189,8 +200,12 @@ class ConversationalOrchestratorModule(BaseBrainModule):
                 return self.linguistic_priors.execute("analyze_structure", {
                     "text": input_text,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "linguistic_priors failed; using fallback analysis",
+                    exc_info=True,
+                    extra={"module_name": "conversational_orchestrator", "error_type": type(e).__name__},
+                )
 
         # Fallback: simple analysis
         return {
@@ -210,8 +225,12 @@ class ConversationalOrchestratorModule(BaseBrainModule):
                     "input": input_text,
                     "context": context,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "social_priors failed; using fallback social context",
+                    exc_info=True,
+                    extra={"module_name": "conversational_orchestrator", "error_type": type(e).__name__},
+                )
 
         # Fallback: default social context
         return {
@@ -231,8 +250,12 @@ class ConversationalOrchestratorModule(BaseBrainModule):
                     "text": input_text,
                     "context": context,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "emotional_inference failed; using fallback emotion",
+                    exc_info=True,
+                    extra={"module_name": "conversational_orchestrator", "error_type": type(e).__name__},
+                )
 
         # Fallback: neutral emotion
         return {
@@ -252,8 +275,12 @@ class ConversationalOrchestratorModule(BaseBrainModule):
                     "query": query,
                     "context": context,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "world_knowledge failed; using empty knowledge context",
+                    exc_info=True,
+                    extra={"module_name": "conversational_orchestrator", "error_type": type(e).__name__},
+                )
 
         # Fallback: no additional knowledge
         return {
