@@ -3,6 +3,11 @@ Persistent Memory Service - Unified persistent memory service for reasoning-awar
 Converted from Swift PersistentMemoryService.swift
 """
 
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import Enum
+import logging
 from typing import Any, Dict, List, Optional
 import sys
 import math
@@ -12,12 +17,59 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 try:
     from models.memory_models import MemoryEntry, MemoryType
 except ImportError:
     # Models not available - define minimal types
     MemoryEntry = None
     MemoryType = None
+
+logger = logging.getLogger(__name__)
+
+
+if MemoryType is None:
+    class MemoryType(Enum):
+        """Fallback memory type enum when models are unavailable."""
+
+        CONVERSATION = "conversation"
+        MESSAGE = "message"
+        FACT = "fact"
+        PREFERENCE = "preference"
+
+
+if MemoryEntry is None:
+    @dataclass
+    class MemoryEntry:
+        """Fallback MemoryEntry implementation when models are unavailable."""
+
+        id: str
+        type: str
+        content: str
+        importance: float
+        conversation_id: Optional[str] = None
+        message_id: Optional[str] = None
+        tags: List[str] = field(default_factory=list)
+        keywords: List[str] = field(default_factory=list)
+        emotional_tone: Optional[str] = None
+        summary: Optional[str] = None
+        last_accessed: float = 0.0
+        _embedding: Optional[List[float]] = None
+
+        def set_embedding(self, embedding: List[float]) -> None:
+            self._embedding = embedding
+
+        def get_embedding(self) -> Optional[List[float]]:
+            return self._embedding
+
+        def update_cleanup_priority(self) -> None:
+            # Deterministic heuristic: inverse of importance.
+            self.cleanup_priority = 1.0 - max(0.0, min(1.0, float(self.importance)))
+
+        def mark_accessed(self) -> None:
+            import time
+
+            self.last_accessed = time.time()
 
 
 class PersistentMemoryServiceModule(BaseBrainModule):
@@ -59,7 +111,8 @@ class PersistentMemoryServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            # Prefer canonical registry; avoid the legacy in-folder registry shim.
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.embeddings = ModuleRegistry.get_module("embeddings")
             self.memory_graph = ModuleRegistry.get_module("memory_graph")
@@ -67,7 +120,11 @@ class PersistentMemoryServiceModule(BaseBrainModule):
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load one or more persistent_memory_service dependencies",
+                exc_info=True,
+                extra={"module_name": "persistent_memory_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -86,7 +143,11 @@ class PersistentMemoryServiceModule(BaseBrainModule):
         elif operation == "get_memory_by_id":
             return self._get_memory_by_id(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for persistent_memory_service",
+            )
 
     def _store_memory(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Store a new memory entry"""
@@ -325,8 +386,12 @@ class PersistentMemoryServiceModule(BaseBrainModule):
                     "text": text,
                 })
                 return result.get("embedding")
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Embeddings generation failed; returning None",
+                    exc_info=True,
+                    extra={"module_name": "persistent_memory_service", "error_type": type(e).__name__},
+                )
 
         # Fallback: return None (no embedding)
         return None
