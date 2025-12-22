@@ -5,14 +5,13 @@ Used for semantic similarity search and candidate ranking in hybrid phrasing sys
 """
 
 from typing import List, Dict, Any, Optional, Tuple
-import sys
 import re
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional import - will fail gracefully if dependencies not available
 try:
@@ -22,20 +21,23 @@ try:
 except ImportError:
     PHRASE_EMBEDDINGS_AVAILABLE = False
 
-# Lazy import ModelManager to avoid timeout during module discovery
-    MODEL_MANAGER_AVAILABLE = False
-    ModelManager = None
+MODEL_MANAGER_AVAILABLE = False
+ModelManager = None
 
 def _lazy_import_model_manager():
     """Lazy import ModelManager only when needed"""
     global MODEL_MANAGER_AVAILABLE, ModelManager
     if not MODEL_MANAGER_AVAILABLE:
         try:
-            from model_manager import ModelManager as MM
+            from mavaia_core.brain.modules.model_manager import ModelManager as MM
             ModelManager = MM
             MODEL_MANAGER_AVAILABLE = True
-        except ImportError:
-            pass
+        except ImportError as e:
+            logger.debug(
+                "Failed to import ModelManager for phrase_embeddings",
+                exc_info=True,
+                extra={"module_name": "phrase_embeddings", "error_type": type(e).__name__},
+            )
 
 
 class PhraseEmbeddingsModule(BaseBrainModule):
@@ -43,6 +45,7 @@ class PhraseEmbeddingsModule(BaseBrainModule):
 
     def __init__(self, model_name: str = "embedding_small"):
         """Initialize with a registered model name"""
+        super().__init__()
         self.model_name = model_name
         self.model = None
 
@@ -85,12 +88,13 @@ class PhraseEmbeddingsModule(BaseBrainModule):
             try:
                 self.model = ModelManager.get_model(self.model_name)
             except Exception as e:
-                print(
-                    f"[PhraseEmbeddingsModule] Failed to load model: {e}",
-                    file=sys.stderr,
+                logger.debug(
+                    "Failed to load embeddings model; continuing without model",
+                    exc_info=True,
+                    extra={"module_name": "phrase_embeddings", "error_type": type(e).__name__},
                 )
                 # Don't raise - allow module to work without model
-                pass
+                self.model = None
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a phrase embedding operation"""
@@ -147,10 +151,14 @@ class PhraseEmbeddingsModule(BaseBrainModule):
             )
 
         else:
-            raise ValueError(
-                f"Unknown operation: {operation}. "
-                f"Supported: embed_words, embed_phrases, embed_sentence, "
-                f"find_similar_phrases, rank_candidates, batch_embed_words, batch_embed_phrases"
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason=(
+                    "Unknown operation for phrase_embeddings. Supported: embed_words, "
+                    "embed_phrases, embed_sentence, find_similar_phrases, rank_candidates, "
+                    "batch_embed_words, batch_embed_phrases"
+                ),
             )
 
     def _embed_words(
@@ -165,6 +173,13 @@ class PhraseEmbeddingsModule(BaseBrainModule):
             self.model = None
 
         self._ensure_model_loaded()
+        if self.model is None:
+            return {
+                "embeddings": [],
+                "words": [],
+                "dimension": 0,
+                "error": "Embedding model is not available",
+            }
 
         # Tokenize into words
         words = self._tokenize_words(text)
@@ -200,6 +215,13 @@ class PhraseEmbeddingsModule(BaseBrainModule):
             self.model = None
 
         self._ensure_model_loaded()
+        if self.model is None:
+            return {
+                "embeddings": [],
+                "phrases": [],
+                "dimension": 0,
+                "error": "Embedding model is not available",
+            }
 
         # Tokenize into words
         words = self._tokenize_words(text)
@@ -248,6 +270,12 @@ class PhraseEmbeddingsModule(BaseBrainModule):
             self.model = None
 
         self._ensure_model_loaded()
+        if self.model is None:
+            return {
+                "embedding": [],
+                "dimension": 0,
+                "error": "Embedding model is not available",
+            }
 
         # Embed as single sentence
         embedding = self.model.encode(text, convert_to_numpy=True)
@@ -276,6 +304,8 @@ class PhraseEmbeddingsModule(BaseBrainModule):
             self.model = None
 
         self._ensure_model_loaded()
+        if self.model is None:
+            return {"similar_phrases": [], "similarities": [], "error": "Embedding model is not available"}
 
         # Embed query phrase based on level
         if level == "word":
@@ -344,6 +374,14 @@ class PhraseEmbeddingsModule(BaseBrainModule):
             self.model = None
 
         self._ensure_model_loaded()
+        if self.model is None:
+            return {
+                "ranked_candidates": candidates,
+                "scores": [],
+                "detailed_scores": [],
+                "count": len(candidates),
+                "error": "Embedding model is not available",
+            }
 
         # Get weights
         w_word = level_weights.get("word", 0.2)
@@ -376,9 +414,9 @@ class PhraseEmbeddingsModule(BaseBrainModule):
                 np.array(context_phrase_result["embeddings"]), axis=0
             ).reshape(1, -1)
 
-        context_sentence_embed = np.array(context_sentence_result["embedding"]).reshape(
-            1, -1
-        )
+        context_sentence_embed = None
+        if context_sentence_result.get("embedding"):
+            context_sentence_embed = np.array(context_sentence_result["embedding"]).reshape(1, -1)
 
         # Score each candidate
         candidate_scores = []
@@ -416,7 +454,7 @@ class PhraseEmbeddingsModule(BaseBrainModule):
 
             # Sentence-level similarity
             sentence_sim = 0.0
-            if w_sentence > 0:
+            if w_sentence > 0 and context_sentence_embed is not None:
                 candidate_sentence_embed = np.array(
                     self.model.encode(candidate, convert_to_numpy=True)
                 ).reshape(1, -1)
@@ -509,6 +547,8 @@ class PhraseEmbeddingsModule(BaseBrainModule):
             self.model = None
 
         self._ensure_model_loaded()
+        if self.model is None:
+            return {"embeddings": [], "phrases": phrases, "dimension": 0, "error": "Embedding model is not available"}
 
         # Embed all phrases at once
         embeddings_array = self.model.encode(phrases, convert_to_numpy=True)
