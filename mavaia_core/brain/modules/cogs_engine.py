@@ -4,29 +4,84 @@ Context Object Graph System (COGS) Engine - Main service for managing context ob
 Converted from Swift COGSEngine.swift
 """
 
-from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
+from __future__ import annotations
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+from dataclasses import dataclass, field
+from enum import Enum
+import logging
+from typing import Any, Dict, List, Optional
+import uuid
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports - models package may not be available
 try:
     from models.context_models import ContextObject, ContextRelationship, EntityType as ContextEntityType
 except ImportError:
-    # Models not available - define minimal types
-    ContextObject = None
-    ContextRelationship = None
-    ContextEntityType = None
+    class ContextEntityType(str, Enum):
+        """Fallback entity types for COGS when models package isn't available."""
+
+        CONCEPT = "CONCEPT"
+        ENTITY = "ENTITY"
+        PERSON = "PERSON"
+        ORGANIZATION = "ORGANIZATION"
+        LOCATION = "LOCATION"
+
+    @dataclass
+    class ContextObject:
+        """Fallback ContextObject with a stable to_dict contract."""
+
+        entity_type: ContextEntityType = ContextEntityType.CONCEPT
+        label: str = ""
+        description: Optional[str] = None
+        properties: Dict[str, Any] = field(default_factory=dict)
+        confidence: float = 0.5
+        aliases: List[str] = field(default_factory=list)
+        id: str = field(default_factory=lambda: str(uuid.uuid4()))
+        embedding: List[float] = field(default_factory=list)
+
+        def to_dict(self) -> Dict[str, Any]:
+            return {
+                "id": self.id,
+                "entity_type": self.entity_type.value,
+                "label": self.label,
+                "description": self.description,
+                "properties": self.properties,
+                "confidence": self.confidence,
+                "aliases": self.aliases,
+                "embedding": self.embedding,
+            }
+
+    @dataclass
+    class ContextRelationship:
+        """Fallback ContextRelationship with a stable to_dict contract."""
+
+        source_id: str
+        target_id: str
+        relationship_type: Any
+        properties: Dict[str, Any] = field(default_factory=dict)
+        confidence: float = 0.5
+
+        def to_dict(self) -> Dict[str, Any]:
+            rel_type = self.relationship_type.value if hasattr(self.relationship_type, "value") else str(self.relationship_type)
+            return {
+                "source_id": self.source_id,
+                "target_id": self.target_id,
+                "relationship_type": rel_type,
+                "properties": self.properties,
+                "confidence": self.confidence,
+            }
 
 
 class COGSEngineModule(BaseBrainModule):
     """Main service for managing context objects and relationships"""
 
     def __init__(self):
+        super().__init__()
         self.embeddings_service = None
         self._modules_loaded = False
         # In-memory storage for entities and relationships
@@ -65,13 +120,15 @@ class COGSEngineModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.embeddings_service = ModuleRegistry.get_module("embeddings")
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Failed to load optional embeddings dependency for cogs_engine",
+                exc_info=True,
+                extra={"module_name": "cogs_engine", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -98,7 +155,11 @@ class COGSEngineModule(BaseBrainModule):
         elif operation == "extract_entities":
             return self._extract_entities(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for cogs_engine",
+            )
 
     def _create_entity(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new context object"""
@@ -414,7 +475,6 @@ class COGSEngineModule(BaseBrainModule):
 
         # Try to use entity extraction service if available
         try:
-            from module_registry import ModuleRegistry
             entity_extractor = ModuleRegistry.get_module("cogs_relationship_extractor")
             if entity_extractor:
                 result = entity_extractor.execute("extract_entities", {"text": text})
@@ -431,8 +491,12 @@ class COGSEngineModule(BaseBrainModule):
                         )
                         entities.append(entity)
                     return entities
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "Entity extraction service failed; falling back to heuristic extraction",
+                exc_info=True,
+                extra={"module_name": "cogs_engine", "error_type": type(e).__name__},
+            )
 
         # Fallback: simple extraction based on capitalization and common patterns
         words = text.split()

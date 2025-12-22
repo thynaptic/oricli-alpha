@@ -5,14 +5,14 @@ Converted from Swift ReasoningVerificationLoop.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from cot_models import CoTStep
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.brain.modules.cot_models import CoTStep
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class StepVerificationResult:
@@ -52,6 +52,7 @@ class ReasoningVerificationLoopModule(BaseBrainModule):
     """Verification loop that validates reasoning steps"""
 
     def __init__(self):
+        super().__init__()
         self.symbolic_validator = None
         self.symbolic_overlay = None
         self.python_brain = None
@@ -83,15 +84,17 @@ class ReasoningVerificationLoopModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.symbolic_validator = ModuleRegistry.get_module("symbolic_step_validator")
             self.symbolic_overlay = ModuleRegistry.get_module("symbolic_overlay_service")
             self.python_brain = ModuleRegistry.get_module("python_brain_service")
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Failed to load optional verification dependencies",
+                exc_info=True,
+                extra={"module_name": "reasoning_verification_loop", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -102,7 +105,11 @@ class ReasoningVerificationLoopModule(BaseBrainModule):
         elif operation == "validate_reasoning":
             return self._validate_reasoning(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for reasoning_verification_loop",
+            )
 
     def _verify_step(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Verify a reasoning step with adaptive verification"""
@@ -162,7 +169,12 @@ class ReasoningVerificationLoopModule(BaseBrainModule):
                         verification_type = StepVerificationResult.VerificationType.SYMBOLIC
                     all_warnings.extend(symbolic_validation.get("warnings", []))
             except Exception as e:
-                all_warnings.append(f"Symbolic verification unavailable: {str(e)}")
+                logger.debug(
+                    "Symbolic verification failed; continuing without symbolic validation",
+                    exc_info=True,
+                    extra={"module_name": "reasoning_verification_loop", "error_type": type(e).__name__},
+                )
+                all_warnings.append("Symbolic verification unavailable")
 
         # Step 2: Neural validation
         if verification_strategy.get("use_neural", True):
