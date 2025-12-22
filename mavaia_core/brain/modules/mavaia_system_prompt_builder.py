@@ -5,21 +5,23 @@ Converted from Swift MavaiaSystemPromptBuilder.swift
 """
 
 from typing import Any, Dict, Optional
-import sys
 import json
 import time
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class MavaiaSystemPromptBuilderModule(BaseBrainModule):
     """Centralized system prompt builder for standalone Mavaia"""
 
     def __init__(self):
+        super().__init__()
         self.versions_file_name = "mavaia_standalone_prompt_versions"
         self.versions: Optional[Dict[str, Any]] = None
         self.current_version_id = "mavaia-54c"  # 54 cognitive modules, 0 LLMs
@@ -53,14 +55,16 @@ class MavaiaSystemPromptBuilderModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.cache_service = ModuleRegistry.get_module("prompt_context_cache_service")
             self.segment_analyzer = ModuleRegistry.get_module("prompt_segment_analyzer")
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Failed to load optional prompt builder dependencies",
+                exc_info=True,
+                extra={"module_name": "mavaia_system_prompt_builder", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -73,7 +77,11 @@ class MavaiaSystemPromptBuilderModule(BaseBrainModule):
         elif operation == "get_version":
             return self._get_version()
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for mavaia_system_prompt_builder",
+            )
 
     def _build_system_prompt(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Build system prompt with all sections"""
