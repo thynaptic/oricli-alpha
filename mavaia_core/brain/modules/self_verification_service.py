@@ -3,15 +3,11 @@ Self Verification Service - Self-verification service that cross-checks final an
 Converted from Swift SelfVerificationService.swift
 """
 
-from typing import Any, Dict, List, Optional
 import logging
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+from typing import Any, Dict, List, Optional
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
 from mavaia_core.exceptions import InvalidParameterError
 
 logger = logging.getLogger(__name__)
@@ -21,6 +17,7 @@ class SelfVerificationServiceModule(BaseBrainModule):
     """Self-verification service that cross-checks final answers using different reasoning methods"""
 
     def __init__(self):
+        super().__init__()
         self.mcts_service = None
         self.cot_service = None
         self.tot_service = None
@@ -52,8 +49,6 @@ class SelfVerificationServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.mcts_service = ModuleRegistry.get_module("mcts_service")
             self.cot_service = ModuleRegistry.get_module("chain_of_thought")
             self.tot_service = ModuleRegistry.get_module("tree_of_thought")

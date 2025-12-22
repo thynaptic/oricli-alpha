@@ -5,16 +5,11 @@ Mirrors Swift SafetyFramework.swift functionality
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import time
 import hashlib
 import json
-from pathlib import Path
 from dataclasses import dataclass, field
 from enum import Enum
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 

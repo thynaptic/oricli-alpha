@@ -4,16 +4,12 @@ Model cascading service for sequential model usage
 Converted from Swift ModelCascadeService.swift
 """
 
-from typing import Any, Dict, List, Optional
 import logging
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+from typing import Any, Dict, List, Optional
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
 from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
 
 logger = logging.getLogger(__name__)
@@ -76,6 +72,7 @@ class ModelCascadeServiceModule(BaseBrainModule):
     """Model cascading service for sequential model usage"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self.cascade_depth: Dict[str, int] = {}
         self.max_cascade_depth = 3
@@ -107,8 +104,6 @@ class ModelCascadeServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
 
             self._modules_loaded = True

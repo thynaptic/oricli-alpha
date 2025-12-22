@@ -4,15 +4,11 @@ Orchestrates all cognitive reasoning features into a unified flow
 Converted from Swift CognitiveReasoningOrchestrator.swift
 """
 
-from typing import Any, Dict, Optional
 import logging
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+from typing import Any, Dict, Optional
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
 from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
 
 logger = logging.getLogger(__name__)
@@ -21,6 +17,7 @@ class CognitiveReasoningOrchestratorModule(BaseBrainModule):
     """Orchestrates all cognitive reasoning features into a unified flow"""
 
     def __init__(self):
+        super().__init__()
         self.cot_service = None
         self.tot_service = None
         self.mcts_service = None
@@ -56,8 +53,6 @@ class CognitiveReasoningOrchestratorModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.cot_service = ModuleRegistry.get_module("chain_of_thought")
             self.tot_service = ModuleRegistry.get_module("tree_of_thought")
             self.mcts_service = ModuleRegistry.get_module("mcts_service")

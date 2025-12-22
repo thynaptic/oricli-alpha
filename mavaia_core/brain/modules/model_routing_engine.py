@@ -4,15 +4,11 @@ Routing logic engine with confidence weighting, casual detection, and per-model 
 Converted from Swift ModelRoutingEngine.swift
 """
 
-from typing import Any, Dict, Optional
 import logging
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+from typing import Any, Dict, Optional
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
 from mavaia_core.exceptions import InvalidParameterError
 
 logger = logging.getLogger(__name__)
@@ -45,6 +41,7 @@ class ModelRoutingEngineModule(BaseBrainModule):
     """Routing logic engine for model selection"""
 
     def __init__(self):
+        super().__init__()
         self.cluster_model_cache: Dict[str, str] = {}
         self.model_cooldown: Dict[str, int] = {}
         self.cooldown_turns = 3
@@ -75,8 +72,6 @@ class ModelRoutingEngineModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.casual_detector = ModuleRegistry.get_module("casual_conversation_detector")
 
             self._modules_loaded = True
