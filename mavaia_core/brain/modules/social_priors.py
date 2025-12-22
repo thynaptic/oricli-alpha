@@ -6,19 +6,20 @@ Handles social norms, cultural sensitivity, relationship dynamics, and context-a
 from typing import Dict, Any, List, Optional, Tuple
 import json
 import re
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class SocialPriorsModule(BaseBrainModule):
     """Social priors for context detection and appropriateness scoring"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self._load_config()
 
@@ -71,7 +72,11 @@ class SocialPriorsModule(BaseBrainModule):
                     },
                 }
         except Exception as e:
-            print(f"[SocialPriorsModule] Failed to load config: {e}", file=sys.stderr)
+            logger.warning(
+                "Failed to load social_priors config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "social_priors", "error_type": type(e).__name__},
+            )
             self.config = {}
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -100,7 +105,11 @@ class SocialPriorsModule(BaseBrainModule):
             context = params.get("context", {})
             return self.check_cultural_sensitivity(text, context)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for social_priors",
+            )
 
     def assess_context(
         self,

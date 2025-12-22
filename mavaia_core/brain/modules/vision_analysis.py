@@ -4,16 +4,16 @@ Converts image features to structured thoughts for cognitive generator
 """
 
 from typing import Dict, Any, List, Optional
-import sys
 import json
 import base64
 import io
 from pathlib import Path
-
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports - handle gracefully if dependencies not available
 try:
@@ -64,6 +64,7 @@ class VisionAnalysisModule(BaseBrainModule):
     """Vision analysis using TensorFlow Hub models for feature extraction"""
 
     def __init__(self):
+        super().__init__()
         self.model = None
         self.image_labels = None
         self._model_loaded = False
@@ -109,7 +110,11 @@ class VisionAnalysisModule(BaseBrainModule):
             self._load_labels()
             return True
         except Exception as e:
-            print(f"[VisionAnalysisModule] Model loading failed: {e}, using fallback", file=sys.stderr)
+            logger.debug(
+                "Vision model initialization failed; using fallback behavior",
+                exc_info=True,
+                extra={"module_name": "vision_analysis", "error_type": type(e).__name__},
+            )
             return True  # Return True to allow fallback operation
 
     def _load_model(self):
@@ -124,7 +129,11 @@ class VisionAnalysisModule(BaseBrainModule):
             self.model = _tf_hub.load(self.model_url)
             self._model_loaded = True
         except Exception as e:
-            print(f"Failed to load vision model: {e}", file=sys.stderr)
+            logger.debug(
+                "Failed to load TensorFlow Hub vision model",
+                exc_info=True,
+                extra={"module_name": "vision_analysis", "error_type": type(e).__name__},
+            )
             self.model = None
 
     def _load_labels(self):
@@ -137,7 +146,12 @@ class VisionAnalysisModule(BaseBrainModule):
             else:
                 # Fallback: use top ImageNet classes
                 self.image_labels = self._get_default_labels()
-        except:
+        except Exception as e:
+            logger.debug(
+                "Failed to load ImageNet labels; using defaults",
+                exc_info=True,
+                extra={"module_name": "vision_analysis", "error_type": type(e).__name__},
+            )
             self.image_labels = self._get_default_labels()
 
     def _get_default_labels(self) -> List[str]:
@@ -158,7 +172,11 @@ class VisionAnalysisModule(BaseBrainModule):
         elif operation == "get_color_info":
             return self._get_color_info(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for vision_analysis",
+            )
 
     def _analyze_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Full image analysis - combines all features"""
@@ -397,7 +415,12 @@ class VisionAnalysisModule(BaseBrainModule):
                     "face_count": len(faces),
                     "has_faces": len(faces) > 0,
                 }
-            except:
+            except Exception as e:
+                logger.debug(
+                    "Face detection cascade unavailable or failed",
+                    exc_info=True,
+                    extra={"module_name": "vision_analysis", "error_type": type(e).__name__},
+                )
                 # Cascade not available
                 return {
                     "success": False,
@@ -584,7 +607,12 @@ class VisionAnalysisModule(BaseBrainModule):
 
                 image = Image.open(io.BytesIO(image_bytes))
                 return np.array(image.convert("RGB"))
-            except:
+            except Exception as e:
+                logger.debug(
+                    "PIL decode failed; attempting OpenCV fallback",
+                    exc_info=True,
+                    extra={"module_name": "vision_analysis", "error_type": type(e).__name__},
+                )
                 # Fallback to OpenCV
                 if _check_opencv():
                     nparr = np.frombuffer(image_bytes, np.uint8)
@@ -595,7 +623,11 @@ class VisionAnalysisModule(BaseBrainModule):
                 return None
 
         except Exception as e:
-            print(f"Image decoding error: {e}", file=sys.stderr)
+            logger.debug(
+                "Image decoding error",
+                exc_info=True,
+                extra={"module_name": "vision_analysis", "error_type": type(e).__name__},
+            )
             return None
 
     def _preprocess_image(self, image: np.ndarray):

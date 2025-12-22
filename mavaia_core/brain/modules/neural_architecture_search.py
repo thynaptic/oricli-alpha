@@ -4,15 +4,14 @@ Automatically discover optimal architectures for specific tasks
 """
 
 from typing import Dict, Any, Optional, List, Tuple
-import sys
-from pathlib import Path
 import random
 import copy
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError, ModuleInitializationError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports
 try:
@@ -308,7 +307,11 @@ class EvolutionaryNAS:
             return score
 
         except Exception as e:
-            print(f"[EvolutionaryNAS] Evaluation failed: {e}", file=sys.stderr)
+            logger.debug(
+                "NAS candidate evaluation failed",
+                exc_info=True,
+                extra={"module_name": "neural_architecture_search", "error_type": type(e).__name__},
+            )
             return 0.0
 
     def select_parents(self) -> Tuple[ArchitectureCandidate, ArchitectureCandidate]:
@@ -368,7 +371,10 @@ class EvolutionaryNAS:
             self.initialize_population()
 
         # Evaluate initial population
-        print(f"[EvolutionaryNAS] Evaluating initial population...", file=sys.stderr)
+        logger.info(
+            "Evaluating initial NAS population",
+            extra={"module_name": "neural_architecture_search", "population_size": int(self.population_size)},
+        )
         for candidate in self.population:
             if candidate.performance_score == 0.0:
                 self.evaluate_candidate(
@@ -422,9 +428,14 @@ class EvolutionaryNAS:
             avg_score = sum(c.performance_score for c in self.population) / len(
                 self.population
             )
-            print(
-                f"[EvolutionaryNAS] Generation {self.generation}: Best={best_score:.4f}, Avg={avg_score:.4f}",
-                file=sys.stderr,
+            logger.info(
+                "NAS generation progress",
+                extra={
+                    "module_name": "neural_architecture_search",
+                    "generation": int(self.generation),
+                    "best_score": round(float(best_score), 6),
+                    "avg_score": round(float(avg_score), 6),
+                },
             )
 
         # Return best candidate
@@ -436,6 +447,7 @@ class NeuralArchitectureSearchModule(BaseBrainModule):
     """Neural Architecture Search for automatic architecture discovery"""
 
     def __init__(self):
+        super().__init__()
         self.search_space: Optional[SearchSpace] = None
         self.nas: Optional[EvolutionaryNAS] = None
         self.best_architecture: Optional[ArchitectureCandidate] = None
@@ -461,9 +473,9 @@ class NeuralArchitectureSearchModule(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize the module"""
         if not JAX_AVAILABLE:
-            print(
-                "[NeuralArchitectureSearchModule] JAX not available",
-                file=sys.stderr,
+            logger.warning(
+                "JAX not available; neural_architecture_search is unavailable",
+                extra={"module_name": "neural_architecture_search"},
             )
             return False
 
@@ -492,9 +504,20 @@ class NeuralArchitectureSearchModule(BaseBrainModule):
             elif operation == "load_architecture":
                 return self._load_architecture(params)
             else:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for neural_architecture_search",
+                )
+        except (InvalidParameterError, ModuleInitializationError, ModuleOperationError):
+            raise
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            logger.debug(
+                "Unhandled neural_architecture_search execution error",
+                exc_info=True,
+                extra={"module_name": "neural_architecture_search", "operation": str(operation), "error_type": type(e).__name__},
+            )
+            return {"success": False, "error": "NAS operation failed"}
 
     def _define_search_space(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Define architecture search space"""
