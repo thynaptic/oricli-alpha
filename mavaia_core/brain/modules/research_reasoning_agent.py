@@ -4,19 +4,20 @@ Converted from Swift ResearchReasoningAgent.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ResearchReasoningAgentModule(BaseBrainModule):
     """Orchestrates multi-step reasoning for research mode"""
 
     def __init__(self):
+        super().__init__()
         self.web_search = None
         self.cognitive_generator = None
         self._modules_loaded = False
@@ -46,15 +47,17 @@ class ResearchReasoningAgentModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.web_search = ModuleRegistry.get_module("web_scraper")
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
 
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load one or more optional research_reasoning_agent dependencies",
+                exc_info=True,
+                extra={"module_name": "research_reasoning_agent", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -67,12 +70,19 @@ class ResearchReasoningAgentModule(BaseBrainModule):
         elif operation == "perform_research_with_reasoning":
             return self._perform_research_with_reasoning(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for research_reasoning_agent",
+            )
 
     def _conduct_research(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Conduct research on a query"""
         query = params.get("query", "")
         max_results = params.get("max_results", 10)
+
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError("query", str(query), "query must be a non-empty string")
 
         if not self.web_search:
             return {
@@ -93,9 +103,14 @@ class ResearchReasoningAgentModule(BaseBrainModule):
                 "query": query,
             }
         except Exception as e:
+            logger.debug(
+                "Web search execution failed",
+                exc_info=True,
+                extra={"module_name": "research_reasoning_agent", "error_type": type(e).__name__},
+            )
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Web search failed",
                 "results": [],
             }
 
@@ -139,15 +154,22 @@ class ResearchReasoningAgentModule(BaseBrainModule):
                 "sources": [r.get("url", "") for r in results],
             }
         except Exception as e:
+            logger.debug(
+                "Research synthesis failed",
+                exc_info=True,
+                extra={"module_name": "research_reasoning_agent", "error_type": type(e).__name__},
+            )
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Synthesis failed",
                 "synthesis": "",
             }
 
     def _perform_research_with_reasoning(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Perform research with multi-step reasoning"""
         query = params.get("query", "")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError("query", str(query), "query must be a non-empty string")
         max_passes = min(max(params.get("max_passes", 5), 2), 7)  # Enforce 2-7 range
 
         passes = []
@@ -162,7 +184,12 @@ class ResearchReasoningAgentModule(BaseBrainModule):
                     "query": query,
                 })
                 sub_questions = decomposition.get("sub_questions", [query])
-            except:
+            except Exception as e:
+                logger.debug(
+                    "Query decomposition failed; using original query",
+                    exc_info=True,
+                    extra={"module_name": "research_reasoning_agent", "error_type": type(e).__name__},
+                )
                 sub_questions = [query]
         else:
             sub_questions = [query]
@@ -180,8 +207,12 @@ class ResearchReasoningAgentModule(BaseBrainModule):
                         if url and url not in seen_urls:
                             seen_urls.add(url)
                             all_sources.append(item)
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        "Search sub-question failed; continuing",
+                        exc_info=True,
+                        extra={"module_name": "research_reasoning_agent", "error_type": type(e).__name__},
+                    )
 
         # Create first pass
         passes.append({

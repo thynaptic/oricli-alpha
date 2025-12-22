@@ -4,22 +4,21 @@ Plug-and-play module for analytical, creative, strategic, diagnostic, and compar
 No LLM dependencies - uses structured reasoning patterns and symbolic methods
 """
 
-from pathlib import Path
+import logging
 from typing import Any, Dict, List, Optional
 import re
-import sys
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ReasoningModule(BaseBrainModule):
     """Perform reasoning tasks using structured patterns and symbolic methods"""
     
     def __init__(self):
-        pass
+        super().__init__()
     
     @property
     def metadata(self) -> ModuleMetadata:
@@ -63,20 +62,22 @@ class ReasoningModule(BaseBrainModule):
                 context = params.get("context", [])
                 reasoning_type = params.get("reasoning_type", "analytical")
                 
-                if not query:
-                    raise ValueError("Missing required parameter: query")
-                
-                    # Use structured reasoning patterns
+                if not isinstance(query, str) or not query.strip():
+                    raise InvalidParameterError("query", str(query), "Missing required parameter: query")
+
+                context_list = self._normalize_context(context)
+                # Use structured reasoning patterns
                 reasoning_text = self._structured_reasoning(
-                    query, context, reasoning_type
+                    query, context_list, str(reasoning_type or "analytical")
                 )
                 
                 return {
+                    "success": True,
                     "reasoning": reasoning_text,
                     "conclusion": self._extract_conclusion(reasoning_text),
                     "confidence": self._estimate_confidence(reasoning_text),
                     "reasoning_steps": self._extract_steps(reasoning_text),
-                    "reasoning_type": reasoning_type,
+                    "reasoning_type": str(reasoning_type or "analytical"),
                     "method": "structured_reasoning",
                 }
         
@@ -85,8 +86,10 @@ class ReasoningModule(BaseBrainModule):
                 item2 = params.get("item2", "")
                 context = params.get("context", [])
                 
-                if not item1 or not item2:
-                    raise ValueError("Missing required parameters: item1, item2")
+                if not isinstance(item1, str) or not item1.strip():
+                    raise InvalidParameterError("item1", str(item1), "Missing required parameter: item1")
+                if not isinstance(item2, str) or not item2.strip():
+                    raise InvalidParameterError("item2", str(item2), "Missing required parameter: item2")
                 
                 query = f"Compare: {item1} vs {item2}"
                 return self.execute(
@@ -153,13 +156,37 @@ class ReasoningModule(BaseBrainModule):
                 return self.resolve_contradictions(contradictions, reasoning_steps)
 
             case _:
-                raise ValueError(
-                    f"Unknown operation: {operation}. "
-                    "Supported: reason, analyze, compare, multi_step_solve, "
-                    "causal_reasoning, analogical_reasoning, deep_analysis, "
-                    "create_reasoning_graph, branch_reasoning, select_strategy, "
-                    "evaluate_reasoning, detect_contradictions, resolve_contradictions"
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for reasoning",
                 )
+
+    def _normalize_context(self, context: Any) -> List[str]:
+        """Normalize context to a list[str] for internal reasoning utilities."""
+        if context is None:
+            return []
+        if isinstance(context, str):
+            ctx = context.strip()
+            return [ctx] if ctx else []
+        if isinstance(context, list):
+            out: list[str] = []
+            for item in context:
+                if item is None:
+                    continue
+                if isinstance(item, str):
+                    s = item.strip()
+                    if s:
+                        out.append(s)
+                else:
+                    # Best-effort stringification; keep non-empty.
+                    s = str(item).strip()
+                    if s:
+                        out.append(s)
+            return out
+        # Unknown type; stringify safely.
+        s = str(context).strip()
+        return [s] if s else []
     
     def _build_reasoning_prompt(
         self, query: str, context: List[str], reasoning_type: str
