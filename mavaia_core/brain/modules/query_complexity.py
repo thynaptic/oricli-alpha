@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 
 @dataclass
@@ -74,6 +75,9 @@ class QueryComplexityAnalyzer(BaseBrainModule):
         "proof",
     ]
 
+    def __init__(self) -> None:
+        super().__init__()
+
     @property
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
@@ -107,7 +111,11 @@ class QueryComplexityAnalyzer(BaseBrainModule):
         elif operation == "should_use_supervised_consistency":
             return self._should_use_supervised_consistency(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for query_complexity",
+            )
 
     def _analyze_complexity(
         self, params: dict[str, Any]
@@ -125,11 +133,21 @@ class QueryComplexityAnalyzer(BaseBrainModule):
             Dictionary with ComplexityScore data
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         self_chaining_metadata = params.get("self_chaining_metadata")
+        if self_chaining_metadata is not None and not isinstance(self_chaining_metadata, dict):
+            raise InvalidParameterError(
+                parameter="self_chaining_metadata",
+                value=str(type(self_chaining_metadata).__name__),
+                reason="self_chaining_metadata must be a dict when provided",
+            )
 
         factors: dict[str, float] = {}
         overall = 0.0
@@ -222,8 +240,12 @@ class QueryComplexityAnalyzer(BaseBrainModule):
             Dictionary with should_use boolean
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         self_chaining_metadata = params.get("self_chaining_metadata")

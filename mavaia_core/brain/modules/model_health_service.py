@@ -4,20 +4,21 @@ Converted from Swift ModelHealthService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ModelHealthServiceModule(BaseBrainModule):
     """Service to verify models are actually online and communicating"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self.model_warmup = None
         self._modules_loaded = False
@@ -53,15 +54,17 @@ class ModelHealthServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
             self.model_warmup = ModuleRegistry.get_module("model_warmup_service")
 
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load model_health_service dependencies",
+                exc_info=True,
+                extra={"module_name": "model_health_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -76,11 +79,21 @@ class ModelHealthServiceModule(BaseBrainModule):
         elif operation == "verify_model_communicating":
             return self._verify_model_communicating(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for model_health_service",
+            )
 
     def _check_health(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Check if a model is currently healthy and online"""
         model = params.get("model", "default")
+        if not isinstance(model, str) or not model.strip():
+            raise InvalidParameterError(
+                parameter="model",
+                value=str(model),
+                reason="model must be a non-empty string",
+            )
 
         # Check cache first
         if model in self._model_health_status:
@@ -113,6 +126,14 @@ class ModelHealthServiceModule(BaseBrainModule):
     def _monitor_models(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Monitor models (background monitoring)"""
         models = params.get("models", ["default"])
+        if models is None:
+            models = ["default"]
+        if not isinstance(models, list) or any(not isinstance(m, str) for m in models):
+            raise InvalidParameterError(
+                parameter="models",
+                value=str(type(models).__name__),
+                reason="models must be a list of strings",
+            )
 
         results = {}
         for model in models:
@@ -127,6 +148,12 @@ class ModelHealthServiceModule(BaseBrainModule):
     def _get_health_status(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get current health status for a model"""
         model = params.get("model", "default")
+        if not isinstance(model, str) or not model.strip():
+            raise InvalidParameterError(
+                parameter="model",
+                value=str(model),
+                reason="model must be a non-empty string",
+            )
 
         status = self._model_health_status.get(model, {})
         return {
@@ -142,6 +169,12 @@ class ModelHealthServiceModule(BaseBrainModule):
         import time
 
         model = params.get("model", "default")
+        if not isinstance(model, str) or not model.strip():
+            raise InvalidParameterError(
+                parameter="model",
+                value=str(model),
+                reason="model must be a non-empty string",
+            )
         start_time = time.time()
 
         if not self.cognitive_generator:
@@ -167,10 +200,19 @@ class ModelHealthServiceModule(BaseBrainModule):
             }
         except Exception as e:
             response_time = time.time() - start_time
+            logger.debug(
+                "Model communication check failed",
+                exc_info=True,
+                extra={
+                    "module_name": "model_health_service",
+                    "target_model": str(model),
+                    "error_type": type(e).__name__,
+                },
+            )
             return {
                 "success": False,
                 "is_communicating": False,
                 "response_time": response_time,
-                "error": str(e),
+                "error": "Model communication check failed",
             }
 
