@@ -5,13 +5,13 @@ Converted from Swift DocumentRanker.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class RetrievedDocument:
@@ -71,6 +71,7 @@ class DocumentRankerModule(BaseBrainModule):
     """Multi-stage document ranking service"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self.stage1_limit = 50  # Initial broad retrieval
         self.stage2_limit = 20  # After first ranking pass
@@ -105,13 +106,15 @@ class DocumentRankerModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Failed to load document_ranker dependencies",
+                exc_info=True,
+                extra={"module_name": "document_ranker", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -122,12 +125,32 @@ class DocumentRankerModule(BaseBrainModule):
         elif operation == "rank":
             return self._rank(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for document_ranker",
+            )
 
     def _rank_documents(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Perform multi-stage ranking with progressive refinement"""
         documents_data = params.get("documents", [])
         query = params.get("query", "")
+        if documents_data is None:
+            documents_data = []
+        if query is None:
+            query = ""
+        if not isinstance(documents_data, list):
+            raise InvalidParameterError(
+                parameter="documents",
+                value=str(type(documents_data).__name__),
+                reason="documents must be a list",
+            )
+        if not isinstance(query, str):
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(type(query).__name__),
+                reason="query must be a string",
+            )
 
         documents = [
             RetrievedDocument.from_dict(d) if isinstance(d, dict) else d

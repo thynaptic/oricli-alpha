@@ -10,18 +10,19 @@ from datetime import datetime, timedelta
 import json
 import random
 import re
-import sys
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class EmotionalInferenceModule(BaseBrainModule):
     """Infer emotional intent and modulate response warmth and empathy"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.emotion_patterns = {}
         self.warmth_modulators = {}
@@ -139,9 +140,10 @@ class EmotionalInferenceModule(BaseBrainModule):
                     "low_empathy": ["I see", "Okay", "Right"],
                 }
         except Exception as e:
-            print(
-                f"[EmotionalInferenceModule] Failed to load config: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load emotional_inference config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "emotional_inference", "error_type": type(e).__name__},
             )
             self.emotion_patterns = {}
             self.warmth_modulators = {}
@@ -153,35 +155,109 @@ class EmotionalInferenceModule(BaseBrainModule):
             case "score_emotional_intent":
                 text = params.get("text", "")
                 context = params.get("context", "")
+                if text is None:
+                    text = ""
+                if context is None:
+                    context = ""
+                if not isinstance(text, str):
+                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+                if not isinstance(context, str):
+                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
                 return self.score_emotional_intent(text, context)
             case "calculate_warmth_level":
                 emotion_score = params.get("emotion_score", {})
+                if emotion_score is None:
+                    emotion_score = {}
+                if not isinstance(emotion_score, dict):
+                    raise InvalidParameterError(
+                        "emotion_score", str(type(emotion_score).__name__), "emotion_score must be a dict"
+                    )
                 return self.calculate_warmth_level(emotion_score)
             case "tune_empathy":
                 text = params.get("text", "")
                 emotion_score = params.get("emotion_score", {})
+                if text is None:
+                    text = ""
+                if emotion_score is None:
+                    emotion_score = {}
+                if not isinstance(text, str):
+                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+                if not isinstance(emotion_score, dict):
+                    raise InvalidParameterError(
+                        "emotion_score", str(type(emotion_score).__name__), "emotion_score must be a dict"
+                    )
                 return self.tune_empathy(text, emotion_score)
             case "infer_emotion":
                 text = params.get("text", "")
                 context = params.get("context", "")
+                if text is None:
+                    text = ""
+                if context is None:
+                    context = ""
+                if not isinstance(text, str):
+                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+                if not isinstance(context, str):
+                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
                 return self.infer_emotion(text, context)
             case "modulate_response_warmth":
                 response = params.get("response", "")
                 emotion_score = params.get("emotion_score", {})
+                if response is None:
+                    response = ""
+                if emotion_score is None:
+                    emotion_score = {}
+                if not isinstance(response, str):
+                    raise InvalidParameterError("response", str(type(response).__name__), "response must be a string")
+                if not isinstance(emotion_score, dict):
+                    raise InvalidParameterError(
+                        "emotion_score", str(type(emotion_score).__name__), "emotion_score must be a dict"
+                    )
                 return self.modulate_response_warmth(response, emotion_score)
             case "track_affective_state":
                 user_id = params.get("user_id", "default")
                 text = params.get("text", "")
                 context = params.get("context", "")
+                if user_id is None:
+                    user_id = "default"
+                if text is None:
+                    text = ""
+                if context is None:
+                    context = ""
+                if not isinstance(user_id, str):
+                    raise InvalidParameterError("user_id", str(type(user_id).__name__), "user_id must be a string")
+                if not isinstance(text, str):
+                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+                if not isinstance(context, str):
+                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
                 return self.track_affective_state(user_id, text, context)
             case "calculate_mood_curve":
                 user_id = params.get("user_id", "default")
                 time_window = params.get("time_window", 24)
+                if user_id is None:
+                    user_id = "default"
+                if not isinstance(user_id, str):
+                    raise InvalidParameterError("user_id", str(type(user_id).__name__), "user_id must be a string")
+                try:
+                    time_window_int = int(time_window)
+                except (TypeError, ValueError):
+                    raise InvalidParameterError("time_window", str(time_window), "time_window must be an integer")
+                if time_window_int < 1:
+                    raise InvalidParameterError("time_window", str(time_window_int), "time_window must be >= 1")
                 return self.calculate_mood_curve(user_id, time_window)
             case "apply_sentiment_carryover":
                 current_sentiment = params.get("current_sentiment", 0.0)
                 previous_sentiment = params.get("previous_sentiment", 0.0)
                 carryover_factor = params.get("carryover_factor", 0.3)
+                try:
+                    float(current_sentiment)
+                    float(previous_sentiment)
+                    float(carryover_factor)
+                except (TypeError, ValueError):
+                    raise InvalidParameterError(
+                        "carryover_factor",
+                        str(carryover_factor),
+                        "current_sentiment, previous_sentiment, and carryover_factor must be numbers",
+                    )
                 return self.apply_sentiment_carryover(
                     current_sentiment, previous_sentiment, carryover_factor
                 )
@@ -189,17 +265,54 @@ class EmotionalInferenceModule(BaseBrainModule):
                 user_id = params.get("user_id", "default")
                 time_elapsed = params.get("time_elapsed", 1.0)
                 decay_rate = params.get("decay_rate", 0.1)
+                if user_id is None:
+                    user_id = "default"
+                if not isinstance(user_id, str):
+                    raise InvalidParameterError("user_id", str(type(user_id).__name__), "user_id must be a string")
+                try:
+                    float(time_elapsed)
+                    float(decay_rate)
+                except (TypeError, ValueError):
+                    raise InvalidParameterError(
+                        "time_elapsed",
+                        str(time_elapsed),
+                        "time_elapsed and decay_rate must be numbers",
+                    )
                 return self.apply_emotional_decay(user_id, time_elapsed, decay_rate)
             case "compensate_tone":
                 text = params.get("text", "")
                 detected_emotion = params.get("detected_emotion", {})
+                if text is None:
+                    text = ""
+                if detected_emotion is None:
+                    detected_emotion = {}
+                if not isinstance(text, str):
+                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+                if not isinstance(detected_emotion, dict):
+                    raise InvalidParameterError(
+                        "detected_emotion", str(type(detected_emotion).__name__), "detected_emotion must be a dict"
+                    )
                 return self.compensate_tone(text, detected_emotion)
             case "navigate_emotional_graph":
                 current_state = params.get("current_state", "neutral")
                 target_state = params.get("target_state")
+                if current_state is None:
+                    current_state = "neutral"
+                if not isinstance(current_state, str):
+                    raise InvalidParameterError(
+                        "current_state", str(type(current_state).__name__), "current_state must be a string"
+                    )
+                if target_state is not None and not isinstance(target_state, str):
+                    raise InvalidParameterError(
+                        "target_state", str(type(target_state).__name__), "target_state must be a string when provided"
+                    )
                 return self.navigate_emotional_graph(current_state, target_state)
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for emotional_inference",
+                )
 
     def score_emotional_intent(self, text: str, context: str = "") -> Dict[str, Any]:
         """Score emotional intent from user input (detect tone, sentiment, emotional state)"""

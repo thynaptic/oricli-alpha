@@ -5,19 +5,20 @@ Handles confidence-based fallback triggers, context-aware fallback strategies, a
 
 from typing import Dict, Any, List, Optional, Tuple
 import json
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class FallbackHeuristicsModule(BaseBrainModule):
     """Intelligent fallback chain selection and management"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.fallback_chains = {}
         self.fallback_strategies = {}
@@ -79,9 +80,10 @@ class FallbackHeuristicsModule(BaseBrainModule):
                     "context_aware": True,
                 }
         except Exception as e:
-            print(
-                f"[FallbackHeuristicsModule] Failed to load config: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load fallback_heuristics config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "fallback_heuristics", "error_type": type(e).__name__},
             )
             self.fallback_chains = {}
             self.fallback_strategies = {}
@@ -92,26 +94,104 @@ class FallbackHeuristicsModule(BaseBrainModule):
             confidence = params.get("confidence", 0.5)
             error_type = params.get("error_type", "")
             context = params.get("context", {})
+            if error_type is None:
+                error_type = ""
+            if context is None:
+                context = {}
+            try:
+                confidence_float = float(confidence)
+            except (TypeError, ValueError):
+                raise InvalidParameterError(
+                    parameter="confidence",
+                    value=str(confidence),
+                    reason="confidence must be a number",
+                )
+            if not isinstance(error_type, str):
+                raise InvalidParameterError(
+                    parameter="error_type",
+                    value=str(type(error_type).__name__),
+                    reason="error_type must be a string",
+                )
+            if not isinstance(context, dict):
+                raise InvalidParameterError(
+                    parameter="context",
+                    value=str(type(context).__name__),
+                    reason="context must be a dict",
+                )
             return self.select_fallback_strategy(confidence, error_type, context)
         elif operation == "should_fallback":
             confidence = params.get("confidence", 0.5)
             error_occurred = params.get("error_occurred", False)
             response_quality = params.get("response_quality", 0.5)
+            try:
+                float(confidence)
+            except (TypeError, ValueError):
+                raise InvalidParameterError("confidence", str(confidence), "confidence must be a number")
+            if not isinstance(error_occurred, bool):
+                raise InvalidParameterError(
+                    parameter="error_occurred",
+                    value=str(type(error_occurred).__name__),
+                    reason="error_occurred must be a boolean",
+                )
+            try:
+                float(response_quality)
+            except (TypeError, ValueError):
+                raise InvalidParameterError(
+                    parameter="response_quality",
+                    value=str(response_quality),
+                    reason="response_quality must be a number",
+                )
             return self.should_fallback(confidence, error_occurred, response_quality)
         elif operation == "get_fallback_chain":
             strategy = params.get("strategy", "")
+            if strategy is None:
+                strategy = ""
+            if not isinstance(strategy, str):
+                raise InvalidParameterError("strategy", str(type(strategy).__name__), "strategy must be a string")
             return self.get_fallback_chain(strategy)
         elif operation == "evaluate_fallback_trigger":
             trigger_type = params.get("trigger_type", "")
             context = params.get("context", {})
+            if trigger_type is None:
+                trigger_type = ""
+            if context is None:
+                context = {}
+            if not isinstance(trigger_type, str):
+                raise InvalidParameterError(
+                    parameter="trigger_type",
+                    value=str(type(trigger_type).__name__),
+                    reason="trigger_type must be a string",
+                )
+            if not isinstance(context, dict):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a dict")
             return self.evaluate_fallback_trigger(trigger_type, context)
         elif operation == "get_next_fallback_step":
             current_step = params.get("current_step", "")
             chain = params.get("chain", [])
             attempts = params.get("attempts", 0)
+            if current_step is None:
+                current_step = ""
+            if chain is None:
+                chain = []
+            if not isinstance(current_step, str):
+                raise InvalidParameterError(
+                    parameter="current_step",
+                    value=str(type(current_step).__name__),
+                    reason="current_step must be a string",
+                )
+            if not isinstance(chain, list):
+                raise InvalidParameterError("chain", str(type(chain).__name__), "chain must be a list")
+            try:
+                attempts_int = int(attempts)
+            except (TypeError, ValueError):
+                raise InvalidParameterError("attempts", str(attempts), "attempts must be an integer")
             return self.get_next_fallback_step(current_step, chain, attempts)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for fallback_heuristics",
+            )
 
     def select_fallback_strategy(
         self, confidence: float, error_type: str = "", context: Dict[str, Any] = None
