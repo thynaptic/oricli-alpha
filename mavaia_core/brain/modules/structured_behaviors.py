@@ -5,19 +5,20 @@ Handles conversation sequences, routine behaviors, and multi-turn behavior coord
 
 from typing import Dict, Any, List, Optional
 import json
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class StructuredBehaviorsModule(BaseBrainModule):
     """Structured behaviors for conversation flows and routines"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.behavior_sequences = {}
         self.routine_behaviors = {}
@@ -74,35 +75,79 @@ class StructuredBehaviorsModule(BaseBrainModule):
                     ],
                 }
         except Exception as e:
-            print(
-                f"[StructuredBehaviorsModule] Failed to load config: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load structured_behaviors config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "structured_behaviors", "error_type": type(e).__name__},
             )
             self.behavior_sequences = {}
             self.routine_behaviors = {}
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a structured behaviors operation"""
-        if operation == "get_behavior_sequence":
-            sequence_type = params.get("sequence_type", "")
-            return self.get_behavior_sequence(sequence_type)
-        elif operation == "execute_behavior":
-            behavior = params.get("behavior", "")
-            context = params.get("context", {})
-            sequence_id = params.get("sequence_id", "")
-            return self.execute_behavior(behavior, context, sequence_id)
-        elif operation == "continue_sequence":
-            sequence_id = params.get("sequence_id", "")
-            context = params.get("context", {})
-            return self.continue_sequence(sequence_id, context)
-        elif operation == "reset_sequence":
-            sequence_id = params.get("sequence_id", "")
-            return self.reset_sequence(sequence_id)
-        elif operation == "get_routine_behavior":
-            routine_type = params.get("routine_type", "")
-            return self.get_routine_behavior(routine_type)
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
+        match operation:
+            case "get_behavior_sequence":
+                sequence_type = params.get("sequence_type", "")
+                if sequence_type is None:
+                    sequence_type = ""
+                if not isinstance(sequence_type, str):
+                    raise InvalidParameterError(
+                        "sequence_type", str(type(sequence_type).__name__), "sequence_type must be a string"
+                    )
+                return self.get_behavior_sequence(sequence_type)
+            case "execute_behavior":
+                behavior = params.get("behavior", "")
+                context = params.get("context", {})
+                sequence_id = params.get("sequence_id", "")
+                if behavior is None:
+                    behavior = ""
+                if context is None:
+                    context = {}
+                if sequence_id is None:
+                    sequence_id = ""
+                if not isinstance(behavior, str):
+                    raise InvalidParameterError("behavior", str(type(behavior).__name__), "behavior must be a string")
+                if not isinstance(context, dict):
+                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a dict")
+                if not isinstance(sequence_id, str):
+                    raise InvalidParameterError(
+                        "sequence_id", str(type(sequence_id).__name__), "sequence_id must be a string"
+                    )
+                return self.execute_behavior(behavior, context, sequence_id)
+            case "continue_sequence":
+                sequence_id = params.get("sequence_id", "")
+                context = params.get("context", {})
+                if sequence_id is None:
+                    sequence_id = ""
+                if context is None:
+                    context = {}
+                if not isinstance(sequence_id, str):
+                    raise InvalidParameterError(
+                        "sequence_id", str(type(sequence_id).__name__), "sequence_id must be a string"
+                    )
+                if not isinstance(context, dict):
+                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a dict")
+                return self.continue_sequence(sequence_id, context)
+            case "reset_sequence":
+                sequence_id = params.get("sequence_id", "")
+                if sequence_id is None:
+                    sequence_id = ""
+                if not isinstance(sequence_id, str):
+                    raise InvalidParameterError(
+                        "sequence_id", str(type(sequence_id).__name__), "sequence_id must be a string"
+                    )
+                return self.reset_sequence(sequence_id)
+            case "get_routine_behavior":
+                routine_type = params.get("routine_type", "")
+                if routine_type is None:
+                    routine_type = ""
+                if not isinstance(routine_type, str):
+                    raise InvalidParameterError(
+                        "routine_type", str(type(routine_type).__name__), "routine_type must be a string"
+                    )
+                return self.get_routine_behavior(routine_type)
+            case _:
+                raise InvalidParameterError("operation", str(operation), "Unknown operation for structured_behaviors")
 
     def get_behavior_sequence(self, sequence_type: str) -> Dict[str, Any]:
         """Get a behavior sequence by type"""

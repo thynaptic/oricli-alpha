@@ -99,6 +99,9 @@ def _exec_module_with_timeout(spec, module, timeout_s: float) -> tuple[bool, Opt
 class ModuleHealthDiagnosticsModule(BaseBrainModule):
     """Diagnose module importability and basic integrity."""
 
+    def __init__(self) -> None:
+        super().__init__()
+
     @property
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
@@ -130,16 +133,34 @@ class ModuleHealthDiagnosticsModule(BaseBrainModule):
 
         modules_dir = Path(__file__).parent
         files = _collect_module_files(modules_dir, include_subdirs)[:max_modules]
-        # Some legacy modules may still rely on local-import patterns (e.g., `from base_module import ...`
-        # or `from cot_models import ...`). We keep compatibility here, but do so in a reversible way to
-        # avoid polluting interpreter state for callers.
-        import mavaia_core.brain.base_module as package_base_module
-        prior_base_module = sys.modules.get("base_module")
-        added_sys_path = False
-        if str(modules_dir) not in sys.path:
-            sys.path.insert(0, str(modules_dir))
-            added_sys_path = True
-        sys.modules["base_module"] = package_base_module
+        # Some legacy modules may still rely on local-import patterns (e.g. `from base_module import ...`
+        # or `from cot_models import ...`). Avoid mutating sys.path (which can hide real import problems)
+        # by installing a small, explicit set of compatibility shims in sys.modules and restoring them
+        # after the scan.
+        shims: dict[str, str] = {
+            "base_module": "mavaia_core.brain.base_module",
+            "cot_models": "mavaia_core.brain.modules.cot_models",
+            "tot_models": "mavaia_core.brain.modules.tot_models",
+            "mcts_models": "mavaia_core.brain.modules.mcts_models",
+            "tool_calling_models": "mavaia_core.brain.modules.tool_calling_models",
+            # Many legacy modules used a shim module_registry in modules/; keep that mapping.
+            "module_registry": "mavaia_core.brain.modules.module_registry",
+        }
+        prior_shims: dict[str, Any] = {k: sys.modules.get(k) for k in shims}
+        installed: list[str] = []
+        for shim_name, target in shims.items():
+            if sys.modules.get(shim_name) is not None:
+                continue
+            try:
+                imported = __import__(target, fromlist=["*"])
+                sys.modules[shim_name] = imported
+                installed.append(shim_name)
+            except Exception as e:
+                logger.debug(
+                    "Failed to install import-compat shim",
+                    exc_info=True,
+                    extra={"shim_name": shim_name, "target": target, "error_type": type(e).__name__},
+                )
 
         entries: list[dict[str, Any]] = []
         ok_count = 0
@@ -154,15 +175,13 @@ class ModuleHealthDiagnosticsModule(BaseBrainModule):
                     fail_count += 1
         finally:
             # Restore interpreter state
-            if added_sys_path:
-                try:
-                    sys.path.remove(str(modules_dir))
-                except ValueError:
-                    pass
-            if prior_base_module is None:
-                sys.modules.pop("base_module", None)
-            else:
-                sys.modules["base_module"] = prior_base_module
+            for shim_name in installed:
+                sys.modules.pop(shim_name, None)
+            for shim_name, prior in prior_shims.items():
+                if prior is None:
+                    # If it existed before, we would have recorded a module object.
+                    continue
+                sys.modules[shim_name] = prior
 
         return {
             "success": True,
