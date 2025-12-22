@@ -14,7 +14,11 @@ from typing import Any
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.brain.registry import ModuleRegistry
-from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+from mavaia_core.exceptions import (
+    InvalidParameterError,
+    ModuleInitializationError,
+    ModuleOperationError,
+)
 from mavaia_core.brain.modules.cot_models import (
     CoTStep,
     CoTConfiguration,
@@ -92,39 +96,72 @@ class ChainOfThought(BaseBrainModule):
             # Optional dependencies
             try:
                 self._memory_graph = ModuleRegistry.get_module("memory_graph")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: memory_graph",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
             try:
                 self._safety_filter = ModuleRegistry.get_module("safety_framework")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: safety_framework",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
             try:
                 self._verification_loop = ModuleRegistry.get_module("verification")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: verification",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
             try:
                 self._reflection_service = ModuleRegistry.get_module(
                     "reasoning_reflection"
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: reasoning_reflection",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
 
             # Lazy load stage modules for layered reasoning
             try:
                 self._decomposition_module = ModuleRegistry.get_module("decomposition")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: decomposition",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
             try:
                 self._reasoning_module = ModuleRegistry.get_module("reasoning")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: reasoning",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
             try:
                 self._synthesis_agent = ModuleRegistry.get_module("synthesis_agent")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: synthesis_agent",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Chain-of-thought initialization failed",
+                exc_info=True,
+                extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+            )
             return False
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -169,8 +206,9 @@ class ChainOfThought(BaseBrainModule):
         if not self._complexity_detector or not self._prompt_chaining:
             self.initialize()
             if not self._complexity_detector or not self._prompt_chaining:
-                raise RuntimeError(
-                    "Required modules not available (complexity_detector, prompt_chaining)"
+                raise ModuleInitializationError(
+                    module_name=self.metadata.name,
+                    reason="Required modules not available (cot_complexity_detector, prompt_chaining)",
                 )
 
         query = params.get("query", "")
@@ -2222,7 +2260,10 @@ Extract and return the final answer/conclusion now:"""
         if not self._cognitive_generator:
             self.initialize()
             if not self._cognitive_generator:
-                raise RuntimeError("Cognitive generator module not available")
+                raise ModuleInitializationError(
+                    module_name=self.metadata.name,
+                    reason="Cognitive generator module not available",
+                )
 
         try:
             # Set guard flag
@@ -2593,5 +2634,14 @@ Extract and return the final answer/conclusion now:"""
         except Exception as e:
             # Clear guard flag on exception
             self._in_cognitive_generator_call = False
-            raise RuntimeError(f"Simple reasoning execution failed: {e}")
+            logger.debug(
+                "Simple reasoning execution failed",
+                exc_info=True,
+                extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+            )
+            raise ModuleOperationError(
+                module_name=self.metadata.name,
+                operation="execute_simple_reasoning",
+                reason="Simple reasoning execution failed",
+            ) from e
 

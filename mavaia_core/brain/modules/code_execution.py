@@ -11,9 +11,14 @@ import ast
 import re
 from typing import Dict, Any, Optional, List
 from pathlib import Path
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mavaia_core.exceptions import ModuleOperationError, InvalidParameterError
+from mavaia_core.exceptions import (
+    InvalidParameterError,
+    ModuleInitializationError,
+    ModuleOperationError,
+)
 
 # Lazy imports to avoid timeout during module discovery
 SandboxService = None
@@ -24,11 +29,15 @@ ResourceLimits = None
 CommandValidator = None
 CommandValidationError = None
 SandboxExecutionError = None
+_SANDBOX_IMPORT_FAILURE_LOGGED = False
+
+logger = logging.getLogger(__name__)
 
 def _lazy_import_sandbox():
     """Lazy import sandbox services only when needed"""
     global SandboxService, DockerSandbox, FirecrackerSandbox, SandboxPoolManager
     global ResourceLimits, CommandValidator, CommandValidationError, SandboxExecutionError
+    global _SANDBOX_IMPORT_FAILURE_LOGGED
     if SandboxService is None:
         try:
             from mavaia_core.services.sandbox import (
@@ -50,7 +59,13 @@ def _lazy_import_sandbox():
             CommandValidationError = CVE
             SandboxExecutionError = SEE
         except ImportError:
-            pass
+            if not _SANDBOX_IMPORT_FAILURE_LOGGED:
+                _SANDBOX_IMPORT_FAILURE_LOGGED = True
+                logger.debug(
+                    "Sandbox services not available",
+                    exc_info=True,
+                    extra={"module_name": "code_execution"},
+                )
 
 
 class CodeExecutionModule(BaseBrainModule):
@@ -185,11 +200,17 @@ class CodeExecutionModule(BaseBrainModule):
         """Ensure sandbox service is initialized"""
         # Check Docker availability first
         if not self._check_docker_availability():
-            raise RuntimeError(self._initialization_error or "Docker is not available")
+            raise ModuleInitializationError(
+                module_name=self.metadata.name,
+                reason=self._initialization_error or "Docker is not available",
+            )
         
         _lazy_import_sandbox()
         if SandboxService is None:
-            raise RuntimeError("Sandbox services not available")
+            raise ModuleInitializationError(
+                module_name=self.metadata.name,
+                reason="Sandbox services not available",
+            )
         
         if self._command_validator is None:
             self._command_validator = CommandValidator()
@@ -223,7 +244,15 @@ class CodeExecutionModule(BaseBrainModule):
                 # Store error but don't print during discovery
                 # Error will be raised when module is actually used
                 self._initialization_error = f"Failed to initialize sandbox service: {e}"
-                raise RuntimeError(self._initialization_error)
+                logger.debug(
+                    "Sandbox initialization failed",
+                    exc_info=True,
+                    extra={"module_name": "code_execution", "error_type": type(e).__name__},
+                )
+                raise ModuleInitializationError(
+                    module_name=self.metadata.name,
+                    reason="Failed to initialize sandbox service",
+                ) from e
     
     def cleanup(self) -> None:
         """Clean up resources."""
@@ -257,7 +286,7 @@ class CodeExecutionModule(BaseBrainModule):
         # Lazy initialize on first use
         try:
             self._ensure_initialized()
-        except RuntimeError as e:
+        except ModuleInitializationError as e:
             # Provide clear error message when Docker is not available
             error_msg = str(e)
             if "Docker" in error_msg or "docker" in error_msg or "daemon" in error_msg.lower():
@@ -282,37 +311,49 @@ class CodeExecutionModule(BaseBrainModule):
             )
         
         try:
-            if operation == "execute_command":
-                return self._execute_command(params)
-            elif operation == "execute_python":
-                return self._execute_python(params)
-            elif operation == "execute_node":
-                return self._execute_node(params)
-            elif operation == "read_file":
-                return self._read_file(params)
-            elif operation == "write_file":
-                return self._write_file(params)
-            elif operation == "list_files":
-                return self._list_files(params)
-            elif operation == "delete_file":
-                return self._delete_file(params)
-            elif operation == "create_session":
-                return self._create_session(params)
-            elif operation == "destroy_session":
-                return self._destroy_session(params)
-            else:
-                raise ValueError(f"Unknown operation: {operation}")
+            match operation:
+                case "execute_command":
+                    return self._execute_command(params)
+                case "execute_python":
+                    return self._execute_python(params)
+                case "execute_node":
+                    return self._execute_node(params)
+                case "read_file":
+                    return self._read_file(params)
+                case "write_file":
+                    return self._write_file(params)
+                case "list_files":
+                    return self._list_files(params)
+                case "delete_file":
+                    return self._delete_file(params)
+                case "create_session":
+                    return self._create_session(params)
+                case "destroy_session":
+                    return self._destroy_session(params)
+                case _:
+                    raise InvalidParameterError(
+                        "operation",
+                        str(operation),
+                        "Unknown operation for code_execution",
+                    )
         except (CommandValidationError, SandboxExecutionError) as e:
             raise ModuleOperationError(
                 self.metadata.name,
                 operation,
                 str(e),
             )
+        except (InvalidParameterError, ModuleInitializationError, ModuleOperationError):
+            raise
         except Exception as e:
+            logger.debug(
+                "code_execution operation failed",
+                exc_info=True,
+                extra={"module_name": "code_execution", "operation": str(operation), "error_type": type(e).__name__},
+            )
             raise ModuleOperationError(
                 self.metadata.name,
                 operation,
-                f"Unexpected error: {str(e)}",
+                "Unexpected error during code execution operation",
             )
     
     def _get_or_create_session(self, session_id: Optional[str] = None) -> str:
