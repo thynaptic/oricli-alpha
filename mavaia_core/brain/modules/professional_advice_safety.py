@@ -4,6 +4,7 @@ Prevents providing professional advice (legal, medical, financial, etc.)
 """
 
 from typing import Any, Dict, List, Optional
+import logging
 import sys
 import time
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 from safety_framework import (
     SafetyServicePriority,
     SafetyCheckType,
@@ -19,6 +21,7 @@ from safety_framework import (
     SafetyCheckResult,
 )
 
+logger = logging.getLogger(__name__)
 
 class ProfessionalAdviceType:
     """Types of professional advice"""
@@ -70,7 +73,11 @@ class ProfessionalAdviceSafetyModule(BaseBrainModule):
             detection = self.detect_professional_advice_request(text)
             return detection
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for professional_advice_safety",
+            )
 
     def check_input(self, input_text: str, context: SafetyCheckContext) -> SafetyCheckResult:
         """Check input for professional advice requests"""
@@ -122,16 +129,15 @@ class ProfessionalAdviceSafetyModule(BaseBrainModule):
 
         for pattern, confidence in dangerous_patterns:
             if pattern in normalized:
-                sassy_response = (
-                    f"Oh honey, I can't help with that! 😅 "
-                    f"That's way outside my comfort zone, babe. "
-                    f"What else can I help you with?"
+                blocked_response = (
+                    "Request blocked: it appears to seek assistance with evasion, surveillance, or disabling security. "
+                    "I can help with legal, safety-focused alternatives (e.g., personal privacy best practices) instead."
                 )
 
                 return SafetyCheckResult.hard_stop(
                     service_id=self.service_id,
                     service_name=self.service_name,
-                    replacement_response=sassy_response,
+                    replacement_response=blocked_response,
                     confidence=confidence,
                     detected_patterns=[pattern],
                     metadata={"dangerousTopic": pattern, "timestamp": time.time()},
@@ -256,36 +262,33 @@ class ProfessionalAdviceSafetyModule(BaseBrainModule):
         """Generate blocked response for advice type"""
         responses = {
             ProfessionalAdviceType.LEGAL: (
-                "I can't give legal advice, babe! 😅 "
-                "You'll need to talk to a qualified attorney for that. "
-                "What else can I help you with?"
+                "I can’t provide legal advice. For legal guidance, please consult a qualified attorney. "
+                "If you share your jurisdiction and the general situation (no sensitive details), I can help explain common concepts."
             ),
             ProfessionalAdviceType.MEDICAL: (
-                "I'm not a doctor, sweetie! 💜 "
-                "Please consult with a healthcare professional for medical advice. "
-                "What else can I help you with?"
+                "I can’t provide medical advice. Please consult a licensed healthcare professional. "
+                "If you describe symptoms at a high level, I can share general information and questions to ask a clinician."
             ),
             ProfessionalAdviceType.FINANCIAL: (
-                "I can't give financial advice, babe! 💰 "
-                "You should talk to a financial advisor for that. "
-                "What else can I help you with?"
+                "I can’t provide personalized financial advice. For tailored guidance, consult a licensed financial professional. "
+                "I can help explain general financial concepts and risk trade-offs."
             ),
             ProfessionalAdviceType.THERAPY: (
-                "I'm not a therapist, honey! 💙 "
-                "For clinical psychology questions, please consult a licensed professional. "
-                "What else can I help you with?"
+                "I can’t provide therapy or clinical psychological treatment. "
+                "If you’re in distress, consider contacting a licensed professional. "
+                "I can offer general coping resources and help you find appropriate support options."
             ),
             ProfessionalAdviceType.ENGINEERING: (
-                "I can't provide engineering advice, babe! 🏗️ "
-                "You'll need a licensed engineer for structural/building questions. "
-                "What else can I help you with?"
+                "I can’t provide professional engineering advice for safety-critical decisions. "
+                "For structural/building questions, consult a licensed engineer. "
+                "I can help with general principles and non-safety-critical explanations."
             ),
         }
 
         return responses.get(
             advice_type,
-            "I can't provide professional advice on that, sweetie. "
-            "What else can I help you with?",
+            "I can’t provide professional advice on that topic. Please consult a qualified professional. "
+            "I can help with general information and terminology if you’d like.",
         )
 
     def _dict_to_context(self, context_dict: Dict[str, Any]) -> SafetyCheckContext:

@@ -10,6 +10,7 @@ import sys
 import time
 import uuid
 import re
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
 from cot_models import (
     CoTStep,
     CoTConfiguration,
@@ -24,6 +26,8 @@ from cot_models import (
     CoTComplexityScore,
     CoTStageResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ChainOfThought(BaseBrainModule):
@@ -147,7 +151,11 @@ class ChainOfThought(BaseBrainModule):
         elif operation == "format_reasoning_output":
             return self._format_reasoning_output(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for chain_of_thought",
+            )
 
     def _execute_cot(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -172,7 +180,7 @@ class ChainOfThought(BaseBrainModule):
 
         query = params.get("query", "")
         if not query:
-            raise ValueError("query parameter is required")
+            raise InvalidParameterError("query", str(query), "query parameter is required")
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -248,9 +256,10 @@ class ChainOfThought(BaseBrainModule):
             completed_steps = self._reasoning_stage(sub_problems, combined_context, config)
         except Exception as e:
             # Log error but continue with fallback
-            print(
-                f"[ChainOfThought] Error in reasoning stage: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Error in reasoning stage; continuing with fallback",
+                exc_info=True,
+                extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
             )
             # Create minimal steps from sub-problems as fallback
             completed_steps = [
@@ -259,7 +268,11 @@ class ChainOfThought(BaseBrainModule):
             ]
         
         if not completed_steps:
-            raise ValueError("No completed steps from reasoning stage - cannot synthesize answer")
+            raise ModuleOperationError(
+                module_name=self.metadata.name,
+                operation="execute_cot",
+                reason="No completed steps from reasoning stage; cannot synthesize answer",
+            )
 
         # Apply safety filtering, verification, and memory storage to reasoning stage steps
         # (Orchestrator responsibility: post-process steps from reasoning stage)
@@ -342,13 +355,21 @@ class ChainOfThought(BaseBrainModule):
 
         # Validate we have completed steps
         if not completed_steps:
-            raise ValueError("No completed steps for synthesis")
+            raise ModuleOperationError(
+                module_name=self.metadata.name,
+                operation="execute_cot",
+                reason="No completed steps for synthesis",
+            )
 
         # Step 6: Synthesis Stage
         final_answer = self._synthesis_stage(query, completed_steps, sub_problems, config)
 
         if not final_answer:
-            raise ValueError("Empty final answer from CoT synthesis")
+            raise ModuleOperationError(
+                module_name=self.metadata.name,
+                operation="execute_cot",
+                reason="Empty final answer from CoT synthesis",
+            )
         
         # CRITICAL: Immediately validate and fix if "1" - use extraction helper
         if final_answer.strip() == "1" or (final_answer.strip().isdigit() and len(final_answer.strip()) <= 2):
@@ -839,7 +860,7 @@ class ChainOfThought(BaseBrainModule):
         """Analyze query complexity for Chain-of-Thought"""
         query = params.get("query", "")
         if not query:
-            raise ValueError("query parameter is required")
+            raise InvalidParameterError("query", str(query), "query parameter is required")
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -883,7 +904,7 @@ class ChainOfThought(BaseBrainModule):
         """Determine if CoT should be activated"""
         query = params.get("query", "")
         if not query:
-            raise ValueError("query parameter is required")
+            raise InvalidParameterError("query", str(query), "query parameter is required")
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -1737,7 +1758,7 @@ Extract and return the final answer/conclusion now:"""
         """
         # Input validation
         if not query or not isinstance(query, str) or not query.strip():
-            raise ValueError("query must be a non-empty string")
+            raise InvalidParameterError("query", str(query), "query must be a non-empty string")
         if context is None:
             context = ""
         if not isinstance(context, str):
@@ -1851,7 +1872,9 @@ Extract and return the final answer/conclusion now:"""
         """
         # Input validation
         if not decomposed_problems:
-            raise ValueError("decomposed_problems must be a non-empty list")
+            raise InvalidParameterError(
+                "decomposed_problems", str(type(decomposed_problems)), "decomposed_problems must be a non-empty list"
+            )
         if not isinstance(decomposed_problems, list):
             raise TypeError("decomposed_problems must be a list")
         if context is None:
@@ -2035,9 +2058,11 @@ Extract and return the final answer/conclusion now:"""
         """
         # Input validation
         if not query or not isinstance(query, str) or not query.strip():
-            raise ValueError("query must be a non-empty string")
+            raise InvalidParameterError("query", str(query), "query must be a non-empty string")
         if not reasoning_steps:
-            raise ValueError("reasoning_steps must be a non-empty list")
+            raise InvalidParameterError(
+                "reasoning_steps", str(type(reasoning_steps)), "reasoning_steps must be a non-empty list"
+            )
         if not isinstance(reasoning_steps, list):
             raise TypeError("reasoning_steps must be a list")
         if decomposed_problems is None:

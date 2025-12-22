@@ -22,6 +22,8 @@ from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 # All debugging info goes to diagnostic dictionary, which is displayed by DebugOutputFormatter.swift
 # No log_* functions - use diagnostic dictionary instead
 
+logger = logging.getLogger(__name__)
+
 
 class CognitiveGeneratorModule(BaseBrainModule):
     """Main cognitive generation orchestrator - replaces LLM text generation"""
@@ -103,10 +105,10 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     ModuleRegistry.discover_modules()
                     self.thought_to_text = ModuleRegistry.get_module("thought_to_text")
             except Exception as e:
-                print(
-                    f"[CognitiveGenerator] Failed to load thought_to_text: {str(e)}",
-                    file=sys.stderr,
-                    flush=True,
+                logger.warning(
+                    "Failed to load thought_to_text module",
+                    exc_info=True,
+                    extra={"module_name": "cognitive_generator", "error_type": type(e).__name__},
                 )
         
         # Load text generation modules
@@ -2118,15 +2120,16 @@ class CognitiveGeneratorModule(BaseBrainModule):
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
         """Main generation entry point - replaces LLM generation"""
-        # CRITICAL: Print immediately at start - this MUST be visible
-        print("\n" + "=" * 80, file=sys.stderr, flush=True)
-        print(
-            "PYTHON COGNITIVE_GENERATOR.generate_response() CALLED",
-            file=sys.stderr,
-            flush=True,
+        # Avoid logging raw user inputs; log only safe metadata.
+        logger.info(
+            "cognitive_generator.generate_response called",
+            extra={
+                "module_name": "cognitive_generator",
+                "operation": "generate_response",
+                "input_length": len(input_text) if isinstance(input_text, str) else None,
+                "context_length": len(context) if isinstance(context, str) else None,
+            },
         )
-        print(f"INPUT: {input_text}", file=sys.stderr, flush=True)
-        print("=" * 80 + "\n", file=sys.stderr, flush=True)
 
         overall_start = time.time()
         
@@ -2917,7 +2920,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
             }
             
         except Exception as e:
-            print(traceback.format_exc(), file=sys.stderr)
+            logger.error(
+                "cognitive_generator.generate_response failed; entering fallback chain",
+                exc_info=True,
+                extra={"module_name": "cognitive_generator", "operation": "generate_response", "error_type": type(e).__name__},
+            )
 
             # Fallback chain: try multiple strategies
             fallback_response = None
@@ -3600,7 +3607,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
 
             return result
         except Exception as e:
-            print(traceback.format_exc(), file=sys.stderr, flush=True)
+            logger.error(
+                "cognitive_generator.generate_response returned error result",
+                exc_info=True,
+                extra={"module_name": "cognitive_generator", "operation": "generate_response", "error_type": type(e).__name__},
+            )
             # Return empty result on error
             return {"text": "", "confidence": 0.0, "method": "error"}
 

@@ -4,6 +4,7 @@ Provides tiered severity assessment and escalation protocols
 """
 
 from typing import Any, Dict, List, Optional
+import logging
 import sys
 import time
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 from safety_framework import (
     SafetyServicePriority,
     SafetyCheckType,
@@ -20,6 +22,7 @@ from safety_framework import (
     SafetySeverity,
 )
 
+logger = logging.getLogger(__name__)
 
 class SelfHarmSeverity:
     """Self-harm severity levels"""
@@ -80,7 +83,11 @@ class SelfHarmSafetyModule(BaseBrainModule):
             detection = self.detect_self_harm(text, context)
             return detection
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for self_harm_safety",
+            )
 
     def check_input(self, input_text: str, context: SafetyCheckContext) -> SafetyCheckResult:
         """Check input for self-harm content"""
@@ -277,29 +284,24 @@ class SelfHarmSafetyModule(BaseBrainModule):
         """Generate crisis response with resources"""
         if severity == SelfHarmSeverity.CRITICAL:
             return (
-                "I'm really worried about you, sweetie. 💔 "
-                "Please reach out for help right now:\n\n"
-                "National Suicide Prevention Lifeline: 988\n"
-                "Crisis Text Line: Text HOME to 741741\n\n"
-                "You're not alone, and there are people who want to help. "
-                "What else can I do to support you?"
+                "I’m really concerned about your safety. If you are in immediate danger, call your local emergency number now.\n\n"
+                "If you’re in the U.S., you can call or text 988 (Suicide & Crisis Lifeline).\n"
+                "You can also text HOME to 741741 (Crisis Text Line).\n\n"
+                "You’re not alone. If you want, tell me where you are (country/region) and whether you feel safe right now."
             )
         elif severity == SelfHarmSeverity.HIGH:
             return (
-                "I'm concerned about you, babe. 💜 "
-                "Please know there's help available:\n\n"
-                "National Suicide Prevention Lifeline: 988\n"
-                "Crisis Text Line: Text HOME to 741741\n\n"
-                "You matter, and there are people who care. "
-                "What can I help you with?"
+                "I’m concerned about you. Support is available.\n\n"
+                "If you’re in the U.S., you can call or text 988 (Suicide & Crisis Lifeline).\n"
+                "You can also text HOME to 741741 (Crisis Text Line).\n\n"
+                "If you’re outside the U.S., tell me your country/region and I’ll share local crisis resources. Are you safe right now?"
             )
         else:
             return (
-                "I hear you're going through a tough time. 💙 "
-                "If you need to talk to someone, there's help available:\n\n"
-                "National Suicide Prevention Lifeline: 988\n"
-                "Crisis Text Line: Text HOME to 741741\n\n"
-                "What else can I help you with?"
+                "I’m sorry you’re going through a difficult time. If you feel at risk of harming yourself, please reach out for support.\n\n"
+                "If you’re in the U.S., you can call or text 988.\n"
+                "You can also text HOME to 741741.\n\n"
+                "If you share your country/region, I can help find local resources. If you’d like, tell me what’s been going on."
             )
 
     def generate_response_guidance(
