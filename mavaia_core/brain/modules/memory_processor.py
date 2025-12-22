@@ -576,7 +576,12 @@ class MemoryProcessor(BaseBrainModule):
                 now = pd.Timestamp.now()
                 days_ago = (now - last_accessed).dt.days
                 recency_scores = 1.0 / (1.0 + days_ago / 30.0)  # Decay over 30 days
-            except:
+            except Exception as e:
+                logger.debug(
+                    "Failed to parse lastAccessed; using default recency score",
+                    exc_info=True,
+                    extra={"module_name": "memory_processor", "error_type": type(e).__name__},
+                )
                 recency_scores = pd.Series([0.5] * len(df))
         else:
             recency_scores = pd.Series([0.5] * len(df))

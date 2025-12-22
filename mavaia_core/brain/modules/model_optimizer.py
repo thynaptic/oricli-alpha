@@ -26,8 +26,12 @@ def _lazy_import_bitsandbytes():
             from transformers import BitsAndBytesConfig as BBC
             BitsAndBytesConfig = BBC
             BITSANDBYTES_AVAILABLE = True
-        except ImportError:
-            pass
+        except ImportError as e:
+            logger.debug(
+                "Failed to import BitsAndBytesConfig",
+                exc_info=True,
+                extra={"module_name": "model_optimizer", "error_type": type(e).__name__},
+            )
 
 
 class ModelOptimizerModule(BaseBrainModule):
@@ -407,12 +411,12 @@ class ModelOptimizerModule(BaseBrainModule):
                 # Use TorchScript for CPU optimization
                 try:
                     model = torch.jit.script(model)
-                except:
+                except Exception:
                     # If scripting fails, use tracing
                     try:
                         dummy_input = torch.zeros(1, 128, dtype=torch.long)
                         model = torch.jit.trace(model, dummy_input)
-                    except:
+                    except Exception:
                         pass  # Skip optimization if both fail
 
             # Store optimized model
@@ -535,11 +539,11 @@ class ModelOptimizerModule(BaseBrainModule):
             buffer_size = sum(b.numel() * b.element_size() for b in model.buffers())
             total_size = param_size + buffer_size
             return total_size / (1024 * 1024)  # Convert to MB
-        except:
+        except Exception:
             # Fallback: estimate from parameter count
             try:
                 param_count = sum(p.numel() for p in model.parameters())
                 # Assume float32 (4 bytes per parameter)
                 return (param_count * 4) / (1024 * 1024)
-            except:
+            except Exception:
                 return 0.0

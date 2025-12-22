@@ -8,8 +8,12 @@ import json
 from typing import Dict, Any, List, Optional
 from collections import defaultdict
 from datetime import datetime
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports
 try:
@@ -24,6 +28,7 @@ class COGSGraph(BaseBrainModule):
     """Graph operations for Context Object Graph System"""
 
     def __init__(self):
+        super().__init__()
         self.graph = None  # NetworkX graph
         self.entity_graph = None  # Separate graph for entities
         self.relationship_graph = None  # Separate graph for relationships
@@ -53,6 +58,11 @@ class COGSGraph(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize graph structures"""
         if not NETWORKX_AVAILABLE:
+            logger.debug(
+                "networkx not available; cogs_graph will be disabled",
+                extra={"module_name": "cogs_graph"},
+            )
+            self.is_initialized = False
             return False
 
         self.entity_graph = nx.DiGraph()
@@ -68,6 +78,12 @@ class COGSGraph(BaseBrainModule):
 
         if not self.is_initialized:
             self.initialize()
+        if not self.is_initialized or not NETWORKX_AVAILABLE:
+            return {
+                "success": False,
+                "error": "Dependency not available: networkx",
+                "operation": operation,
+            }
 
         if operation == "build_entity_graph":
             entities_json = params.get("entities", "[]")
@@ -114,7 +130,11 @@ class COGSGraph(BaseBrainModule):
             return self.get_graph_analytics()
 
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for cogs_graph",
+            )
 
     def build_entity_graph(
         self, entities_json: str, relationships_json: str
@@ -416,7 +436,12 @@ class COGSGraph(BaseBrainModule):
             elif centrality_type == "eigenvector":
                 try:
                     centrality = nx.eigenvector_centrality(self.graph)
-                except:
+                except Exception as e:
+                    logger.debug(
+                        "Eigenvector centrality failed; returning empty centrality",
+                        exc_info=True,
+                        extra={"module_name": "cogs_graph", "error_type": type(e).__name__},
+                    )
                     centrality = {}
             else:
                 centrality = nx.degree_centrality(self.graph)
@@ -585,8 +610,12 @@ class COGSGraph(BaseBrainModule):
                     analytics["average_clustering"] = float(
                         nx.average_clustering(self.graph.to_undirected())
                     )
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Average clustering calculation failed",
+                    exc_info=True,
+                    extra={"module_name": "cogs_graph", "error_type": type(e).__name__},
+                )
 
             return {"success": True, "result": analytics}
         except Exception as e:

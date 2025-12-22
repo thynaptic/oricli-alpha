@@ -4,19 +4,20 @@ Converted from Swift ConversationCompressionService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ConversationCompressionServiceModule(BaseBrainModule):
     """Summarizes long conversations to manage context limits"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self._modules_loaded = False
         self._cache: Dict[str, Dict[str, Any]] = {}
@@ -48,14 +49,15 @@ class ConversationCompressionServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
 
             self._modules_loaded = True
         except Exception as e:
-            # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load conversation_compression_service dependencies",
+                exc_info=True,
+                extra={"module_name": "conversation_compression_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -66,12 +68,27 @@ class ConversationCompressionServiceModule(BaseBrainModule):
         elif operation == "summarize_conversation":
             return self._summarize_conversation(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for conversation_compression_service",
+            )
 
     def _compress_conversation(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Compress a conversation"""
         conversation_id = params.get("conversation_id")
         messages = params.get("messages", [])
+        if conversation_id is None or not isinstance(conversation_id, (str, int)) or not str(conversation_id).strip():
+            # If no conversation_id, we can still return as non-compressed.
+            conversation_id = None
+        if messages is None:
+            messages = []
+        if not isinstance(messages, list):
+            raise InvalidParameterError(
+                parameter="messages",
+                value=str(type(messages).__name__),
+                reason="messages must be a list",
+            )
 
         if not conversation_id or len(messages) <= self._threshold:
             return {
@@ -135,8 +152,12 @@ class ConversationCompressionServiceModule(BaseBrainModule):
                     "max_sentences": 3,
                 })
                 summary = result.get("summary")
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Conversation summarization failed; returning uncompressed messages",
+                    exc_info=True,
+                    extra={"module_name": "conversation_compression_service", "error_type": type(e).__name__},
+                )
 
         if summary:
             # Cache result

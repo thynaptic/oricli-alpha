@@ -4,19 +4,20 @@ Converted from Swift DocumentAnalysisService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentAnalysisServiceModule(BaseBrainModule):
     """Document analysis service"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self._modules_loaded = False
         self._max_document_size = 80 * 1024 * 1024  # 80 MB
@@ -46,14 +47,15 @@ class DocumentAnalysisServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
 
             self._modules_loaded = True
         except Exception as e:
-            # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load document_analysis_service dependencies",
+                exc_info=True,
+                extra={"module_name": "document_analysis_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -66,13 +68,31 @@ class DocumentAnalysisServiceModule(BaseBrainModule):
         elif operation == "summarize_document":
             return self._summarize_document(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for document_analysis_service",
+            )
 
     def _analyze_document(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze a document"""
         data = params.get("data")  # bytes
         file_name = params.get("file_name", "")
         mime_type = params.get("mime_type", "")
+        if file_name is None:
+            file_name = ""
+        if mime_type is None:
+            mime_type = ""
+        if data is not None and not isinstance(data, (bytes, bytearray)):
+            raise InvalidParameterError(
+                parameter="data",
+                value=str(type(data).__name__),
+                reason="data must be bytes when provided",
+            )
+        if not isinstance(file_name, str):
+            raise InvalidParameterError("file_name", str(type(file_name).__name__), "file_name must be a string")
+        if not isinstance(mime_type, str):
+            raise InvalidParameterError("mime_type", str(type(mime_type).__name__), "mime_type must be a string")
 
         # Check size
         if data and len(data) > self._max_document_size:
@@ -109,9 +129,14 @@ class DocumentAnalysisServiceModule(BaseBrainModule):
                     "page_count": analysis.get("page_count"),
                 }
             except Exception as e:
+                logger.debug(
+                    "Document analysis failed",
+                    exc_info=True,
+                    extra={"module_name": "document_analysis_service", "error_type": type(e).__name__},
+                )
                 return {
                     "success": False,
-                    "error": f"Analysis failed: {str(e)}",
+                    "error": "Analysis failed",
                 }
 
         # Fallback: simple analysis
@@ -131,6 +156,16 @@ class DocumentAnalysisServiceModule(BaseBrainModule):
         data = params.get("data")
         file_name = params.get("file_name", "")
         mime_type = params.get("mime_type", "")
+        if file_name is None:
+            file_name = ""
+        if mime_type is None:
+            mime_type = ""
+        if data is not None and not isinstance(data, (bytes, bytearray)):
+            raise InvalidParameterError("data", str(type(data).__name__), "data must be bytes when provided")
+        if not isinstance(file_name, str):
+            raise InvalidParameterError("file_name", str(type(file_name).__name__), "file_name must be a string")
+        if not isinstance(mime_type, str):
+            raise InvalidParameterError("mime_type", str(type(mime_type).__name__), "mime_type must be a string")
 
         extracted_text = self._extract_text(data, file_name, mime_type)
 
@@ -142,6 +177,10 @@ class DocumentAnalysisServiceModule(BaseBrainModule):
     def _summarize_document(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Summarize a document"""
         text = params.get("text", "")
+        if text is None:
+            text = ""
+        if not isinstance(text, str):
+            raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
 
         if self.cognitive_generator:
             try:
@@ -154,9 +193,14 @@ class DocumentAnalysisServiceModule(BaseBrainModule):
                     "summary": result.get("summary", ""),
                 }
             except Exception as e:
+                logger.debug(
+                    "Document summarization failed",
+                    exc_info=True,
+                    extra={"module_name": "document_analysis_service", "error_type": type(e).__name__},
+                )
                 return {
                     "success": False,
-                    "error": str(e),
+                    "error": "Summarization failed",
                 }
 
         # Fallback: simple summary
@@ -178,7 +222,12 @@ class DocumentAnalysisServiceModule(BaseBrainModule):
             try:
                 # Fallback: try to decode as text
                 return data.decode("utf-8", errors="ignore")
-            except:
+            except Exception as e:
+                logger.debug(
+                    "PDF decode failed",
+                    exc_info=True,
+                    extra={"module_name": "document_analysis_service", "error_type": type(e).__name__},
+                )
                 return None
         elif file_ext in ["md", "markdown"] or "markdown" in mime_type:
             return data.decode("utf-8", errors="ignore")
@@ -191,6 +240,11 @@ class DocumentAnalysisServiceModule(BaseBrainModule):
             # Try UTF-8 as fallback
             try:
                 return data.decode("utf-8", errors="ignore")
-            except:
+            except Exception as e:
+                logger.debug(
+                    "Text decode failed",
+                    exc_info=True,
+                    extra={"module_name": "document_analysis_service", "error_type": type(e).__name__},
+                )
                 return None
 

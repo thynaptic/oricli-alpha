@@ -88,8 +88,13 @@ class ThoughtToTextModule(BaseBrainModule):
 
             try:
                 self.hybrid_phrasing_service = ModuleRegistry.get_module("hybrid_phrasing_service")
-            except Exception:
+            except Exception as e:
                 self.hybrid_phrasing_service = None
+                logger.debug(
+                    "Failed to load optional hybrid_phrasing_service",
+                    exc_info=True,
+                    extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+                )
 
             try:
                 self.text_generation_engine = ModuleRegistry.get_module("text_generation_engine")
@@ -244,7 +249,17 @@ class ThoughtToTextModule(BaseBrainModule):
             return result
 
         except Exception as e:
-            return {"text": "", "confidence": 0.0, "method": "error", "error": str(e)}
+            logger.debug(
+                "Failed to convert reasoning tree",
+                exc_info=True,
+                extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+            )
+            return {
+                "text": "",
+                "confidence": 0.0,
+                "method": "error",
+                "error": "Reasoning tree conversion failed",
+            }
 
     def generate_sentences(
         self, thoughts: List[str], context: str = "", voice_context: Dict[str, Any] = None
@@ -345,6 +360,11 @@ class ThoughtToTextModule(BaseBrainModule):
             return result
 
         except Exception as e:
+            logger.debug(
+                "Sentence generation failed; using fallback join",
+                exc_info=True,
+                extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+            )
             # Fallback: simple join (but still filter instructions)
             fallback_text = ". ".join(thoughts) + "." if thoughts else ""
             fallback_text = self._filter_instructions_from_output(fallback_text)
@@ -352,7 +372,7 @@ class ThoughtToTextModule(BaseBrainModule):
                 "text": fallback_text,
                 "confidence": 0.5,
                 "method": "fallback",
-                "error": str(e),
+                "error": "Sentence generation failed",
             }
 
     def apply_grammar_and_style(
@@ -382,11 +402,11 @@ class ThoughtToTextModule(BaseBrainModule):
                             confidence = max(
                                 confidence, grammar_result["confidence"] * 0.8
                             )
-                except:
+                except Exception as e:
                     logger.debug(
                         "Grammar correction failed; continuing without grammar adjustments",
                         exc_info=True,
-                        extra={"module_name": "thought_to_text"},
+                        extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
                     )
 
             # Apply style transfer if available
@@ -400,11 +420,11 @@ class ThoughtToTextModule(BaseBrainModule):
                         "result", {}
                     ):
                         processed_text = style_result["result"]["transformed_text"]
-                except:
+                except Exception as e:
                     logger.debug(
                         "Style transfer failed; continuing without style adjustments",
                         exc_info=True,
-                        extra={"module_name": "thought_to_text"},
+                        extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
                     )
 
             # Basic cleanup
@@ -417,11 +437,16 @@ class ThoughtToTextModule(BaseBrainModule):
             }
 
         except Exception as e:
+            logger.debug(
+                "apply_grammar_and_style failed; returning cleaned text fallback",
+                exc_info=True,
+                extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+            )
             return {
                 "text": self._cleanup_text(text),
                 "confidence": 0.5,
                 "method": "fallback",
-                "error": str(e),
+                "error": "Grammar/style processing failed",
             }
 
     # Helper methods
