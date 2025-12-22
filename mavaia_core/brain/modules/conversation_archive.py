@@ -5,14 +5,14 @@ Converted from Swift ConversationArchive.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import re
+import logging
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+from dataclasses import dataclass
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
 
 # Optional imports - models package may not be available
 try:
@@ -23,15 +23,54 @@ except ImportError:
     ConversationDigest = None
     ConversationSummaryContext = None
 
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _FallbackConversationDigest:
+    """Minimal in-module fallback for ConversationDigest when models are unavailable."""
+
+    conversation_id: str
+    title: str
+    summary: str
+    key_topics: List[str]
+    emotional_tone: str
+    message_count: int
+    start_date: float
+    last_message_date: float
+    is_digested: bool
+    action_items: List[str]
+    decisions: List[str]
+    insights: List[str]
+    searchable_content: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "conversation_id": self.conversation_id,
+            "title": self.title,
+            "summary": self.summary,
+            "key_topics": list(self.key_topics),
+            "emotional_tone": self.emotional_tone,
+            "message_count": self.message_count,
+            "start_date": self.start_date,
+            "last_message_date": self.last_message_date,
+            "is_digested": self.is_digested,
+            "action_items": list(self.action_items),
+            "decisions": list(self.decisions),
+            "insights": list(self.insights),
+            "searchable_content": self.searchable_content,
+        }
+
 
 class ConversationArchiveModule(BaseBrainModule):
     """Manages conversation digestion and cross-conversation memory"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self._modules_loaded = False
         # In-memory storage for conversation digests
-        self._archives: Dict[str, ConversationDigest] = {}
+        self._archives: Dict[str, Any] = {}
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -59,28 +98,35 @@ class ConversationArchiveModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Failed to load dependent modules for conversation_archive",
+                exc_info=True,
+                extra={"module_name": "conversation_archive", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
         self._ensure_modules_loaded()
 
-        if operation == "digest_conversation":
-            return self._digest_conversation(params)
-        elif operation == "archive_conversation":
-            return self._archive_conversation(params)
-        elif operation == "retrieve_archive":
-            return self._retrieve_archive(params)
-        elif operation == "get_recent_digests":
-            return self._get_recent_digests(params)
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
+        match operation:
+            case "digest_conversation":
+                return self._digest_conversation(params)
+            case "archive_conversation":
+                return self._archive_conversation(params)
+            case "retrieve_archive":
+                return self._retrieve_archive(params)
+            case "get_recent_digests":
+                return self._get_recent_digests(params)
+            case _:
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for conversation_archive",
+                )
 
     def _digest_conversation(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Generate AI summary for a specific conversation"""
@@ -90,6 +136,31 @@ class ConversationArchiveModule(BaseBrainModule):
         messages = conversation_data.get("messages", [])
         created_at = conversation_data.get("created_at", 0.0)
         updated_at = conversation_data.get("updated_at", 0.0)
+
+        if not isinstance(conversation_data, dict):
+            raise InvalidParameterError("conversation", str(type(conversation_data).__name__), "conversation must be a dict")
+
+        if not conversation_id or not isinstance(conversation_id, str):
+            return {"success": False, "error": "conversation.id is required"}
+
+        if title is None:
+            title = ""
+        if not isinstance(title, str):
+            return {"success": False, "error": "conversation.title must be a string"}
+
+        if messages is None:
+            messages = []
+        if not isinstance(messages, list):
+            return {"success": False, "error": "conversation.messages must be a list"}
+
+        try:
+            created_at_float = float(created_at)
+        except (TypeError, ValueError):
+            created_at_float = 0.0
+        try:
+            updated_at_float = float(updated_at)
+        except (TypeError, ValueError):
+            updated_at_float = created_at_float
 
         if not messages:
             return {
@@ -163,16 +234,17 @@ Conversation:
             decisions = self._parse_list(decisions_text)
             insights = self._parse_list(insights_text)
 
-            # Create digest
-            digest = ConversationDigest(
+            # Create digest (use fallback if models package unavailable)
+            digest_cls = ConversationDigest or _FallbackConversationDigest
+            digest = digest_cls(
                 conversation_id=conversation_id,
                 title=title,
                 summary=summary,
                 key_topics=topics,
                 emotional_tone=tone if tone else "neutral",
                 message_count=len(messages),
-                start_date=created_at,
-                last_message_date=updated_at,
+                start_date=created_at_float,
+                last_message_date=updated_at_float,
                 is_digested=True,
                 action_items=action_items,
                 decisions=decisions,
@@ -188,9 +260,14 @@ Conversation:
                 "result": digest.to_dict(),
             }
         except Exception as e:
+            logger.debug(
+                "Conversation digest failed",
+                exc_info=True,
+                extra={"module_name": "conversation_archive", "conversation_id": str(conversation_id), "error_type": type(e).__name__},
+            )
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Conversation digest failed",
             }
 
     def _archive_conversation(self, params: Dict[str, Any]) -> Dict[str, Any]:
