@@ -6,23 +6,23 @@ Implements priority queue, pruning, and path reconstruction.
 Ported from Swift ToTSearchEngine.swift
 """
 
-import sys
 import time
 import uuid
-from pathlib import Path
 from typing import Any
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from tot_models import (
+from mavaia_core.brain.modules.tot_models import (
     ToTThoughtNode,
     ToTTreeState,
     ToTConfiguration,
     ToTSearchResult,
     SearchStatistics,
 )
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 
 class ToTSearchEngine(BaseBrainModule):
@@ -33,6 +33,7 @@ class ToTSearchEngine(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._thought_generator = None
         self._state_evaluator = None
         self._cognitive_generator = None
@@ -56,8 +57,6 @@ class ToTSearchEngine(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from module_registry import ModuleRegistry
-
             self._thought_generator = ModuleRegistry.get_module(
                 "tot_thought_generator"
             )
@@ -68,15 +67,28 @@ class ToTSearchEngine(BaseBrainModule):
             # Optional dependencies
             try:
                 self._safety_filter = ModuleRegistry.get_module("safety_framework")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency 'safety_framework' unavailable for tot_search_engine",
+                    exc_info=True,
+                    extra={"module_name": "tot_search_engine", "error_type": type(e).__name__},
+                )
             try:
                 self._verification_loop = ModuleRegistry.get_module("verification")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency 'verification' unavailable for tot_search_engine",
+                    exc_info=True,
+                    extra={"module_name": "tot_search_engine", "error_type": type(e).__name__},
+                )
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to initialize tot_search_engine dependencies",
+                exc_info=True,
+                extra={"module_name": "tot_search_engine", "error_type": type(e).__name__},
+            )
             return False
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -89,7 +101,11 @@ class ToTSearchEngine(BaseBrainModule):
         if operation == "search":
             return self._search(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for tot_search_engine",
+            )
 
     def _search(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -108,13 +124,19 @@ class ToTSearchEngine(BaseBrainModule):
         if not self._thought_generator or not self._state_evaluator:
             self.initialize()
             if not self._thought_generator or not self._state_evaluator:
-                raise RuntimeError(
-                    "Required modules not available (thought_generator, state_evaluator)"
+                raise ModuleOperationError(
+                    module_name="tot_search_engine",
+                    operation="search",
+                    reason="Required modules not available (tot_thought_generator, tot_state_evaluator)",
                 )
 
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -273,9 +295,10 @@ class ToTSearchEngine(BaseBrainModule):
                         valid_child_thoughts.append(child)
 
                     except Exception as e:
-                        print(
-                            f"[ToTSearchEngine] Error verifying ToT node: {e}",
-                            file=sys.stderr,
+                        logger.debug(
+                            "Error verifying ToT node; failing open",
+                            exc_info=True,
+                            extra={"module_name": "tot_search_engine", "error_type": type(e).__name__},
                         )
                         # On error, include the child (fail open)
                         valid_child_thoughts.append(child)
@@ -326,9 +349,10 @@ class ToTSearchEngine(BaseBrainModule):
                 )
 
             except Exception as e:
-                print(
-                    f"[ToTSearchEngine] Failed to generate or evaluate children: {e}",
-                    file=sys.stderr,
+                logger.debug(
+                    "Failed to generate or evaluate children; continuing search",
+                    exc_info=True,
+                    extra={"module_name": "tot_search_engine", "error_type": type(e).__name__},
                 )
                 # Continue search with remaining nodes
                 continue
@@ -342,7 +366,11 @@ class ToTSearchEngine(BaseBrainModule):
 
         if not best_path:
             termination_reason = "no_valid_path"
-            raise ValueError("No valid path found in Tree-of-Thought search")
+            raise ModuleOperationError(
+                module_name="tot_search_engine",
+                operation="search",
+                reason="No valid path found in Tree-of-Thought search",
+            )
 
         # Generate final answer from best path
         final_answer = self._synthesize_final_answer(path=best_path, query=query)
@@ -478,9 +506,10 @@ Final Answer:
 
             return response_result.get("text", "").strip()
         except Exception as e:
-            print(
-                f"[ToTSearchEngine] Error synthesizing final answer: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Error synthesizing final answer; using fallback",
+                exc_info=True,
+                extra={"module_name": "tot_search_engine", "error_type": type(e).__name__},
             )
             # Fallback: use last node's thought
             return path[-1].thought if path else ""

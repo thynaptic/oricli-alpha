@@ -4,19 +4,20 @@ Converted from Swift LongHorizonPlanner.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class LongHorizonPlannerModule(BaseBrainModule):
     """Long-horizon planning for multi-step goal-based reasoning"""
 
     def __init__(self):
+        super().__init__()
         self.mcts_service = None
         self.complexity_detector = None
         self.cognitive_generator = None
@@ -47,8 +48,6 @@ class LongHorizonPlannerModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.mcts_service = ModuleRegistry.get_module("mcts_service")
             self.complexity_detector = ModuleRegistry.get_module("cot_complexity_detector")
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
@@ -56,7 +55,11 @@ class LongHorizonPlannerModule(BaseBrainModule):
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load one or more long_horizon_planner dependencies",
+                exc_info=True,
+                extra={"module_name": "long_horizon_planner", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -69,7 +72,11 @@ class LongHorizonPlannerModule(BaseBrainModule):
         elif operation == "create_plan":
             return self._create_plan(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for long_horizon_planner",
+            )
 
     def _create_long_plan(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Create a long-horizon plan for a goal"""
@@ -91,8 +98,12 @@ class LongHorizonPlannerModule(BaseBrainModule):
                     "context": context,
                 })
                 complexity_score = complexity_result.get("score", 0.5)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Complexity analysis failed; using default score",
+                    exc_info=True,
+                    extra={"module_name": "long_horizon_planner", "error_type": type(e).__name__},
+                )
 
         # Determine plan depth
         plan_depth = max_depth or self._determine_plan_depth(complexity_score)
@@ -108,7 +119,12 @@ class LongHorizonPlannerModule(BaseBrainModule):
                 })
 
                 steps = result.get("steps", [])
-            except:
+            except Exception as e:
+                logger.debug(
+                    "MCTS planning failed; falling back to sequential steps",
+                    exc_info=True,
+                    extra={"module_name": "long_horizon_planner", "error_type": type(e).__name__},
+                )
                 steps = self._create_sequential_steps(goal, context, plan_depth)
         else:
             # Use sequential planning
@@ -190,7 +206,12 @@ class LongHorizonPlannerModule(BaseBrainModule):
             })
 
             return result.get("steps", [])
-        except:
+        except Exception as e:
+            logger.debug(
+                "Sequential plan generation failed; using fallback steps",
+                exc_info=True,
+                extra={"module_name": "long_horizon_planner", "error_type": type(e).__name__},
+            )
             # Fallback
             return [
                 {
