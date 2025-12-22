@@ -71,7 +71,7 @@ class ModelRoutingEngineModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.casual_detector = ModuleRegistry.get_module("casual_conversation_detector")
 

@@ -63,7 +63,7 @@ class TreeOfThought(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             # Lazy load complexity detector (optional)
             try:

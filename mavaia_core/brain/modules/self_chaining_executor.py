@@ -69,7 +69,7 @@ class SelfChainingExecutorModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.python_brain_service = ModuleRegistry.get_module("python_brain_service")
             self.module_registry = ModuleRegistry.get_module("self_chaining_module_registry")

@@ -11,7 +11,6 @@ from pathlib import Path
 from collections import Counter
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 

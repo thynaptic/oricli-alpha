@@ -10,7 +10,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from module_registry import ModuleRegistry
+from mavaia_core.brain.registry import ModuleRegistry
 
 
 def execute_batch_operations(operations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

@@ -58,7 +58,7 @@ class EmotionalDistressDetectorModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.emotional_inference = ModuleRegistry.get_module("emotional_inference")
 

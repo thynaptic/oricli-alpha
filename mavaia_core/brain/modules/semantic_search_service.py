@@ -56,7 +56,7 @@ class SemanticSearchServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.memory_pipeline = ModuleRegistry.get_module("memory_pipeline_service")
             self.embeddings = ModuleRegistry.get_module("embeddings")

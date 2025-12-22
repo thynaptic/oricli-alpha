@@ -23,7 +23,7 @@ _current_dir = Path(__file__).parent
 if str(_current_dir) not in sys.path:
     sys.path.insert(0, str(_current_dir))
 
-from module_registry import ModuleRegistry
+from mavaia_core.brain.registry import ModuleRegistry
 
 # Lazy discovery - modules are discovered on first get_module() call
 # This avoids verbose logging and unnecessary work on import

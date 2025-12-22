@@ -221,6 +221,8 @@ class TestDataManager:
         if "category" not in data:
             raise ValueError("Test case missing required field: category")
         
+        timeout_value = float(data.get("timeout", 0.0))
+        
         test_case = TestCase(
             id=str(data["id"]),
             category=str(data["category"]),
@@ -228,7 +230,8 @@ class TestDataManager:
             operation=data.get("operation"),
             params=data.get("params", {}),
             expected=data.get("expected", {}),
-            timeout=float(data.get("timeout", 30.0)),
+            # timeout <= 0 means "no per-test timeout"; global runner timeout may still apply
+            timeout=timeout_value,
             description=data.get("description"),
             skip=bool(data.get("skip", False)),
             tags=data.get("tags", []),
@@ -360,8 +363,9 @@ class TestDataManager:
         if not test_case.category:
             errors.append("Test case category is required")
         
-        if test_case.timeout <= 0:
-            errors.append("Test case timeout must be positive")
+        # Allow zero timeout to mean "no per-test timeout"
+        if test_case.timeout < 0:
+            errors.append("Test case timeout must be non-negative")
         
         # Validate expected structure if present
         if test_case.expected:

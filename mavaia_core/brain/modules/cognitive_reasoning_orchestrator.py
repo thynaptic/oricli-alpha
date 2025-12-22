@@ -54,7 +54,7 @@ class CognitiveReasoningOrchestratorModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.cot_service = ModuleRegistry.get_module("chain_of_thought")
             self.tot_service = ModuleRegistry.get_module("tree_of_thought")

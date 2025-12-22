@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from module_registry import ModuleRegistry
+from mavaia_core.brain.registry import ModuleRegistry
 
 
 class AgentPipelineModule(BaseBrainModule):

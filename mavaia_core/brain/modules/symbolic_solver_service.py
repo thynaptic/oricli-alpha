@@ -53,7 +53,7 @@ class SymbolicSolverServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.symbolic_solver = ModuleRegistry.get_module("symbolic_solver")
 

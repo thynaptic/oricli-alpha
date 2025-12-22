@@ -45,7 +45,7 @@ class ImageAnalysisServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.local_vision = ModuleRegistry.get_module("local_vision_service")
             self.vision_pipeline = ModuleRegistry.get_module("vision_pipeline_service")

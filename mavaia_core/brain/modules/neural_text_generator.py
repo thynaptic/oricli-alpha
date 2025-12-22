@@ -30,52 +30,99 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
-# Try to import TensorFlow/Keras
-TENSORFLOW_AVAILABLE = False
-try:
-    import tensorflow as tf
-    from tensorflow import keras
-    from tensorflow.keras import layers
-    TENSORFLOW_AVAILABLE = True
-except ImportError:
-    pass
+# Lazy imports - don't import heavy libraries at module level
+# These will be imported lazily when needed to avoid slow module imports
+TENSORFLOW_AVAILABLE = None
+tf = None
+keras = None
+layers = None
 
-# Try to import numpy
-NUMPY_AVAILABLE = False
-try:
-    import numpy as np
-    NUMPY_AVAILABLE = True
-except ImportError:
-    pass
+NUMPY_AVAILABLE = None
+np = None
 
-# Try to import rich for enhanced console output
-RICH_AVAILABLE = False
-try:
-    from rich.console import Console
-    RICH_AVAILABLE = True
-except ImportError:
-    Console = None
+RICH_AVAILABLE = None
+Console = None
 
-# Try to import transformers and torch for transformer model training
-TRANSFORMERS_AVAILABLE = False
-TORCH_AVAILABLE = False
-try:
-    import transformers
-    TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    pass
+TRANSFORMERS_AVAILABLE = None
+transformers = None
 
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except ImportError:
-    pass
+TORCH_AVAILABLE = None
+torch = None
 
-# Import data pipeline
-try:
-    from neural_text_generator_data import NeuralTextGeneratorData
-except ImportError:
-    NeuralTextGeneratorData = None
+NeuralTextGeneratorData = None
+
+def _lazy_import_tensorflow():
+    """Lazy import TensorFlow/Keras"""
+    global TENSORFLOW_AVAILABLE, tf, keras, layers
+    if TENSORFLOW_AVAILABLE is None:
+        try:
+            import tensorflow as tf_module
+            from tensorflow import keras as keras_module
+            from tensorflow.keras import layers as layers_module
+            tf = tf_module
+            keras = keras_module
+            layers = layers_module
+            TENSORFLOW_AVAILABLE = True
+        except ImportError:
+            TENSORFLOW_AVAILABLE = False
+    return TENSORFLOW_AVAILABLE
+
+def _lazy_import_numpy():
+    """Lazy import numpy"""
+    global NUMPY_AVAILABLE, np
+    if NUMPY_AVAILABLE is None:
+        try:
+            import numpy as np_module
+            np = np_module
+            NUMPY_AVAILABLE = True
+        except ImportError:
+            NUMPY_AVAILABLE = False
+    return NUMPY_AVAILABLE
+
+def _lazy_import_rich():
+    """Lazy import rich"""
+    global RICH_AVAILABLE, Console
+    if RICH_AVAILABLE is None:
+        try:
+            from rich.console import Console as Console_class
+            Console = Console_class
+            RICH_AVAILABLE = True
+        except ImportError:
+            RICH_AVAILABLE = False
+            Console = None
+    return RICH_AVAILABLE
+
+def _lazy_import_transformers():
+    """Lazy import transformers and torch"""
+    global TRANSFORMERS_AVAILABLE, TORCH_AVAILABLE, transformers, torch
+    if TRANSFORMERS_AVAILABLE is None:
+        try:
+            import transformers as transformers_module
+            transformers = transformers_module
+            TRANSFORMERS_AVAILABLE = True
+        except ImportError:
+            TRANSFORMERS_AVAILABLE = False
+    
+    if TORCH_AVAILABLE is None:
+        try:
+            import torch as torch_module
+            torch = torch_module
+            TORCH_AVAILABLE = True
+        except ImportError:
+            TORCH_AVAILABLE = False
+    
+    return TRANSFORMERS_AVAILABLE and TORCH_AVAILABLE
+
+def _lazy_import_data_pipeline():
+    """Lazy import data pipeline"""
+    global NeuralTextGeneratorData
+    if NeuralTextGeneratorData is None:
+        try:
+            from neural_text_generator_data import NeuralTextGeneratorData as NTD
+            NeuralTextGeneratorData = NTD
+        except ImportError:
+            NeuralTextGeneratorData = None
+    return NeuralTextGeneratorData is not None
 
 
 class NeuralTextGeneratorModule(BaseBrainModule):
@@ -426,13 +473,14 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
-        if not TENSORFLOW_AVAILABLE:
+        # Lazy import dependencies when needed
+        if not _lazy_import_tensorflow():
             return {
                 "success": False,
                 "error": "TensorFlow/Keras not available. Install with: pip install tensorflow",
             }
 
-        if not NUMPY_AVAILABLE:
+        if not _lazy_import_numpy():
             return {
                 "success": False,
                 "error": "NumPy not available. Install with: pip install numpy",

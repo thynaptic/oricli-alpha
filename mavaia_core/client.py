@@ -2265,8 +2265,16 @@ class MavaiaClient:
             ModuleNotFoundError: If cognitive_generator module is not available
             ModuleOperationError: If generation fails or returns empty response
         """
-        # Get cognitive generator module
-        cognitive_module = ModuleRegistry.get_module("cognitive_generator")
+        # Get cognitive generator module with fallback support
+        from mavaia_core.brain.registry import ModuleRegistry
+        
+        # Use get_module_or_fallback to handle degraded modules
+        module_result = ModuleRegistry.get_module_or_fallback(
+            "cognitive_generator",
+            operation="generate_response"
+        )
+        cognitive_module, actual_module_name, is_fallback, mapped_operation = module_result
+        
         if cognitive_module is None:
             raise ModuleNotFoundError("cognitive_generator")
         
@@ -2351,16 +2359,125 @@ class MavaiaClient:
         if expanded_tools:
             params["tools"] = expanded_tools
         
-        result = cognitive_module.execute("generate_response", params)
+        # Use mapped operation if available, otherwise use original
+        operation_to_use = mapped_operation if mapped_operation else "generate_response"
         
-        # Extract response
-        response_text = result.get("response", "") or result.get("text", "")
+        # Adjust params for fallback modules if needed
+        if is_fallback and actual_module_name == "text_generation_engine":
+            # text_generation_engine might need different params
+            fallback_params = {
+                "input": params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else params.get("input", ""),
+                "context": params.get("context", ""),
+            }
+            params = fallback_params
+        
+        result = cognitive_module.execute(operation_to_use, params)
+        
+        # Extract response - check multiple possible fields
+        response_text = (
+            result.get("response", "") or
+            result.get("text", "") or
+            result.get("generated_text", "") or
+            result.get("result", {}).get("text", "") if isinstance(result.get("result"), dict) else "" or
+            result.get("result", {}).get("response", "") if isinstance(result.get("result"), dict) else ""
+        )
+        
         if not response_text or not str(response_text).strip():
-            raise ModuleOperationError(
-                "cognitive_generator",
-                "generate_response",
-                "Returned empty response"
-            )
+            # Empty response detected - try fallback if we haven't already
+            if not is_fallback:
+                # Primary module returned empty, try fallback directly
+                try:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    from mavaia_core.brain.degraded_classifier import get_degraded_classifier
+                    classifier = get_degraded_classifier()
+                    
+                    # Get fallback module name
+                    fallback_name = classifier.get_fallback_module(
+                        actual_module_name or "cognitive_generator",
+                        operation_to_use
+                    )
+                    
+                    if fallback_name and fallback_name != (actual_module_name or "cognitive_generator"):
+                        logger.info(
+                            f"Primary module {actual_module_name or 'cognitive_generator'} returned empty response, "
+                            f"trying fallback {fallback_name}"
+                        )
+                        
+                        # Get mapped operation for fallback
+                        fallback_op = classifier.get_fallback_operation(
+                            actual_module_name or "cognitive_generator",
+                            operation_to_use,
+                            fallback_name
+                        ) if operation_to_use else None
+                        
+                        # Get fallback module
+                        fallback_module = ModuleRegistry.get_module(fallback_name, auto_discover=True)
+                        
+                        if fallback_module:
+                            # Adjust params for fallback module
+                            if fallback_name == "text_generation_engine":
+                                fallback_params = {
+                                    "input": params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else params.get("input", ""),
+                                    "context": params.get("context", ""),
+                                }
+                            else:
+                                fallback_params = params
+                            
+                            fallback_result = fallback_module.execute(
+                                fallback_op if fallback_op else operation_to_use,
+                                fallback_params
+                            )
+                            
+                            # Extract response from fallback
+                            response_text = (
+                                fallback_result.get("text", "") or
+                                fallback_result.get("generated_text", "") or
+                                fallback_result.get("response", "") or
+                                fallback_result.get("result", {}).get("text", "") if isinstance(fallback_result.get("result"), dict) else "" or
+                                fallback_result.get("result", {}).get("response", "") if isinstance(fallback_result.get("result"), dict) else ""
+                            )
+                            
+                            if response_text and str(response_text).strip():
+                                # Fallback succeeded!
+                                actual_module_name = fallback_name
+                                operation_to_use = fallback_op if fallback_op else operation_to_use
+                                is_fallback = True
+                                result = fallback_result  # Update result for downstream use
+                                logger.info(f"Fallback {fallback_name} succeeded with operation {operation_to_use}")
+                except Exception as e:
+                    logger.warning(f"Fallback attempt failed: {e}")
+            
+            # If we already used a fallback and it failed, try one more fallback
+            if (is_fallback or not response_text or not str(response_text).strip()) and actual_module_name != "text_generation_engine":
+                try:
+                    text_gen = ModuleRegistry.get_module("text_generation_engine")
+                    if text_gen:
+                        fallback_result = text_gen.execute(
+                            "generate_full_response",
+                            {
+                                "input": params.get("input", params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else ""),
+                                "context": params.get("context", ""),
+                            }
+                        )
+                        response_text = (
+                            fallback_result.get("text", "") or
+                            fallback_result.get("response", "") or
+                            fallback_result.get("generated_text", "")
+                        )
+                        if response_text and str(response_text).strip():
+                            result = fallback_result
+                            actual_module_name = "text_generation_engine"
+                except Exception:
+                    pass
+            
+            # If still empty, raise error
+            if not response_text or not str(response_text).strip():
+                raise ModuleOperationError(
+                    actual_module_name or "cognitive_generator",
+                    operation_to_use,
+                    "Returned empty response"
+                )
         reasoning_steps = result.get("reasoning_steps")
         confidence = result.get("confidence")
         metadata = result.get("metadata", {})
@@ -2528,6 +2645,94 @@ class MavaiaClient:
             InvalidParameterError: If parameter validation fails
             ModuleOperationError: If operation execution fails
         """
+        # Try to use availability manager for ensuring modules are online
+        try:
+            from mavaia_core.brain.availability import get_availability_manager
+            availability_manager = get_availability_manager()
+            
+            if availability_manager._initialized:
+                # If ensuring all online, wait for module to come online instead of using fallback
+                if availability_manager._ensure_all_online:
+                    # Wait for module to be available (with longer timeout when ensuring all online)
+                    wait_timeout = float(os.getenv("MAVAIA_CLIENT_WAIT_FOR_MODULE", "60.0"))
+                    
+                    # Retry loop to wait for module to come online
+                    max_retries = int(os.getenv("MAVAIA_CLIENT_MAX_RETRIES", "3"))
+                    retry_delay = float(os.getenv("MAVAIA_CLIENT_RETRY_DELAY", "2.0"))
+                    
+                    for retry in range(max_retries):
+                        try:
+                            module, actual_module_name = availability_manager.ensure_module_available(
+                                module_name,
+                                timeout=wait_timeout,
+                                use_fallback=False  # Don't use fallback when ensuring all online
+                            )
+                            
+                            if module is not None:
+                                if not module.validate_params(operation, params):
+                                    raise InvalidParameterError(
+                                        "params",
+                                        str(params),
+                                        f"Validation failed for operation '{operation}'"
+                                    )
+                                
+                                return module.execute(operation, params)
+                        except ModuleNotFoundError:
+                            if retry < max_retries - 1:
+                                import logging
+                                logger = logging.getLogger(__name__)
+                                logger.info(
+                                    f"Module {module_name} not available yet, "
+                                    f"retrying in {retry_delay}s (attempt {retry + 1}/{max_retries})"
+                                )
+                                import time
+                                time.sleep(retry_delay)
+                                continue
+                            raise
+                    
+                    # If we get here, module still not available after retries
+                    raise ModuleNotFoundError(
+                        f"Module {module_name} not available after {max_retries} retries. "
+                        f"System is ensuring it comes online in background."
+                    )
+                else:
+                    # Use fallback support (legacy behavior)
+                    result = availability_manager.get_module_or_fallback(module_name, operation)
+                    module, actual_module_name, is_fallback, mapped_operation = result
+                    
+                    if module is None:
+                        raise ModuleNotFoundError(module_name)
+                    
+                    # Use mapped operation if fallback was used
+                    operation_to_use = mapped_operation if mapped_operation else operation
+                    
+                    if is_fallback:
+                        # Log that fallback is being used
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.info(
+                            f"Using fallback module {actual_module_name} for {module_name} "
+                            f"with operation mapping: {operation} -> {operation_to_use}"
+                        )
+                    
+                    if not module.validate_params(operation_to_use, params):
+                        raise InvalidParameterError(
+                            "params",
+                            str(params),
+                            f"Validation failed for operation '{operation_to_use}'"
+                        )
+                    
+                    return module.execute(operation_to_use, params)
+        except ImportError:
+            # Availability manager not available, use direct registry
+            pass
+        except Exception as e:
+            # If availability manager fails, fall back to direct registry
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Availability manager failed, using direct registry: {e}")
+        
+        # Fallback to direct registry access
         module = ModuleRegistry.get_module(module_name)
         if module is None:
             raise ModuleNotFoundError(module_name)

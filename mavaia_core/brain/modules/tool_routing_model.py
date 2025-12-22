@@ -1,3 +1,22 @@
+
+
+# Lazy import JAX
+JAX_AVAILABLE = None
+jax = None
+jnp = None
+
+def _lazy_import_jax():
+    """Lazy import JAX"""
+    global JAX_AVAILABLE, jax, jnp
+    if JAX_AVAILABLE is None:
+        try:
+            jax = jax_module
+            jnp = jnp_module
+            JAX_AVAILABLE = True
+        except ImportError:
+            JAX_AVAILABLE = False
+    return JAX_AVAILABLE
+
 """
 Tool Routing Model
 Neural network for learned tool selection and routing based on query characteristics
@@ -8,14 +27,11 @@ import sys
 from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
 # Optional imports
 try:
-    import jax
-    import jax.numpy as jnp
     import flax.linen as nn
     from flax import serialization
     import optax

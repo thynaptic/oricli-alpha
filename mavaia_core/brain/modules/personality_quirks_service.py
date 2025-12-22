@@ -60,7 +60,7 @@ class PersonalityQuirksServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.personality_adaptation = ModuleRegistry.get_module("personality_adaptation_service")
 

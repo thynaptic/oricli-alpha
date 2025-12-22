@@ -111,7 +111,7 @@ class ReactionMemoryServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.persistent_memory_service = ModuleRegistry.get_module("persistent_memory_service")
 

@@ -62,7 +62,7 @@ class MentalHealthSafetyServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.safety_framework = ModuleRegistry.get_module("safety_framework")
 

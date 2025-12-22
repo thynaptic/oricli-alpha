@@ -59,7 +59,7 @@ class MCTSReasoning(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             # Lazy load cognitive generator
             self._cognitive_generator = ModuleRegistry.get_module(

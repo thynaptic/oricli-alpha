@@ -59,7 +59,7 @@ class MCTSSearchEngine(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self._thought_generator = ModuleRegistry.get_module(
                 "tot_thought_generator"

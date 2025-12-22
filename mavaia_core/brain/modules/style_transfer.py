@@ -1,3 +1,22 @@
+
+
+# Lazy import JAX
+JAX_AVAILABLE = None
+jax = None
+jnp = None
+
+def _lazy_import_jax():
+    """Lazy import JAX"""
+    global JAX_AVAILABLE, jax, jnp
+    if JAX_AVAILABLE is None:
+        try:
+            jax = jax_module
+            jnp = jnp_module
+            JAX_AVAILABLE = True
+        except ImportError:
+            JAX_AVAILABLE = False
+    return JAX_AVAILABLE
+
 """
 Style Transfer Module - Transform text to match target style metrics
 Explicit style transfer models for personality switching
@@ -8,23 +27,30 @@ import sys
 from pathlib import Path
 import re
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
-# JAX/Flax required (Python 3.14 compatible)
-try:
-    import jax
-    import jax.numpy as jnp
-    from transformers import FlaxAutoModelForSeq2SeqLM, FlaxAutoTokenizer
-    JAX_AVAILABLE = True
-    STYLE_TRANSFER_AVAILABLE = True
-except ImportError:
-    JAX_AVAILABLE = False
-    FlaxAutoModelForSeq2SeqLM = None
-    FlaxAutoTokenizer = None
-    STYLE_TRANSFER_AVAILABLE = False
+# Lazy import transformers - don't import at module level
+JAX_AVAILABLE = None
+STYLE_TRANSFER_AVAILABLE = None
+FlaxAutoModelForSeq2SeqLM = None
+FlaxAutoTokenizer = None
+
+def _lazy_import_style_transfer_deps():
+    """Lazy import style transfer dependencies"""
+    global JAX_AVAILABLE, STYLE_TRANSFER_AVAILABLE, FlaxAutoModelForSeq2SeqLM, FlaxAutoTokenizer
+    if STYLE_TRANSFER_AVAILABLE is None:
+        try:
+            from transformers import FlaxAutoModelForSeq2SeqLM as FAM, FlaxAutoTokenizer as FAT
+            FlaxAutoModelForSeq2SeqLM = FAM
+            FlaxAutoTokenizer = FAT
+            JAX_AVAILABLE = True
+            STYLE_TRANSFER_AVAILABLE = True
+        except ImportError:
+            JAX_AVAILABLE = False
+            STYLE_TRANSFER_AVAILABLE = False
+            FlaxAutoModelForSeq2SeqLM = None
+            FlaxAutoTokenizer = None
+    return STYLE_TRANSFER_AVAILABLE
 
 
 class StyleTransferModule(BaseBrainModule):

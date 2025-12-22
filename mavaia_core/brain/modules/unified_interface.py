@@ -24,7 +24,7 @@ class UnifiedInterfaceModule(BaseBrainModule):
     def _initialize_module_registry(self) -> None:
         """Initialize module registry for routing"""
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.module_registry = ModuleRegistry
         except ImportError:

@@ -53,7 +53,7 @@ class MavaiaSystemPromptBuilderModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.cache_service = ModuleRegistry.get_module("prompt_context_cache_service")
             self.segment_analyzer = ModuleRegistry.get_module("prompt_segment_analyzer")

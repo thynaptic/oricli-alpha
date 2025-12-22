@@ -66,7 +66,7 @@ class SupervisedSelfConsistencyServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             # Load dependent modules
             self.complexity_analyzer = ModuleRegistry.get_module("query_complexity_analyzer")

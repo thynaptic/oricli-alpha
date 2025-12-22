@@ -49,7 +49,7 @@ class ToTStateEvaluator(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self._cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
             self._embeddings = ModuleRegistry.get_module("embeddings")

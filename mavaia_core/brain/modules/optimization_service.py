@@ -52,7 +52,7 @@ class OptimizationServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.response_cache = ModuleRegistry.get_module("response_cache")
             # Performance profiler would be a separate module if needed
@@ -108,7 +108,7 @@ class OptimizationServiceModule(BaseBrainModule):
 
         # Execute actual operation via module registry
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             target_module = ModuleRegistry.get_module(module)
             if not target_module:

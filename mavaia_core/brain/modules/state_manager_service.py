@@ -49,7 +49,7 @@ class StateManagerServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.state_manager = ModuleRegistry.get_module("state_manager")
 

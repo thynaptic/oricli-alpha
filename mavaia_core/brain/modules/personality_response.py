@@ -447,7 +447,7 @@ class PersonalityResponseModule(BaseBrainModule):
         """Generate fallback response using neural grammar module"""
         try:
             # Try to import and use neural grammar module
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             grammar_module = ModuleRegistry.get_module("neural_grammar")
             if grammar_module:

@@ -47,7 +47,7 @@ class LongHorizonPlannerModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.mcts_service = ModuleRegistry.get_module("mcts_service")
             self.complexity_detector = ModuleRegistry.get_module("cot_complexity_detector")

@@ -44,7 +44,12 @@ class ModuleTestRunner:
         Returns:
             TestResult instance
         """
-        test_timeout = timeout or test_case.timeout
+        # Prefer explicit timeout override; fall back to per-test timeout.
+        # A timeout value of 0 or None disables the timeout mechanism.
+        if timeout is not None:
+            test_timeout = timeout
+        else:
+            test_timeout = test_case.timeout
         start_time = time.time()
         
         result = TestResult(
@@ -103,8 +108,8 @@ class ModuleTestRunner:
                     result.execution_time = time.time() - start_time
                     return result
             
-            # Execute operation with timeout
-            if test_timeout > 0:
+            # Execute operation with timeout if enabled
+            if test_timeout and test_timeout > 0:
                 execution_result = self._execute_with_timeout(
                     module,
                     test_case.operation,

@@ -83,7 +83,7 @@ class ReasoningVerificationLoopModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.symbolic_validator = ModuleRegistry.get_module("symbolic_step_validator")
             self.symbolic_overlay = ModuleRegistry.get_module("symbolic_overlay_service")

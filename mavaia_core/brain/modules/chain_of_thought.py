@@ -72,7 +72,7 @@ class ChainOfThought(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             # Lazy load complexity detector
             self._complexity_detector = ModuleRegistry.get_module(

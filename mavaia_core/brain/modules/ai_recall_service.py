@@ -56,7 +56,7 @@ class AIRecallServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.persistent_memory = ModuleRegistry.get_module("persistent_memory_service")
             self.memory_graph = ModuleRegistry.get_module("memory_graph")

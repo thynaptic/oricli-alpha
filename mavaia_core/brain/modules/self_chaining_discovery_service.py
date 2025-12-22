@@ -61,7 +61,7 @@ class SelfChainingDiscoveryServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.module_registry = ModuleRegistry.get_module("self_chaining_module_registry")
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")

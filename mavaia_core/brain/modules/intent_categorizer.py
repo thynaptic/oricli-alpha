@@ -59,7 +59,7 @@ class IntentCategorizerModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.intent_correction = ModuleRegistry.get_module("intent_correction")
 

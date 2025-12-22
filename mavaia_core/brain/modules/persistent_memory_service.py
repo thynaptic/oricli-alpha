@@ -8,10 +8,8 @@ import sys
 import math
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
 try:
     from models.memory_models import MemoryEntry, MemoryType
 except ImportError:
@@ -59,13 +57,10 @@ class PersistentMemoryServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.embeddings = ModuleRegistry.get_module("embeddings")
             self.memory_graph = ModuleRegistry.get_module("memory_graph")
-
             self._modules_loaded = True
-        except Exception as e:
+        except Exception:
             # Modules not available - will use fallback methods
             pass
 

@@ -133,3 +133,5 @@ mavaia_core/evaluation/test_data_manager.py
 mavaia_core/evaluation/test_results.py
 mavaia_core/evaluation/test_runner.py
 mavaia_core/evaluation/test_reporter.py
+.venv_*
+.venv_broken_*

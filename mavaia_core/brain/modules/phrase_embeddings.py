@@ -1,3 +1,32 @@
+
+
+np = None
+NUMPY_AVAILABLE = None
+
+def _lazy_import_numpy():
+    global np, NUMPY_AVAILABLE
+    if NUMPY_AVAILABLE is None:
+        try:
+            np = np_module
+            NUMPY_AVAILABLE = True
+        except ImportError:
+            NUMPY_AVAILABLE = False
+    return NUMPY_AVAILABLE
+
+
+SKLEARN_AVAILABLE = None
+sklearn = None
+
+def _lazy_import_sklearn():
+    global SKLEARN_AVAILABLE, sklearn
+    if SKLEARN_AVAILABLE is None:
+        try:
+            sklearn = sk_module
+            SKLEARN_AVAILABLE = True
+        except ImportError:
+            SKLEARN_AVAILABLE = False
+    return SKLEARN_AVAILABLE
+
 """
 Phrase Embeddings Module - Multi-level phrase embeddings for hybrid phrasing
 Generates word-level, phrase-level, and sentence-level embeddings
@@ -10,14 +39,11 @@ import re
 from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
 # Optional import - will fail gracefully if dependencies not available
 try:
-    import numpy as np
-    from sklearn.metrics.pairwise import cosine_similarity
     PHRASE_EMBEDDINGS_AVAILABLE = True
 except ImportError:
     PHRASE_EMBEDDINGS_AVAILABLE = False

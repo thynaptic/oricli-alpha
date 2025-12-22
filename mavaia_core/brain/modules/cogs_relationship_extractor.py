@@ -86,7 +86,7 @@ class COGSRelationshipExtractorModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.cogs_engine = ModuleRegistry.get_module("cogs_engine")
 

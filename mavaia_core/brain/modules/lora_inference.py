@@ -258,7 +258,7 @@ class LoRAInferenceModule(BaseBrainModule):
         """Apply style transfer to generated text"""
         try:
             # Try to import style transfer module
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             style_transfer_module = ModuleRegistry.get_module("style_transfer")
 

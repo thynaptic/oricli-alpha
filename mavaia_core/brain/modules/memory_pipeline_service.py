@@ -7,10 +7,8 @@ from typing import Any, Dict, List, Optional
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
 
 
 class MemoryPipelineServiceModule(BaseBrainModule):
@@ -50,13 +48,10 @@ class MemoryPipelineServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.persistent_memory = ModuleRegistry.get_module("persistent_memory_service")
             self.memory_graph = ModuleRegistry.get_module("memory_graph")
-
             self._modules_loaded = True
-        except Exception as e:
+        except Exception:
             # Modules not available - will use fallback methods
             pass
 

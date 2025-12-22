@@ -1,3 +1,5 @@
+from __future__ import annotations  # Defer evaluation of type hints
+
 """
 Memory Processor Module - Pandas-based data processing
 Handles data cleaning, deduplication, clustering, pattern finding, and relevance scoring
@@ -10,22 +12,35 @@ import json
 import math
 import re
 
-# Optional imports - handle gracefully if dependencies not available
-try:
-    import numpy as np
-    import pandas as pd
-    from sklearn.cluster import DBSCAN, KMeans
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.preprocessing import StandardScaler
-    MEMORY_PROCESSOR_AVAILABLE = True
-except ImportError:
-    MEMORY_PROCESSOR_AVAILABLE = False
-    np = None
-    pd = None
-    DBSCAN = None
-    KMeans = None
-    TfidfVectorizer = None
-    StandardScaler = None
+# Lazy imports - don't import heavy libraries at module level
+MEMORY_PROCESSOR_AVAILABLE = None
+np = None
+pd = None
+DBSCAN = None
+KMeans = None
+TfidfVectorizer = None
+StandardScaler = None
+
+def _lazy_import_memory_deps():
+    """Lazy import memory processor dependencies"""
+    global MEMORY_PROCESSOR_AVAILABLE, np, pd, DBSCAN, KMeans, TfidfVectorizer, StandardScaler
+    if MEMORY_PROCESSOR_AVAILABLE is None:
+        try:
+            import numpy as np_module
+            import pandas as pd_module
+            from sklearn.cluster import DBSCAN as DBSCAN_class, KMeans as KMeans_class
+            from sklearn.feature_extraction.text import TfidfVectorizer as TfidfVectorizer_class
+            from sklearn.preprocessing import StandardScaler as StandardScaler_class
+            np = np_module
+            pd = pd_module
+            DBSCAN = DBSCAN_class
+            KMeans = KMeans_class
+            TfidfVectorizer = TfidfVectorizer_class
+            StandardScaler = StandardScaler_class
+            MEMORY_PROCESSOR_AVAILABLE = True
+        except ImportError:
+            MEMORY_PROCESSOR_AVAILABLE = False
+    return MEMORY_PROCESSOR_AVAILABLE
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 

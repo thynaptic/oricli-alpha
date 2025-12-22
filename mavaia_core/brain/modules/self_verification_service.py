@@ -48,7 +48,7 @@ class SelfVerificationServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.mcts_service = ModuleRegistry.get_module("mcts_service")
             self.cot_service = ModuleRegistry.get_module("chain_of_thought")

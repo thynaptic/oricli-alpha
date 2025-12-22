@@ -46,7 +46,7 @@ class ResearchReasoningAgentModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.web_search = ModuleRegistry.get_module("web_scraper")
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")

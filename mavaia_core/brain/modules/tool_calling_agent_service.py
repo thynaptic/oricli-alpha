@@ -49,7 +49,7 @@ class ToolCallingAgentServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
             self.tool_execution = ModuleRegistry.get_module("tool_execution_service")

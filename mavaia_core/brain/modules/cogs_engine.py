@@ -65,7 +65,7 @@ class COGSEngineModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.embeddings_service = ModuleRegistry.get_module("embeddings")
 
@@ -414,7 +414,7 @@ class COGSEngineModule(BaseBrainModule):
 
         # Try to use entity extraction service if available
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
             entity_extractor = ModuleRegistry.get_module("cogs_relationship_extractor")
             if entity_extractor:
                 result = entity_extractor.execute("extract_entities", {"text": text})

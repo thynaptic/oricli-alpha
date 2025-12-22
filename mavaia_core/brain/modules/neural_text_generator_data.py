@@ -13,42 +13,64 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional, Union
 import json
+import importlib.util
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+# Lazy imports - don't import heavy libraries at module level
+REQUESTS_AVAILABLE = None
+requests = None
 
-try:
-    import requests
-    REQUESTS_AVAILABLE = True
-except ImportError:
-    REQUESTS_AVAILABLE = False
+WIKIPEDIA_AVAILABLE = None
+wikipedia = None
 
-# Try to import Wikipedia library
-try:
-    import wikipedia
-    WIKIPEDIA_AVAILABLE = True
-except ImportError:
-    WIKIPEDIA_AVAILABLE = False
+INTERNETARCHIVE_AVAILABLE = None
+search_items = None
+get_item = None
+download = None
 
-# Try to import Internet Archive library
-try:
-    from internetarchive import search_items, get_item, download
-    INTERNETARCHIVE_AVAILABLE = True
-except ImportError:
-    INTERNETARCHIVE_AVAILABLE = False
+def _lazy_import_requests():
+    """Lazy import requests"""
+    global REQUESTS_AVAILABLE, requests
+    if REQUESTS_AVAILABLE is None:
+        try:
+            import requests as req
+            requests = req
+            REQUESTS_AVAILABLE = True
+        except ImportError:
+            REQUESTS_AVAILABLE = False
+    return REQUESTS_AVAILABLE
 
-# Try to import HuggingFace datasets library
-try:
-    from datasets import load_dataset, list_datasets
-    try:
-        from huggingface_hub import HfApi
-        HF_API_AVAILABLE = True
-    except ImportError:
-        HF_API_AVAILABLE = False
-    HUGGINGFACE_AVAILABLE = True
-except ImportError:
-    HUGGINGFACE_AVAILABLE = False
-    HF_API_AVAILABLE = False
+def _lazy_import_wikipedia():
+    """Lazy import wikipedia"""
+    global WIKIPEDIA_AVAILABLE, wikipedia
+    if WIKIPEDIA_AVAILABLE is None:
+        try:
+            import wikipedia as wiki
+            wikipedia = wiki
+            WIKIPEDIA_AVAILABLE = True
+        except ImportError:
+            WIKIPEDIA_AVAILABLE = False
+    return WIKIPEDIA_AVAILABLE
+
+def _lazy_import_internetarchive():
+    """Lazy import internetarchive"""
+    global INTERNETARCHIVE_AVAILABLE, search_items, get_item, download
+    if INTERNETARCHIVE_AVAILABLE is None:
+        try:
+            from internetarchive import search_items as si, get_item as gi, download as dl
+            search_items = si
+            get_item = gi
+            download = dl
+            INTERNETARCHIVE_AVAILABLE = True
+        except ImportError:
+            INTERNETARCHIVE_AVAILABLE = False
+    return INTERNETARCHIVE_AVAILABLE
+
+# HuggingFace datasets and hub can be very heavy to import and may pull in
+# additional ML frameworks. To avoid hangs when this module is imported
+# (e.g. for `--list-sources`), we only check for their presence here and
+# import them lazily inside the HuggingFace-specific methods.
+HUGGINGFACE_AVAILABLE = importlib.util.find_spec("datasets") is not None
+HF_API_AVAILABLE = importlib.util.find_spec("huggingface_hub") is not None
 
 
 class BaseDataSource(ABC):
@@ -1039,6 +1061,12 @@ class DataSourceRegistry:
                 )
                 continue
             
+            # Progress logging so long-running downloads don't look like a hang
+            print(
+                f"[DataSourceRegistry] Loading data from source '{source_name}'...",
+                file=sys.stderr,
+            )
+            start_time = time.time()
             try:
                 text = source.load_data(
                     book_ids=book_ids,
@@ -1048,11 +1076,18 @@ class DataSourceRegistry:
                     data_dir=data_dir,
                     search=search,
                 )
+                duration = time.time() - start_time
+                print(
+                    f"[DataSourceRegistry] Finished source '{source_name}' in {duration:.1f}s "
+                    f"({len(text) if text else 0:,} chars)",
+                    file=sys.stderr,
+                )
                 if text:
                     all_texts.append(text)
             except Exception as e:
+                duration = time.time() - start_time
                 print(
-                    f"[DataSourceRegistry] Error loading from {source_name}: {e}",
+                    f"[DataSourceRegistry] Error loading from {source_name} after {duration:.1f}s: {e}",
                     file=sys.stderr,
                 )
         
@@ -1225,6 +1260,16 @@ class HuggingFaceSource(BaseDataSource):
             return None
         
         try:
+            # Lazily import HuggingFace datasets only when actually needed
+            try:
+                from datasets import load_dataset  # type: ignore[import]
+            except Exception as e:
+                print(
+                    f"[HuggingFaceSource] Failed to import datasets library: {e}",
+                    file=sys.stderr,
+                )
+                return None
+            
             # Try to load dataset - handle different formats
             # Some datasets require config names, others don't
             dataset = None
@@ -1251,12 +1296,12 @@ class HuggingFaceSource(BaseDataSource):
                         )
                     else:
                         raise ValueError(f"No splits available in dataset {dataset_name}")
-                except Exception as e2:
+                except Exception:
                     # If that also fails, try with default config
                     try:
                         dataset_dict = load_dataset(dataset_name, split="train", streaming=False)
                         dataset = dataset_dict
-                    except Exception as e3:
+                    except Exception:
                         # Last attempt: try loading with trust_remote_code for custom datasets
                         try:
                             dataset = load_dataset(
@@ -1265,13 +1310,13 @@ class HuggingFaceSource(BaseDataSource):
                                 streaming=False,
                                 trust_remote_code=True,
                             )
-                        except Exception as e4:
+                        except Exception:
                             print(
                                 f"[HuggingFaceSource] Failed to load dataset {dataset_name}: {error_msg}",
                                 file=sys.stderr,
                             )
                             print(
-                                f"[HuggingFaceSource] Attempted: default split, all splits, and trust_remote_code=True",
+                                "[HuggingFaceSource] Attempted: default split, all splits, and trust_remote_code=True",
                                 file=sys.stderr,
                             )
                             return None

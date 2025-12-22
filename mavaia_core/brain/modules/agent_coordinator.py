@@ -138,7 +138,7 @@ class AgentCoordinatorModule(BaseBrainModule):
             # Convert enum to string for dictionary key
             agent_type_str = agent_type_enum if isinstance(agent_type_enum, str) else str(agent_type_enum)
             try:
-                from module_registry import ModuleRegistry
+                from mavaia_core.brain.registry import ModuleRegistry
                 agent = ModuleRegistry.get_module(f"{agent_type_str}_agent")
                 if agent:
                     # Store with string key to ensure consistency

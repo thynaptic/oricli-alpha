@@ -9,18 +9,28 @@ import sys
 from pathlib import Path
 from collections import defaultdict
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+# Removed sys.path manipulation - use proper package imports
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
-# Check for basic dependencies first
-try:
-    import numpy as np
-    from sklearn.metrics.pairwise import cosine_similarity
-    NUMPY_AVAILABLE = True
-except ImportError:
-    NUMPY_AVAILABLE = False
+# Lazy import dependencies - don't import at module level
+NUMPY_AVAILABLE = None
+np = None
+cosine_similarity = None
+
+def _lazy_import_numpy_sklearn():
+    """Lazy import numpy and sklearn"""
+    global NUMPY_AVAILABLE, np, cosine_similarity
+    if NUMPY_AVAILABLE is None:
+        try:
+            import numpy as np_module
+            from sklearn.metrics.pairwise import cosine_similarity as cs
+            np = np_module
+            cosine_similarity = cs
+            NUMPY_AVAILABLE = True
+        except ImportError:
+            NUMPY_AVAILABLE = False
+    return NUMPY_AVAILABLE
 
 # Lazy import base embeddings module - don't import at module level
 EMBEDDINGS_MODULE_AVAILABLE = None
@@ -39,8 +49,15 @@ def _lazy_import_embeddings():
             EmbeddingsModule = None
     return EMBEDDINGS_MODULE_AVAILABLE
 
-# EMBEDDINGS_AVAILABLE should be True if basic deps are available
-EMBEDDINGS_AVAILABLE = NUMPY_AVAILABLE
+# EMBEDDINGS_AVAILABLE will be checked lazily
+EMBEDDINGS_AVAILABLE = None
+
+def _check_embeddings_available():
+    """Check if embeddings dependencies are available"""
+    global EMBEDDINGS_AVAILABLE
+    if EMBEDDINGS_AVAILABLE is None:
+        EMBEDDINGS_AVAILABLE = _lazy_import_numpy_sklearn()
+    return EMBEDDINGS_AVAILABLE
 
 
 class ConceptEmbeddingsModule(BaseBrainModule):
@@ -270,7 +287,7 @@ class ConceptEmbeddingsModule(BaseBrainModule):
         hierarchy = {}
         roots = []
 
-        if NUMPY_AVAILABLE and embeddings_map:
+        if _lazy_import_numpy_sklearn() and embeddings_map:
             # Find most general concepts (furthest from average)
             if len(embeddings_map) > 1:
                 # Simple approach: mark concepts that are similar as siblings
@@ -314,7 +331,7 @@ class ConceptEmbeddingsModule(BaseBrainModule):
 
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """Calculate cosine similarity between two vectors"""
-        if not NUMPY_AVAILABLE:
+        if not _lazy_import_numpy_sklearn():
             # Simple dot product implementation
             if len(vec1) != len(vec2):
                 return 0.0

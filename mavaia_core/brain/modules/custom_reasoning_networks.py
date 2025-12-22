@@ -7,8 +7,7 @@ from typing import Dict, Any, Optional, List, Tuple
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+# Removed sys.path manipulation - use proper package imports
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
@@ -54,9 +53,9 @@ def _check_jax_available():
 
 # Only define Flax-based classes if JAX is available
 # Otherwise define stub classes that will raise errors when used
-# Ensure JAX is checked and nn is set before using it
-_check_jax_available()
-if JAX_AVAILABLE and nn is not None:
+# Lazy check - don't import JAX at module level to avoid slow imports
+# JAX will be checked lazily when needed
+if False:  # Changed to False - JAX classes will be defined lazily when needed
     class TransformerEncoderLayer(nn.Module):
         """Flax implementation of Transformer Encoder Layer"""
         d_model: int

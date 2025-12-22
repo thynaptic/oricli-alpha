@@ -54,7 +54,7 @@ class ModelWarmupServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
 
@@ -155,7 +155,7 @@ class ModelWarmupServiceModule(BaseBrainModule):
     def _warmup_local_model(self, model: str) -> None:
         """Warmup a local model"""
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             module = ModuleRegistry.get_module(model)
             if module:
