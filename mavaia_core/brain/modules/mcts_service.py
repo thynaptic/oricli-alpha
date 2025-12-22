@@ -6,15 +6,10 @@ Orchestrates MCTS search with complexity detection, memory integration, and refl
 Ported from Swift MCTSService.swift
 """
 
-import sys
 import time
 import uuid
 import logging
-from pathlib import Path
 from typing import Any
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
@@ -27,14 +22,14 @@ def _lazy_import_mcts_models():
     global MCTSNode, MCTSConfiguration, MCTSResult, MCTSSearchResult, MCTSComplexityScore, ToTThoughtNode
     if MCTSNode is None:
         try:
-            from mcts_models import (
+            from mavaia_core.brain.modules.mcts_models import (
                 MCTSNode as MN,
                 MCTSConfiguration as MC,
                 MCTSResult as MR,
                 MCTSSearchResult as MSR,
                 MCTSComplexityScore as MCS,
             )
-            from tot_models import ToTThoughtNode as TTTN
+            from mavaia_core.brain.modules.tot_models import ToTThoughtNode as TTTN
             MCTSNode = MN
             MCTSConfiguration = MC
             MCTSResult = MR
@@ -60,6 +55,7 @@ class MCTSService(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._complexity_detector = None
         self._search_engine = None
         self._memory_graph = None

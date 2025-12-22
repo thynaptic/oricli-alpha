@@ -7,14 +7,10 @@ import importlib.util
 import inspect
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import Type
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
-from base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
 logger = logging.getLogger(__name__)
 

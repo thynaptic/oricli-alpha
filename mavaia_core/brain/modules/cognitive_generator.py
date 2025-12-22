@@ -5,7 +5,6 @@ Uses existing modules: memory, reasoning, MCTS results, safety, style, and thoug
 """
 
 from typing import Any
-import sys
 import json
 import re
 import random
@@ -13,9 +12,6 @@ import time
 import traceback
 import logging
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
@@ -29,6 +25,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
     """Main cognitive generation orchestrator - replaces LLM text generation"""
     
     def __init__(self) -> None:
+        super().__init__()
         self.thought_to_text = None
         self.memory_graph = None
         self.reasoning = None

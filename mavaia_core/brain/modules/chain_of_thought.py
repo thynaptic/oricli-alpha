@@ -6,20 +6,16 @@ Orchestrates multi-step reasoning with prompt chaining, verification, and reflec
 Ported from Swift ChainOfThoughtService.swift
 """
 
-import sys
 import time
 import uuid
 import re
 import logging
-from pathlib import Path
 from typing import Any
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
 from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
-from cot_models import (
+from mavaia_core.brain.modules.cot_models import (
     CoTStep,
     CoTConfiguration,
     CoTResult,
@@ -39,6 +35,7 @@ class ChainOfThought(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._complexity_detector = None
         self._prompt_chaining = None
         self._cognitive_generator = None
@@ -76,8 +73,6 @@ class ChainOfThought(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from module_registry import ModuleRegistry
-
             # Lazy load complexity detector
             self._complexity_detector = ModuleRegistry.get_module(
                 "cot_complexity_detector"

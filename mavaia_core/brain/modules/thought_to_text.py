@@ -6,14 +6,9 @@ Uses existing grammar, phrasing, and style modules to produce natural sentences 
 
 from typing import List, Dict, Any, Optional, Union
 import logging
-import sys
 import json
 import re
 import random
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError
@@ -24,6 +19,7 @@ class ThoughtToTextModule(BaseBrainModule):
     """Convert thought graphs (MCTS nodes or reasoning trees) to natural language sentences"""
 
     def __init__(self):
+        super().__init__()
         self.grammar_module = None
         self.style_module = None
         self.phrase_module = None
@@ -206,13 +202,18 @@ class ThoughtToTextModule(BaseBrainModule):
             return result
 
         except Exception as e:
+            logger.debug(
+                "Failed to convert thought graph; falling back to string concatenation",
+                exc_info=True,
+                extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+            )
             # Fallback: simple concatenation
             thoughts_text = " ".join([str(node) for node in mcts_nodes])
             return {
                 "text": thoughts_text,
                 "confidence": 0.5,
                 "method": "fallback",
-                "error": str(e),
+                "error": "Thought graph conversion failed",
             }
 
     def convert_reasoning_tree(

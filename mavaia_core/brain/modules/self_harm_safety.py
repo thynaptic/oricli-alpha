@@ -5,16 +5,11 @@ Provides tiered severity assessment and escalation protocols
 
 from typing import Any, Dict, List, Optional
 import logging
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError
-from safety_framework import (
+from mavaia_core.brain.modules.safety_framework import (
     SafetyServicePriority,
     SafetyCheckType,
     SafetyCheckContext,
@@ -37,6 +32,7 @@ class SelfHarmSafetyModule(BaseBrainModule):
     """Comprehensive self-harm safety detection service"""
 
     def __init__(self):
+        super().__init__()
         self.service_id = "self_harm_safety"
         self.service_name = "Self-Harm Safety"
         self.priority = SafetyServicePriority.CRITICAL
@@ -360,8 +356,6 @@ class SelfHarmSafetyModule(BaseBrainModule):
 
     def _dict_to_context(self, context_dict: Dict[str, Any]) -> SafetyCheckContext:
         """Convert dictionary to SafetyCheckContext"""
-        from safety_framework import SafetyCheckContext
-
         return SafetyCheckContext(
             conversation_history=context_dict.get("conversation_history", []),
             conversation_id=context_dict.get("conversation_id"),

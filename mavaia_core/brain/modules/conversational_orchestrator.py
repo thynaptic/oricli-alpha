@@ -6,14 +6,10 @@ Converted from Swift ConversationalOrchestrator.swift
 
 from typing import Any, Dict, List, Optional
 import logging
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
 from mavaia_core.exceptions import InvalidParameterError
 
 logger = logging.getLogger(__name__)
@@ -22,6 +18,7 @@ class ConversationalOrchestratorModule(BaseBrainModule):
     """Orchestrates all conversational Python modules for comprehensive conversation handling"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self.linguistic_priors = None
         self.social_priors = None
@@ -60,8 +57,6 @@ class ConversationalOrchestratorModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
             self.linguistic_priors = ModuleRegistry.get_module("linguistic_priors")
             self.social_priors = ModuleRegistry.get_module("social_priors")
@@ -184,9 +179,14 @@ class ConversationalOrchestratorModule(BaseBrainModule):
                 "model_used": "cognitive_generator",
             }
         except Exception as e:
+            logger.debug(
+                "Conversational response generation failed",
+                exc_info=True,
+                extra={"module_name": "conversational_orchestrator", "error_type": type(e).__name__},
+            )
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Conversational response generation failed",
                 "text": "",
                 "confidence": 0.0,
             }

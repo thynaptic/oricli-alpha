@@ -6,12 +6,7 @@ Converted from Swift CoreResponseService.swift
 
 from typing import Any, Dict, List, Optional
 import logging
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError
@@ -53,6 +48,7 @@ class CoreResponseServiceModule(BaseBrainModule):
     """Main orchestrator for response generation"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self.tool_registration = None
         self.safety_framework = None
