@@ -25,10 +25,10 @@ warnings.filterwarnings("ignore", category=UserWarning, module="torch.utils.data
 warnings.filterwarnings("ignore", message=".*ResourceTracker.*")
 warnings.filterwarnings("ignore", message=".*_recursion_count.*")
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Try to import TensorFlow/Keras
 TENSORFLOW_AVAILABLE = False
@@ -85,6 +85,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
     """
 
     def __init__(self):
+        super().__init__()
         self.char_model = None
         self.word_model = None
         self.transformer_model = None
@@ -166,9 +167,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 }
             self._config_loaded = True
         except Exception as e:
-            print(
-                f"[Mavaia-Trainer] Failed to load config: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load neural_text_generator config; using empty config",
+                exc_info=True,
+                extra={"module_name": "neural_text_generator", "error_type": type(e).__name__},
             )
             self.config = {}
 
@@ -201,11 +203,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 policies = json.load(f)
             return policies
         except Exception as e:
-            if RICH_AVAILABLE:
-                console = Console(stderr=True)
-                console.print(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] Failed to load adaptive policies: {e}")
-            else:
-                print(f"[Mavaia-Trainer] Warning: Failed to load adaptive policies: {e}", file=sys.stderr)
+            logger.debug(
+                "Failed to load adaptive policies",
+                exc_info=True,
+                extra={"module_name": "neural_text_generator", "error_type": type(e).__name__},
+            )
             return {}
     
     def _save_adaptive_policies(self, policies: Dict[str, Any]) -> bool:
@@ -224,11 +226,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 json.dump(policies, f, indent=2)
             return True
         except Exception as e:
-            if RICH_AVAILABLE:
-                console = Console(stderr=True)
-                console.print(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] Failed to save adaptive policies: {e}")
-            else:
-                print(f"[Mavaia-Trainer] Warning: Failed to save adaptive policies: {e}", file=sys.stderr)
+            logger.debug(
+                "Failed to save adaptive policies",
+                exc_info=True,
+                extra={"module_name": "neural_text_generator", "error_type": type(e).__name__},
+            )
             return False
     
     def _generate_policy_key(
@@ -451,7 +453,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         elif operation == "get_model_info":
             return self._get_model_info()
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for neural_text_generator",
+            )
 
     def _train_model(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -2032,8 +2038,12 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     use_mixed_precision = True
                     use_bf16 = True
                     use_fp16 = False
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Mixed precision detection failed on MPS; disabling mixed precision",
+                    exc_info=True,
+                    extra={"module_name": "neural_text_generator", "error_type": type(e).__name__},
+                )
         elif TORCH_AVAILABLE and torch.cuda.is_available():
             # CUDA supports FP16
             use_mixed_precision = True
