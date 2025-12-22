@@ -5,14 +5,14 @@ Extends base embeddings.py with concept hierarchies, semantic relationships, and
 
 from typing import Dict, Any, List, Optional, Set, Tuple
 import json
-import sys
 from pathlib import Path
 from collections import defaultdict
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Check for basic dependencies first
 try:
@@ -31,7 +31,7 @@ def _lazy_import_embeddings():
     global EMBEDDINGS_MODULE_AVAILABLE, EmbeddingsModule
     if EMBEDDINGS_MODULE_AVAILABLE is None:
         try:
-            from embeddings import EmbeddingsModule as EM
+            from mavaia_core.brain.modules.embeddings import EmbeddingsModule as EM
             EmbeddingsModule = EM
             EMBEDDINGS_MODULE_AVAILABLE = True
         except ImportError:
@@ -47,6 +47,7 @@ class ConceptEmbeddingsModule(BaseBrainModule):
     """Extended concept embeddings with hierarchies and relationships"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.base_embeddings = None
         self.concept_hierarchies = {}
@@ -116,8 +117,10 @@ class ConceptEmbeddingsModule(BaseBrainModule):
                     ],
                 }
         except Exception as e:
-            print(
-                f"[ConceptEmbeddingsModule] Failed to load config: {e}", file=sys.stderr
+            logger.warning(
+                "Failed to load concept_embeddings config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "concept_embeddings", "error_type": type(e).__name__},
             )
             self.config = {}
 
@@ -132,9 +135,10 @@ class ConceptEmbeddingsModule(BaseBrainModule):
             init_result = self.base_embeddings.initialize()
             return init_result
         except Exception as e:
-            print(
-                f"[ConceptEmbeddingsModule] Failed to initialize base embeddings: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Failed to initialize base embeddings for concept_embeddings",
+                exc_info=True,
+                extra={"module_name": "concept_embeddings", "error_type": type(e).__name__},
             )
         return False
 
@@ -168,7 +172,11 @@ class ConceptEmbeddingsModule(BaseBrainModule):
             concept = params.get("concept", "")
             return self.find_hypernyms(concept)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for concept_embeddings",
+            )
 
     def embed_concept(self, concept: str, domain: str = "general") -> Dict[str, Any]:
         """Generate embedding for a concept"""
