@@ -351,9 +351,10 @@ If no issues found, respond with "No issues found."
             return {"issues": issues, "summary": response_text}
 
         except Exception as e:
-            print(
-                f"[ReasoningReflectionService] Error performing reflection: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Error performing reflection",
+                exc_info=True,
+                extra={"module_name": "reasoning_reflection", "error_type": type(e).__name__},
             )
             return {"issues": [], "summary": ""}
 

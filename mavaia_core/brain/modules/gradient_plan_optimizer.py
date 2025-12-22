@@ -501,9 +501,13 @@ class GradientPlanOptimizerModule(BaseBrainModule):
 
             avg_loss = total_loss / len(training_data)
             if epoch % 5 == 0:
-                print(
-                    f"[GradientPlanOptimizerModule] Epoch {epoch}, Loss: {avg_loss:.4f}",
-                    file=sys.stderr,
+                logger.info(
+                    "Gradient plan optimizer training progress",
+                    extra={
+                        "module_name": "gradient_plan_optimizer",
+                        "epoch": epoch,
+                        "avg_loss": float(avg_loss),
+                    },
                 )
 
         return {"success": True, "epochs": epochs, "final_loss": avg_loss}

@@ -8,13 +8,15 @@ Based on "Combining Induction and Transduction for Abstract Reasoning" (arxiv:24
 """
 
 import copy
-import sys
+import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from mavaia_core.brain.modules.arc_data_augmentation import ARCTask
 from mavaia_core.brain.modules.arc_transduction_model import ARCTransductionModel
+
+logger = logging.getLogger(__name__)
 
 
 class ARCEnsemble:
@@ -154,9 +156,10 @@ class ARCEnsemble:
             return prediction, confidence
             
         except Exception as e:
-            print(
-                f"[ARCEnsemble] Induction failed: {e}",
-                file=sys.stderr
+            logger.debug(
+                "Induction prediction failed",
+                exc_info=True,
+                extra={"module_name": "arc_ensemble", "error_type": type(e).__name__},
             )
             return None, 0.0
     
