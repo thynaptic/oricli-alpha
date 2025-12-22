@@ -130,26 +130,39 @@ class ModuleHealthDiagnosticsModule(BaseBrainModule):
 
         modules_dir = Path(__file__).parent
         files = _collect_module_files(modules_dir, include_subdirs)[:max_modules]
-
-        # Ensure local-import compatibility for modules that use `from base_module import ...`
-        # without modifying core discovery logic.
+        # Some legacy modules may still rely on local-import patterns (e.g., `from base_module import ...`
+        # or `from cot_models import ...`). We keep compatibility here, but do so in a reversible way to
+        # avoid polluting interpreter state for callers.
         import mavaia_core.brain.base_module as package_base_module
-        sys.modules["base_module"] = package_base_module
-
+        prior_base_module = sys.modules.get("base_module")
+        added_sys_path = False
         if str(modules_dir) not in sys.path:
             sys.path.insert(0, str(modules_dir))
+            added_sys_path = True
+        sys.modules["base_module"] = package_base_module
 
         entries: list[dict[str, Any]] = []
         ok_count = 0
         fail_count = 0
-
-        for file_path in files:
-            scan = self._scan_one_file(file_path, import_timeout_s, include_tracebacks)
-            entries.append(scan)
-            if scan["import_ok"]:
-                ok_count += 1
+        try:
+            for file_path in files:
+                scan = self._scan_one_file(file_path, import_timeout_s, include_tracebacks)
+                entries.append(scan)
+                if scan["import_ok"]:
+                    ok_count += 1
+                else:
+                    fail_count += 1
+        finally:
+            # Restore interpreter state
+            if added_sys_path:
+                try:
+                    sys.path.remove(str(modules_dir))
+                except ValueError:
+                    pass
+            if prior_base_module is None:
+                sys.modules.pop("base_module", None)
             else:
-                fail_count += 1
+                sys.modules["base_module"] = prior_base_module
 
         return {
             "success": True,

@@ -5,13 +5,9 @@ Converted from Swift StateManagerService.swift
 
 from typing import Any, Dict, List, Optional
 import logging
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
 from mavaia_core.exceptions import InvalidParameterError
 
 logger = logging.getLogger(__name__)
@@ -21,6 +17,7 @@ class StateManagerServiceModule(BaseBrainModule):
     """State tracking and management service"""
 
     def __init__(self):
+        super().__init__()
         self.state_manager = None
         self._modules_loaded = False
 
@@ -53,8 +50,6 @@ class StateManagerServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.state_manager = ModuleRegistry.get_module("state_manager")
 
             self._modules_loaded = True

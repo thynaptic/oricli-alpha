@@ -4,17 +4,12 @@ Detects prompt injection, routing hijacks, API leakage, safety blind spots, etc.
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import time
 import logging
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError
-from safety_framework import (
+from mavaia_core.brain.modules.safety_framework import (
     SafetyServicePriority,
     SafetyCheckType,
     SafetyCheckContext,
@@ -40,6 +35,7 @@ class AdvancedThreatSafetyModule(BaseBrainModule):
     """Advanced threat safety service"""
 
     def __init__(self):
+        super().__init__()
         self.service_id = "advanced_threat_safety"
         self.service_name = "Advanced Threat Safety"
         self.priority = SafetyServicePriority.CRITICAL
@@ -352,8 +348,6 @@ class AdvancedThreatSafetyModule(BaseBrainModule):
 
     def _dict_to_context(self, context_dict: Dict[str, Any]) -> SafetyCheckContext:
         """Convert dictionary to SafetyCheckContext"""
-        from safety_framework import SafetyCheckContext
-
         return SafetyCheckContext(
             conversation_history=context_dict.get("conversation_history", []),
             conversation_id=context_dict.get("conversation_id"),

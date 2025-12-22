@@ -9,12 +9,8 @@ from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
 import json
-import sys
 import uuid
 import logging
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError
@@ -48,6 +44,7 @@ class StateManagerModule(BaseBrainModule):
     """Manage state tracking, persistence, transitions, and queries"""
 
     def __init__(self):
+        super().__init__()
         self.state_storage_path = Path(__file__).parent.parent / "state_storage"
         self.state_storage_path.mkdir(parents=True, exist_ok=True)
         self.state_cache: Dict[str, Dict[str, Any]] = {}

@@ -5,15 +5,11 @@ Converted from Swift ToolCallingAgentService.swift
 
 from typing import Any, Dict, List, Optional
 import logging
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
 from mavaia_core.exceptions import InvalidParameterError
-from tool_calling_models import ToolCall, ToolCallFunction, ToolResult, AgentLoopResult
+from mavaia_core.brain.modules.tool_calling_models import ToolCall, ToolCallFunction, ToolResult, AgentLoopResult
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +17,7 @@ class ToolCallingAgentServiceModule(BaseBrainModule):
     """Service for multi-turn tool calling (agent loop)"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self.tool_execution = None
         self.tool_parser = None
@@ -52,8 +49,6 @@ class ToolCallingAgentServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
             self.tool_execution = ModuleRegistry.get_module("tool_execution_service")
             self.tool_parser = ModuleRegistry.get_module("tool_call_parser")
