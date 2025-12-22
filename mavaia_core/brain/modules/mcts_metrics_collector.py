@@ -6,16 +6,15 @@ Tracks rollout performance, UCB1 patterns, convergence, and search efficiency.
 Ported from Swift MCTSMetricsCollector.swift
 """
 
-import sys
-from pathlib import Path
 from typing import Any
 from datetime import datetime
 from collections import deque
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 # Lazy import to avoid timeout during module discovery
 MCTSSearchResult = None
@@ -25,7 +24,7 @@ def _lazy_import_mcts_models():
     global MCTSSearchResult
     if MCTSSearchResult is None:
         try:
-            from mcts_models import MCTSSearchResult as MSR
+            from mavaia_core.brain.modules.mcts_models import MCTSSearchResult as MSR
             MCTSSearchResult = MSR
         except ImportError:
             pass
@@ -39,6 +38,7 @@ class MCTSMetricsCollector(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._metrics: list[dict[str, Any]] = []
         self._max_metrics = 1000
 
@@ -99,7 +99,11 @@ class MCTSMetricsCollector(BaseBrainModule):
         elif operation == "clear_old_metrics":
             return self._clear_old_metrics(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for mcts_metrics_collector",
+            )
 
     def _record_mcts_search(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -124,10 +128,18 @@ class MCTSMetricsCollector(BaseBrainModule):
         search_result_dict = params.get("search_result", {})
 
         if not search_result_dict:
-            raise ValueError("search_result parameter is required")
+            raise InvalidParameterError(
+                parameter="search_result",
+                value=str(type(search_result_dict).__name__),
+                reason="search_result parameter is required",
+            )
 
         if MCTSSearchResult is None:
-            raise RuntimeError("MCTSSearchResult not available")
+            raise ModuleOperationError(
+                module_name="mcts_metrics_collector",
+                operation="record_mcts_search",
+                reason="MCTSSearchResult type is not available (import failed)",
+            )
 
         search_result = MCTSSearchResult.from_dict(search_result_dict)
         rollout_latencies = params.get("rollout_latencies", [])
@@ -181,7 +193,11 @@ class MCTSMetricsCollector(BaseBrainModule):
         """Get metrics for a specific session"""
         session_id = params.get("session_id")
         if not session_id:
-            raise ValueError("session_id parameter is required")
+            raise InvalidParameterError(
+                parameter="session_id",
+                value=str(session_id),
+                reason="session_id parameter is required",
+            )
 
         metric = next(
             (m for m in self._metrics if m["session_id"] == session_id), None

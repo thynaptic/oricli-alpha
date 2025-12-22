@@ -4,14 +4,13 @@ Simplified Python version of Swift ToolRegistrationService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import asyncio
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Lazy imports to avoid timeout during module discovery
 def _lazy_import_tools():
@@ -19,9 +18,17 @@ def _lazy_import_tools():
     global Tool, ToolFunction, ToolParameters, ToolProperty, ToolResult, tool_registry, tool_schema_generator
     if Tool is None:
         try:
-            from tool_calling_models import Tool as T, ToolFunction as TF, ToolParameters as TP, ToolProperty as TProp, ToolResult as TR
-            from tool_registry import tool_registry as tr
-            from tool_schema_generator import tool_schema_generator as tsg
+            from mavaia_core.brain.modules.tool_calling_models import (
+                Tool as T,
+                ToolFunction as TF,
+                ToolParameters as TP,
+                ToolProperty as TProp,
+                ToolResult as TR,
+            )
+            from mavaia_core.brain.modules.tool_registry import tool_registry as tr
+            from mavaia_core.brain.modules.tool_schema_generator import (
+                tool_schema_generator as tsg,
+            )
             Tool = T
             ToolFunction = TF
             ToolParameters = TP
@@ -29,8 +36,12 @@ def _lazy_import_tools():
             ToolResult = TR
             tool_registry = tr
             tool_schema_generator = tsg
-        except ImportError:
-            pass
+        except ImportError as e:
+            logger.debug(
+                "Failed to import tool registry/models for tool_registration_service",
+                exc_info=True,
+                extra={"module_name": "tool_registration_service", "error_type": type(e).__name__},
+            )
 
 Tool = None
 ToolFunction = None
@@ -45,7 +56,7 @@ class ToolRegistrationServiceModule(BaseBrainModule):
     """Service to register all available tools"""
 
     def __init__(self):
-        pass
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -76,8 +87,14 @@ class ToolRegistrationServiceModule(BaseBrainModule):
         return True
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        _lazy_import_tools()
         """Execute a registration service operation"""
+        _lazy_import_tools()
+        if tool_registry is None:
+            return {
+                "success": False,
+                "error": "Tool registry is not available",
+                "operation": operation,
+            }
         if operation == "register_all_tools":
             asyncio.run(self.register_all_tools())
             return {"success": True, "tool_count": tool_registry.get_tool_count()}
@@ -107,7 +124,11 @@ class ToolRegistrationServiceModule(BaseBrainModule):
                 "tool_count": len(tools),
             }
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for tool_registration_service",
+            )
 
     async def register_all_tools(self) -> None:
         """Register all available tools"""
