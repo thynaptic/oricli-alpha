@@ -6,37 +6,51 @@ Implements heuristic (fast) and LLM (accurate) rollouts with caching.
 Ported from Swift MCTSRolloutService.swift
 """
 
-import sys
 import time
-from pathlib import Path
 from typing import Any
 from datetime import datetime, timedelta
 import concurrent.futures
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 # Lazy imports to avoid timeout during module discovery
 MCTSNode = None
 MCTSConfiguration = None
 ToTThoughtNode = None
 ToTConfiguration = None
+_MCTS_MODELS_IMPORT_FAILURE_LOGGED = False
 
 def _lazy_import_mcts_models():
     """Lazy import MCTS models only when needed"""
     global MCTSNode, MCTSConfiguration, ToTThoughtNode, ToTConfiguration
+    global _MCTS_MODELS_IMPORT_FAILURE_LOGGED
     if MCTSNode is None:
         try:
-            from mcts_models import MCTSNode as MN, MCTSConfiguration as MC
-            from tot_models import ToTThoughtNode as TTN, ToTConfiguration as TC
+            from mavaia_core.brain.modules.mcts_models import (
+                MCTSNode as MN,
+                MCTSConfiguration as MC,
+            )
+            from mavaia_core.brain.modules.tot_models import (
+                ToTThoughtNode as TTN,
+                ToTConfiguration as TC,
+            )
             MCTSNode = MN
             MCTSConfiguration = MC
             ToTThoughtNode = TTN
             ToTConfiguration = TC
-        except ImportError:
-            pass
+        except ImportError as e:
+            if not _MCTS_MODELS_IMPORT_FAILURE_LOGGED:
+                _MCTS_MODELS_IMPORT_FAILURE_LOGGED = True
+                logger.debug(
+                    "Failed to import MCTS/ToT model types for mcts_rollout_service",
+                    exc_info=True,
+                    extra={"module_name": "mcts_rollout_service", "error_type": type(e).__name__},
+                )
 
 
 class MCTSRolloutService(BaseBrainModule):
@@ -47,6 +61,7 @@ class MCTSRolloutService(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._state_evaluator = None
         self._thought_generator = None
         # Cache for rollout values (node ID -> (value, timestamp))
@@ -80,13 +95,16 @@ class MCTSRolloutService(BaseBrainModule):
         """Lazy load dependent modules only when needed"""
         if self._state_evaluator is None or self._thought_generator is None:
             try:
-                from mavaia_core.brain.registry import ModuleRegistry
                 if self._state_evaluator is None:
                     self._state_evaluator = ModuleRegistry.get_module("tot_state_evaluator", auto_discover=True, wait_timeout=1.0)
                 if self._thought_generator is None:
                     self._thought_generator = ModuleRegistry.get_module("tot_thought_generator", auto_discover=True, wait_timeout=1.0)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load one or more optional dependency modules for mcts_rollout_service",
+                    exc_info=True,
+                    extra={"module_name": "mcts_rollout_service", "error_type": type(e).__name__},
+                )
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -112,7 +130,11 @@ class MCTSRolloutService(BaseBrainModule):
         elif operation == "get_cache_stats":
             return self._get_cache_stats(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for mcts_rollout_service",
+            )
 
     def _perform_adaptive_rollout(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -131,14 +153,28 @@ class MCTSRolloutService(BaseBrainModule):
         if not self._state_evaluator:
             self.initialize()
             if not self._state_evaluator:
-                raise RuntimeError("State evaluator module not available")
+                raise ModuleOperationError(
+                    module_name="mcts_rollout_service",
+                    operation="perform_adaptive_rollout",
+                    reason="Required module not available: tot_state_evaluator",
+                )
 
         node_dict = params.get("node")
-        if not node_dict:
-            raise ValueError("node parameter is required")
+        if not isinstance(node_dict, dict) or not node_dict:
+            raise InvalidParameterError(
+                parameter="node",
+                value=str(type(node_dict).__name__),
+                reason="node parameter is required and must be a non-empty dict",
+            )
 
         node = MCTSNode.from_dict(node_dict)
         query = params.get("query", "")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
         context = params.get("context")
         config_dict = params.get("configuration", {})
 
@@ -191,13 +227,37 @@ class MCTSRolloutService(BaseBrainModule):
             Dictionary with list of rollout values
         """
         node_dict = params.get("node")
-        if not node_dict:
-            raise ValueError("node parameter is required")
+        if not isinstance(node_dict, dict) or not node_dict:
+            raise InvalidParameterError(
+                parameter="node",
+                value=str(type(node_dict).__name__),
+                reason="node parameter is required and must be a non-empty dict",
+            )
 
         node = MCTSNode.from_dict(node_dict)
         query = params.get("query", "")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
         context = params.get("context")
         count = params.get("count", 1)
+        try:
+            count_int = int(count)
+        except (TypeError, ValueError):
+            raise InvalidParameterError(
+                parameter="count",
+                value=str(count),
+                reason="count must be an integer",
+            )
+        if count_int < 1:
+            raise InvalidParameterError(
+                parameter="count",
+                value=str(count_int),
+                reason="count must be >= 1",
+            )
         config_dict = params.get("configuration", {})
 
         config = (
@@ -210,7 +270,7 @@ class MCTSRolloutService(BaseBrainModule):
 
         # Perform rollouts in parallel using thread pool
         with concurrent.futures.ThreadPoolExecutor(
-            max_workers=min(count, config.parallel_rollouts)
+            max_workers=min(count_int, config.parallel_rollouts)
         ) as executor:
             future_to_rollout = {
                 executor.submit(
@@ -222,7 +282,7 @@ class MCTSRolloutService(BaseBrainModule):
                         "configuration": config.to_dict(),
                     },
                 ): i
-                for i in range(count)
+                for i in range(count_int)
             }
 
             for future in concurrent.futures.as_completed(future_to_rollout):
@@ -230,9 +290,10 @@ class MCTSRolloutService(BaseBrainModule):
                     result = future.result()
                     rollout_values.append(result.get("value", 0.5))
                 except Exception as e:
-                    print(
-                        f"[MCTSRolloutService] Error in parallel rollout: {e}",
-                        file=sys.stderr,
+                    logger.debug(
+                        "Error in parallel rollout; using default value",
+                        exc_info=True,
+                        extra={"module_name": "mcts_rollout_service", "error_type": type(e).__name__},
                     )
                     rollout_values.append(0.5)  # Default value on error
 
@@ -424,9 +485,10 @@ class MCTSRolloutService(BaseBrainModule):
                     next_nodes.extend(generated_thoughts)
 
                 except Exception as e:
-                    print(
-                        f"[MCTSRolloutService] Failed to generate rollout thoughts: {e}",
-                        file=sys.stderr,
+                    logger.debug(
+                        "Failed to generate rollout thoughts; continuing",
+                        exc_info=True,
+                        extra={"module_name": "mcts_rollout_service", "error_type": type(e).__name__},
                     )
                     # Continue with other nodes
                     continue
@@ -443,7 +505,12 @@ class MCTSRolloutService(BaseBrainModule):
 
     def _mcts_to_tot_config(self, mcts_config: MCTSConfiguration) -> "ToTConfiguration":
         """Convert MCTSConfiguration to ToTConfiguration for compatibility"""
-        from tot_models import ToTConfiguration
+        if ToTConfiguration is None:
+            raise ModuleOperationError(
+                module_name="mcts_rollout_service",
+                operation="mcts_to_tot_config",
+                reason="ToTConfiguration type is not available (import failed)",
+            )
 
         return ToTConfiguration(
             max_depth=mcts_config.max_depth,
