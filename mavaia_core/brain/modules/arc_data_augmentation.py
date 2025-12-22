@@ -16,6 +16,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from mavaia_core.exceptions import InvalidParameterError
+
 
 class ARCTask:
     """ARC task representation with training examples and test input"""
@@ -214,7 +216,11 @@ class ARCDataAugmentation:
         # Normalize degrees to 0, 90, 180, 270
         degrees = degrees % 360
         if degrees not in [0, 90, 180, 270]:
-            raise ValueError(f"Rotation degrees must be 90, 180, or 270, got {degrees}")
+            raise InvalidParameterError(
+                parameter="degrees",
+                value=str(degrees),
+                reason="Rotation degrees must be 90, 180, or 270",
+            )
         
         np_grid = np.array(grid)
         

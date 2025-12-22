@@ -143,7 +143,11 @@ class PythonProjectUnderstandingModule(BaseBrainModule):
             return self.suggest_structure_improvements(project)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def understand_project(self, project: Union[str, Path]) -> Dict[str, Any]:
         """

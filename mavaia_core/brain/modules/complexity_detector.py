@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 
 @dataclass
@@ -107,7 +108,11 @@ class ComplexityDetector(BaseBrainModule):
         elif operation == "should_use_tot":
             return self._should_use_tot(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation for complexity_detector",
+            )
 
     def _analyze_cot_complexity(
         self, params: dict[str, Any]
@@ -125,8 +130,12 @@ class ComplexityDetector(BaseBrainModule):
             Dictionary with CoTComplexityScore data
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -161,8 +170,12 @@ class ComplexityDetector(BaseBrainModule):
             Dictionary with should_activate boolean
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         config_dict = params.get("configuration", {})
         config = self._parse_config(config_dict)
@@ -185,8 +198,12 @@ class ComplexityDetector(BaseBrainModule):
             Dictionary with ToTComplexityScore data
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         score = self._calculate_tot_complexity(query, context)
@@ -219,8 +236,12 @@ class ComplexityDetector(BaseBrainModule):
             Dictionary with should_use boolean
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         score = self._calculate_tot_complexity(query, context)

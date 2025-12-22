@@ -291,7 +291,11 @@ class SafetyFrameworkModule(BaseBrainModule):
         elif operation == "get_registered_services":
             return {"services": list(self.services.keys())}
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation for safety_framework",
+            )
 
     def register_service(self, service_data: Dict[str, Any]) -> Dict[str, Any]:
         """Register a safety service"""

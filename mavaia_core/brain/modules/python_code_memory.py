@@ -191,7 +191,11 @@ class PythonCodeMemoryModule(BaseBrainModule):
             return self.list_projects()
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def remember_code_pattern(
         self,

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 
 @dataclass
@@ -169,7 +170,11 @@ class SemanticThreatAnalysis(BaseBrainModule):
         if operation == "analyze_semantics":
             return self._analyze_semantics(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation for semantic_threat_analysis",
+            )
 
     def _analyze_semantics(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -183,8 +188,12 @@ class SemanticThreatAnalysis(BaseBrainModule):
             Dictionary with SemanticAnalysisResult data
         """
         text = params.get("text", "")
-        if not text:
-            raise ValueError("text parameter is required")
+        if not isinstance(text, str) or not text.strip():
+            raise InvalidParameterError(
+                parameter="text",
+                value=str(text),
+                reason="text parameter is required and must be a non-empty string",
+            )
 
         normalized = text.lower()
         detected_intents: list[str] = []

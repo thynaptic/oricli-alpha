@@ -29,6 +29,43 @@ from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError
 
 logger = logging.getLogger(__name__)
+_RICH_MARKUP_RE = re.compile(r"\[/?[^\]]+\]")
+
+
+def _trainer_log(*objects: object, **kwargs: object) -> None:
+    """
+    Trainer-friendly logging replacement for Rich `_trainer_log(...)`.
+
+    - Removes Rich markup tags to keep logs readable.
+    - Infers log level from common trainer symbols (✗/⚠) and markup hints.
+    - Never writes directly to stdout/stderr.
+    """
+    sep = str(kwargs.get("sep", " "))
+    message = sep.join(str(o) for o in objects)
+    # Infer severity from common markers.
+    message_lower = message.lower()
+    if "✗" in message or "[red]" in message_lower or "error" in message_lower:
+        level = "error"
+    elif "⚠" in message or "[yellow]" in message_lower or "warning" in message_lower:
+        level = "warning"
+    else:
+        level = "info"
+
+    # Strip Rich markup and trim.
+    plain = _RICH_MARKUP_RE.sub("", message).strip()
+
+    log_extra = {"module_name": "neural_text_generator", "component": "trainer"}
+    extra = kwargs.get("extra")
+    if isinstance(extra, dict):
+        # Avoid mutating caller dict.
+        log_extra = {**log_extra, **{k: str(v) for k, v in extra.items()}}
+
+    if level == "error":
+        logger.error(plain, extra=log_extra)
+    elif level == "warning":
+        logger.warning(plain, extra=log_extra)
+    else:
+        logger.info(plain, extra=log_extra)
 
 # Try to import TensorFlow/Keras
 TENSORFLOW_AVAILABLE = False
@@ -535,7 +572,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # Load and preprocess data
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] Loading training data from source(s): [green]{source}[/green]...")
+                _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] Loading training data from source(s): [green]{source}[/green]...")
             else:
                 logger.info(
                     "Loading training data from source(s)",
@@ -569,7 +606,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     f"  - Try a different data source"
                 )
                 if RICH_AVAILABLE:
-                    console.print(f"[bold red][Mavaia-Trainer][/bold red] [red]✗[/red] {error_msg}")
+                    _trainer_log(f"[bold red][Mavaia-Trainer][/bold red] [red]✗[/red] {error_msg}")
                 else:
                     logger.error(
                         "No data loaded from source(s)",
@@ -585,7 +622,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 text_length = int(len(raw_text) * data_percentage)
                 raw_text = raw_text[:text_length]
                 if RICH_AVAILABLE:
-                    console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] Using [yellow]{data_percentage*100:.1f}%[/yellow] of data ([cyan]{text_length:,}[/cyan] characters)")
+                    _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] Using [yellow]{data_percentage*100:.1f}%[/yellow] of data ([cyan]{text_length:,}[/cyan] characters)")
                 else:
                     logger.info(
                         "Using subset of data",
@@ -607,7 +644,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if not text or len(text.strip()) == 0:
                 error_msg = "No text remaining after preprocessing. Check your data source and preprocessing settings."
                 if RICH_AVAILABLE:
-                    console.print(f"[bold red][Mavaia-Trainer][/bold red] [red]✗[/red] {error_msg}")
+                    _trainer_log(f"[bold red][Mavaia-Trainer][/bold red] [red]✗[/red] {error_msg}")
                 else:
                     logger.error(
                         "No text remaining after preprocessing",
@@ -622,7 +659,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             policy = self._get_adaptive_policy(device, model_type, source, data_size, categories)
             if policy:
                 if RICH_AVAILABLE:
-                    console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] Applying learned adaptive policy for [cyan]{device}[/cyan] + [cyan]{model_type}[/cyan] (success count: {policy.get('success_count', 0)})")
+                    _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] Applying learned adaptive policy for [cyan]{device}[/cyan] + [cyan]{model_type}[/cyan] (success count: {policy.get('success_count', 0)})")
                 else:
                     logger.info(
                         "Applying learned adaptive policy",
@@ -667,7 +704,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # Train character model
             if model_type in ["character", "both"]:
                 if RICH_AVAILABLE:
-                    console.print("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]character-level[/green] model...")
+                    _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]character-level[/green] model...")
                 else:
                     logger.info(
                         "Training character-level model",
@@ -683,7 +720,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # Train word model
             if model_type in ["word", "both"]:
                 if RICH_AVAILABLE:
-                    console.print("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]word-level[/green] model...")
+                    _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]word-level[/green] model...")
                 else:
                     logger.info(
                         "Training word-level model",
@@ -724,7 +761,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     remaining_time_limit = max(0, time_limit_seconds - elapsed)
                     if remaining_time_limit <= 0:
                         if RICH_AVAILABLE:
-                            console.print(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] Time limit reached ([cyan]{elapsed:.1f}s[/cyan]), skipping transformer model")
+                            _trainer_log(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] Time limit reached ([cyan]{elapsed:.1f}s[/cyan]), skipping transformer model")
                         else:
                             logger.info(
                                 "Time limit reached; skipping transformer model",
@@ -737,7 +774,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         }
                     else:
                         if RICH_AVAILABLE:
-                            console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] Remaining time for transformer model: [yellow]{remaining_time_limit:.1f}s[/yellow]")
+                            _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] Remaining time for transformer model: [yellow]{remaining_time_limit:.1f}s[/yellow]")
                         else:
                             logger.info(
                                 "Remaining time for transformer model",
@@ -746,7 +783,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 
                 if remaining_time_limit is None or remaining_time_limit > 0:
                     if RICH_AVAILABLE:
-                        console.print("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]transformer[/green] model...")
+                        _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]transformer[/green] model...")
                     else:
                         logger.info(
                             "Training transformer model",
@@ -765,7 +802,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             f"Install with: pip install {' '.join(missing)}"
                         )
                         if RICH_AVAILABLE:
-                            console.print(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] {error_msg}")
+                            _trainer_log(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] {error_msg}")
                         else:
                             logger.warning(
                                 "Transformer training dependencies unavailable",
@@ -789,7 +826,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             "The transformers and torch libraries are available, but the training function needs to be added."
                         )
                         if RICH_AVAILABLE:
-                            console.print(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] {error_msg}")
+                            _trainer_log(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] {error_msg}")
                         else:
                             logger.warning(
                                 "Transformer training not implemented in this module",
@@ -814,7 +851,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     f"Failed models:\n" + "\n".join(f"  - {m}" for m in failed_models)
                 )
                 if RICH_AVAILABLE:
-                    console.print(f"[bold red][Mavaia-Trainer][/bold red] [red]✗[/red] {error_msg}")
+                    _trainer_log(f"[bold red][Mavaia-Trainer][/bold red] [red]✗[/red] {error_msg}")
                 else:
                     logger.error(
                         "No models trained successfully",
@@ -855,7 +892,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     )
                 
                 if RICH_AVAILABLE:
-                    console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] Saved adaptive policy for future training")
+                    _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] Saved adaptive policy for future training")
                 else:
                     logger.info(
                         "Saved adaptive policy for future training",
@@ -1308,7 +1345,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # If augmentation fails, return original
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                     f"Dataset augmentation failed: {str(e)}. Using original dataset."
                 )
@@ -1346,7 +1383,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         except Exception as e:
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                     f"Mini-head injection note: {str(e)}"
                 )
@@ -1430,7 +1467,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         except Exception as e:
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                     f"Dataset quality analysis failed: {str(e)}"
                 )
@@ -1512,7 +1549,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         except Exception as e:
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                     f"Head-only fine-tuning setup failed: {str(e)}"
                 )
@@ -1599,7 +1636,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         except Exception as e:
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                     f"Synthetic continuation generation failed: {str(e)}. Using original data."
                 )
@@ -1695,7 +1732,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 device = "mps"
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
-                    console.print("[bold cyan][Mavaia-Trainer][/bold cyan] [green]🍎[/green] MPS (Apple Silicon GPU) detected")
+                    _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] [green]🍎[/green] MPS (Apple Silicon GPU) detected")
                 else:
                     logger.info(
                         "MPS device detected",
@@ -1705,7 +1742,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 device = "cuda"
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
-                    console.print("[bold cyan][Mavaia-Trainer][/bold cyan] [green]CUDA[/green] GPU detected")
+                    _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] [green]CUDA[/green] GPU detected")
                 else:
                     logger.info(
                         "CUDA device detected",
@@ -1722,7 +1759,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if policy:
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] Applying learned adaptive policy for transformer on [cyan]{device}[/cyan] (success count: {policy.get('success_count', 0)})")
+                _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] Applying learned adaptive policy for transformer on [cyan]{device}[/cyan] (success count: {policy.get('success_count', 0)})")
             else:
                 logger.info(
                     "Applying learned adaptive policy (transformer)",
@@ -1755,7 +1792,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             model_name = "distilgpt2"
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print("[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] Switching to distilgpt2 for MPS compatibility")
+                _trainer_log("[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] Switching to distilgpt2 for MPS compatibility")
             else:
                 logger.warning(
                     "Switching to distilgpt2 for MPS compatibility",
@@ -1769,7 +1806,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             block_size = 256
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] Capping sequence length to 256 for MPS")
+                _trainer_log(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] Capping sequence length to 256 for MPS")
             else:
                 logger.warning(
                     "Capping sequence length to 256 for MPS",
@@ -1783,7 +1820,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             batch_size = 1
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] Reducing batch size to 1 for MPS")
+                _trainer_log(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] Reducing batch size to 1 for MPS")
             else:
                 logger.warning(
                     "Reducing batch size to 1 for MPS",
@@ -1797,7 +1834,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             gradient_accumulation_steps = 4
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] Using gradient accumulation (steps={gradient_accumulation_steps}) to maintain effective batch size")
+                _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] Using gradient accumulation (steps={gradient_accumulation_steps}) to maintain effective batch size")
             else:
                 logger.info(
                     "Using gradient accumulation for MPS",
@@ -1859,7 +1896,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # TINY-DATA MODE ACTIVATED: "Train on scraps" - never error out
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold magenta][Mavaia-Trainer][/bold magenta] [magenta]🔬[/magenta] "
                     f"[bold]TINY-DATA MODE[/bold] activated ({len(tokens)} tokens) - Training on scraps!"
                 )
@@ -1879,7 +1916,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if model_name not in ["distilgpt2", "gpt2"]:
                 model_name = "distilgpt2"
                 if RICH_AVAILABLE:
-                    console.print(f"[bold magenta][Mavaia-Trainer][/bold magenta] Using [cyan]distilgpt2[/cyan] for tiny-data mode")
+                    _trainer_log(f"[bold magenta][Mavaia-Trainer][/bold magenta] Using [cyan]distilgpt2[/cyan] for tiny-data mode")
                 else:
                     logger.info(
                         "Using distilgpt2 for tiny-data mode",
@@ -1897,7 +1934,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 device = "cpu"
                 use_mps = False
                 if RICH_AVAILABLE:
-                    console.print(f"[bold magenta][Mavaia-Trainer][/bold magenta] Auto-fallback to [cyan]CPU[/cyan] for tiny-data stability")
+                    _trainer_log(f"[bold magenta][Mavaia-Trainer][/bold magenta] Auto-fallback to [cyan]CPU[/cyan] for tiny-data stability")
                 else:
                     logger.info(
                         "Auto-fallback to CPU for tiny-data stability",
@@ -1905,7 +1942,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     )
             
             if RICH_AVAILABLE:
-                console.print(
+                _trainer_log(
                     f"[bold magenta][Mavaia-Trainer][/bold magenta] "
                     f"Tiny-data config: block_size={block_size}, batch_size={batch_size}, "
                     f"grad_accum={gradient_accumulation_steps}, device={device}"
@@ -1936,7 +1973,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     block_size = max(min_block_size_normal, len(tokens) - 10)  # Leave some margin
                     if RICH_AVAILABLE:
                         console = Console(stderr=True)
-                        console.print(
+                        _trainer_log(
                             f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                             f"Reducing block_size from {old_block_size} to {block_size} to fit available data ({len(tokens)} tokens)"
                         )
@@ -1977,7 +2014,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if tiny_data_mode and source and "huggingface" in str(source).lower():
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold magenta][Mavaia-Trainer][/bold magenta] [magenta]🔄[/magenta] "
                     f"Micro-dataset augmentation: Permuting substrings for tiny dataset"
                 )
@@ -1993,7 +2030,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             tokens = augmented_tokens
             
             if RICH_AVAILABLE:
-                console.print(
+                _trainer_log(
                     f"[bold magenta][Mavaia-Trainer][/bold magenta] "
                     f"Augmented dataset: {original_token_count} → {len(tokens)} tokens "
                     f"(+{len(tokens) - original_token_count} from permutations)"
@@ -2022,7 +2059,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if quality_metrics:
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]📊[/green] "
                     f"Dataset quality: {quality_metrics.get('vocab_diversity', 0):.2%} diversity, "
                     f"{quality_metrics.get('repetition_rate', 0):.2%} repetition, "
@@ -2049,7 +2086,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             effective_epochs = min(epochs, max_epochs_by_time)
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold cyan][Mavaia-Trainer][/bold cyan] Time limit: [yellow]{time_limit_seconds:.1f}s[/yellow], "
                     f"adjusting to [cyan]{effective_epochs}[/cyan] epochs max"
                 )
@@ -2072,7 +2109,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         
         if RICH_AVAILABLE:
             console = Console(stderr=True)
-            console.print(
+            _trainer_log(
                 f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] "
                 f"Learning rate scheduling: cosine decay with {warmup_steps} warmup steps "
                 f"(total steps: {total_steps})"
@@ -2127,7 +2164,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if use_mps:
                     if RICH_AVAILABLE:
                         console = Console(stderr=True)
-                        console.print("[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] MPS out of memory, falling back to CPU")
+                        _trainer_log("[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] MPS out of memory, falling back to CPU")
                     else:
                         logger.warning(
                             "MPS out of memory; falling back to CPU",
@@ -2158,7 +2195,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 resume_from_checkpoint = str(checkpoint_dirs[0])
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
-                    console.print(
+                    _trainer_log(
                         f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] "
                         f"Resuming training from checkpoint: {checkpoint_dirs[0].name}"
                     )
@@ -2228,7 +2265,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 precision_type = "BF16" if use_bf16 else "FP16"
-                console.print(
+                _trainer_log(
                     f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] "
                     f"Mixed precision training enabled: {precision_type}"
                 )
@@ -2291,7 +2328,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     if elapsed >= self.time_limit:
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
-                            console.print(
+                            _trainer_log(
                                 f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                                 f"Time limit reached ([cyan]{elapsed:.1f}s[/cyan]), stopping training"
                             )
@@ -2327,7 +2364,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
-                            console.print(
+                            _trainer_log(
                                 f"[bold green][Mavaia-Trainer][/bold green] [green]✓[/green] "
                                 f"Validation loss improved to {eval_loss:.4f} (best: {self.best_eval_loss:.4f})"
                             )
@@ -2341,7 +2378,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
-                            console.print(
+                            _trainer_log(
                                 f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⏸[/yellow] "
                                 f"Validation loss did not improve ({eval_loss:.4f}). "
                                 f"Patience: {self.patience_counter}/{self.patience}"
@@ -2365,7 +2402,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
-                            console.print(
+                            _trainer_log(
                                 f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]🛑[/yellow] "
                                 f"Early stopping triggered: No improvement for {self.patience} evaluations. "
                                 f"Best validation loss: {self.best_eval_loss:.4f}"
@@ -2421,7 +2458,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         # Don't fail training if CSV logging fails
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
-                            console.print(
+                            _trainer_log(
                                 f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                                 f"CSV logging failed: {str(e)}"
                             )
@@ -2465,7 +2502,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             
                             if RICH_AVAILABLE:
                                 console = Console(stderr=True)
-                                console.print(
+                                _trainer_log(
                                     f"[bold green][Mavaia-Trainer][/bold green] [green]💾[/green] "
                                     f"Saved best model: eval_loss {old_best:.4f} → {eval_loss:.4f}"
                                 )
@@ -2481,7 +2518,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         except Exception as e:
                             if RICH_AVAILABLE:
                                 console = Console(stderr=True)
-                                console.print(
+                                _trainer_log(
                                     f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                                     f"Failed to save best model checkpoint: {str(e)}"
                                 )
@@ -2589,7 +2626,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if use_head_only:
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold magenta][Mavaia-Trainer][/bold magenta] [magenta]🎯[/magenta] "
                     f"Head-only fine-tuning mode: Freezing all layers except output head"
                 )
@@ -2609,7 +2646,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if use_kl_reg:
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold magenta][Mavaia-Trainer][/bold magenta] [magenta]🛡️[/magenta] "
                     f"KL-Regularization enabled: Preventing overfitting on tiny dataset"
                 )
@@ -2631,7 +2668,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         param.requires_grad = False
                 except Exception as e:
                     if RICH_AVAILABLE:
-                        console.print(
+                        _trainer_log(
                             f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                             f"Could not create initial model copy for KL reg: {str(e)}"
                         )
@@ -2681,7 +2718,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         epoch_str = f"{float(epoch):.2f}" if epoch is not None and isinstance(epoch, (int, float)) else "N/A"
                         
                         # Print formatted line, overwriting any previous output on same line
-                        console.print(
+                        _trainer_log(
                             f"[dim]Step {step:>5}[/dim] | "
                             f"[bold red]Loss: {loss_str:>8}[/bold red] | "
                             f"[cyan]Grad: {grad_norm_str:>10}[/cyan] | "
@@ -2807,7 +2844,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] "
                     f"Early stopping enabled: patience={patience}, min_delta=0.001"
                 )
@@ -2823,7 +2860,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         
         if RICH_AVAILABLE:
             console = Console(stderr=True)
-            console.print(
+            _trainer_log(
                 f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] "
                 f"CSV metrics logging enabled: {csv_logging_callback.csv_file}"
             )
@@ -2849,7 +2886,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] "
                     f"TensorBoard logging enabled: {tensorboard_log_dir}"
                     f"\n  View logs with: tensorboard --logdir {tensorboard_log_dir}"
@@ -2933,7 +2970,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 # Rich progress bar failed, continue without it
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
-                    console.print(
+                    _trainer_log(
                         f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                         f"Rich progress bar initialization failed: {str(e)}"
                     )
@@ -2974,7 +3011,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if tiny_data_mode:
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(
+                _trainer_log(
                     f"[bold magenta][Mavaia-Trainer][/bold magenta] [magenta]📚[/magenta] "
                     f"[bold]CURRICULUM TRAINING PHASE 2[/bold] activated - Adaptive context stretching from 32 → {block_size}"
                 )
@@ -2986,7 +3023,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             # MINI-TRANSFORMER HEAD INJECTION: Add custom tiny head for tiny datasets
             if RICH_AVAILABLE:
-                console.print(
+                _trainer_log(
                     f"[bold magenta][Mavaia-Trainer][/bold magenta] [magenta]🧠[/magenta] "
                     f"Injecting mini-transformer head for tiny-data optimization"
                 )
@@ -3011,7 +3048,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             synthetic_continuations_generated = False
             if len(tokens) < 100:  # Only for ultra-scarce data
                 if RICH_AVAILABLE:
-                    console.print(
+                    _trainer_log(
                         f"[bold magenta][Mavaia-Trainer][/bold magenta] [magenta]🔄[/magenta] "
                         f"Synthetic-continuation generator: Will generate synthetic data after initial training"
                     )
@@ -3034,7 +3071,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             use_validation_for_stretching = val_dataset is not None  # Use validation loss if available
             
             if RICH_AVAILABLE:
-                console.print(
+                _trainer_log(
                     f"[bold magenta][Mavaia-Trainer][/bold magenta] "
                     f"Adaptive curriculum: Starting at block_size={current_block_size}, "
                     f"max={max_allowed}, stretch_threshold={stretch_threshold}"
@@ -3050,7 +3087,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             while current_block_size <= max_allowed:
                 stage_idx += 1
                 if RICH_AVAILABLE:
-                    console.print(
+                    _trainer_log(
                         f"[bold magenta][Mavaia-Trainer][/bold magenta] "
                         f"[cyan]Stage {stage_idx}[/cyan]: "
                         f"Training with block_size={current_block_size} (adaptive curriculum)"
@@ -3068,7 +3105,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 # Validate dataset has enough samples (must have at least 1 sample)
                 if len(stage_train_dataset) == 0:
                     if RICH_AVAILABLE:
-                        console.print(
+                        _trainer_log(
                             f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                             f"Stage {stage_idx}: Dataset too small for block_size={current_block_size} "
                             f"(need > {current_block_size} tokens, have {len(train_tokens)}). "
@@ -3240,7 +3277,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         smoothed_loss = loss_history_smoothed[-1] if loss_history_smoothed else None
                         loss_str = f"{raw_loss:.4f}" if raw_loss is not None else "N/A"
                         smoothed_str = f"{smoothed_loss:.4f}" if smoothed_loss is not None else "N/A"
-                        console.print(
+                        _trainer_log(
                             f"[bold magenta][Mavaia-Trainer][/bold magenta] [green]✓[/green] "
                             f"Stage {stage_idx} complete: loss={loss_str} "
                             f"(EMA-smoothed: {smoothed_str}), "
@@ -3263,7 +3300,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     if not synthetic_continuations_generated and stage_idx == 1 and len(tokens) < 100:
                         try:
                             if RICH_AVAILABLE:
-                                console.print(
+                                _trainer_log(
                                     f"[bold magenta][Mavaia-Trainer][/bold magenta] [magenta]🔄[/magenta] "
                                     f"Generating synthetic continuations to extend dataset..."
                                 )
@@ -3294,7 +3331,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                                 stage_train_dataset = TextDataset(train_tokens, current_block_size)
                                 
                                 if RICH_AVAILABLE:
-                                    console.print(
+                                    _trainer_log(
                                         f"[bold magenta][Mavaia-Trainer][/bold magenta] "
                                         f"Synthetic data added: {original_train_len} → {len(train_tokens)} tokens "
                                         f"(+{len(train_tokens) - original_train_len} synthetic)"
@@ -3310,7 +3347,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                                     )
                         except Exception as e:
                             if RICH_AVAILABLE:
-                                console.print(
+                                _trainer_log(
                                     f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                                     f"Synthetic continuation generation failed: {str(e)}. Continuing with original data."
                                 )
@@ -3343,7 +3380,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                                 should_stretch = True
                                 
                                 if RICH_AVAILABLE:
-                                    console.print(
+                                    _trainer_log(
                                         f"[bold magenta][Mavaia-Trainer][/bold magenta] [cyan]📈[/cyan] "
                                         f"EMA-smoothed {loss_type_label} loss slope: {loss_slope:.4f} - Model stabilized, stretching context..."
                                     )
@@ -3358,7 +3395,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                                     )
                             else:
                                 if RICH_AVAILABLE:
-                                    console.print(
+                                    _trainer_log(
                                         f"[bold magenta][Mavaia-Trainer][/bold magenta] [yellow]⏸[/yellow] "
                                         f"EMA-smoothed {loss_type_label} loss slope: {loss_slope:.4f} - Still improving, continuing at current size..."
                                     )
@@ -3400,7 +3437,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         if current_block_size > max_allowed:
                             current_block_size = max_allowed
                             if RICH_AVAILABLE:
-                                console.print(
+                                _trainer_log(
                                     f"[bold magenta][Mavaia-Trainer][/bold magenta] "
                                     f"Reached maximum block_size ({max_allowed}) allowed by data"
                                 )
@@ -3425,7 +3462,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 except Exception as e:
                     # If a stage fails, try to stretch and continue (never error out in tiny-data mode)
                     if RICH_AVAILABLE:
-                        console.print(
+                        _trainer_log(
                             f"[bold magenta][Mavaia-Trainer][/bold magenta] [yellow]⚠[/yellow] "
                             f"Stage {stage_idx} encountered error: {str(e)}. Attempting to stretch and continue..."
                         )
@@ -3458,7 +3495,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             block_size = current_block_size
             
             if RICH_AVAILABLE:
-                console.print(
+                _trainer_log(
                     f"[bold magenta][Mavaia-Trainer][/bold magenta] [green]✓[/green] "
                     f"Adaptive curriculum training complete! Final block_size: {block_size}, "
                     f"Total epochs: {sum(completed_epochs)}, Stages: {stage_idx}"
@@ -3491,7 +3528,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 try:
                     if RICH_AVAILABLE:
                         console = Console(stderr=True)
-                        console.print(
+                        _trainer_log(
                             f"[bold green][Mavaia-Trainer][/bold green] [green]💾[/green] "
                             f"Loading best model from checkpoint (best validation loss)"
                         )
@@ -3506,7 +3543,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 except Exception as e:
                     if RICH_AVAILABLE:
                         console = Console(stderr=True)
-                        console.print(
+                        _trainer_log(
                             f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                             f"Could not load best model checkpoint: {str(e)}. Using final model instead."
                         )
@@ -3582,7 +3619,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     metrics_panel.append(f"Validation Perplexity: {eval_perplexity:.2f}")
                 
                 if metrics_panel:
-                    console.print(
+                    _trainer_log(
                         f"[bold green][Mavaia-Trainer][/bold green] [green]📊[/green] "
                         f"Final Metrics: {' | '.join(metrics_panel)}"
                     )
@@ -3630,7 +3667,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                console.print(f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] Saved adaptive policy for transformer training")
+                _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]✓[/green] Saved adaptive policy for transformer training")
             else:
                 logger.info(
                     "Saved adaptive policy for transformer training",
@@ -3644,7 +3681,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if use_mps and ("mps" in str(e).lower() or "out of memory" in str(e).lower()):
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
-                    console.print("[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] MPS out of memory during training, retrying with CPU")
+                    _trainer_log("[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] MPS out of memory during training, retrying with CPU")
                 else:
                     logger.warning(
                         "MPS out of memory during training; retrying with CPU",
@@ -3755,7 +3792,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     if tiny_data_mode:
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
-                            console.print(
+                            _trainer_log(
                                 f"[bold magenta][Mavaia-Trainer][/bold magenta] [yellow]⚠[/yellow] "
                                 f"CPU fallback error in tiny-data mode: {str(e2)}. Attempting final fallback..."
                             )
@@ -3822,7 +3859,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             train_loss = train_result.training_loss if hasattr(train_result, "training_loss") else None
                             
                             if RICH_AVAILABLE:
-                                console.print(
+                                _trainer_log(
                                     f"[bold magenta][Mavaia-Trainer][/bold magenta] [green]✓[/green] "
                                     f"Tiny-data mode fallback succeeded!"
                                 )
@@ -3849,7 +3886,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             # This ensures we never error out
                             if RICH_AVAILABLE:
                                 console = Console(stderr=True)
-                                console.print(
+                                _trainer_log(
                                     f"[bold magenta][Mavaia-Trainer][/bold magenta] [yellow]⚠[/yellow] "
                                     f"Tiny-data mode: All fallbacks exhausted. Returning minimal success."
                                 )
@@ -3888,7 +3925,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if tiny_data_mode:
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
-                    console.print(
+                    _trainer_log(
                         f"[bold magenta][Mavaia-Trainer][/bold magenta] [yellow]⚠[/yellow] "
                         f"Error in tiny-data mode: {str(e)}. Attempting final fallback..."
                     )
@@ -3953,7 +3990,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     train_loss = train_result.training_loss if hasattr(train_result, "training_loss") else None
                     
                     if RICH_AVAILABLE:
-                        console.print(
+                        _trainer_log(
                             f"[bold magenta][Mavaia-Trainer][/bold magenta] [green]✓[/green] "
                             f"Tiny-data mode fallback succeeded!"
                         )
@@ -3980,7 +4017,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     # This ensures we never error out
                     if RICH_AVAILABLE:
                         console = Console(stderr=True)
-                        console.print(
+                        _trainer_log(
                             f"[bold magenta][Mavaia-Trainer][/bold magenta] [yellow]⚠[/yellow] "
                             f"Tiny-data mode: All fallbacks exhausted. Returning minimal success."
                         )

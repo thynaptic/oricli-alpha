@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional, List
 import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mavaia_core.exceptions import InvalidParameterError
+from mavaia_core.exceptions import InvalidParameterError, ModuleInitializationError
 
 logger = logging.getLogger(__name__)
 
@@ -118,12 +118,19 @@ class LoRAInferenceModule(BaseBrainModule):
 
         self._ensure_loader()
         if not self.loader:
-            raise ValueError("LoRA loader not available")
+            raise ModuleInitializationError(
+                module_name=self.metadata.name,
+                reason="LoRA loader not available",
+            )
 
         # Get loaded adapter
         adapter_dict = self.loader.get_loaded_adapter(personality)
         if not adapter_dict:
-            raise ValueError(f"Adapter not loaded for personality: {personality}")
+            raise InvalidParameterError(
+                parameter="personality",
+                value=str(personality),
+                reason="Adapter not loaded for personality",
+            )
 
         adapter_model = adapter_dict["adapter_model"]
         tokenizer = adapter_dict["tokenizer"]

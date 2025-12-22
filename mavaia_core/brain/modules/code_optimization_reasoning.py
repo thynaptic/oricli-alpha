@@ -122,7 +122,11 @@ class CodeOptimizationReasoningModule(BaseBrainModule):
             return self.analyze_bottlenecks(code)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def identify_optimizations(self, code: str) -> Dict[str, Any]:
         """

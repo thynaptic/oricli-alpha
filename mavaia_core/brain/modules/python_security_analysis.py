@@ -142,7 +142,11 @@ class PythonSecurityAnalysisModule(BaseBrainModule):
             return self.suggest_security_improvements(code)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def analyze_security(self, code: str) -> Dict[str, Any]:
         """

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 
 @dataclass
@@ -117,7 +118,11 @@ class SymbolicReasoningDetector(BaseBrainModule):
         if operation == "analyze":
             return self._analyze(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation for symbolic_reasoning_detector",
+            )
 
     def _analyze(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -131,8 +136,12 @@ class SymbolicReasoningDetector(BaseBrainModule):
             Dictionary with SymbolicAnalysis data
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         query_lower = query.lower()
 

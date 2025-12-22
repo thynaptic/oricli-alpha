@@ -151,7 +151,11 @@ class PythonRefactoringReasoningModule(BaseBrainModule):
             return self.refactor_multi_file(project, refactoring)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def suggest_refactorings(self, code: str, refactoring_type: str = "all") -> Dict[str, Any]:
         """

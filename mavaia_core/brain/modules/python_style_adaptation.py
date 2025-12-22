@@ -136,7 +136,11 @@ class PythonStyleAdaptationModule(BaseBrainModule):
             return self.migrate_style(codebase, new_style)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def detect_style(self, codebase: Union[str, Path]) -> Dict[str, Any]:
         """

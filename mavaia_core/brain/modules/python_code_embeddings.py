@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mavaia_core.exceptions import InvalidParameterError
+from mavaia_core.exceptions import InvalidParameterError, ModuleInitializationError
 
 # Lazy imports to avoid timeout during module discovery
 # These will be imported when actually needed
@@ -216,7 +216,11 @@ class PythonCodeEmbeddingsModule(BaseBrainModule):
             return self.code_similarity(code1, code2)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def embed_code(self, code: str) -> Dict[str, Any]:
         """
@@ -280,7 +284,10 @@ class PythonCodeEmbeddingsModule(BaseBrainModule):
         """Generate embedding using code-specific model."""
         _lazy_import_dependencies()
         if not self._code_model or not self._tokenizer or not JAX_AVAILABLE:
-            raise ValueError("Code model not available")
+            raise ModuleInitializationError(
+                module_name=self.metadata.name,
+                reason="Code embedding model not available",
+            )
         
         # Tokenize code
         inputs = self._tokenizer(
@@ -306,7 +313,7 @@ class PythonCodeEmbeddingsModule(BaseBrainModule):
         try:
             tree = ast.parse(code)
         except SyntaxError:
-            raise ValueError("Invalid Python code")
+            raise InvalidParameterError("code", "invalid_python_code", "Invalid Python code")
 
         features = []
 

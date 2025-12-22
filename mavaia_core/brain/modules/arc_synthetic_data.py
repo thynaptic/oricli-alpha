@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import numpy as np
 
 from mavaia_core.brain.modules.arc_data_augmentation import ARCTask
+from mavaia_core.exceptions import InvalidParameterError
 
 logger = logging.getLogger(__name__)
 
@@ -388,7 +389,11 @@ class ARCSyntheticDataGenerator:
             ARCTask
         """
         if not examples:
-            raise ValueError("Cannot create task from empty examples list")
+            raise InvalidParameterError(
+                parameter="examples",
+                value="[]",
+                reason="Cannot create task from empty examples list",
+            )
         
         train_inputs = [inp for inp, _ in examples]
         train_outputs = [out for _, out in examples]

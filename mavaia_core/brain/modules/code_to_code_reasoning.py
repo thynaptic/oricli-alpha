@@ -154,7 +154,11 @@ class CodeToCodeReasoningModule(BaseBrainModule):
             return self.analyze_code_differences(code1, code2)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def relate_code(self, code1: str, code2: str) -> Dict[str, Any]:
         """

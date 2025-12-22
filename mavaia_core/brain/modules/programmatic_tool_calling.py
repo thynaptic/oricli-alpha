@@ -248,8 +248,8 @@ def mavaia_tools_invoke(tool_name, **kwargs):
         "caller": "code_execution_20250825"
     }}
     
-    # Print tool call marker
-    print(f"__MAVAIA_TOOL_USE__{{json.dumps(tool_call)}}__END_TOOL_USE__")
+    # Emit tool call marker (avoid stdout helper; keep deterministic protocol framing)
+    sys.stdout.write("__MAVAIA_TOOL_USE__" + json.dumps(tool_call) + "__END_TOOL_USE__\\n")
     sys.stdout.flush()
     
     # Wait for tool result (simulated by reading from special variable)

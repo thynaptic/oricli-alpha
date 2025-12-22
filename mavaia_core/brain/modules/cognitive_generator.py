@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 # All debugging info goes to diagnostic dictionary, which is displayed by DebugOutputFormatter.swift
 # No log_* functions - use diagnostic dictionary instead
@@ -399,7 +400,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 return self.get_router_state()
             
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=str(operation),
+                    reason="Unknown operation for cognitive_generator",
+                )
     
     def _refresh_module_discovery(self) -> None:
         """

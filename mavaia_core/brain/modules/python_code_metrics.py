@@ -127,7 +127,11 @@ class PythonCodeMetricsModule(BaseBrainModule):
             return self.analyze_dependency_complexity(project)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def calculate_metrics(self, code: str) -> Dict[str, Any]:
         """

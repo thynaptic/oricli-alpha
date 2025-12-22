@@ -136,7 +136,11 @@ class PythonCodeExplanationModule(BaseBrainModule):
             return self.generate_tutorial(code, topic)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def explain_code(self, code: str, audience: str = "developer", detail_level: str = "medium") -> Dict[str, Any]:
         """
