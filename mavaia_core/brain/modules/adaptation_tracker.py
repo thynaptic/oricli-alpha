@@ -6,20 +6,21 @@ Tracks user communication style over time and suggests personality adjustments
 from typing import Dict, Any, List, Optional
 import json
 import re
-import sys
 from pathlib import Path
 from collections import Counter
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class AdaptationTrackerModule(BaseBrainModule):
     """Track and analyze user communication patterns for personality adaptation"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self._load_config()
 
@@ -163,8 +164,10 @@ class AdaptationTrackerModule(BaseBrainModule):
                     "gradual_adaptation_alpha": 0.15,
                 }
         except Exception as e:
-            print(
-                f"[AdaptationTrackerModule] Failed to load config: {e}", file=sys.stderr
+            logger.warning(
+                "Failed to load adaptation_tracker config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "adaptation_tracker", "error_type": type(e).__name__},
             )
             self.config = {}
 
@@ -172,20 +175,72 @@ class AdaptationTrackerModule(BaseBrainModule):
         """Execute an adaptation tracker operation"""
         if operation == "analyze_communication_patterns":
             conversation_history = params.get("conversation_history", [])
+            if conversation_history is None:
+                conversation_history = []
+            if not isinstance(conversation_history, list):
+                raise InvalidParameterError(
+                    parameter="conversation_history",
+                    value=str(type(conversation_history).__name__),
+                    reason="conversation_history must be a list",
+                )
             return self.analyze_communication_patterns(conversation_history)
         elif operation == "calculate_adaptation_factors":
             user_profile = params.get("user_profile", {})
             recent_conversations = params.get("recent_conversations", [])
+            if user_profile is None:
+                user_profile = {}
+            if recent_conversations is None:
+                recent_conversations = []
+            if not isinstance(user_profile, dict):
+                raise InvalidParameterError(
+                    parameter="user_profile",
+                    value=str(type(user_profile).__name__),
+                    reason="user_profile must be a dict",
+                )
+            if not isinstance(recent_conversations, list):
+                raise InvalidParameterError(
+                    parameter="recent_conversations",
+                    value=str(type(recent_conversations).__name__),
+                    reason="recent_conversations must be a list",
+                )
             return self.calculate_adaptation_factors(user_profile, recent_conversations)
         elif operation == "suggest_personality_adjustments":
             base_config = params.get("base_config", {})
             user_profile = params.get("user_profile", {})
+            if base_config is None:
+                base_config = {}
+            if user_profile is None:
+                user_profile = {}
+            if not isinstance(base_config, dict):
+                raise InvalidParameterError(
+                    parameter="base_config",
+                    value=str(type(base_config).__name__),
+                    reason="base_config must be a dict",
+                )
+            if not isinstance(user_profile, dict):
+                raise InvalidParameterError(
+                    parameter="user_profile",
+                    value=str(type(user_profile).__name__),
+                    reason="user_profile must be a dict",
+                )
             return self.suggest_personality_adjustments(base_config, user_profile)
         elif operation == "track_phrase_usage":
             messages = params.get("messages", [])
+            if messages is None:
+                messages = []
+            if not isinstance(messages, list):
+                raise InvalidParameterError(
+                    parameter="messages",
+                    value=str(type(messages).__name__),
+                    reason="messages must be a list",
+                )
             return self.track_phrase_usage(messages)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for adaptation_tracker",
+            )
 
     def analyze_communication_patterns(
         self, conversation_history: List[str]
@@ -210,7 +265,8 @@ class AdaptationTrackerModule(BaseBrainModule):
         cultural_count = 0
 
         for message in conversation_history:
-            words = message.lower().split()
+            message_str = str(message)
+            words = message_str.lower().split()
             word_count = len(words)
             length_samples.append(word_count)
 
@@ -231,9 +287,9 @@ class AdaptationTrackerModule(BaseBrainModule):
             slang_samples.append(slang_usage)
 
             # Energy (punctuation, caps, length)
-            exclamation = message.count("!")
-            question = message.count("?")
-            caps = sum(1 for c in message if c.isupper())
+            exclamation = message_str.count("!")
+            question = message_str.count("?")
+            caps = sum(1 for c in message_str if c.isupper())
             energy = min(
                 1.0,
                 (exclamation * 0.3 + question * 0.2 + caps * 0.1 + word_count * 0.01),
@@ -241,7 +297,7 @@ class AdaptationTrackerModule(BaseBrainModule):
             energy_samples.append(energy)
 
             # Emotional tone
-            message_lower = message.lower()
+            message_lower = message_str.lower()
             for tone, keywords in self.tone_keywords.items():
                 tone_scores[tone] += sum(
                     1 for keyword in keywords if keyword in message_lower
