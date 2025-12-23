@@ -94,8 +94,27 @@ class ModuleOrchestrator:
                 if dep != module_name:
                     self.load_module(dep, load_dependencies=False)
         
-        # Get module instance
-        module = ModuleRegistry.get_module(module_name)
+        # Get module instance - use availability manager if available
+        module = None
+        try:
+            from mavaia_core.brain.availability import get_availability_manager
+            availability_manager = get_availability_manager()
+            
+            if availability_manager._initialized:
+                # Use availability manager to ensure module is available
+                module, actual_name, is_fallback = availability_manager.get_module_or_fallback(
+                    module_name
+                )
+                if is_fallback:
+                    # Log that fallback was used
+                    print(f"[Orchestrator] Using fallback {actual_name} for {module_name}")
+            else:
+                # Availability manager not initialized, use registry directly
+                module = ModuleRegistry.get_module(module_name)
+        except Exception:
+            # Availability manager not available, use registry directly
+            module = ModuleRegistry.get_module(module_name)
+        
         if module is None:
             raise ModuleNotFoundError(module_name)
         

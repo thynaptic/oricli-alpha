@@ -173,6 +173,7 @@ class ModuleRegistry:
         modules_dir = Path(modules_dir)
         discovered_count = 0
         failed_count = 0
+        failed_modules = []  # Track failed module names
 
         # Add modules directory to path for imports
         if str(modules_dir) not in sys.path:
@@ -239,68 +240,54 @@ class ModuleRegistry:
                         module.BaseBrainModule = relative_base_module.BaseBrainModule
                         module.ModuleMetadata = relative_base_module.ModuleMetadata
                 
-                # Import module with timeout to prevent hanging
+                # Import module with a configurable timeout to prevent hangs on
+                # misbehaving modules, while still allowing heavy but valid
+                # modules to load. The timeout can be tuned via the
+                # MAVAIA_MODULE_IMPORT_TIMEOUT environment variable.
                 try:
-                    # Increase timeout for modules that may have heavy imports
-                    # Some modules like python_code_embeddings import transformers/jax which can take time
-                    # custom_reasoning_networks is large and may need more time
-                    heavy_import_modules = ['embedding', 'model', 'custom_reasoning', 'advanced_reasoning']
-                    timeout = 15.0 if any(keyword in module_file.name.lower() for keyword in heavy_import_modules) else 5.0
-                    if not cls._import_with_timeout(module_file, spec, module, timeout=timeout):
-                        # Always show errors, not just when verbose
-                        print(
-                            f"Failed to import {module_file.name}: import timeout (>{timeout}s)",
-                            file=sys.stderr,
-                        )
-                        failed_count += 1
-                        continue
+                    import os
+
+                    default_timeout = 60.0
+                    try:
+                        timeout = float(os.getenv("MAVAIA_MODULE_IMPORT_TIMEOUT", default_timeout))
+                    except ValueError:
+                        timeout = default_timeout
+
+                    # Allow disabling the threaded timeout path entirely via env
+                    disable_timeout = os.getenv(
+                        "MAVAIA_DISABLE_IMPORT_TIMEOUT", "false"
+                    ).lower() in ("true", "1", "yes")
+
+                    if disable_timeout:
+                        # Synchronous import on main thread
+                        spec.loader.exec_module(module)
+                    else:
+                        if not cls._import_with_timeout(
+                            module_file, spec, module, timeout=timeout
+                        ):
+                            failed_count += 1
+                            failed_modules.append(f"{module_file.name}: import timeout (>{timeout}s)")
+                            continue
+
                 except Exception as e:
                     failed_count += 1
-                    # Always show errors, not just when verbose
-                    error_msg = f"Failed to import {module_file.name}: {e}"
-                    print(
-                        error_msg,
-                        file=sys.stderr,
-                    )
-                    # Store error for potential re-raising if needed
+                    failed_modules.append(f"{module_file.name}: {e}")
                     continue
 
                 # Find all classes that inherit from BaseBrainModule
                 for name, obj in inspect.getmembers(module, inspect.isclass):
                     if issubclass(obj, BaseBrainModule) and obj is not BaseBrainModule:
 
-                        # Create instance to get metadata (with timeout)
+                        # Create instance to get metadata.
+                        # This used to run in a short-lived thread with a hard timeout,
+                        # which caused legitimate but heavy modules to be dropped.
+                        # We now construct synchronously so *all* valid modules can
+                        # load and expose metadata, even if initialization is slower.
                         try:
-                            instance_result = [None]
-                            instance_exception = [None]
-                            
-                            def create_instance():
-                                try:
-                                    instance_result[0] = obj()
-                                except Exception as e:
-                                    instance_exception[0] = e
-                            
-                            instance_thread = threading.Thread(target=create_instance, daemon=True)
-                            instance_thread.start()
-                            instance_thread.join(timeout=2.0)  # 2 second timeout for instance creation
-                            
-                            if instance_thread.is_alive():
-                                # Instance creation is taking too long, skip this module
-                                failed_count += 1
-                                # Always show errors, not just when verbose
-                                print(
-                                    f"Failed to initialize {name}: instance creation timeout (>2s)",
-                                    file=sys.stderr,
-                                )
-                                continue
-                            
-                            if instance_exception[0]:
-                                raise instance_exception[0]
-                            
-                            instance = instance_result[0]
+                            instance = obj()
                             if instance is None:
                                 continue
-                                
+
                             metadata = instance.metadata
 
                             # Register module
@@ -309,24 +296,30 @@ class ModuleRegistry:
                             # Don't print individual module discoveries - only show errors
                         except Exception as e:
                             failed_count += 1
-                            # Always show errors, not just when verbose
-                            error_msg = f"Failed to initialize {name}: {e}"
-                            print(
-                                error_msg,
-                                file=sys.stderr,
-                            )
-                            # Could raise ModuleInitializationError here if needed
+                            failed_modules.append(f"{module_file.name} ({name}): initialization failed: {e}")
 
             except Exception as e:
                 failed_count += 1
-                # Always show errors, not just when verbose
-                print(
-                    f"Failed to load {module_file.name}: {e}",
-                    file=sys.stderr,
-                )
+                failed_modules.append(f"{module_file.name}: {e}")
 
         # Mark as discovered
         cls._discovered = True
+        
+        # Print single status line with counts
+        print(
+            f"[ModuleRegistry] imported({discovered_count})/failed({failed_count})",
+            file=sys.stderr,
+            flush=True,
+        )
+        
+        # Only show failed imports
+        if failed_modules:
+            for failed in failed_modules:
+                print(
+                    f"  Failed to import {failed}",
+                    file=sys.stderr,
+                )
+        
         # Return counts to caller
         return (discovered_count, failed_count)
 
@@ -391,6 +384,83 @@ class ModuleRegistry:
                 ) from e
 
         return cls._instances[name]
+
+    @classmethod
+    def get_module_or_fallback(
+        cls,
+        name: str,
+        operation: Optional[str] = None,
+        auto_discover: bool = True,
+        wait_timeout: float = 10.0
+    ) -> tuple[Optional[BaseBrainModule], Optional[str], bool, Optional[str]]:
+        """
+        Get module instance or automatic fallback
+        
+        Args:
+            name: Name of primary module
+            operation: Optional operation name (for operation-specific fallbacks)
+            auto_discover: Whether to auto-discover modules
+            wait_timeout: Maximum time to wait for module discovery
+        
+        Returns:
+            Tuple of (module_instance, actual_module_name, is_fallback, mapped_operation)
+            is_fallback indicates if fallback was used
+            mapped_operation is the operation name to use (may differ from input if fallback used)
+        """
+        # Try to get primary module first
+        try:
+            module = cls.get_module(name, auto_discover=auto_discover, wait_timeout=wait_timeout)
+            if module is not None:
+                # Check if module is available and healthy via availability manager
+                try:
+                    from mavaia_core.brain.availability import get_availability_manager
+                    availability_manager = get_availability_manager()
+                    
+                    if availability_manager._initialized:
+                        # Use availability manager to get module or fallback
+                        result = availability_manager.get_module_or_fallback(
+                            name,
+                            operation
+                        )
+                        module, actual_name, is_fallback, mapped_op = result
+                        return module, actual_name, is_fallback, mapped_op
+                except Exception:
+                    # Availability manager not available or error, use primary module
+                    pass
+                
+                return module, name, False, operation
+        except Exception:
+            # Primary module failed, try fallback
+            pass
+        
+        # Try fallback if primary failed
+        try:
+            from mavaia_core.brain.degraded_classifier import get_degraded_classifier
+            classifier = get_degraded_classifier()
+            fallback_name = classifier.get_fallback_module(name, operation)
+            
+            if fallback_name:
+                fallback_module = cls.get_module(
+                    fallback_name,
+                    auto_discover=auto_discover,
+                    wait_timeout=wait_timeout
+                )
+                if fallback_module:
+                    # Get mapped operation for fallback
+                    mapped_operation = None
+                    if operation:
+                        try:
+                            mapped_operation = classifier.get_fallback_operation(
+                                name, operation, fallback_name
+                            )
+                        except Exception:
+                            mapped_operation = operation  # Use original if mapping fails
+                    return fallback_module, fallback_name, True, mapped_operation
+        except Exception:
+            # Fallback failed, return None
+            pass
+        
+        return None, None, False, None
 
     @classmethod
     def list_modules(cls) -> list[str]:

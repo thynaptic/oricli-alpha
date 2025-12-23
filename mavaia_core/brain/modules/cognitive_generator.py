@@ -67,6 +67,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
         self._router_state = "symbolic"  # symbolic, ml, hybrid
         self._routing_history = []  # Store routing decisions for learning
         self._routing_success_rates = {}  # Track success rates per route
+        # Specialized modules (for routing when split modules are available)
+        self._specialized_modules = {}
     
     @property
     def metadata(self) -> ModuleMetadata:
@@ -129,7 +131,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
             return
         
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
             
             # Load other required modules
             try:
@@ -154,7 +156,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
             
             try:
                 # Safety module might be named differently
-                from module_registry import ModuleRegistry as MR
+                from mavaia_core.brain.registry import ModuleRegistry as MR
 
                 self.safety = MR.get_module("safety") or MR.get_module(
                     "safety_cognition"
@@ -288,7 +290,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
     def _load_module_if_needed(self, module_name: str) -> None:
         """Load a module on-demand if not already loaded"""
         try:
-            from module_registry import ModuleRegistry
+            from mavaia_core.brain.registry import ModuleRegistry
 
             # Map module name to attribute
             module_map = {
@@ -338,13 +340,55 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 return {"success": True, "message": "Common modules preloaded"}
         
             case "generate_response":
+                # Extract input_text from either "input" or "messages" parameter
+                input_text = params.get("input", "")
+                if not input_text and params.get("messages"):
+                    # Extract from messages array (OpenAI-compatible format)
+                    messages = params.get("messages", [])
+                    if isinstance(messages, list) and len(messages) > 0:
+                        # Get the last user message
+                        for msg in reversed(messages):
+                            if isinstance(msg, dict):
+                                content = msg.get("content", "")
+                                if content and msg.get("role") in ("user", "system"):
+                                    input_text = content
+                                    break
+                        # If no user message found, use last message content
+                        if not input_text and messages:
+                            last_msg = messages[-1]
+                            if isinstance(last_msg, dict):
+                                input_text = last_msg.get("content", "")
+                
+                # Extract conversation_history from messages if not provided
+                conversation_history = params.get("conversation_history", [])
+                if not conversation_history and params.get("messages"):
+                    messages = params.get("messages", [])
+                    if isinstance(messages, list):
+                        conversation_history = [
+                            {"role": msg.get("role", "user"), "content": msg.get("content", "")}
+                            for msg in messages
+                            if isinstance(msg, dict) and msg.get("content")
+                        ]
+                
+                # Log warning if input_text is still empty after extraction
+                if not input_text:
+                    import sys
+                    print(
+                        f"[CognitiveGenerator] WARNING: No input_text extracted from params. "
+                        f"Params keys: {list(params.keys())}, "
+                        f"Has messages: {bool(params.get('messages'))}, "
+                        f"Messages type: {type(params.get('messages'))}",
+                        file=sys.stderr,
+                        flush=True
+                    )
+                
                 return self.generate_response(
-                    input_text=params.get("input", ""),
+                    input_text=input_text,
                     context=params.get("context", ""),
                     voice_context=params.get("voice_context", {}),
                     mcts_result=params.get("mcts_result"),
                     reasoning_tree=params.get("reasoning_tree"),
-                    conversation_history=params.get("conversation_history", []),
+                    conversation_history=conversation_history,
                     vision_context=params.get("vision_context"),
                     document_context=params.get("document_context"),
                     temperature=params.get("temperature", 0.7),

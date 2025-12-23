@@ -613,25 +613,33 @@ def _get_cli_class():
         
         def __init__(self, enabled: bool = True):
             self.enabled = enabled and self._supports_color()
+            # Color theme aligned with `train_neural_text_generator.py`:
+            # - Green for primary titles/success
+            # - Magenta for section headers
+            # - Cyan for option/label text
+            # - Yellow for highlights/warnings
+            # - Blue for secondary metadata
             self.colors = {
-                'success': '\033[92m',
-                'error': '\033[91m',
-                'warning': '\033[93m',
-            'info': '\033[96m',  # Cyan
-            'prompt': '\033[95m',  # Magenta
-            'module': '\033[94m',  # Blue
-            'category': '\033[36m',  # Cyan
-            'timestamp': '\033[2;37m',  # Dim white
-            'separator': '\033[37m',  # White
-            'reset': '\033[0m',
-            'bold': '\033[1m',
-            'header': '\033[90m',  # Dark gray for box
-            'title': '\033[1;97m',  # Bold white for title
-            'stats': '\033[93m',  # Yellow for stats
-            'stats_label': '\033[96m',  # Cyan for stat labels
-            'stats_value': '\033[93m',  # Yellow for stat values
-            'success': '\033[92m',  # Green
-            'warning': '\033[93m',  # Yellow
+                'reset': '\033[0m',
+                'bold': '\033[1m',
+                # Core statuses
+                'success': '\033[1;32m',   # Bold green (✓)
+                'error': '\033[1;31m',     # Bold red (✗)
+                'warning': '\033[1;33m',   # Bold yellow (⚠)
+                'info': '\033[96m',        # Cyan
+                # Structural elements
+                'header': '\033[32m',      # Green borders (like rich Panel border_style="green")
+                'title': '\033[1;32m',     # Bold green title text
+                'separator': '\033[90m',   # Dim gray separators
+                # Semantic roles
+                'prompt': '\033[95m',      # Magenta prompt (matches rich magenta headers)
+                'module': '\033[94m',      # Blue for module names
+                'category': '\033[36m',    # Cyan for categories
+                'timestamp': '\033[2;37m', # Dim white timestamps
+                # Stats / key-value displays
+                'stats': '\033[33m',       # Yellow overall stats accent
+                'stats_label': '\033[36m', # Cyan labels (like rich cyan column)
+                'stats_value': '\033[32m', # Green values
             }
         
         def _supports_color(self) -> bool:
@@ -750,75 +758,105 @@ def _get_cli_class():
             import os
             os.system('clear' if os.name != 'nt' else 'cls')
         
-        def _get_stats(self, force_refresh=False):
-            """Get current statistics for the header"""
+        def _warmup_environment(self) -> None:
+            """One-time warmup: discover modules, load tests, and latest results.
+
+            This is allowed to do heavier work but is only called explicitly
+            (e.g. on first CLI startup) and provides user-visible progress so
+            it doesn't feel like the UI is frozen.
+            """
             import time
-            # Cache stats for 5 seconds to avoid expensive operations
-            if not force_refresh and self._stats_cache and (time.time() - self._stats_cache_time) < 5:
-                return self._stats_cache
-            
+
+            # Avoid doing this multiple times in a row.
+            if self._stats_cache and (time.time() - self._stats_cache_time) < 5:
+                return
+
+            # Basic stats skeleton
             stats = {
-                'modules': 0,
-                'tests': 0,
-                'modules_with_tests': 0,
-                'coverage': 0.0,
-                'last_run': None,
-                'last_success_rate': 0.0
+                "modules": 0,
+                "tests": 0,
+                "modules_with_tests": 0,
+                "coverage": 0.0,
+                "last_run": None,
+                "last_success_rate": 0.0,
             }
-            
+
+            # 1) Module discovery (with progress message)
             try:
                 from mavaia_core.brain.registry import ModuleRegistry
-                # Check if already discovered, if not, discover synchronously
-                if not ModuleRegistry._discovered:
-                    # Quick discovery without verbose output
-                    ModuleRegistry.discover_modules(background=False, verbose=False)
-                    # Wait a moment for discovery to complete if it was in progress
-                    import time
-                    timeout = 5.0
-                    start = time.time()
-                    while ModuleRegistry._discovering and (time.time() - start) < timeout:
-                        time.sleep(0.1)
-                
-                # Get module count
+
+                print(self.color_output.status("⋯", "Discovering brain modules...", "info"))
+                start = time.time()
+                ModuleRegistry.discover_modules(background=False, verbose=False)
                 module_list = ModuleRegistry.list_modules()
-                stats['modules'] = len(module_list) if module_list else 0
+                stats["modules"] = len(module_list) if module_list else 0
+                elapsed = time.time() - start
+                print(self.color_output.status("✓", f"Discovered {stats['modules']} modules in {elapsed:.1f}s", "success"))
             except Exception as e:
-                # Log error but don't fail - use cached value if available
-                if hasattr(ModuleRegistry, '_modules'):
-                    stats['modules'] = len(ModuleRegistry._modules) if ModuleRegistry._modules else 0
-                else:
-                    stats['modules'] = 0
-            
+                print(self.color_output.status("✗", f"Module discovery failed: {e}", "error"))
+
+            # 2) Test suites
             try:
                 from mavaia_core.evaluation.test_data_manager import TestDataManager
+
+                print(self.color_output.status("⋯", "Loading test suites...", "info"))
                 test_manager = TestDataManager(self._test_data_dir)
                 test_manager.load_all_test_suites()
-                stats['tests'] = sum(len(suite.test_suite) for suite in test_manager._test_suites.values())
-                stats['modules_with_tests'] = len(test_manager._test_suites)
-                if stats['modules'] > 0:
-                    stats['coverage'] = (stats['modules_with_tests'] / stats['modules']) * 100
-            except Exception:
-                pass
-            
+                stats["tests"] = sum(len(suite.test_suite) for suite in test_manager._test_suites.values())
+                stats["modules_with_tests"] = len(test_manager._test_suites)
+                if stats["modules"] > 0:
+                    stats["coverage"] = (stats["modules_with_tests"] / stats["modules"]) * 100
+                print(
+                    self.color_output.status(
+                        "✓",
+                        f"Loaded {stats['tests']} tests across {stats['modules_with_tests']} modules",
+                        "success",
+                    )
+                )
+            except Exception as e:
+                print(self.color_output.status("✗", f"Loading test suites failed: {e}", "error"))
+
+            # 3) Latest results summary
             try:
                 from mavaia_core.evaluation.test_results import TestResults
+
                 results_manager = TestResults(self._results_dir)
                 archives = results_manager.list_archives()
                 if archives:
                     latest = archives[0]
-                    stats['last_run'] = latest.name
+                    stats["last_run"] = latest.name
                     try:
                         test_results = results_manager.load_results(latest / "detailed_results.json")
                         if test_results and test_results.summary:
-                            stats['last_success_rate'] = test_results.summary.success_rate * 100
+                            stats["last_success_rate"] = test_results.summary.success_rate * 100
                     except Exception:
                         pass
             except Exception:
                 pass
-            
+
             self._stats_cache = stats
             self._stats_cache_time = time.time()
-            return stats
+
+        def _get_stats(self, force_refresh: bool = False):
+            """Return real header statistics, warming up environment if needed."""
+            import time
+
+            if (
+                not force_refresh
+                and self._stats_cache
+                and (time.time() - self._stats_cache_time) < 5
+            ):
+                return self._stats_cache
+
+            self._warmup_environment()
+            return self._stats_cache or {
+                "modules": 0,
+                "tests": 0,
+                "modules_with_tests": 0,
+                "coverage": 0.0,
+                "last_run": None,
+                "last_success_rate": 0.0,
+            }
         
         def _display_header(self, detailed: bool = True):
             """Display the professional header with optional stats
@@ -941,6 +979,8 @@ def _get_cli_class():
             """Called once before cmdloop() starts"""
             if self._first_load:
                 self._clear_screen()
+                # One-time warmup so header shows real stats, with progress output.
+                self._warmup_environment()
                 self._display_header()
                 print()
                 print(self.color_output.colorize("Welcome to Thynaptic Evaluation Framework", 'bold'))
@@ -1853,29 +1893,247 @@ def _get_cli_class():
         # ========================================================================
         # Help System
         # ========================================================================
-        
+
+        def do_help(self, arg: str):
+            """Show help for commands (rich-styled when available)."""
+            topic = arg.strip()
+
+            # If a specific subcommand is requested, delegate to its help_*
+            if topic:
+                func = getattr(self, f"help_{topic}", None)
+                if func is not None:
+                    func()
+                    return
+                # Fall back to default cmd behavior for unknown topics
+                return super().do_help(topic)
+
+            # General help (no specific topic)
+            try:
+                from rich.console import Console
+                from rich.table import Table
+                from rich.panel import Panel
+
+                console = Console()
+
+                # Header panel
+                console.print(
+                    Panel(
+                        "[bold]Interactive CLI for the Thynaptic Evaluation Framework.[/bold]\n"
+                        "Run tests, inspect modules, view coverage, and generate reports.",
+                        title="[bold green]Thynaptic Evaluation CLI[/bold green]",
+                        border_style="green",
+                    )
+                )
+
+                # Command groups mirroring the style of the training script
+                groups = [
+                    (
+                        "[bold cyan]General Commands[/bold cyan]",
+                        [
+                            ("help [COMMAND]", "Show general help or help for a specific command"),
+                            ("quit / exit", "Exit the CLI"),
+                            ("clear", "Clear the screen and redraw the header"),
+                            ("history", "Show command history"),
+                        ],
+                    ),
+                    (
+                        "[bold cyan]Configuration[/bold cyan]",
+                        [
+                            ("config", "Show current configuration"),
+                            ("set KEY VALUE", "Set configuration option (e.g., timeout, verbose, colors)"),
+                        ],
+                    ),
+                    (
+                        "[bold cyan]Profiles[/bold cyan]",
+                        [
+                            ("profile fast|thorough|gpu|silent", "Activate a built-in execution profile"),
+                            ("profile list", "List all profiles"),
+                            ("profile show NAME", "Show details for a profile"),
+                            ("profile save NAME", "Save current config as a custom profile"),
+                            ("profile delete NAME", "Delete a custom profile"),
+                        ],
+                    ),
+                    (
+                        "[bold cyan]Aliases[/bold cyan]",
+                        [
+                            ("alias", "List all aliases"),
+                            ("alias NAME COMMAND", "Create or update an alias"),
+                            ("unalias NAME", "Remove an alias"),
+                        ],
+                    ),
+                    (
+                        "[bold cyan]Running Tests[/bold cyan]",
+                        [
+                            ("run [OPTIONS]", "Run tests (module/category/tags/timeout, etc.)"),
+                            ("run-quick", "Run quick/essential tests"),
+                            ("run-essential", "Run essential tests only"),
+                            ("list-modules", "List discovered brain modules"),
+                            ("discover", "Force module discovery"),
+                            ("list-tests", "List available tests (with filters)"),
+                        ],
+                    ),
+                    (
+                        "[bold cyan]Results & Reporting[/bold cyan]",
+                        [
+                            ("list-results", "List previous result archives"),
+                            ("report", "Generate HTML / summary reports"),
+                            ("compare", "Compare two result archives"),
+                            ("coverage", "Show module/test coverage summary"),
+                            ("validate-tests", "Validate test definitions and schemas"),
+                            ("create-template", "Create a new test template file"),
+                        ],
+                    ),
+                    (
+                        "[bold cyan]Diagnostics[/bold cyan]",
+                        [
+                            ("health", "Show health of core components and modules"),
+                            ("impact", "Analyze test impact on modules/components"),
+                            ("explain", "Explain a specific test case in detail"),
+                            ("graph", "Show dependency / routing graph summary"),
+                            ("detect-cycles", "Detect cycles in the module dependency graph"),
+                        ],
+                    ),
+                ]
+
+                for title, rows in groups:
+                    table = Table(
+                        title=title,
+                        show_header=True,
+                        header_style="bold magenta",
+                        box=None,
+                        padding=(0, 2),
+                    )
+                    table.add_column("Command", style="cyan", no_wrap=True, width=28)
+                    table.add_column("Description", style="green", overflow="fold")
+
+                    for cmd_text, desc in rows:
+                        table.add_row(cmd_text, desc)
+
+                    console.print(table)
+                    console.print()
+
+                console.print(
+                    "[dim]Tip:[/dim] Use "
+                    "[cyan]run --module <name>[/cyan] or "
+                    "[cyan]run --category <name>[/cyan] "
+                    "for focused evaluations."
+                )
+                console.print()
+            except ImportError:
+                # Fallback: simple text help grouped by sections
+                print("Thynaptic Evaluation CLI - Commands\n")
+
+                def _print_group(title: str, items: list[tuple[str, str]]) -> None:
+                    print(title)
+                    print("-" * len(title))
+                    for cmd_text, desc in items:
+                        print(f"  {cmd_text:<28} {desc}")
+                    print()
+
+                _print_group(
+                    "General Commands",
+                    [
+                        ("help [COMMAND]", "Show general help or help for a specific command"),
+                        ("quit / exit", "Exit the CLI"),
+                        ("clear", "Clear the screen and redraw the header"),
+                        ("history", "Show command history"),
+                    ],
+                )
+                _print_group(
+                    "Configuration",
+                    [
+                        ("config", "Show current configuration"),
+                        ("set KEY VALUE", "Set configuration option (e.g., timeout, verbose, colors)"),
+                    ],
+                )
+                _print_group(
+                    "Profiles",
+                    [
+                        ("profile fast|thorough|gpu|silent", "Activate a built-in execution profile"),
+                        ("profile list", "List all profiles"),
+                        ("profile show NAME", "Show details for a profile"),
+                        ("profile save NAME", "Save current config as a custom profile"),
+                        ("profile delete NAME", "Delete a custom profile"),
+                    ],
+                )
+                _print_group(
+                    "Aliases",
+                    [
+                        ("alias", "List all aliases"),
+                        ("alias NAME COMMAND", "Create or update an alias"),
+                        ("unalias NAME", "Remove an alias"),
+                    ],
+                )
+                _print_group(
+                    "Running Tests",
+                    [
+                        ("run [OPTIONS]", "Run tests (module/category/tags/timeout, etc.)"),
+                        ("run-quick", "Run quick/essential tests"),
+                        ("run-essential", "Run essential tests only"),
+                        ("list-modules", "List discovered brain modules"),
+                        ("discover", "Force module discovery"),
+                        ("list-tests", "List available tests (with filters)"),
+                    ],
+                )
+                _print_group(
+                    "Results & Reporting",
+                    [
+                        ("list-results", "List previous result archives"),
+                        ("report", "Generate HTML / summary reports"),
+                        ("compare", "Compare two result archives"),
+                        ("coverage", "Show module/test coverage summary"),
+                        ("validate-tests", "Validate test definitions and schemas"),
+                        ("create-template", "Create a new test template file"),
+                    ],
+                )
+                _print_group(
+                    "Diagnostics",
+                    [
+                        ("health", "Show health of core components and modules"),
+                        ("impact", "Analyze test impact on modules/components"),
+                        ("explain", "Explain a specific test case in detail"),
+                        ("graph", "Show dependency / routing graph summary"),
+                        ("detect-cycles", "Detect cycles in the module dependency graph"),
+                    ],
+                )
+
         def help_run(self):
-            """Help for run command"""
-            print("""
+            """Help for run command (rich-styled when available)"""
+            help_text = """
 Run tests: run [--module MODULE] [--category CATEGORY] [--tags TAG...]
 
 Options:
-  --module MODULE      Run tests for a specific module
+  --module MODULE       Run tests for a specific module
   --category CATEGORY   Run tests for a specific category
-  --tags TAG...        Filter by tags (e.g., quick, essential)
-  --timeout SECONDS    Override timeout for all tests
-  --tag-mode MODE      How to combine tags: 'all' (AND) or 'any' (OR)
+  --tags TAG...         Filter by tags (e.g., quick, essential)
+  --timeout SECONDS     Override timeout for all tests
+  --tag-mode MODE       How to combine tags: 'all' (AND) or 'any' (OR)
 
 Examples:
   run
   run --module chain_of_thought
   run --category reasoning --tags quick
   run --tags essential quick
-        """)
+            """.strip("\n")
+
+            try:
+                from rich.console import Console
+                from rich.panel import Panel
+
+                console = Console()
+                console.print(
+                    Panel(
+                        help_text,
+                        title="[bold green]run command[/bold green]",
+                        border_style="green",
+                    )
+                )
+            except ImportError:
+                print(help_text)
     
         def help_profile(self):
-            """Help for profile command"""
-            print("""
+            """Help for profile command (rich-styled when available)"""
+            help_text = """
 Profile management: profile [NAME|list|show NAME|save NAME|delete NAME]
 
 Built-in profiles:
@@ -1885,26 +2143,56 @@ Built-in profiles:
   silent    - Minimal output, no colors
 
 Examples:
-  profile fast              # Activate fast profile
-  profile list              # List all profiles
+  profile fast               # Activate fast profile
+  profile list               # List all profiles
   profile show fast          # Show profile details
   profile save myprofile     # Save current config as profile
   profile delete myprofile   # Delete custom profile
-        """)
+            """.strip("\n")
+
+            try:
+                from rich.console import Console
+                from rich.panel import Panel
+
+                console = Console()
+                console.print(
+                    Panel(
+                        help_text,
+                        title="[bold green]profile command[/bold green]",
+                        border_style="green",
+                    )
+                )
+            except ImportError:
+                print(help_text)
     
         def help_alias(self):
-            """Help for alias command"""
-            print("""
+            """Help for alias command (rich-styled when available)"""
+            help_text = """
 Alias management: alias [NAME [COMMAND]]
 
 Create shortcuts for commands. Aliases can include arguments.
 
 Examples:
-  alias                    # List all aliases
+  alias                     # List all aliases
   alias m "run --module chain_of_thought"
   alias quick "run --tags quick"
-  unalias m                # Remove alias
-        """)
+  unalias m                 # Remove alias
+            """.strip("\n")
+
+            try:
+                from rich.console import Console
+                from rich.panel import Panel
+
+                console = Console()
+                console.print(
+                    Panel(
+                        help_text,
+                        title="[bold green]alias command[/bold green]",
+                        border_style="green",
+                    )
+                )
+            except ImportError:
+                print(help_text)
     
     # Set the global TestRunnerCLI to the created class
     TestRunnerCLI = TestRunnerCLIImpl
@@ -1915,6 +2203,301 @@ def main():
     """Command-line interface for evaluation framework"""
     import argparse
     import sys
+
+    def _print_argparse_help_rich(_: argparse.ArgumentParser) -> None:
+        """Print structured help with rich-style sections, similar to training script."""
+        try:
+            from rich.console import Console
+            from rich.table import Table
+            from rich.panel import Panel
+
+            console = Console()
+
+            # Header panel (matches training script style)
+            console.print(
+                Panel(
+                    "[bold]Comprehensive evaluation suite for all Mavaia brain modules and system components.[/bold]\n"
+                    "Supports focused runs by module/category, rich reporting, coverage, and diagnostics.",
+                    title="[bold green]Mavaia Core Test Suite[/bold green]",
+                    border_style="green",
+                )
+            )
+
+            # Argument groups and descriptions
+            arg_groups = {
+                "Selection & Scope": [
+                    (
+                        "--module MODULE_NAME",
+                        "Run tests for a specific brain module.\n"
+                        "Example: --module chain_of_thought",
+                    ),
+                    (
+                        "--category CATEGORY",
+                        "Run tests for a specific category.\n"
+                        "Categories: functional, reasoning, safety, api, client, system, livebench.",
+                    ),
+                    (
+                        "--livebench-category LIVEBENCH_CATEGORY",
+                        "Filter LiveBench tests by reasoning/math/coding/language/data_analysis/instruction_following.\n"
+                        "Example: --category livebench --livebench-category reasoning",
+                    ),
+                    (
+                        "--max-questions N",
+                        "Maximum LiveBench questions per task (for quick runs).\n"
+                        "Example: --category livebench --max-questions 10",
+                    ),
+                    (
+                        "--test-data-dir DIRECTORY",
+                        "Directory containing test data files (JSON/YAML).\n"
+                        "Default: mavaia_core/evaluation/test_data/",
+                    ),
+                    (
+                        "--results-dir DIRECTORY",
+                        "Directory for storing test results and reports.\n"
+                        "Default: mavaia_core/evaluation/results/",
+                    ),
+                ],
+                "Filtering & Tags": [
+                    (
+                        "--tags TAG [TAG ...]",
+                        "Filter tests by tags such as quick, essential, smoke, integration, unit.\n"
+                        "Example: --tags quick essential",
+                    ),
+                    (
+                        "--tag-mode {all,any}",
+                        "How to combine multiple tags.\n"
+                        "all = test must have ALL tags, any = at least one tag (default: all).",
+                    ),
+                    (
+                        "--categories",
+                        "List all available test categories with detailed descriptions and exit.",
+                    ),
+                    (
+                        "--exclude-module MODULE_NAME [...]",
+                        "Exclude one or more modules from the run.",
+                    ),
+                    (
+                        "--exclude-category CATEGORY [...]",
+                        "Exclude one or more categories from the run.",
+                    ),
+                    (
+                        "--enabled-only",
+                        "Only run tests for modules that are currently enabled.",
+                    ),
+                    (
+                        "--new-only",
+                        "Only test newly discovered modules that do not yet have test files.\n"
+                        "Helps identify modules needing coverage.",
+                    ),
+                ],
+                "Execution Control": [
+                    (
+                        "--timeout SECONDS",
+                        "Global timeout per test case (default: 30.0 seconds).\n"
+                        "Individual tests may override this.",
+                    ),
+                    (
+                        "--skip-modules",
+                        "Skip tests that require module discovery.\n"
+                        "Speeds up startup; system/API tests still run.",
+                    ),
+                    (
+                        "--quiet",
+                        "Quiet mode: minimal output, suitable for CI or large suites.",
+                    ),
+                    (
+                        "--debug",
+                        "Enable debug output (discovery details, internal operations).",
+                    ),
+                    (
+                        "--no-colors",
+                        "Disable ANSI colors (useful for logs or unsupported terminals).",
+                    ),
+                    (
+                        "--stop-on-failure",
+                        "Stop running tests after the first failure.",
+                    ),
+                    (
+                        "--retry N",
+                        "Retry failed tests up to N times before marking as failed.",
+                    ),
+                    (
+                        "--random-order",
+                        "Shuffle test order to detect order-dependent issues.",
+                    ),
+                    (
+                        "--seed N",
+                        "Random seed for deterministic random-order runs.",
+                    ),
+                    (
+                        "--order-by METRIC",
+                        "Sort tests by metric: time, failures, priority, name, random.\n"
+                        "Default: order as defined in test files.",
+                    ),
+                    (
+                        "--watch",
+                        "Watch files for changes and rerun affected tests (TDD workflow).",
+                    ),
+                    (
+                        "--stress [CONCURRENT]",
+                        "Run load/concurrency tests (default concurrent workers: 10).\n"
+                        "Example: --stress 50",
+                    ),
+                    (
+                        "--matrix CONFIG [CONFIG ...]",
+                        "Run tests across multiple configurations using key=value pairs.\n"
+                        "Example: --matrix python=3.9 python=3.11 model=small model=large",
+                    ),
+                    (
+                        "--fuzz [COUNT]",
+                        "Run random adversarial tests (default: 100 inputs).\n"
+                        "Example: --fuzz 200",
+                    ),
+                ],
+                "Output & Reporting": [
+                    (
+                        "--report-only RESULTS_FILE",
+                        "Generate HTML report from an existing detailed_results.json file.\n"
+                        "Example: --report-only results/20250115_103000/detailed_results.json",
+                    ),
+                    (
+                        "--output FILE",
+                        "Output path for HTML report (otherwise timestamped file in results dir).",
+                    ),
+                    (
+                        "--csv FILE",
+                        "Export test summary to CSV format at the given path.",
+                    ),
+                    (
+                        "--json-output FILE",
+                        "Export detailed test results to JSON at the given path.",
+                    ),
+                    (
+                        "--junit-xml FILE",
+                        "Export test results in JUnit XML format (for CI/CD systems).",
+                    ),
+                    (
+                        "--no-html",
+                        "Skip HTML report generation (only CSV/JSON/JUnit outputs).",
+                    ),
+                    (
+                        "--list-archives",
+                        "List all archived test result directories and exit.",
+                    ),
+                ],
+                "Analysis & Diagnostics": [
+                    (
+                        "--coverage",
+                        "Print coverage statistics: modules with tests, without tests, by category.",
+                    ),
+                    (
+                        "--profile",
+                        "Print performance heatmaps and timing breakdown across modules/operations.",
+                    ),
+                    (
+                        "--module-health",
+                        "Calculate health scores from pass rates, performance, and error frequency.",
+                    ),
+                    (
+                        "--test-impact",
+                        "Analyze which modules are most critical based on dependencies and coverage.",
+                    ),
+                    (
+                        "--compare BASELINE_FILE",
+                        "Compare current results with a baseline detailed_results.json.\n"
+                        "Highlights pass/fail deltas and performance changes.",
+                    ),
+                    (
+                        "--compare-industry [RESULTS_FILE]",
+                        "Compare results against industry benchmarks (e.g., GPT‑4, Claude‑3).\n"
+                        "If no file is provided, uses the most recent run.",
+                    ),
+                    (
+                        "--validate-tests",
+                        "Validate test data files (syntax, required fields, configuration) and exit.",
+                    ),
+                    (
+                        "--validate-modules",
+                        "Sanity-check module metadata, operations, dependencies, and configuration.",
+                    ),
+                    (
+                        "--bench",
+                        "Run microbenchmarks per module to establish performance baselines.",
+                    ),
+                ],
+                "Graph & Introspection": [
+                    (
+                        "--graph [OUTPUT_FILE]",
+                        "Generate a module dependency graph (PNG/SVG).",
+                    ),
+                    (
+                        "--graph-layout LAYOUT",
+                        "Graph layout: spring, circular, hierarchical, cluster, kamada_kawai.\n"
+                        "Default: spring (force-directed).",
+                    ),
+                    (
+                        "--detect-cycles",
+                        "Detect cycles in the module dependency graph and report them.",
+                    ),
+                    (
+                        "--list-modules",
+                        "List all discovered modules grouped by type with basic info.",
+                    ),
+                    (
+                        "--describe MODULE_NAME",
+                        "Show detailed information and metadata for a specific module.",
+                    ),
+                    (
+                        "--module-health",
+                        "Summarize health scores per module (also listed above under diagnostics).",
+                    ),
+                    (
+                        "--explain MODULE_NAME",
+                        "Explain why a module failed: error patterns and suggestions.\n"
+                        "Example: --explain chain_of_thought",
+                    ),
+                ],
+                "Meta": [
+                    ("-h, --help", "Show this help message and exit."),
+                ],
+            }
+
+            # Render groups with rich tables
+            for group_title, entries in arg_groups.items():
+                table = Table(
+                    title=f"[bold cyan]{group_title}[/bold cyan]",
+                    show_header=True,
+                    header_style="bold magenta",
+                    box=None,
+                    padding=(0, 2),
+                )
+                table.add_column("Option", style="cyan", no_wrap=True, width=32)
+                table.add_column("Description", style="green", overflow="fold")
+
+                for opt, desc in entries:
+                    table.add_row(opt, desc)
+
+                console.print(table)
+                console.print()
+
+            # Examples panel (matches training script pattern)
+            console.print(
+                Panel(
+                    "[bold]Examples:[/bold]\n\n"
+                    "[cyan]python3 -m mavaia_core.evaluation.test_runner[/cyan]\n"
+                    "[cyan]python3 -m mavaia_core.evaluation.test_runner --module chain_of_thought[/cyan]\n"
+                    "[cyan]python3 -m mavaia_core.evaluation.test_runner --category reasoning --tags quick[/cyan]\n"
+                    "[cyan]python3 -m mavaia_core.evaluation.test_runner --coverage[/cyan]\n"
+                    "[cyan]python3 -m mavaia_core.evaluation.test_runner --report-only "
+                    "results/20250115_103000/detailed_results.json[/cyan]",
+                    title="[bold green]Usage Examples[/bold green]",
+                    border_style="green",
+                )
+            )
+            console.print()
+        except ImportError:
+            # Fallback to the default argparse help if rich is unavailable
+            _.print_help()
     
     # Lazy load CLI class only when needed
     # If no arguments provided, start interactive CLI
@@ -2499,6 +3082,11 @@ def main():
         )
     )
     
+    # If help was requested explicitly, show rich-styled help and exit early
+    if "--help" in sys.argv or "-h" in sys.argv:
+        _print_argparse_help_rich(parser)
+        return
+
     args = parser.parse_args()
     
     # Import ModuleRegistry lazily (only after args are parsed, so help works quickly)
@@ -2903,17 +3491,17 @@ def _list_all_modules(use_colors: bool = True) -> None:
     import time
     time.sleep(0.5)
     print(" done\n", flush=True)
-    
+
     # Get all modules
     module_names = ModuleRegistry.list_modules()
-    
+
     if not module_names:
         print("No modules discovered.")
         return
-    
+
     # Group modules by category
     modules_by_category: Dict[str, List[tuple[str, Any]]] = {}
-    
+
     for module_name in sorted(module_names):
         metadata = ModuleRegistry.get_metadata(module_name)
         if metadata:
@@ -2921,18 +3509,87 @@ def _list_all_modules(use_colors: bool = True) -> None:
             if category not in modules_by_category:
                 modules_by_category[category] = []
             modules_by_category[category].append((module_name, metadata))
-    
-    # Print grouped modules
+
+    # Rich-styled listing similar to training script tables
+    if use_colors:
+        try:
+            from rich.console import Console
+            from rich.table import Table
+            from rich.panel import Panel
+
+            console = Console()
+
+            console.print(
+                Panel(
+                    f"[bold]Discovered Modules:[/bold] [cyan]{len(module_names)}[/cyan]\n"
+                    "Grouped by high-level type/category.",
+                    title="[bold green]Discovered Modules[/bold green]",
+                    border_style="green",
+                )
+            )
+
+            for category in sorted(modules_by_category.keys()):
+                modules = modules_by_category[category]
+                table = Table(
+                    title=f"[bold cyan]{category} ({len(modules)} modules)[/bold cyan]",
+                    show_header=True,
+                    header_style="bold magenta",
+                    box=None,
+                    padding=(0, 2),
+                )
+                table.add_column("Module", style="cyan", no_wrap=True, width=34)
+                table.add_column("Version", style="green", no_wrap=True, width=10)
+                table.add_column("Ops", style="yellow", no_wrap=True, width=6)
+                table.add_column("Enabled", style="green", no_wrap=True, width=8)
+                table.add_column("Model", style="yellow", no_wrap=True, width=12)
+                table.add_column("Description", style="blue", overflow="fold")
+
+                for module_name, metadata in modules:
+                    enabled_str = "✓" if metadata.enabled else "✗"
+                    model_str = "required" if metadata.model_required else "optional"
+                    ops_count = len(metadata.operations) if metadata.operations else 0
+                    desc = metadata.description or ""
+                    if len(desc) > 80:
+                        desc = desc[:77] + "..."
+
+                    table.add_row(
+                        module_name,
+                        metadata.version,
+                        str(ops_count),
+                        enabled_str,
+                        model_str,
+                        desc,
+                    )
+
+                console.print(table)
+                console.print()
+
+            console.print(
+                Panel(
+                    "[bold]Next steps:[/bold]\n\n"
+                    "[cyan]--describe <module_name>[/cyan] to see full metadata and operations.\n"
+                    "[cyan]run --module <module_name>[/cyan] to execute tests for a module.",
+                    title="[bold green]Usage[/bold green]",
+                    border_style="green",
+                )
+            )
+            console.print()
+            return
+        except ImportError:
+            # Fall back to plain-text formatting below
+            pass
+
+    # Plain-text fallback
     print("=" * 80)
     print("Discovered Modules (Grouped by Type)")
     print("=" * 80)
     print(f"\nTotal Modules: {len(module_names)}\n")
-    
+
     for category in sorted(modules_by_category.keys()):
         modules = modules_by_category[category]
         print(f"\n{category} ({len(modules)} modules)")
         print("-" * 80)
-        
+
         for module_name, metadata in modules:
             enabled_str = "✓" if metadata.enabled else "✗"
             model_str = " [Model Required]" if metadata.model_required else ""
@@ -2942,7 +3599,7 @@ def _list_all_modules(use_colors: bool = True) -> None:
                 # Truncate long descriptions
                 desc = metadata.description[:65] + "..." if len(metadata.description) > 65 else metadata.description
                 print(f"      {desc}")
-    
+
     print("\n" + "=" * 80)
     print(f"\nUse --describe <module_name> to see detailed information about a module.")
     print(f"Example: --describe chain_of_thought\n")
@@ -3529,6 +4186,67 @@ def _list_archives(results_dir: Optional[str] = None) -> None:
     results_manager = TestResults(results_dir)
     archives = results_manager.list_archives()
     
+    # Try rich-styled table view first
+    try:
+        from rich.console import Console
+        from rich.table import Table
+        from rich.panel import Panel
+        import json
+
+        console = Console()
+
+        if not archives:
+            console.print(
+                Panel(
+                    "[yellow]No archived test results found.[/yellow]",
+                    title="[bold green]Archived Test Results[/bold green]",
+                    border_style="green",
+                )
+            )
+            console.print()
+            return
+
+        table = Table(
+            title="[bold cyan]Archived Test Results[/bold cyan]",
+            show_header=True,
+            header_style="bold magenta",
+            box=None,
+            padding=(0, 2),
+        )
+        table.add_column("Run", style="cyan", no_wrap=True, width=20)
+        table.add_column("Summary", style="green", overflow="fold")
+        table.add_column("Path", style="blue", overflow="fold")
+
+        for archive_dir in archives:
+            summary_file = archive_dir / "summary.json"
+            if summary_file.exists():
+                with open(summary_file, "r", encoding="utf-8") as f:
+                    summary = json.load(f)
+                total = summary.get("total_tests", 0)
+                passed = summary.get("passed", 0)
+                failed = summary.get("failed", 0)
+                summary_str = f"Tests: {total} | Passed: {passed} | Failed: {failed}"
+            else:
+                summary_str = "No summary.json found"
+
+            table.add_row(archive_dir.name, summary_str, str(archive_dir))
+
+        console.print(table)
+        console.print(
+            Panel(
+                "[bold]Tip:[/bold] Use "
+                "[cyan]--report-only <archive>/detailed_results.json[/cyan] "
+                "to regenerate reports for a specific run.",
+                title="[bold green]Usage[/bold green]",
+                border_style="green",
+            )
+        )
+        console.print()
+        return
+    except ImportError:
+        pass
+
+    # Plain-text fallback
     print("=" * 80)
     print("Archived Test Results")
     print("=" * 80)
@@ -3956,11 +4674,16 @@ def _detect_dependency_cycles() -> None:
     
     from mavaia_core.brain.registry import ModuleRegistry
     
-    print("=" * 80)
-    print("Dependency Cycle Detection")
-    print("=" * 80)
-    print()
-    
+    # Try rich-styled summary first
+    try:
+        from rich.console import Console
+        from rich.table import Table
+        from rich.panel import Panel
+
+        console = Console()
+    except ImportError:
+        console = None
+
     ModuleRegistry.discover_modules(background=False, verbose=False)
     
     # Build graph (same logic as _generate_dependency_graph)
@@ -4001,34 +4724,84 @@ def _detect_dependency_cycles() -> None:
     cycles = list(nx.simple_cycles(G))
     
     if not cycles:
-        print("✓ No dependency cycles detected.")
-        print("\nAll module dependencies form a valid DAG (Directed Acyclic Graph).")
+        if console:
+            console.print(
+                Panel(
+                    "[bold green]✓ No dependency cycles detected.[/bold green]\n\n"
+                    "All module dependencies form a valid DAG (Directed Acyclic Graph).",
+                    title="[bold green]Dependency Cycle Detection[/bold green]",
+                    border_style="green",
+                )
+            )
+            console.print()
+        else:
+            print("✓ No dependency cycles detected.")
+            print("\nAll module dependencies form a valid DAG (Directed Acyclic Graph).")
         return
-    
-    print(f"⚠️  Found {len(cycles)} dependency cycle(s):\n")
-    
+
     # Group cycles by modules involved
     cycle_modules = set()
     for cycle in cycles:
         cycle_modules.update(cycle)
-    
-    print(f"Modules involved in cycles: {', '.join(sorted(cycle_modules))}\n")
-    
-    # Show each cycle
-    for i, cycle in enumerate(cycles, 1):
-        cycle_str = " → ".join(cycle) + f" → {cycle[0]}"
-        print(f"Cycle {i}:")
-        print(f"  {cycle_str}")
+
+    if console:
+        console.print(
+            Panel(
+                f"[yellow]⚠ Found {len(cycles)} dependency cycle(s).[/yellow]\n\n"
+                f"Modules involved: [cyan]{', '.join(sorted(cycle_modules))}[/cyan]",
+                title="[bold red]Dependency Cycles Detected[/bold red]",
+                border_style="red",
+            )
+        )
+
+        table = Table(
+            title="[bold cyan]Detected Cycles[/bold cyan]",
+            show_header=True,
+            header_style="bold magenta",
+            box=None,
+            padding=(0, 2),
+        )
+        table.add_column("Cycle", style="cyan", no_wrap=True, width=8)
+        table.add_column("Path", style="green", overflow="fold")
+
+        for i, cycle in enumerate(cycles, 1):
+            cycle_str = " → ".join(cycle) + f" → {cycle[0]}"
+            table.add_row(str(i), cycle_str)
+
+        console.print(table)
+        console.print(
+            Panel(
+                "[bold]Recommendations:[/bold]\n"
+                "• Break cycles via interfaces or dependency injection\n"
+                "• Refactor shared logic into common lower-level modules\n"
+                "• Consider lazy initialization to avoid circular startup\n"
+                "• Prefer event-driven patterns where appropriate",
+                title="[bold yellow]Next Steps[/bold yellow]",
+                border_style="yellow",
+            )
+        )
+        console.print()
+    else:
+        print("=" * 80)
+        print("Dependency Cycle Detection")
+        print("=" * 80)
         print()
-    
-    # Suggest fixes
-    print("Recommendations:")
-    print("-" * 80)
-    print("  • Break cycles by introducing interfaces or dependency injection")
-    print("  • Refactor shared functionality into a common module")
-    print("  • Use lazy initialization to break circular dependencies")
-    print("  • Consider using an event-driven architecture")
-    print()
+        print(f"⚠️  Found {len(cycles)} dependency cycle(s):\n")
+        print(f"Modules involved in cycles: {', '.join(sorted(cycle_modules))}\n")
+
+        for i, cycle in enumerate(cycles, 1):
+            cycle_str = " → ".join(cycle) + f" → {cycle[0]}"
+            print(f"Cycle {i}:")
+            print(f"  {cycle_str}")
+            print()
+
+        print("Recommendations:")
+        print("-" * 80)
+        print("  • Break cycles by introducing interfaces or dependency injection")
+        print("  • Refactor shared functionality into a common module")
+        print("  • Use lazy initialization to break circular dependencies")
+        print("  • Consider using an event-driven architecture")
+        print()
     
     sys.exit(1)  # Exit with error if cycles found
 
@@ -4038,11 +4811,16 @@ def _show_module_health_scores(results_dir: Optional[str] = None) -> None:
     from mavaia_core.brain.registry import ModuleRegistry
     from mavaia_core.evaluation.test_results import TestResults
     
-    print("=" * 80)
-    print("Module Health Scores")
-    print("=" * 80)
-    print()
-    
+    # Try rich-styled overview first
+    try:
+        from rich.console import Console
+        from rich.table import Table
+        from rich.panel import Panel
+
+        console = Console()
+    except ImportError:
+        console = None
+
     ModuleRegistry.discover_modules(background=False, verbose=False)
     module_names = ModuleRegistry.list_modules()
     
@@ -4145,34 +4923,95 @@ def _show_module_health_scores(results_dir: Optional[str] = None) -> None:
     # Sort by score
     health_scores.sort(key=lambda x: x["score"], reverse=True)
     
-    # Print results
-    print(f"{'Module':<40} {'Score':<8} {'Status':<15} {'Category':<25}")
-    print("-" * 80)
-    
-    for health in health_scores:
-        print(f"{health['module']:<40} {health['score']:>6.1f}  {health['status']:<15} {health['category']:<25}")
-    
-    print()
-    print("Score Breakdown (Top 10):")
-    print("-" * 80)
-    for health in health_scores[:10]:
-        print(f"\n{health['module']} ({health['score']:.1f}/100)")
-        for factor in health['factors']:
-            print(f"  • {factor}")
-    
     # Summary statistics
     avg_score = sum(h["score"] for h in health_scores) / len(health_scores) if health_scores else 0
     excellent = sum(1 for h in health_scores if h["score"] >= 80)
     good = sum(1 for h in health_scores if 60 <= h["score"] < 80)
     fair = sum(1 for h in health_scores if 40 <= h["score"] < 60)
     poor = sum(1 for h in health_scores if h["score"] < 40)
-    
-    print(f"\nSummary:")
-    print(f"  Average Score: {avg_score:.1f}/100")
-    print(f"  Excellent (≥80): {excellent}")
-    print(f"  Good (60-79): {good}")
-    print(f"  Fair (40-59): {fair}")
-    print(f"  Poor (<40): {poor}")
+
+    if console:
+        # Main health table
+        table = Table(
+            title="[bold cyan]Module Health Scores[/bold cyan]",
+            show_header=True,
+            header_style="bold magenta",
+            box=None,
+            padding=(0, 2),
+        )
+        table.add_column("Module", style="cyan", no_wrap=True, width=34)
+        table.add_column("Score", style="green", no_wrap=True, width=8)
+        table.add_column("Status", style="yellow", no_wrap=True, width=12)
+        table.add_column("Category", style="blue", no_wrap=True, width=24)
+
+        for health in health_scores:
+            table.add_row(
+                health["module"],
+                f"{health['score']:.1f}",
+                health["status"],
+                health["category"],
+            )
+
+        console.print(
+            Panel(
+                f"[bold]Average Score:[/bold] [green]{avg_score:.1f}/100[/green]\n"
+                f"[bold]Excellent (≥80):[/bold] [green]{excellent}[/green]   "
+                f"[bold]Good (60–79):[/bold] [green]{good}[/green]\n"
+                f"[bold]Fair (40–59):[/bold] [yellow]{fair}[/yellow]   "
+                f"[bold]Poor (<40):[/bold] [red]{poor}[/red]",
+                title="[bold green]Module Health Summary[/bold green]",
+                border_style="green",
+            )
+        )
+        console.print(table)
+
+        # Breakdown for top 10
+        breakdown = []
+        for health in health_scores[:10]:
+            breakdown.append(
+                f"[bold cyan]{health['module']}[/bold cyan] "
+                f"([green]{health['score']:.1f}/100[/green])"
+            )
+            for factor in health["factors"]:
+                breakdown.append(f"  • {factor}")
+            breakdown.append("")
+
+        if breakdown:
+            console.print(
+                Panel(
+                    "\n".join(breakdown).rstrip("\n"),
+                    title="[bold green]Score Breakdown (Top 10)[/bold green]",
+                    border_style="green",
+                )
+            )
+        console.print()
+    else:
+        # Plain-text fallback
+        print("=" * 80)
+        print("Module Health Scores")
+        print("=" * 80)
+        print()
+
+        print(f"{'Module':<40} {'Score':<8} {'Status':<15} {'Category':<25}")
+        print("-" * 80)
+
+        for health in health_scores:
+            print(f"{health['module']:<40} {health['score']:>6.1f}  {health['status']:<15} {health['category']:<25}")
+
+        print()
+        print("Score Breakdown (Top 10):")
+        print("-" * 80)
+        for health in health_scores[:10]:
+            print(f"\n{health['module']} ({health['score']:.1f}/100)")
+            for factor in health['factors']:
+                print(f"  • {factor}")
+
+        print(f"\nSummary:")
+        print(f"  Average Score: {avg_score:.1f}/100")
+        print(f"  Excellent (≥80): {excellent}")
+        print(f"  Good (60-79): {good}")
+        print(f"  Fair (40-59): {fair}")
+        print(f"  Poor (<40): {poor}")
 
 
 def _analyze_test_impact(results_dir: Optional[str] = None) -> None:
@@ -4188,11 +5027,16 @@ def _analyze_test_impact(results_dir: Optional[str] = None) -> None:
     from mavaia_core.evaluation.test_results import TestResults
     from mavaia_core.evaluation.test_data_manager import TestDataManager
     
-    print("=" * 80)
-    print("Test Impact Analysis")
-    print("=" * 80)
-    print()
-    
+    # Try rich-styled summary first
+    try:
+        from rich.console import Console
+        from rich.table import Table
+        from rich.panel import Panel
+
+        console = Console()
+    except ImportError:
+        console = None
+
     ModuleRegistry.discover_modules(background=False, verbose=False)
     
     # Build dependency graph
@@ -4281,52 +5125,147 @@ def _analyze_test_impact(results_dir: Optional[str] = None) -> None:
     
     # Sort by impact score
     sorted_modules = sorted(impact_scores.items(), key=lambda x: x[1]["score"], reverse=True)
-    
-    print("High-Impact Modules (Top 20):")
-    print("-" * 80)
-    print(f"{'Module':<40} {'Impact':<8} {'Dependents':<12} {'Dependencies':<14} {'Tests':<8}")
-    print("-" * 80)
-    
-    for module_name, data in sorted_modules[:20]:
-        test_status = "✓" if data["has_tests"] else "✗"
-        print(f"{module_name:<40} {data['score']:>6.1f}  {data['dependents']:>10}  {data['dependencies']:>12}  {test_status:>6}")
-    
-    print()
-    print("Impact Score Breakdown (Top 10):")
-    print("-" * 80)
-    for module_name, data in sorted_modules[:10]:
-        print(f"\n{module_name} (Impact: {data['score']:.1f})")
-        for factor in data['factors']:
-            print(f"  • {factor}")
-    
-    # Recommendations
-    print("\n" + "=" * 80)
-    print("Recommendations")
-    print("=" * 80)
-    
+
     # Modules with high impact but no tests
     high_impact_no_tests = [
         (name, data) for name, data in sorted_modules[:20]
         if data["score"] > 30 and not data["has_tests"]
     ]
     
-    if high_impact_no_tests:
-        print(f"\n⚠️  {len(high_impact_no_tests)} high-impact module(s) without tests:")
-        for module_name, data in high_impact_no_tests:
-            print(f"  • {module_name} (Impact: {data['score']:.1f}, {data['dependents']} dependents)")
-        print(f"\n  Recommendation: Add test coverage for these critical modules.")
-    
     # Modules with many dependents
     high_dependents = [
         (name, data) for name, data in sorted_modules
         if data["dependents"] >= 5
     ]
-    
-    if high_dependents:
-        print(f"\n📊 {len(high_dependents)} module(s) with 5+ dependents (high coupling):")
-        for module_name, data in high_dependents[:10]:
-            print(f"  • {module_name} ({data['dependents']} dependents)")
-        print(f"\n  Recommendation: Ensure these modules are well-tested and stable.")
+
+    if console:
+        # High-impact modules table
+        table = Table(
+            title="[bold cyan]High-Impact Modules (Top 20)[/bold cyan]",
+            show_header=True,
+            header_style="bold magenta",
+            box=None,
+            padding=(0, 2),
+        )
+        table.add_column("Module", style="cyan", no_wrap=True, width=34)
+        table.add_column("Impact", style="green", no_wrap=True, width=8)
+        table.add_column("Dependents", style="yellow", no_wrap=True, width=12)
+        table.add_column("Dependencies", style="yellow", no_wrap=True, width=14)
+        table.add_column("Tests", style="blue", no_wrap=True, width=8)
+
+        for module_name, data in sorted_modules[:20]:
+            test_status = "✓" if data["has_tests"] else "✗"
+            table.add_row(
+                module_name,
+                f"{data['score']:.1f}",
+                str(data["dependents"]),
+                str(data["dependencies"]),
+                test_status,
+            )
+
+        console.print(
+            Panel(
+                "Impact scores combine dependents, dependencies, coverage, pass rate, and centrality.",
+                title="[bold green]Test Impact Analysis[/bold green]",
+                border_style="green",
+            )
+        )
+        console.print(table)
+
+        # Breakdown panel (Top 10)
+        breakdown_lines = []
+        for module_name, data in sorted_modules[:10]:
+            breakdown_lines.append(
+                f"[bold cyan]{module_name}[/bold cyan] "
+                f"([green]{data['score']:.1f} impact[/green])"
+            )
+            for factor in data["factors"]:
+                breakdown_lines.append(f"  • {factor}")
+            breakdown_lines.append("")
+
+        if breakdown_lines:
+            console.print(
+                Panel(
+                    "\n".join(breakdown_lines).rstrip("\n"),
+                    title="[bold green]Impact Score Breakdown (Top 10)[/bold green]",
+                    border_style="green",
+                )
+            )
+
+        # Recommendations panel
+        rec_lines = []
+        if high_impact_no_tests:
+            rec_lines.append(
+                f"[yellow]⚠ {len(high_impact_no_tests)} high-impact module(s) without tests:[/yellow]"
+            )
+            for module_name, data in high_impact_no_tests:
+                rec_lines.append(
+                    f"  • {module_name} (Impact: {data['score']:.1f}, {data['dependents']} dependents)"
+                )
+            rec_lines.append(
+                "\n  Recommendation: Add coverage for these critical modules."
+            )
+
+        if high_dependents:
+            rec_lines.append(
+                f"[cyan]📊 {len(high_dependents)} module(s) with 5+ dependents (high coupling):[/cyan]"
+            )
+            for module_name, data in high_dependents[:10]:
+                rec_lines.append(
+                    f"  • {module_name} ({data['dependents']} dependents)"
+                )
+            rec_lines.append(
+                "\n  Recommendation: Ensure these modules are well-tested and stable."
+            )
+
+        if rec_lines:
+            console.print(
+                Panel(
+                    "\n".join(rec_lines).rstrip("\n"),
+                    title="[bold green]Recommendations[/bold green]",
+                    border_style="green",
+                )
+            )
+        console.print()
+    else:
+        # Plain-text fallback
+        print("=" * 80)
+        print("Test Impact Analysis")
+        print("=" * 80)
+        print()
+
+        print("High-Impact Modules (Top 20):")
+        print("-" * 80)
+        print(f"{'Module':<40} {'Impact':<8} {'Dependents':<12} {'Dependencies':<14} {'Tests':<8}")
+        print("-" * 80)
+
+        for module_name, data in sorted_modules[:20]:
+            test_status = "✓" if data["has_tests"] else "✗"
+            print(f"{module_name:<40} {data['score']:>6.1f}  {data['dependents']:>10}  {data['dependencies']:>12}  {test_status:>6}")
+
+        print()
+        print("Impact Score Breakdown (Top 10):")
+        print("-" * 80)
+        for module_name, data in sorted_modules[:10]:
+            print(f"\n{module_name} (Impact: {data['score']:.1f})")
+            for factor in data['factors']:
+                print(f"  • {factor}")
+
+        print("\n" + "=" * 80)
+        print("Recommendations")
+        print("=" * 80)
+
+        if high_impact_no_tests:
+            print(f"\n⚠️  {len(high_impact_no_tests)} high-impact module(s) without tests:")
+            for module_name, data in high_impact_no_tests:
+                print(f"  • {module_name} (Impact: {data['score']:.1f}, {data['dependents']} dependents)")
+            print(f"\n  Recommendation: Add test coverage for these critical modules.")
+
+        if high_dependents:
+            print(f"\n📊 {len(high_dependents)} module(s) with 5+ dependents (high coupling):")
+            for module_name, data in high_dependents[:10]:
+                print(f"  • {module_name} ({data['dependents']} dependents)")
+            print(f"\n  Recommendation: Ensure these modules are well-tested and stable.")
 
 
 def _show_test_coverage() -> None:
@@ -4334,11 +5273,16 @@ def _show_test_coverage() -> None:
     from mavaia_core.brain.registry import ModuleRegistry
     from mavaia_core.evaluation.test_data_manager import TestDataManager
     
-    print("=" * 80)
-    print("Test Coverage Report")
-    print("=" * 80)
-    print()
-    
+    # Try rich-styled coverage summary first
+    try:
+        from rich.console import Console
+        from rich.table import Table
+        from rich.panel import Panel
+
+        console = Console()
+    except ImportError:
+        console = None
+
     # Discover modules
     ModuleRegistry.discover_modules(background=False, verbose=False)
     all_modules = set(ModuleRegistry.list_modules())
@@ -4357,16 +5301,87 @@ def _show_test_coverage() -> None:
     uncovered_modules = all_modules - modules_with_tests
     coverage_pct = (covered_modules / total_modules * 100) if total_modules > 0 else 0
     
+    if console:
+        console.print(
+            Panel(
+                f"[bold]Total Modules:[/bold] [cyan]{total_modules}[/cyan]\n"
+                f"[bold]Modules with Tests:[/bold] [green]{covered_modules}[/green]\n"
+                f"[bold]Modules without Tests:[/bold] [yellow]{len(uncovered_modules)}[/yellow]\n"
+                f"[bold]Overall Coverage:[/bold] [green]{coverage_pct:.1f}%[/green]",
+                title="[bold green]Test Coverage Report[/bold green]",
+                border_style="green",
+            )
+        )
+
+        # Breakdown by category
+        table = Table(
+            title="[bold cyan]Coverage by Category[/bold cyan]",
+            show_header=True,
+            header_style="bold magenta",
+            box=None,
+            padding=(0, 2),
+        )
+        table.add_column("Category", style="cyan", no_wrap=True, width=28)
+        table.add_column("Covered / Total", style="green", no_wrap=True, width=18)
+        table.add_column("Coverage", style="yellow", no_wrap=True, width=10)
+
+        by_category = {}
+        for module_name in all_modules:
+            metadata = ModuleRegistry.get_metadata(module_name)
+            if metadata:
+                category = _categorize_module(module_name, metadata.description)
+                if category not in by_category:
+                    by_category[category] = {"total": 0, "covered": 0}
+                by_category[category]["total"] += 1
+                if module_name in modules_with_tests:
+                    by_category[category]["covered"] += 1
+
+        for category in sorted(by_category.keys()):
+            stats = by_category[category]
+            cat_coverage = (stats["covered"] / stats["total"] * 100) if stats["total"] > 0 else 0
+            table.add_row(
+                category,
+                f"{stats['covered']}/{stats['total']}",
+                f"{cat_coverage:5.1f}%",
+            )
+
+        console.print(table)
+
+        # List uncovered modules (top 20)
+        if uncovered_modules:
+            details = []
+            for module in sorted(uncovered_modules)[:20]:
+                metadata = ModuleRegistry.get_metadata(module)
+                desc = metadata.description[:50] if metadata and metadata.description else ""
+                details.append(f"• [cyan]{module}[/cyan] - {desc}")
+            if len(uncovered_modules) > 20:
+                details.append(f"... and {len(uncovered_modules) - 20} more modules")
+
+            console.print(
+                Panel(
+                    "\n".join(details),
+                    title=f"[bold yellow]Modules Without Tests ({len(uncovered_modules)})[/bold yellow]",
+                    border_style="yellow",
+                )
+            )
+        console.print()
+        return
+
+    # Plain-text fallback
+    print("=" * 80)
+    print("Test Coverage Report")
+    print("=" * 80)
+    print()
+
     print(f"Total Modules:        {total_modules}")
     print(f"Modules with Tests:   {covered_modules}")
     print(f"Modules without Tests: {len(uncovered_modules)}")
     print(f"Coverage:             {coverage_pct:.1f}%")
     print()
-    
-    # Breakdown by category
+
     print("Coverage by Category:")
     print("-" * 80)
-    
+
     by_category = {}
     for module_name in all_modules:
         metadata = ModuleRegistry.get_metadata(module_name)
@@ -4404,18 +5419,41 @@ def _explain_module_failures(module_name: str, results_dir: Optional[str] = None
     """Explain why a module failed"""
     from mavaia_core.brain.registry import ModuleRegistry
     from mavaia_core.evaluation.test_results import TestResults
-    
-    print("=" * 80)
-    print(f"Failure Analysis: {module_name}")
-    print("=" * 80)
-    print()
+
+    # Try rich-styled explanation first
+    try:
+        from rich.console import Console
+        from rich.table import Table
+        from rich.panel import Panel
+
+        console = Console()
+    except ImportError:
+        console = None
     
     # Get latest test results
     results_manager = TestResults(results_dir)
     archives = results_manager.list_archives()
     
     if not archives:
-        print("No test results found. Run tests first to analyze failures.")
+        msg = (
+            "No test results found for this module.\n"
+            "Run tests first to analyze failures."
+        )
+        if console:
+            console.print(
+                Panel(
+                    msg,
+                    title=f"[bold green]Failure Analysis: {module_name}[/bold green]",
+                    border_style="green",
+                )
+            )
+            console.print()
+        else:
+            print("=" * 80)
+            print(f"Failure Analysis: {module_name}")
+            print("=" * 80)
+            print()
+            print("No test results found. Run tests first to analyze failures.")
         return
     
     # Load most recent results
@@ -4428,11 +5466,23 @@ def _explain_module_failures(module_name: str, results_dir: Optional[str] = None
     ]
     
     if not module_failures:
-        print(f"No failures found for module '{module_name}' in latest test run.")
-        print(f"Module may have passed all tests or not been tested.")
+        msg = (
+            f"No failures found for module '{module_name}' in latest test run.\n"
+            "Module may have passed all tests or not been tested."
+        )
+        if console:
+            console.print(
+                Panel(
+                    msg,
+                    title=f"[bold green]Failure Analysis: {module_name}[/bold green]",
+                    border_style="green",
+                )
+            )
+            console.print()
+        else:
+            print(f"No failures found for module '{module_name}' in latest test run.")
+            print(f"Module may have passed all tests or not been tested.")
         return
-    
-    print(f"Found {len(module_failures)} failure(s) for {module_name}\n")
     
     # Analyze failure patterns
     error_types = {}
@@ -4447,49 +5497,159 @@ def _explain_module_failures(module_name: str, results_dir: Optional[str] = None
         if failure.error_message:
             error_messages.append(failure.error_message)
     
-    print("Failure Patterns:")
-    print("-" * 80)
-    print(f"  Total Failures:     {len(module_failures)}")
-    print(f"  Operations Failed:  {', '.join(sorted(operations_failed)) if operations_failed else 'N/A'}")
-    print()
-    
-    print("Error Type Distribution:")
-    for error_type, count in sorted(error_types.items(), key=lambda x: x[1], reverse=True):
-        print(f"  {error_type:30s} {count:3d} ({count/len(module_failures)*100:.1f}%)")
-    print()
-    
-    # Common error messages
-    if error_messages:
-        print("Common Error Messages:")
+    if console:
+        header = Panel(
+            f"[bold]Found {len(module_failures)} failure(s) for[/bold] [cyan]{module_name}[/cyan]",
+            title=f"[bold red]Failure Analysis: {module_name}[/bold red]",
+            border_style="red",
+        )
+        console.print(header)
+
+        # Failure patterns table
+        patterns_table = Table(
+            title="[bold cyan]Failure Patterns[/bold cyan]",
+            show_header=True,
+            header_style="bold magenta",
+            box=None,
+            padding=(0, 2),
+        )
+        patterns_table.add_column("Total Failures", style="green", no_wrap=True, width=16)
+        patterns_table.add_column("Operations Failed", style="yellow", overflow="fold")
+
+        patterns_table.add_row(
+            str(len(module_failures)),
+            ", ".join(sorted(operations_failed)) if operations_failed else "N/A",
+        )
+        console.print(patterns_table)
+
+        # Error type distribution
+        dist_table = Table(
+            title="[bold cyan]Error Type Distribution[/bold cyan]",
+            show_header=True,
+            header_style="bold magenta",
+            box=None,
+            padding=(0, 2),
+        )
+        dist_table.add_column("Error Type", style="cyan", no_wrap=True, width=30)
+        dist_table.add_column("Count", style="green", no_wrap=True, width=8)
+        dist_table.add_column("Share", style="yellow", no_wrap=True, width=10)
+
+        for error_type, count in sorted(error_types.items(), key=lambda x: x[1], reverse=True):
+            pct = count / len(module_failures) * 100
+            dist_table.add_row(error_type, str(count), f"{pct:.1f}%")
+
+        console.print(dist_table)
+
+        # Common error messages
         from collections import Counter
-        common_errors = Counter(error_messages).most_common(5)
-        for error, count in common_errors:
-            print(f"  [{count}x] {error[:70]}")
+        if error_messages:
+            common_errors = Counter(error_messages).most_common(5)
+            msg_lines = []
+            for error, count in common_errors:
+                msg_lines.append(f"[yellow][{count}x][/yellow] {error[:80]}")
+
+            console.print(
+                Panel(
+                    "\n".join(msg_lines),
+                    title="[bold green]Common Error Messages[/bold green]",
+                    border_style="green",
+                )
+            )
+
+        # Module context
+        metadata = ModuleRegistry.get_metadata(module_name)
+        if metadata:
+            ctx_lines = [
+                f"[bold]Version:[/bold] [cyan]{metadata.version}[/cyan]",
+                f"[bold]Enabled:[/bold] [cyan]{metadata.enabled}[/cyan]",
+                f"[bold]Operations:[/bold] [cyan]{len(metadata.operations)}[/cyan]",
+                f"[bold]Dependencies:[/bold] [cyan]{len(metadata.dependencies)}[/cyan]",
+            ]
+            console.print(
+                Panel(
+                    "\n".join(ctx_lines),
+                    title="[bold green]Module Context[/bold green]",
+                    border_style="green",
+                )
+            )
+
+        # Suggestions
+        suggestion_lines = []
+        if "Timeout" in error_types:
+            suggestion_lines.append(
+                "• Timeout errors detected – consider increasing timeout or optimizing performance."
+            )
+        if "ModuleNotFoundError" in error_types:
+            suggestion_lines.append(
+                "• Module not found – verify registration, discovery, and dependencies."
+            )
+        if "InvalidParameterError" in error_types:
+            suggestion_lines.append(
+                "• Invalid parameters – review validation logic and test data schemas."
+            )
+        if metadata and len(operations_failed) == len(metadata.operations):
+            suggestion_lines.append(
+                "• All operations failing – check initialization, configuration, and upstream dependencies."
+            )
+
+        if suggestion_lines:
+            console.print(
+                Panel(
+                    "\n".join(suggestion_lines),
+                    title="[bold yellow]Suggestions[/bold yellow]",
+                    border_style="yellow",
+                )
+            )
+        console.print()
+    else:
+        # Plain-text fallback
+        print("=" * 80)
+        print(f"Failure Analysis: {module_name}")
+        print("=" * 80)
         print()
-    
-    # Get module metadata for context
-    metadata = ModuleRegistry.get_metadata(module_name)
-    if metadata:
-        print("Module Context:")
+
+        print("Failure Patterns:")
         print("-" * 80)
-        print(f"  Version:      {metadata.version}")
-        print(f"  Enabled:      {metadata.enabled}")
-        print(f"  Operations:   {len(metadata.operations)}")
-        print(f"  Dependencies: {len(metadata.dependencies)}")
+        print(f"  Total Failures:     {len(module_failures)}")
+        print(f"  Operations Failed:  {', '.join(sorted(operations_failed)) if operations_failed else 'N/A'}")
         print()
-    
-    # Suggestions
-    print("Suggestions:")
-    print("-" * 80)
-    if "Timeout" in error_types:
-        print("  • Timeout errors detected - consider increasing timeout or optimizing module performance")
-    if "ModuleNotFoundError" in error_types:
-        print("  • Module not found errors - check module registration and discovery")
-    if "InvalidParameterError" in error_types:
-        print("  • Invalid parameter errors - review parameter validation and test data")
-    if len(operations_failed) == len(metadata.operations if metadata else []):
-        print("  • All operations failing - check module initialization and dependencies")
-    print()
+
+        print("Error Type Distribution:")
+        for error_type, count in sorted(error_types.items(), key=lambda x: x[1], reverse=True):
+            print(f"  {error_type:30s} {count:3d} ({count/len(module_failures)*100:.1f}%)")
+        print()
+
+        # Common error messages
+        if error_messages:
+            print("Common Error Messages:")
+            from collections import Counter
+            common_errors = Counter(error_messages).most_common(5)
+            for error, count in common_errors:
+                print(f"  [{count}x] {error[:70]}")
+            print()
+
+        # Get module metadata for context
+        metadata = ModuleRegistry.get_metadata(module_name)
+        if metadata:
+            print("Module Context:")
+            print("-" * 80)
+            print(f"  Version:      {metadata.version}")
+            print(f"  Enabled:      {metadata.enabled}")
+            print(f"  Operations:   {len(metadata.operations)}")
+            print(f"  Dependencies: {len(metadata.dependencies)}")
+            print()
+
+        print("Suggestions:")
+        print("-" * 80)
+        if "Timeout" in error_types:
+            print("  • Timeout errors detected - consider increasing timeout or optimizing module performance")
+        if "ModuleNotFoundError" in error_types:
+            print("  • Module not found errors - check module registration and discovery")
+        if "InvalidParameterError" in error_types:
+            print("  • Invalid parameter errors - review parameter validation and test data")
+        if metadata and len(operations_failed) == len(metadata.operations):
+            print("  • All operations failing - check module initialization and dependencies")
+        print()
 
 
 def _validate_all_modules() -> None:

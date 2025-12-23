@@ -6,10 +6,14 @@ Compares Mavaia's performance against reference benchmarks (HumanEval, MBPP, APP
 """
 
 import json
+import logging
+import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

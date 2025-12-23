@@ -6,7 +6,7 @@ FastAPI-based server that can run standalone
 import os
 import socket
 import sys
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 # Check for required dependencies
@@ -73,8 +73,9 @@ def _register_builtin_tools() -> None:
         from mavaia_core.services.tool_registry import ToolRegistry
         from mavaia_core.brain.registry import ModuleRegistry
         
-        # Ensure modules are discovered
-        ModuleRegistry.discover_modules()
+        # Modules should already be discovered by create_app, but ensure they are
+        if not ModuleRegistry._discovered:
+            ModuleRegistry.discover_modules(background=False, verbose=False)
         
         tool_registry = ToolRegistry()
         
@@ -357,6 +358,15 @@ def create_app(
     if hasattr(sys.stderr, 'reconfigure'):
         sys.stderr.reconfigure(line_buffering=True)
     
+    # Discover modules synchronously BEFORE creating the app
+    # This ensures all modules are loaded and available when the server starts
+    from mavaia_core.brain.registry import ModuleRegistry
+    if modules_dir:
+        ModuleRegistry.set_modules_dir(modules_dir)
+    print("[Server] Discovering modules synchronously...", file=sys.stderr, flush=True)
+    ModuleRegistry.discover_modules(background=False, verbose=False)
+    print(f"[Server] Module discovery complete. Found {len(ModuleRegistry.list_modules())} modules.", file=sys.stderr, flush=True)
+    
     # Get API key from parameter or environment variable
     actual_api_key = api_key or os.getenv("MAVAIA_API_KEY")
     actual_require_auth = require_auth or os.getenv("MAVAIA_REQUIRE_AUTH", "false").lower() == "true"
@@ -371,8 +381,19 @@ def create_app(
         try:
             sys.stderr.write("[DEBUG] Lifespan startup triggered\n")
             sys.stderr.flush()
-            # Register built-in tools after modules are discovered
-            # This will happen lazily when modules are first accessed
+            
+            # Initialize module availability manager
+            try:
+                from mavaia_core.brain.availability import get_availability_manager
+                availability_manager = get_availability_manager()
+                availability_manager.initialize(start_warmup=True, start_monitoring=True)
+                sys.stderr.write("[DEBUG] Module availability manager initialized\n")
+                sys.stderr.flush()
+            except Exception as e:
+                sys.stderr.write(f"[WARNING] Failed to initialize availability manager: {e}\n")
+                sys.stderr.flush()
+            
+            # Register built-in tools (modules already discovered in create_app)
             _register_builtin_tools()
             sys.stderr.write("[DEBUG] Lifespan startup completed\n")
             sys.stderr.flush()
@@ -383,6 +404,12 @@ def create_app(
             sys.stderr.flush()
         yield
         # Shutdown
+        try:
+            from mavaia_core.brain.availability import get_availability_manager
+            availability_manager = get_availability_manager()
+            availability_manager.shutdown()
+        except Exception:
+            pass
         sys.stderr.write("[DEBUG] Lifespan shutdown\n")
         sys.stderr.flush()
     
@@ -574,10 +601,25 @@ def create_app(
     # Health check endpoint (Mavaia-specific)
     @app.get("/v1/health/modules")
     async def get_module_health():
-        """Get health status of all modules"""
+        """Get health status of all modules with fallback info"""
         try:
+            from mavaia_core.brain.availability import get_availability_manager
+            availability_manager = get_availability_manager()
+            system_status = availability_manager.get_availability_status()
             health_checker = get_health_checker()
             summary = health_checker.get_health_summary()
+            
+            # Enhance summary with availability manager info
+            summary["availability"] = {
+                "total_modules": system_status.total_modules,
+                "available_modules": system_status.available_modules,
+                "degraded_modules": system_status.degraded_modules,
+                "offline_modules": system_status.offline_modules,
+                "warmed_modules": system_status.warmed_modules,
+                "modules_with_fallbacks": system_status.modules_with_fallbacks,
+                "timestamp": system_status.timestamp.isoformat()
+            }
+            
             return summary
         except Exception as e:
             raise HTTPException(
@@ -589,20 +631,259 @@ def create_app(
     async def get_module_health_detail(module_name: str):
         """Get detailed health status for a specific module"""
         try:
+            from mavaia_core.brain.availability import get_availability_manager
+            from mavaia_core.brain.monitor import get_monitor_service
+            from mavaia_core.brain.degraded_classifier import get_degraded_classifier
+            
+            availability_manager = get_availability_manager()
+            monitor_service = get_monitor_service()
+            classifier = get_degraded_classifier()
             health_checker = get_health_checker()
+            
+            # Get health check
             health_check = health_checker.check_module_health(module_name)
+            
+            # Get module status from monitor
+            module_status = monitor_service.get_module_status(module_name) if monitor_service else None
+            
+            # Get degradation classification
+            degradation = None
+            if module_status and module_status.state in ("degraded", "offline"):
+                degradation = classifier.classify_degradation(
+                    module_name,
+                    health_check=health_check,
+                    module_status=module_status
+                )
+            
+            # Get fallback info
+            fallback_module = classifier.get_fallback_module(module_name) if classifier else None
+            
             return {
                 "module_name": health_check.module_name,
                 "status": health_check.status.value,
                 "message": health_check.message,
                 "timestamp": health_check.timestamp.isoformat(),
                 "checks": health_check.checks,
-                "details": health_check.details
+                "details": health_check.details,
+                "monitor_status": {
+                    "state": module_status.state.value if module_status else "unknown",
+                    "response_time": module_status.response_time if module_status else None,
+                    "degradation_reason": module_status.degradation_reason if module_status else None,
+                } if module_status else None,
+                "degradation": {
+                    "type": degradation.degradation_type.value,
+                    "reason": degradation.reason,
+                    "details": degradation.details
+                } if degradation else None,
+                "fallback_available": fallback_module is not None,
+                "fallback_module": fallback_module
             }
         except Exception as e:
             raise HTTPException(
                 status_code=500,
                 detail=f"Error checking module health: {str(e)}"
+            )
+    
+    @app.get("/warmup/status")
+    async def get_warmup_status():
+        """Get warmup status for all modules"""
+        try:
+            from mavaia_core.brain.warmup import get_warmup_service
+            warmup_service = get_warmup_service()
+            status = warmup_service.get_warmup_status()
+            
+            return {
+                "warmup_status": {
+                    name: {
+                        "status": result.status.value,
+                        "duration": result.duration,
+                        "error": result.error,
+                        "test_passed": result.test_passed,
+                        "details": result.details
+                    }
+                    for name, result in status.items()
+                }
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error getting warmup status: {str(e)}"
+            )
+    
+    @app.post("/warmup/{module_name}")
+    async def force_warmup(module_name: str):
+        """Force warmup of a module"""
+        try:
+            from mavaia_core.brain.availability import get_availability_manager
+            availability_manager = get_availability_manager()
+            success = availability_manager.force_warmup(module_name)
+            
+            return {
+                "module_name": module_name,
+                "success": success
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error forcing warmup: {str(e)}"
+            )
+    
+    @app.post("/recovery/{module_name}")
+    async def force_recovery(module_name: str):
+        """Force recovery of a module"""
+        try:
+            from mavaia_core.brain.recovery import get_recovery_service
+            recovery_service = get_recovery_service()
+            attempt = recovery_service.recover_module(module_name)
+            
+            return {
+                "module_name": module_name,
+                "attempt_number": attempt.attempt_number,
+                "status": attempt.status.value,
+                "duration": attempt.duration,
+                "error": attempt.error,
+                "details": attempt.details
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error forcing recovery: {str(e)}"
+            )
+    
+    @app.get("/fallback/mappings")
+    async def get_fallback_mappings():
+        """Get all fallback mappings"""
+        try:
+            from mavaia_core.brain.degraded_classifier import get_degraded_classifier
+            classifier = get_degraded_classifier()
+            
+            # Get mappings (we need to access the internal _fallback_mappings)
+            # For now, return a message indicating mappings are configured
+            return {
+                "mappings_configured": True,
+                "message": "Fallback mappings are configured via DegradedModeClassifier"
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error getting fallback mappings: {str(e)}"
+            )
+    
+    @app.post("/fallback/mappings")
+    async def register_fallback_mapping(request: Dict[str, Any]):
+        """Register custom fallback mapping"""
+        try:
+            from mavaia_core.brain.availability import get_availability_manager
+            availability_manager = get_availability_manager()
+            
+            primary = request.get("primary")
+            fallbacks = request.get("fallbacks", [])
+            
+            if not primary or not fallbacks:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Missing 'primary' or 'fallbacks' in request"
+                )
+            
+            availability_manager.register_fallback_mapping(primary, fallbacks)
+            
+            return {
+                "success": True,
+                "primary": primary,
+                "fallbacks": fallbacks
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error registering fallback mapping: {str(e)}"
+            )
+    
+    @app.get("/fallback/stats")
+    async def get_fallback_stats():
+        """Get fallback usage statistics"""
+        try:
+            from mavaia_core.brain.availability import get_availability_manager
+            availability_manager = get_availability_manager()
+            stats = availability_manager.get_fallback_usage_stats()
+            
+            return {
+                "fallback_stats": stats
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error getting fallback stats: {str(e)}"
+            )
+    
+    @app.get("/debug/modules")
+    async def debug_modules():
+        """Debug endpoint to check module discovery status"""
+        try:
+            from mavaia_core.brain.registry import ModuleRegistry
+            import os
+            from pathlib import Path
+            
+            # Get discovery status
+            discovered = ModuleRegistry._discovered
+            discovering = ModuleRegistry._discovering
+            available_modules = ModuleRegistry.list_modules()
+            
+            # Check if cognitive_generator is in the list
+            cog_available = "cognitive_generator" in available_modules
+            
+            # Try to get the module to see what error we get
+            cog_error = None
+            try:
+                ModuleRegistry.get_module("cognitive_generator", auto_discover=False)
+            except Exception as e:
+                cog_error = str(e)
+            
+            # Check modules directory
+            modules_dir = ModuleRegistry.get_modules_dir()
+            cog_file_exists = False
+            if modules_dir:
+                cog_file = modules_dir / "cognitive_generator.py"
+                cog_file_exists = cog_file.exists()
+            
+            return {
+                "discovery_status": {
+                    "discovered": discovered,
+                    "discovering": discovering,
+                    "total_modules": len(available_modules),
+                    "modules": available_modules[:20]  # First 20 modules
+                },
+                "cognitive_generator": {
+                    "in_list": cog_available,
+                    "file_exists": cog_file_exists,
+                    "modules_dir": str(modules_dir) if modules_dir else None,
+                    "error": cog_error
+                }
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error in debug endpoint: {str(e)}"
+            )
+    
+    @app.get("/modules/status")
+    async def get_all_modules_status():
+        """Get status of all modules - check if all are online"""
+        try:
+            from mavaia_core.brain.availability import get_availability_manager
+            availability_manager = get_availability_manager()
+            
+            all_online, details = availability_manager.are_all_modules_online()
+            
+            return {
+                "all_modules_online": all_online,
+                "status": "healthy" if all_online else "degraded",
+                "details": details,
+                "ensure_all_online": availability_manager._ensure_all_online
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error getting modules status: {str(e)}"
             )
     
     # Code execution endpoint (Mavaia-specific)

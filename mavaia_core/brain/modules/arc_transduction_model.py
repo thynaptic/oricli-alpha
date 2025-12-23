@@ -10,9 +10,35 @@ Based on "Combining Induction and Transduction for Abstract Reasoning" (arxiv:24
 import copy
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
+# Lazy import numpy - don't import at module level
+np = None
+NUMPY_AVAILABLE = None
 
-from mavaia_core.brain.modules.arc_data_augmentation import ARCTask
+def _lazy_import_numpy():
+    """Lazy import numpy"""
+    global np, NUMPY_AVAILABLE
+    if NUMPY_AVAILABLE is None:
+        try:
+            import numpy as np_module
+            np = np_module
+            NUMPY_AVAILABLE = True
+        except ImportError:
+            NUMPY_AVAILABLE = False
+    return NUMPY_AVAILABLE
+
+# Lazy import ARCTask - don't import at module level
+ARCTask = None
+
+def _lazy_import_arc_task():
+    """Lazy import ARCTask"""
+    global ARCTask
+    if ARCTask is None:
+        try:
+            from mavaia_core.brain.modules.arc_data_augmentation import ARCTask as AT
+            ARCTask = AT
+        except ImportError:
+            ARCTask = None
+    return ARCTask is not None
 
 
 class ARCTransductionModel:
@@ -50,7 +76,10 @@ class ARCTransductionModel:
         # For now, we use a simple fallback approach
         self._initialized = True
     
-    def encode_grid(self, grid: List[List[Any]]) -> np.ndarray:
+    def encode_grid(self, grid: List[List[Any]]):
+        """Encode grid to feature vector"""
+        if not _lazy_import_numpy():
+            raise ImportError("NumPy is required for ARC transduction model")
         """
         Encode grid to embedding representation.
         

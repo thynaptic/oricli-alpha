@@ -1,0 +1,16 @@
+# Small humor set
+# Created via interactive profile creator
+description: Small humor set
+source:
+- huggingface
+- wikipedia
+- gutenberg
+- openlibrary
+categories:
+- fiction
+- drama
+model_type: both
+epochs: 10
+max_books: 15
+max_text_size: 15000
+data_percentage: 1.0

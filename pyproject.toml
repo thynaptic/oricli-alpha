@@ -81,6 +81,7 @@ ml = [
 
 [project.scripts]
 mavaia-server = "mavaia_core.api.server:main"
+mavaia-curriculum-test = "mavaia_core.evaluation.curriculum.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/thynaptic/mavaia-core"
