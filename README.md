@@ -1,324 +1,281 @@
-# Mavaia Core
+## Mavaia Core
 
-**Mavaia Core** is a modular AI cognitive framework for building intelligent applications. It provides a plug-and-play architecture for cognitive modules, an OpenAI-compatible API, and a unified interface for all Mavaia capabilities.
+**Mavaia Core** is a modular cognitive framework for building intelligent applications. It provides:
+- a plug-and-play brain module system
+- an OpenAI-compatible HTTP API
+- a Python client for direct module execution
+- a lightweight UI for interactive testing
 
-**System Identifier:** Mavaia follows the standardized cognitive system naming scheme (TR-2025-01). The system identifier is dynamically generated based on discovered cognitive modules and follows the format `mavaia-{module_count}c`. Access it programmatically via `from mavaia_core import SYSTEM_ID`.
+**System identifier**: Mavaia follows the TR-2025-01 naming scheme. The system identifier is derived from discovered cognitive modules and is available via `from mavaia_core import SYSTEM_ID` (and `SYSTEM_ID_FULL`).
 
-## Features
+## What’s in this repo
 
-- **Modular Architecture**: Plug-and-play brain modules that extend capabilities without code changes
-- **OpenAI-Compatible API**: Drop-in replacement for OpenAI API endpoints
-- **Cognitive Pipeline**: Composable cognitive modules for reasoning, memory, embeddings, and more
-- **Auto-Discovery**: Modules are automatically discovered and registered
-- **Type-Safe**: Full type hints and Pydantic models throughout
-- **Production-Ready**: Comprehensive error handling, validation, and documentation
+- **Core package**: `mavaia_core/`
+- **Brain modules**: `mavaia_core/brain/modules/` (auto-discovered)
+- **OpenAI-compatible API**: `mavaia_core/api/`
+- **UI**: `ui_app.py` + `ui_static/`
+- **Scripts**: `scripts/`
+- **Docs**: `docs/`
 
 ## Installation
 
-### From Source
+### Prerequisites
+
+- Python **3.8+**
+- Recommended: a virtual environment (`venv` or `.venv`)
+
+### Install from source (editable)
 
 ```bash
-git clone https://github.com/thynaptic/mavaia-core.git
-cd mavaia-core
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip setuptools wheel
 pip install -e .
 ```
 
-### Development Installation
+### Optional dependency groups
+
+This repo uses optional dependency groups (see `pyproject.toml`):
 
 ```bash
+# Developer tools
 pip install -e ".[dev]"
+
+# Web search support
+pip install -e ".[search]"
+
+# Sandbox/code-execution support (Docker client)
+pip install -e ".[sandbox]"
+
+# Memory backends / local storage extras
+pip install -e ".[memory]"
+
+# Data / ML stack (heavier)
+pip install -e ".[data,ml]"
 ```
 
-### Verify Installation
-
-Check that all dependencies are installed:
+### Verify installation
 
 ```bash
 python3 scripts/check_dependencies.py
 ```
 
-If dependencies are missing, install them:
+## Quick start
 
-```bash
-pip install -e .
-```
-
-## Quick Start
-
-> **Note:** Make sure to activate your virtual environment first:
-> ```bash
-> source venv/bin/activate
-> ```
->
-> See [QUICKSTART.md](QUICKSTART.md) for detailed startup instructions and troubleshooting.
-
-### Python Client
-
-```python
-from mavaia_core import MavaiaClient
-
-# Initialize client
-client = MavaiaClient()
-
-# Chat completion
-response = client.chat.completions.create(
-    model="mavaia-cognitive",
-    messages=[
-        {"role": "user", "content": "Hello, how are you?"}
-    ],
-    temperature=0.7
-)
-
-print(response.choices[0].message.content)
-
-# Embeddings
-embedding = client.embeddings.create(
-    input="text to embed",
-    model="mavaia-embeddings"
-)
-
-# Direct module access
-result = client.brain.reasoning.reason(query="What is 2+2?")
-```
-
-### 🚀 Quick Start (One-Click)
-
-Start everything with one command:
+### One command (API + UI)
 
 ```bash
 ./scripts/start_servers.sh
 ```
 
-This starts both API and UI servers and opens your browser automatically!
+Notes:
+- The launcher defaults to `MAVAIA_API_PORT=8001` and `MAVAIA_UI_PORT=5000` (see `scripts/start_servers.sh`).
+- The API server module itself defaults to port `8000` if you run it directly; the launcher overrides this.
 
-### HTTP Server (Manual)
-
-Start the API server:
+### Start the API server (manual)
 
 ```bash
-# Using the entry point (after pip install -e .)
+# Entry point (installed via pyproject [project.scripts])
 mavaia-server --host 0.0.0.0 --port 8000
 
-# Or using the startup script
-python3 scripts/start_server.py --host 0.0.0.0 --port 8000
-
-# Or directly
+# Or module execution
 python3 -m mavaia_core.api.server --host 0.0.0.0 --port 8000
 ```
 
-Or programmatically:
-
-```python
-from mavaia_core.api.server import run_server
-
-run_server(host="0.0.0.0", port=8000)
-```
-
-### UI Server
-
-Start the UI server:
+### Start the UI server (manual)
 
 ```bash
-# Using the startup script
-python3 scripts/start_ui.py
-
-# Or directly
-python3 ui_app.py
+MAVAIA_API_BASE="http://localhost:8000" python3 ui_app.py
 ```
 
-### API Usage
+## API usage (OpenAI-compatible)
+
+### Chat completions
 
 ```bash
-# Chat completion
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "mavaia-cognitive",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
+```
 
-# Embeddings
+### Embeddings
+
+```bash
 curl -X POST http://localhost:8000/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{
     "input": "text to embed",
     "model": "mavaia-embeddings"
   }'
-
-# List models
-curl http://localhost:8000/v1/models
-
-# List modules
-curl http://localhost:8000/v1/modules
 ```
 
-## Architecture
+### Introspection
 
-### Core Components
+```bash
+curl http://localhost:8000/v1/models
+curl http://localhost:8000/v1/modules
+curl http://localhost:8000/v1/metrics
+curl http://localhost:8000/v1/health/modules
+```
 
-1. **BaseBrainModule**: Abstract base class for all cognitive modules
-2. **ModuleRegistry**: Auto-discovery and management of brain modules
-3. **MavaiaClient**: Unified client interface for all capabilities
-4. **OpenAICompatibleAPI**: OpenAI-compatible HTTP API endpoints
+## Python client usage
 
-### Module System
+```python
+from mavaia_core import MavaiaClient
 
-Brain modules are Python classes that inherit from `BaseBrainModule`. They are automatically discovered from the `mavaia_core/brain/modules/` directory and made available via:
+client = MavaiaClient()
 
-- Python client: `client.brain.module_name.operation()`
-- HTTP API: `POST /v1/modules/module_name/operation`
-- Direct execution: `client.execute_module_operation(module_name, operation, params)`
+resp = client.chat.completions.create(
+    model="mavaia-cognitive",
+    messages=[{"role": "user", "content": "Hello"}],
+)
 
-### Module Structure
-
-Each module must implement:
-
-- `metadata` property: Returns `ModuleMetadata` with module information
-- `execute(operation, params)`: Executes operations supported by the module
-
-Optional methods:
-
-- `initialize()`: Initialize resources (models, etc.)
-- `validate_params(operation, params)`: Validate parameters
-- `cleanup()`: Clean up resources
-
-See [Module Development Guide](docs/module_development.md) for details.
-
-## Available Modules
-
-Mavaia Core includes 78+ brain modules across categories:
-
-### Core Intelligence
-- `cognitive_generator`: Main cognitive generation orchestrator
-- `reasoning`: Advanced reasoning capabilities
-- `embeddings`: Text embedding generation
-- `thought_to_text`: Thought-to-text conversion
-
-### Memory & Context
-- `conversational_memory`: Conversation memory management
-- `memory_graph`: Memory graph operations
-- `memory_processor`: Memory processing pipeline
-
-### Language & Communication
-- `neural_grammar`: Neural grammar processing
-- `natural_language_flow`: Natural language flow generation
-- `response_naturalizer`: Response naturalization
-- `linguistic_priors`: Linguistic prior knowledge
-
-### Reasoning & Logic
-- `chain_of_thought`: Chain-of-Thought reasoning
-- `tree_of_thought`: Tree-of-Thought multi-path exploration
-- `mcts_reasoning`: Monte-Carlo Thought Search
-- `logical_deduction`: Logical deduction
-- `causal_inference`: Causal inference
-
-See [MODULES.md](MODULES.md) for the complete list.
+print(resp.choices[0].message.content)
+```
 
 ## Configuration
 
-### Environment Variables
+Mavaia configuration uses environment variables (prefix `MAVAIA_`) with sensible defaults.
 
-- `MAVAIA_API_KEY`: API key for authentication (optional)
-- `MAVAIA_API_BASE`: API base URL (default: `http://localhost:8000`)
-- `MAVAIA_UI_PORT`: UI server port (default: `5000`)
+### Common environment variables
 
-### Server Configuration
+- **`MAVAIA_API_HOST`**: API bind host (default varies by script; often `0.0.0.0`)
+- **`MAVAIA_API_PORT`**: API port (launcher default: `8001`; server default: `8000`)
+- **`MAVAIA_API_KEY`**: API key (optional unless auth is enabled)
+- **`MAVAIA_REQUIRE_AUTH`**: set to `true` to require auth
+- **`MAVAIA_UI_HOST`**: UI bind host (default: `0.0.0.0`)
+- **`MAVAIA_UI_PORT`**: UI port (default: `5000`)
+- **`MAVAIA_API_BASE`**: UI → API base URL (default in UI: `http://localhost:8000`)
+- **`MAVAIA_UI_ATTACHMENT_MB`**: max UI attachment size in MB (default: `5`)
 
-```python
-from mavaia_core.api.server import create_app
+### Configuration precedence
 
-app = create_app(
-    modules_dir=Path("/path/to/modules"),
-    api_key="your-api-key",
-    enable_cors=True
-)
+Command-line arguments override environment variables; environment variables override defaults.
+
+## Brain modules
+
+Modules live in `mavaia_core/brain/modules/` and are auto-discovered by the registry.
+
+- Full module list: see `MODULES.md`
+- Module development guide: see `docs/module_development.md`
+
+## API docs
+
+When the API server is running:
+
+- Swagger UI: `http://localhost:8000/docs`
+- OpenAPI JSON: `http://localhost:8000/openapi.json`
+
+For more details, see `docs/api_documentation.md`.
+
+## Development & testing
+
+```bash
+python3 /workspace/run_quick_tests.py
+python3 /workspace/run_tests.py
 ```
 
-## API Documentation
+## Troubleshooting
 
-Complete API documentation is available at:
+### UI can’t reach the API
 
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
-- **OpenAPI JSON**: `http://localhost:8000/openapi.json`
+- Ensure the API server is running.
+- Ensure `MAVAIA_API_BASE` matches the API URL, e.g. `MAVAIA_API_BASE="http://localhost:8001"`.
 
-### Mavaia-Specific Endpoints
+### Optional dependencies
 
-- `GET /v1/metrics` - Get module metrics and statistics
-- `GET /v1/health/modules` - Get health status of all modules
-- `GET /v1/health/modules/{module_name}` - Get detailed health for a module
+Some modules require optional extras (e.g. `.[search]`, `.[sandbox]`, `.[ml]`). If a dependency is missing, the module should degrade gracefully and log the reason at debug level.
 
-See [API Documentation](docs/api_documentation.md) for detailed endpoint documentation.
-See [Brain Expansion Guide](docs/brain_expansion.md) for information about the new brain infrastructure.
+## Repository links
 
-## Development
+- Source: [thynaptic/mavaia-core](https://github.com/thynaptic/mavaia-core)
 
-### Project Structure
+## Project structure
 
-```
+```text
 mavaia-core/
-├── mavaia_core/          # Main package
-│   ├── api/              # API server and OpenAI compatibility
-│   ├── brain/             # Brain module system
-│   │   ├── modules/      # Brain modules (auto-discovered)
-│   │   └── registry.py   # Module registry
-│   ├── client.py         # Main client interface
-│   └── types/            # Type definitions and models
-├── docs/                  # Documentation
-├── ui_static/             # UI static files
-└── pyproject.toml         # Project configuration
+├── mavaia_core/              # Python package
+│   ├── api/                  # FastAPI server + OpenAI compatibility layer
+│   ├── brain/                # Module system, registry, orchestration
+│   │   └── modules/          # Brain modules (auto-discovered)
+│   ├── services/             # Service layer (tools, integrations)
+│   └── types/                # Pydantic request/response models
+├── docs/                     # Reference docs
+├── scripts/                  # Dev and ops scripts
+├── ui_app.py                 # Flask UI server
+├── ui_static/                # UI assets
+└── pyproject.toml            # Packaging + dependency groups
 ```
 
-### Running Tests
+## Running tests
 
 ```bash
-pytest
+python3 /workspace/run_quick_tests.py
+python3 /workspace/run_tests.py
 ```
 
-### Code Quality
+## Code quality (optional)
 
 ```bash
-# Format code
+pip install -e ".[dev]"
 black mavaia_core/
-
-# Lint code
 ruff check mavaia_core/
-
-# Type checking
 mypy mavaia_core/
 ```
 
-### Creating Modules
+## Creating brain modules
 
-1. Create a new Python file in `mavaia_core/brain/modules/`
-2. Inherit from `BaseBrainModule`
-3. Implement required methods
-4. Module is automatically discovered
+Brain modules are auto-discovered from `mavaia_core/brain/modules/`. A module must:
+- inherit `BaseBrainModule`
+- expose `metadata`
+- implement `execute(operation, params)`
 
-Example:
+Example (minimal):
 
 ```python
-from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from __future__ import annotations
+
 from typing import Any
 
+from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+
 class MyModule(BaseBrainModule):
+    """Example module showing required structure."""
+
     @property
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="my_module",
             version="1.0.0",
-            description="My custom module",
-            operations=["operation1"],
+            description="Example module",
+            operations=["echo"],
             dependencies=[],
         )
-    
+
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
-        if operation == "operation1":
-            return {"result": "success"}
-        raise ValueError(f"Unknown operation: {operation}")
+        if operation == "echo":
+            text = params.get("text", "")
+            if not isinstance(text, str) or not text.strip():
+                raise InvalidParameterError(
+                    parameter="text",
+                    value=str(text),
+                    reason="text must be a non-empty string",
+                )
+            return {"success": True, "text": text}
+
+        raise InvalidParameterError(
+            parameter="operation",
+            value=str(operation),
+            reason="Unknown operation for my_module",
+        )
 ```
 
-See [Module Development Guide](docs/module_development.md) for complete details.
+For deeper guidance, see `docs/module_development.md`.
 
 ## Examples
 
@@ -343,6 +300,7 @@ response = client.chat.completions.create(
 
 ```python
 # Streaming is supported via the API
+import json
 import httpx
 
 with httpx.stream(
@@ -355,8 +313,15 @@ with httpx.stream(
     }
 ) as response:
     for line in response.iter_lines():
+        if not line:
+            continue
+        if isinstance(line, bytes):
+            line = line.decode("utf-8", errors="ignore")
         if line.startswith("data: "):
-            data = json.loads(line[6:])
+            payload = line[6:].strip()
+            if payload == "[DONE]":
+                break
+            data = json.loads(payload)
             if "choices" in data:
                 print(data["choices"][0]["delta"].get("content", ""), end="")
 ```
@@ -402,8 +367,12 @@ MIT License - see LICENSE file for details.
 ## Support
 
 - **Documentation**: [docs/](docs/)
-- **Issues**: GitHub Issues
+- **Issues**: [GitHub Issues](https://github.com/thynaptic/mavaia-core/issues)
 - **Email**: ai@thynaptic.com
+
+## Design partners
+
+If you’re evaluating Mavaia as a design partner, see `README_DESIGN_PARTNERS.md`.
 
 ## Version
 
