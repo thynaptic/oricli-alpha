@@ -7,12 +7,12 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 import json
-import sys
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Lazy imports to avoid timeout during module discovery
 NETWORKX_AVAILABLE = False
@@ -38,8 +38,8 @@ def _lazy_import_world_knowledge_deps():
     
     if not EMBEDDINGS_AVAILABLE:
         try:
-            from embeddings import EmbeddingsModule as EM
-            from concept_embeddings import ConceptEmbeddingsModule as CEM
+            from mavaia_core.brain.modules.embeddings import EmbeddingsModule as EM
+            from mavaia_core.brain.modules.concept_embeddings import ConceptEmbeddingsModule as CEM
             EmbeddingsModule = EM
             ConceptEmbeddingsModule = CEM
             EMBEDDINGS_AVAILABLE = True
@@ -48,7 +48,7 @@ def _lazy_import_world_knowledge_deps():
 
     if not MEMORY_GRAPH_AVAILABLE:
         try:
-            from memory_graph import MemoryGraph as MG
+            from mavaia_core.brain.modules.memory_graph import MemoryGraph as MG
             MemoryGraph = MG
             MEMORY_GRAPH_AVAILABLE = True
         except ImportError:
@@ -58,6 +58,7 @@ class WorldKnowledgeModule(BaseBrainModule):
     """Hybrid knowledge base combining graph and vector representations"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.knowledge_graph = None
         self.knowledge_base = {}
@@ -123,7 +124,11 @@ class WorldKnowledgeModule(BaseBrainModule):
                     "max_results": 10,
                 }
         except Exception as e:
-            print(f"[WorldKnowledgeModule] Failed to load config: {e}", file=sys.stderr)
+            logger.warning(
+                "Failed to load world_knowledge config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "world_knowledge", "error_type": type(e).__name__},
+            )
             self.config = {}
 
     def _initialize_components(self) -> bool:
@@ -203,7 +208,11 @@ class WorldKnowledgeModule(BaseBrainModule):
                 target = params.get("target", "")
                 return self.get_knowledge_path(source, target)
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for world_knowledge",
+                )
 
     def query_knowledge(
         self, query: str, query_type: str = "semantic", limit: int = 10

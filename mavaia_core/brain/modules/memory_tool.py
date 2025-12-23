@@ -6,14 +6,13 @@ Supports all 6 memory operations: view, create, str_replace, insert, delete, ren
 All operations are restricted to the /memories directory for security.
 """
 
-import json
-import sys
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-import re
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import ModuleOperationError, InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Lazy imports to avoid timeout during module discovery
 DatabaseStorage = None
@@ -28,8 +27,12 @@ def _lazy_import_storage():
             from mavaia_core.brain.state_storage.base_storage import StorageConfig as SC
             DatabaseStorage = DS
             StorageConfig = SC
-        except ImportError:
-            pass
+        except ImportError as e:
+            logger.debug(
+                "Storage backend import unavailable for memory_tool",
+                exc_info=True,
+                extra={"module_name": "memory_tool", "error_type": type(e).__name__},
+            )
 
 
 class MemoryToolModule(BaseBrainModule):
@@ -73,11 +76,15 @@ class MemoryToolModule(BaseBrainModule):
         # Don't initialize storage here - it's heavy, will initialize lazily
         return True
     
-    def _ensure_storage(self):
-        """Lazy initialize storage only when needed"""
+    def _ensure_storage(self) -> None:
+        """Lazy initialize storage only when needed."""
         _lazy_import_storage()
         if DatabaseStorage is None or StorageConfig is None:
-            raise RuntimeError("DatabaseStorage not available")
+            raise ModuleOperationError(
+                self.metadata.name,
+                "initialize_storage",
+                "Database storage backend is not available in this environment",
+            )
         if self._storage is None:
             try:
                 config = StorageConfig(
@@ -87,13 +94,19 @@ class MemoryToolModule(BaseBrainModule):
                 self._storage = DatabaseStorage(config)
                 self._storage.initialize()
             except Exception as e:
-                print(f"[MemoryTool] Failed to initialize storage: {e}")
-                raise
+                logger.error(
+                    "Failed to initialize memory_tool storage backend",
+                    exc_info=True,
+                    extra={"module_name": "memory_tool", "error_type": type(e).__name__},
+                )
+                raise ModuleOperationError(
+                    self.metadata.name,
+                    "initialize_storage",
+                    "Failed to initialize storage backend",
+                ) from e
     
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a memory tool operation."""
-        self._ensure_storage()
-        
         try:
             if operation == "view":
                 return self._view(params)
@@ -108,19 +121,24 @@ class MemoryToolModule(BaseBrainModule):
             elif operation == "rename":
                 return self._rename(params)
             else:
-                raise ValueError(f"Unknown operation: {operation}")
-        except (InvalidParameterError, ValueError) as e:
-            raise ModuleOperationError(
-                self.metadata.name,
-                operation,
-                str(e),
-            )
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for memory_tool",
+                )
+        except (InvalidParameterError, ModuleOperationError):
+            raise
         except Exception as e:
+            logger.error(
+                "Unexpected error executing memory_tool operation",
+                exc_info=True,
+                extra={"module_name": "memory_tool", "operation": operation, "error_type": type(e).__name__},
+            )
             raise ModuleOperationError(
                 self.metadata.name,
                 operation,
-                f"Unexpected error: {str(e)}",
-            )
+                "Unexpected error executing operation",
+            ) from e
     
     def _validate_memory_path(self, path: str) -> str:
         """
@@ -133,28 +151,30 @@ class MemoryToolModule(BaseBrainModule):
             Normalized path
             
         Raises:
-            ValueError: If path is invalid or outside /memories directory
+            InvalidParameterError: If path is invalid or outside /memories directory
         """
         if not path:
-            raise ValueError("Path cannot be empty")
+            raise InvalidParameterError("path", path, "Path cannot be empty")
         
         # Normalize path separators
         normalized = path.replace("\\", "/")
         
         # Ensure path starts with /memories
         if not normalized.startswith(self.MEMORY_DIRECTORY):
-            raise ValueError(
-                f"Path must start with {self.MEMORY_DIRECTORY}. Got: {path}"
+            raise InvalidParameterError(
+                "path",
+                path,
+                f"Path must start with {self.MEMORY_DIRECTORY}",
             )
         
         # Prevent directory traversal
         if ".." in normalized:
-            raise ValueError("Directory traversal (..) not allowed")
+            raise InvalidParameterError("path", path, "Directory traversal (..) not allowed")
         
         # Prevent absolute paths outside /memories
         parts = normalized.split("/")
         if parts[0] == "" and len(parts) > 1 and parts[1] != "memories":
-            raise ValueError(f"Path must be within {self.MEMORY_DIRECTORY}")
+            raise InvalidParameterError("path", path, f"Path must be within {self.MEMORY_DIRECTORY}")
         
         # Normalize to remove double slashes and trailing slashes (except for root)
         normalized = "/".join(part for part in parts if part)
@@ -263,6 +283,7 @@ class MemoryToolModule(BaseBrainModule):
             raise InvalidParameterError("path", None, "path parameter is required")
         
         path = self._validate_memory_path(path)
+        self._ensure_storage()
         
         # Check if it's a directory
         if self._is_directory(path):
@@ -363,6 +384,7 @@ class MemoryToolModule(BaseBrainModule):
                 path,
                 "File path cannot end with /"
             )
+        self._ensure_storage()
         
         # Save file
         if self._save_file_data(path, content):
@@ -399,6 +421,7 @@ class MemoryToolModule(BaseBrainModule):
             raise InvalidParameterError("old_str", None, "old_str parameter is required")
         
         path = self._validate_memory_path(path)
+        self._ensure_storage()
         
         # Get existing file
         file_data = self._get_file_data(path)
@@ -462,6 +485,7 @@ class MemoryToolModule(BaseBrainModule):
                 line,
                 "line must be >= 1"
             )
+        self._ensure_storage()
         
         # Get existing file
         file_data = self._get_file_data(path)
@@ -518,6 +542,7 @@ class MemoryToolModule(BaseBrainModule):
             raise InvalidParameterError("path", None, "path parameter is required")
         
         path = self._validate_memory_path(path)
+        self._ensure_storage()
         
         # Check if it's a directory
         if self._is_directory(path):
@@ -576,6 +601,7 @@ class MemoryToolModule(BaseBrainModule):
         
         path = self._validate_memory_path(path)
         new_path = self._validate_memory_path(new_path)
+        self._ensure_storage()
         
         # Check if source exists
         if self._is_directory(path):

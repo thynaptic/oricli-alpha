@@ -4,16 +4,19 @@ Break down reasoning into explicit sequential steps
 """
 
 from typing import List, Dict, Any
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class StepByStepModule(BaseBrainModule):
     """Step-by-step reasoning module"""
+
+    def __init__(self) -> None:
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -34,10 +37,36 @@ class StepByStepModule(BaseBrainModule):
         steps = parameters.get("steps", 5)
         detail = parameters.get("detail", "medium")
 
-        if not query:
-            raise ValueError("Missing required parameter: query")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="Missing required parameter: query (must be a non-empty string)",
+            )
+        if context is None:
+            context = ""
+        if not isinstance(context, str):
+            raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+        if parameters is None:
+            parameters = {}
+        if not isinstance(parameters, dict):
+            raise InvalidParameterError(
+                parameter="parameters",
+                value=str(type(parameters).__name__),
+                reason="parameters must be a dict",
+            )
+        try:
+            steps_int = int(steps)
+        except (TypeError, ValueError):
+            raise InvalidParameterError("parameters.steps", str(steps), "steps must be an integer")
+        if steps_int < 1:
+            raise InvalidParameterError("parameters.steps", str(steps_int), "steps must be >= 1")
+        if detail is None:
+            detail = "medium"
+        if not isinstance(detail, str):
+            raise InvalidParameterError("parameters.detail", str(type(detail).__name__), "detail must be a string")
 
-        reasoning = self._step_by_step_reasoning(query, context, steps, detail)
+        reasoning = self._step_by_step_reasoning(query, context, steps_int, detail)
 
         return {
             "reasoning": reasoning,

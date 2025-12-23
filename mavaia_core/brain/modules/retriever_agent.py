@@ -5,11 +5,15 @@ Fetches candidate documents from various sources including knowledge base,
 memory, and external sources. Part of the Perplexity Multi-Agent Pipeline.
 """
 
-from typing import Any, Dict, List, Optional, Set
-from pathlib import Path
-import sys
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class RetrieverAgent(BaseBrainModule):
@@ -26,6 +30,7 @@ class RetrieverAgent(BaseBrainModule):
 
     def __init__(self):
         """Initialize the Retriever Agent"""
+        super().__init__()
         self._world_knowledge = None
         self._memory_graph = None
         self._document_orchestration = None
@@ -61,31 +66,56 @@ class RetrieverAgent(BaseBrainModule):
             # Lazy load optional dependencies
             try:
                 self._world_knowledge = ModuleRegistry.get_module("world_knowledge")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency world_knowledge",
+                    exc_info=True,
+                    extra={"module_name": "retriever_agent", "dependency": "world_knowledge", "error_type": type(e).__name__},
+                )
 
             try:
                 self._memory_graph = ModuleRegistry.get_module("memory_graph")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency memory_graph",
+                    exc_info=True,
+                    extra={"module_name": "retriever_agent", "dependency": "memory_graph", "error_type": type(e).__name__},
+                )
 
             try:
                 self._document_orchestration = ModuleRegistry.get_module("document_orchestration")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency document_orchestration",
+                    exc_info=True,
+                    extra={"module_name": "retriever_agent", "dependency": "document_orchestration", "error_type": type(e).__name__},
+                )
 
             try:
                 self._embeddings = ModuleRegistry.get_module("embeddings")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency embeddings",
+                    exc_info=True,
+                    extra={"module_name": "retriever_agent", "dependency": "embeddings", "error_type": type(e).__name__},
+                )
 
             try:
                 self._query_agent = ModuleRegistry.get_module("query_agent")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency query_agent",
+                    exc_info=True,
+                    extra={"module_name": "retriever_agent", "dependency": "query_agent", "error_type": type(e).__name__},
+                )
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "ModuleRegistry not available; retriever_agent will run without dependencies",
+                exc_info=True,
+                extra={"module_name": "retriever_agent", "error_type": type(e).__name__},
+            )
             return True  # Can work without dependencies
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -102,12 +132,18 @@ class RetrieverAgent(BaseBrainModule):
         match operation:
             case "retrieve_documents":
                 query = params.get("query", "")
-                limit = params.get("limit", 20)
+                try:
+                    limit = int(params.get("limit", 20) or 20)
+                except (TypeError, ValueError):
+                    limit = 20
                 return self.retrieve_documents(query, limit)
             case "retrieve_from_sources":
                 query = params.get("query", "")
                 sources = params.get("sources", ["knowledge_base", "memory"])
-                limit = params.get("limit", 20)
+                try:
+                    limit = int(params.get("limit", 20) or 20)
+                except (TypeError, ValueError):
+                    limit = 20
                 return self.retrieve_from_sources(query, sources, limit)
             case "expand_query":
                 query = params.get("query", "")
@@ -119,10 +155,17 @@ class RetrieverAgent(BaseBrainModule):
                 return self.filter_candidates(documents, query, min_relevance)
             case "process_retrieval":
                 query = params.get("query", "")
-                limit = params.get("limit", 20)
+                try:
+                    limit = int(params.get("limit", 20) or 20)
+                except (TypeError, ValueError):
+                    limit = 20
                 return self.process_retrieval(query, limit)
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for retriever_agent",
+                )
 
     def retrieve_documents(
         self, query: str, limit: int = 20
@@ -183,6 +226,11 @@ class RetrieverAgent(BaseBrainModule):
                 if results:
                     sources_used.append("knowledge_base")
             except Exception as e:
+                logger.debug(
+                    "world_knowledge semantic query failed; attempting text query fallback",
+                    exc_info=True,
+                    extra={"module_name": "retriever_agent", "dependency": "world_knowledge", "error_type": type(e).__name__},
+                )
                 # Fallback: try text search
                 try:
                     knowledge_result = self._world_knowledge.execute(
@@ -212,8 +260,12 @@ class RetrieverAgent(BaseBrainModule):
                     
                     if results:
                         sources_used.append("knowledge_base")
-                except Exception:
-                    pass
+                except Exception as e2:
+                    logger.debug(
+                        "world_knowledge text query fallback failed",
+                        exc_info=True,
+                        extra={"module_name": "retriever_agent", "dependency": "world_knowledge", "error_type": type(e2).__name__},
+                    )
 
         # Limit results
         documents = documents[:limit]
@@ -287,7 +339,12 @@ class RetrieverAgent(BaseBrainModule):
                 
                 if memories:
                     sources_queried.append("memory")
-            except Exception:
+            except Exception as e:
+                logger.debug(
+                    "memory_graph recall_memories failed; attempting query fallback",
+                    exc_info=True,
+                    extra={"module_name": "retriever_agent", "dependency": "memory_graph", "error_type": type(e).__name__},
+                )
                 # Try alternative memory search
                 try:
                     memory_result = self._memory_graph.execute(
@@ -315,8 +372,12 @@ class RetrieverAgent(BaseBrainModule):
                     
                     if memories:
                         sources_queried.append("memory")
-                except Exception:
-                    pass
+                except Exception as e2:
+                    logger.debug(
+                        "memory_graph query fallback failed",
+                        exc_info=True,
+                        extra={"module_name": "retriever_agent", "dependency": "memory_graph", "error_type": type(e2).__name__},
+                    )
 
         # External sources support
         # Note: External source integration (web search APIs, external databases) can be added as needed
@@ -366,8 +427,12 @@ class RetrieverAgent(BaseBrainModule):
                 )
                 query_variations = query_result.get("queries", [])
                 variations.extend([q.get("query", "") for q in query_variations if q.get("query")])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "query_agent formulate_search_queries failed",
+                    exc_info=True,
+                    extra={"module_name": "retriever_agent", "dependency": "query_agent", "error_type": type(e).__name__},
+                )
 
         # Extract keywords for expansion
         keywords = []
@@ -378,8 +443,12 @@ class RetrieverAgent(BaseBrainModule):
                     {"query": query}
                 )
                 keywords = keywords_result.get("keywords", [])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "query_agent extract_keywords failed",
+                    exc_info=True,
+                    extra={"module_name": "retriever_agent", "dependency": "query_agent", "error_type": type(e).__name__},
+                )
 
         # Create expanded query with synonyms/related terms
         # For now, use keyword combinations

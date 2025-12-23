@@ -3,12 +3,15 @@ Memory Processor Module - Pandas-based data processing
 Handles data cleaning, deduplication, clustering, pattern finding, and relevance scoring
 """
 
+from __future__ import annotations
+
 from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 import json
 import math
 import re
+import logging
 
 # Optional imports - handle gracefully if dependencies not available
 try:
@@ -28,6 +31,9 @@ except ImportError:
     StandardScaler = None
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryProcessor(BaseBrainModule):
@@ -64,9 +70,9 @@ class MemoryProcessor(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize the module"""
         if not MEMORY_PROCESSOR_AVAILABLE:
-            print(
-                "[MemoryProcessor] Dependencies not available (numpy/pandas/scikit-learn), using fallback",
-                file=__import__("sys").stderr,
+            logger.warning(
+                "Optional dependencies not available (numpy/pandas/scikit-learn); memory_processor will be disabled",
+                extra={"module_name": "memory_processor"},
             )
         return True  # Always return True - execute() will handle missing dependencies
 
@@ -74,6 +80,7 @@ class MemoryProcessor(BaseBrainModule):
         """Execute memory processing operations"""
         if not MEMORY_PROCESSOR_AVAILABLE:
             return {
+                "success": False,
                 "error": "Dependencies not available (numpy/pandas/scikit-learn)",
                 "operation": operation,
             }
@@ -120,7 +127,11 @@ class MemoryProcessor(BaseBrainModule):
                 max_memories = params.get("max_memories", 10)
                 return self.build_recency_weighted_context(memories_json, query, max_memories)
             case _:
-                return {"success": False, "error": f"Unknown operation: {operation}"}
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for memory_processor",
+                )
 
     def process_memories(self, memories_json: str) -> Dict[str, Any]:
         """Main processing pipeline: clean, deduplicate, cluster, extract patterns"""
@@ -565,7 +576,12 @@ class MemoryProcessor(BaseBrainModule):
                 now = pd.Timestamp.now()
                 days_ago = (now - last_accessed).dt.days
                 recency_scores = 1.0 / (1.0 + days_ago / 30.0)  # Decay over 30 days
-            except:
+            except Exception as e:
+                logger.debug(
+                    "Failed to parse lastAccessed; using default recency score",
+                    exc_info=True,
+                    extra={"module_name": "memory_processor", "error_type": type(e).__name__},
+                )
                 recency_scores = pd.Series([0.5] * len(df))
         else:
             recency_scores = pd.Series([0.5] * len(df))

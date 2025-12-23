@@ -4,14 +4,14 @@ Converted from Swift SemanticSearchService.swift
 """
 
 from typing import Any, Dict, List, Optional, Set
-import sys
 import math
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports - models package may not be available
 try:
@@ -26,11 +26,14 @@ class SemanticSearchServiceModule(BaseBrainModule):
     """Semantic/vector-based search service for memory and document corpus"""
 
     def __init__(self):
+        super().__init__()
         self.memory_pipeline = None
         self.embeddings = None
         self._modules_loaded = False
         self._embedding_cache: Dict[str, List[float]] = {}
         self._cache_max_size = 100
+
+        self._default_sources = ["memory"]
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -56,15 +59,17 @@ class SemanticSearchServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.memory_pipeline = ModuleRegistry.get_module("memory_pipeline_service")
             self.embeddings = ModuleRegistry.get_module("embeddings")
 
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load semantic_search_service dependencies",
+                exc_info=True,
+                extra={"module_name": "semantic_search_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -75,13 +80,30 @@ class SemanticSearchServiceModule(BaseBrainModule):
         elif operation == "search_with_embeddings":
             return self._search_with_embeddings(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for semantic_search_service",
+            )
 
     def _semantic_search(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Perform semantic search"""
         query = params.get("query", "")
         limit = params.get("limit", 10)
-        sources = params.get("sources", [DocumentSource.MEMORY.value])
+        sources = params.get("sources", self._default_sources)
+
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query must be a non-empty string",
+            )
+        try:
+            limit_int = int(limit)
+        except (TypeError, ValueError):
+            raise InvalidParameterError("limit", str(limit), "limit must be an integer")
+        if limit_int < 1:
+            raise InvalidParameterError("limit", str(limit_int), "limit must be >= 1")
 
         # Generate query embedding
         query_embedding = self._generate_embedding(query)
@@ -89,11 +111,11 @@ class SemanticSearchServiceModule(BaseBrainModule):
         all_documents = []
 
         # Search memory if requested
-        if DocumentSource.MEMORY.value in sources and self.memory_pipeline:
+        if "memory" in [str(s).lower() for s in (sources or [])] and self.memory_pipeline:
             try:
                 memory_results = self.memory_pipeline.execute("recall_memories", {
                     "query": query,
-                    "limit": limit * 2,
+                    "limit": limit_int * 2,
                     "use_graph": True,
                 })
 
@@ -117,7 +139,7 @@ class SemanticSearchServiceModule(BaseBrainModule):
                         "content": memory_content,
                         "url": None,
                         "snippet": memory.get("summary"),
-                        "source": DocumentSource.MEMORY.value,
+                        "source": "memory",
                         "relevance_score": combined_score,
                         "metadata": {
                             "source_id": memory.get("id", ""),
@@ -129,20 +151,24 @@ class SemanticSearchServiceModule(BaseBrainModule):
                     }
 
                     all_documents.append(document)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Memory semantic search failed; continuing with empty results",
+                    exc_info=True,
+                    extra={"module_name": "semantic_search_service", "error_type": type(e).__name__},
+                )
 
         # Sort by relevance score
         all_documents.sort(key=lambda d: d.get("relevance_score", 0.0), reverse=True)
 
         # Limit results
-        limited_documents = all_documents[:limit]
+        limited_documents = all_documents[:limit_int]
 
         return {
             "success": True,
             "documents": limited_documents,
             "query": query,
-            "source": sources[0] if len(sources) == 1 else DocumentSource.HYBRID.value,
+            "source": sources[0] if isinstance(sources, list) and len(sources) == 1 else "hybrid",
             "embedding": query_embedding,
         }
 
@@ -166,8 +192,12 @@ class SemanticSearchServiceModule(BaseBrainModule):
                     # Cache result
                     self._cache_embedding(text, embedding)
                     return embedding
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Embedding generation failed; using fallback embedding",
+                    exc_info=True,
+                    extra={"module_name": "semantic_search_service", "error_type": type(e).__name__},
+                )
 
         # Fallback: return zero vector
         return [0.0] * 768

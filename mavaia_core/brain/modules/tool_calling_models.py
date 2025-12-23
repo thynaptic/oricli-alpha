@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 import time
 import uuid
 
+from mavaia_core.exceptions import InvalidParameterError
+
 
 # MARK: - Tool Schema
 
@@ -74,7 +76,7 @@ class Tool:
 
     def __post_init__(self):
         if self.function is None:
-            raise ValueError("function is required")
+            raise InvalidParameterError("function", "None", "function is required")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
@@ -108,7 +110,7 @@ class ToolCall:
 
     def __post_init__(self):
         if self.function is None:
-            raise ValueError("function is required")
+            raise InvalidParameterError("function", "None", "function is required")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""

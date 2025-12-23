@@ -6,6 +6,11 @@ Provides interface to Z3 theorem prover for SMT problems
 from typing import Dict, Any, Optional, List
 import json
 import time
+import logging
+
+from mavaia_core.exceptions import ModuleInitializationError, ModuleOperationError, InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional import - will fail gracefully if Z3 not available
 try:
@@ -52,7 +57,12 @@ class Z3Solver:
                 - execution_time: float
         """
         if not self._available:
-            raise RuntimeError(self._error_message)
+            raise ModuleInitializationError(
+                module_name="symbolic_solver",
+                reason=self._error_message or "Z3 not available",
+            )
+        if not isinstance(problem, dict):
+            raise InvalidParameterError("problem", str(type(problem).__name__), "problem must be a dict")
 
         start_time = time.time()
 
@@ -113,8 +123,16 @@ class Z3Solver:
             }
 
         except Exception as e:
-            execution_time = time.time() - start_time
-            raise RuntimeError(f"Z3 solver error: {str(e)}")
+            logger.debug(
+                "Z3 solver failed",
+                exc_info=True,
+                extra={"solver": "z3", "error_type": type(e).__name__},
+            )
+            raise ModuleOperationError(
+                module_name="symbolic_solver",
+                operation="solve",
+                reason="Z3 solver error",
+            ) from e
 
     def _parse_expression(
         self, expression: str, variables: Dict[str, Any]

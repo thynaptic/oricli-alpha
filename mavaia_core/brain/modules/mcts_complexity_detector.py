@@ -7,15 +7,11 @@ sequential decision-making, and multi-path reasoning.
 Ported from Swift MCTSComplexityDetector.swift
 """
 
-import sys
-from pathlib import Path
 from typing import Any
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mcts_models import MCTSComplexityScore, ComplexityFactor
+from mavaia_core.brain.modules.mcts_models import MCTSComplexityScore, ComplexityFactor
+from mavaia_core.exceptions import InvalidParameterError
 
 
 class MCTSComplexityDetector(BaseBrainModule):
@@ -26,7 +22,7 @@ class MCTSComplexityDetector(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
-        pass
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -60,7 +56,11 @@ class MCTSComplexityDetector(BaseBrainModule):
         elif operation == "should_activate_mcts":
             return self._should_activate_mcts(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for mcts_complexity_detector",
+            )
 
     def _analyze_mcts_complexity(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -75,8 +75,12 @@ class MCTSComplexityDetector(BaseBrainModule):
             MCTSComplexityScore as dictionary
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
 
@@ -414,8 +418,12 @@ class MCTSComplexityDetector(BaseBrainModule):
     def _should_activate_mcts(self, params: dict[str, Any]) -> dict[str, Any]:
         """Quick check if MCTS should be activated (without full analysis)"""
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
 

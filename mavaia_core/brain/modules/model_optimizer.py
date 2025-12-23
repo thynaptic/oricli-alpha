@@ -5,13 +5,12 @@ JAX/Flax equivalents are not available. This module is disabled in the JAX migra
 """
 
 from typing import Dict, Any, Optional, List
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Module disabled - PyTorch-specific optimizations not available in JAX/Flax
 JAX_AVAILABLE = False
@@ -27,14 +26,19 @@ def _lazy_import_bitsandbytes():
             from transformers import BitsAndBytesConfig as BBC
             BitsAndBytesConfig = BBC
             BITSANDBYTES_AVAILABLE = True
-        except ImportError:
-            pass
+        except ImportError as e:
+            logger.debug(
+                "Failed to import BitsAndBytesConfig",
+                exc_info=True,
+                extra={"module_name": "model_optimizer", "error_type": type(e).__name__},
+            )
 
 
 class ModelOptimizerModule(BaseBrainModule):
     """DISABLED: Model optimization module (requires PyTorch-specific features not available in JAX/Flax)"""
 
     def __init__(self):
+        super().__init__()
         self.optimized_models: Dict[str, Any] = {}
         self.optimization_configs: Dict[str, Dict[str, Any]] = {}
 
@@ -58,7 +62,10 @@ class ModelOptimizerModule(BaseBrainModule):
 
     def initialize(self) -> bool:
         """Initialize the module"""
-        print("[ModelOptimizerModule] DISABLED: PyTorch-specific optimizations not available in JAX/Flax", file=sys.stderr)
+        logger.info(
+            "ModelOptimizerModule is disabled (PyTorch-specific optimizations not available in JAX/Flax)",
+            extra={"module_name": "model_optimizer"},
+        )
         return False
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -67,24 +74,6 @@ class ModelOptimizerModule(BaseBrainModule):
             "success": False,
             "error": "ModelOptimizerModule is disabled. PyTorch-specific optimizations (quantization, pruning) are not available in JAX/Flax."
         }
-
-        try:
-            if operation == "quantize_model":
-                return self._quantize_model(params)
-            elif operation == "prune_model":
-                return self._prune_model(params)
-            elif operation == "compress_model":
-                return self._compress_model(params)
-            elif operation == "optimize_for_device":
-                return self._optimize_for_device(params)
-            elif operation == "get_model_size":
-                return self._get_model_size(params)
-            elif operation == "compare_models":
-                return self._compare_models(params)
-            else:
-                raise ValueError(f"Unknown operation: {operation}")
-        except Exception as e:
-            return {"success": False, "error": str(e)}
 
     def _quantize_model(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -422,12 +411,12 @@ class ModelOptimizerModule(BaseBrainModule):
                 # Use TorchScript for CPU optimization
                 try:
                     model = torch.jit.script(model)
-                except:
+                except Exception:
                     # If scripting fails, use tracing
                     try:
                         dummy_input = torch.zeros(1, 128, dtype=torch.long)
                         model = torch.jit.trace(model, dummy_input)
-                    except:
+                    except Exception:
                         pass  # Skip optimization if both fail
 
             # Store optimized model
@@ -550,11 +539,11 @@ class ModelOptimizerModule(BaseBrainModule):
             buffer_size = sum(b.numel() * b.element_size() for b in model.buffers())
             total_size = param_size + buffer_size
             return total_size / (1024 * 1024)  # Convert to MB
-        except:
+        except Exception:
             # Fallback: estimate from parameter count
             try:
                 param_count = sum(p.numel() for p in model.parameters())
                 # Assume float32 (4 bytes per parameter)
                 return (param_count * 4) / (1024 * 1024)
-            except:
+            except Exception:
                 return 0.0

@@ -6,24 +6,28 @@ Orchestrates multi-step reasoning with prompt chaining, verification, and reflec
 Ported from Swift ChainOfThoughtService.swift
 """
 
-import sys
 import time
 import uuid
 import re
-from pathlib import Path
+import logging
 from typing import Any
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from cot_models import (
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import (
+    InvalidParameterError,
+    ModuleInitializationError,
+    ModuleOperationError,
+)
+from mavaia_core.brain.modules.cot_models import (
     CoTStep,
     CoTConfiguration,
     CoTResult,
     CoTComplexityScore,
     CoTStageResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ChainOfThought(BaseBrainModule):
@@ -35,6 +39,7 @@ class ChainOfThought(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._complexity_detector = None
         self._prompt_chaining = None
         self._cognitive_generator = None
@@ -72,8 +77,6 @@ class ChainOfThought(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from module_registry import ModuleRegistry
-
             # Lazy load complexity detector
             self._complexity_detector = ModuleRegistry.get_module(
                 "cot_complexity_detector"
@@ -93,39 +96,72 @@ class ChainOfThought(BaseBrainModule):
             # Optional dependencies
             try:
                 self._memory_graph = ModuleRegistry.get_module("memory_graph")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: memory_graph",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
             try:
                 self._safety_filter = ModuleRegistry.get_module("safety_framework")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: safety_framework",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
             try:
                 self._verification_loop = ModuleRegistry.get_module("verification")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: verification",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
             try:
                 self._reflection_service = ModuleRegistry.get_module(
                     "reasoning_reflection"
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: reasoning_reflection",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
 
             # Lazy load stage modules for layered reasoning
             try:
                 self._decomposition_module = ModuleRegistry.get_module("decomposition")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: decomposition",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
             try:
                 self._reasoning_module = ModuleRegistry.get_module("reasoning")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: reasoning",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
             try:
                 self._synthesis_agent = ModuleRegistry.get_module("synthesis_agent")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency failed to load: synthesis_agent",
+                    exc_info=True,
+                    extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+                )
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Chain-of-thought initialization failed",
+                exc_info=True,
+                extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+            )
             return False
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -147,7 +183,11 @@ class ChainOfThought(BaseBrainModule):
         elif operation == "format_reasoning_output":
             return self._format_reasoning_output(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for chain_of_thought",
+            )
 
     def _execute_cot(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -166,13 +206,14 @@ class ChainOfThought(BaseBrainModule):
         if not self._complexity_detector or not self._prompt_chaining:
             self.initialize()
             if not self._complexity_detector or not self._prompt_chaining:
-                raise RuntimeError(
-                    "Required modules not available (complexity_detector, prompt_chaining)"
+                raise ModuleInitializationError(
+                    module_name=self.metadata.name,
+                    reason="Required modules not available (cot_complexity_detector, prompt_chaining)",
                 )
 
         query = params.get("query", "")
         if not query:
-            raise ValueError("query parameter is required")
+            raise InvalidParameterError("query", str(query), "query parameter is required")
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -248,9 +289,10 @@ class ChainOfThought(BaseBrainModule):
             completed_steps = self._reasoning_stage(sub_problems, combined_context, config)
         except Exception as e:
             # Log error but continue with fallback
-            print(
-                f"[ChainOfThought] Error in reasoning stage: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Error in reasoning stage; continuing with fallback",
+                exc_info=True,
+                extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
             )
             # Create minimal steps from sub-problems as fallback
             completed_steps = [
@@ -259,7 +301,11 @@ class ChainOfThought(BaseBrainModule):
             ]
         
         if not completed_steps:
-            raise ValueError("No completed steps from reasoning stage - cannot synthesize answer")
+            raise ModuleOperationError(
+                module_name=self.metadata.name,
+                operation="execute_cot",
+                reason="No completed steps from reasoning stage; cannot synthesize answer",
+            )
 
         # Apply safety filtering, verification, and memory storage to reasoning stage steps
         # (Orchestrator responsibility: post-process steps from reasoning stage)
@@ -342,13 +388,21 @@ class ChainOfThought(BaseBrainModule):
 
         # Validate we have completed steps
         if not completed_steps:
-            raise ValueError("No completed steps for synthesis")
+            raise ModuleOperationError(
+                module_name=self.metadata.name,
+                operation="execute_cot",
+                reason="No completed steps for synthesis",
+            )
 
         # Step 6: Synthesis Stage
         final_answer = self._synthesis_stage(query, completed_steps, sub_problems, config)
 
         if not final_answer:
-            raise ValueError("Empty final answer from CoT synthesis")
+            raise ModuleOperationError(
+                module_name=self.metadata.name,
+                operation="execute_cot",
+                reason="Empty final answer from CoT synthesis",
+            )
         
         # CRITICAL: Immediately validate and fix if "1" - use extraction helper
         if final_answer.strip() == "1" or (final_answer.strip().isdigit() and len(final_answer.strip()) <= 2):
@@ -839,7 +893,7 @@ class ChainOfThought(BaseBrainModule):
         """Analyze query complexity for Chain-of-Thought"""
         query = params.get("query", "")
         if not query:
-            raise ValueError("query parameter is required")
+            raise InvalidParameterError("query", str(query), "query parameter is required")
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -883,7 +937,7 @@ class ChainOfThought(BaseBrainModule):
         """Determine if CoT should be activated"""
         query = params.get("query", "")
         if not query:
-            raise ValueError("query parameter is required")
+            raise InvalidParameterError("query", str(query), "query parameter is required")
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -1737,7 +1791,7 @@ Extract and return the final answer/conclusion now:"""
         """
         # Input validation
         if not query or not isinstance(query, str) or not query.strip():
-            raise ValueError("query must be a non-empty string")
+            raise InvalidParameterError("query", str(query), "query must be a non-empty string")
         if context is None:
             context = ""
         if not isinstance(context, str):
@@ -1851,7 +1905,9 @@ Extract and return the final answer/conclusion now:"""
         """
         # Input validation
         if not decomposed_problems:
-            raise ValueError("decomposed_problems must be a non-empty list")
+            raise InvalidParameterError(
+                "decomposed_problems", str(type(decomposed_problems)), "decomposed_problems must be a non-empty list"
+            )
         if not isinstance(decomposed_problems, list):
             raise TypeError("decomposed_problems must be a list")
         if context is None:
@@ -2035,9 +2091,11 @@ Extract and return the final answer/conclusion now:"""
         """
         # Input validation
         if not query or not isinstance(query, str) or not query.strip():
-            raise ValueError("query must be a non-empty string")
+            raise InvalidParameterError("query", str(query), "query must be a non-empty string")
         if not reasoning_steps:
-            raise ValueError("reasoning_steps must be a non-empty list")
+            raise InvalidParameterError(
+                "reasoning_steps", str(type(reasoning_steps)), "reasoning_steps must be a non-empty list"
+            )
         if not isinstance(reasoning_steps, list):
             raise TypeError("reasoning_steps must be a list")
         if decomposed_problems is None:
@@ -2202,7 +2260,10 @@ Extract and return the final answer/conclusion now:"""
         if not self._cognitive_generator:
             self.initialize()
             if not self._cognitive_generator:
-                raise RuntimeError("Cognitive generator module not available")
+                raise ModuleInitializationError(
+                    module_name=self.metadata.name,
+                    reason="Cognitive generator module not available",
+                )
 
         try:
             # Set guard flag
@@ -2573,5 +2634,14 @@ Extract and return the final answer/conclusion now:"""
         except Exception as e:
             # Clear guard flag on exception
             self._in_cognitive_generator_call = False
-            raise RuntimeError(f"Simple reasoning execution failed: {e}")
+            logger.debug(
+                "Simple reasoning execution failed",
+                exc_info=True,
+                extra={"module_name": "chain_of_thought", "error_type": type(e).__name__},
+            )
+            raise ModuleOperationError(
+                module_name=self.metadata.name,
+                operation="execute_simple_reasoning",
+                reason="Simple reasoning execution failed",
+            ) from e
 

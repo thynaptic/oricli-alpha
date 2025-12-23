@@ -4,13 +4,12 @@ Handles complex symbolic transformations and processing
 """
 
 from typing import Dict, Any, List, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Lazy imports to avoid timeout during module discovery
 SYMBOLIC_SOLVERS_AVAILABLE = False
@@ -32,6 +31,7 @@ class LogicLMBridge(BaseBrainModule):
     """Logic-LM bridge for complex symbolic processing"""
 
     def __init__(self):
+        super().__init__()
         self._router = None
         self._router_initialized = False
     
@@ -77,13 +77,21 @@ class LogicLMBridge(BaseBrainModule):
             # Optimize problem for solver
             return self._optimize(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for logic_lm_bridge",
+            )
 
     def _translate(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Advanced translation (can be enhanced with more sophisticated parsing)"""
         problem = params.get("problem")
         if not problem:
-            raise ValueError("Missing required parameter: problem")
+            raise InvalidParameterError(
+                parameter="problem",
+                value=str(problem),
+                reason="Missing required parameter: problem",
+            )
 
         # For now, return as-is (translation happens in Swift)
         # This can be enhanced with Python-based advanced parsing
@@ -93,7 +101,11 @@ class LogicLMBridge(BaseBrainModule):
         """Validate a symbolic problem"""
         problem = params.get("problem")
         if not problem:
-            raise ValueError("Missing required parameter: problem")
+            raise InvalidParameterError(
+                parameter="problem",
+                value=str(problem),
+                reason="Missing required parameter: problem",
+            )
 
         # Basic validation
         errors = []
@@ -124,7 +136,11 @@ class LogicLMBridge(BaseBrainModule):
         target_format = params.get("target_format", "same")
 
         if not problem:
-            raise ValueError("Missing required parameter: problem")
+            raise InvalidParameterError(
+                parameter="problem",
+                value=str(problem),
+                reason="Missing required parameter: problem",
+            )
 
         # For now, return as-is (can be enhanced)
         return {"transformed": problem, "format": target_format}
@@ -135,7 +151,11 @@ class LogicLMBridge(BaseBrainModule):
         solver_name = params.get("solver_name", "auto")
 
         if not problem:
-            raise ValueError("Missing required parameter: problem")
+            raise InvalidParameterError(
+                parameter="problem",
+                value=str(problem),
+                reason="Missing required parameter: problem",
+            )
 
         # Basic optimization: remove redundant constraints, simplify expressions
         optimized = problem.copy()

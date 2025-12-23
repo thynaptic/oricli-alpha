@@ -8,13 +8,16 @@ Based on "Combining Induction and Transduction for Abstract Reasoning" (arxiv:24
 """
 
 import json
-import sys
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from mavaia_core.brain.modules.arc_data_augmentation import ARCTask
 from mavaia_core.brain.modules.arc_synthetic_data import ARCSyntheticDataGenerator
 from mavaia_core.brain.modules.arc_transduction_model import ARCTransductionModel
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ARCModelTraining:
@@ -118,8 +121,14 @@ class ARCModelTraining:
         # 4. Save checkpoints
         # 5. Save final model
         
-        print(f"[ARCModelTraining] Training induction model with {len(training_data)} examples")
-        print(f"[ARCModelTraining] Config: {config}")
+        logger.info(
+            "Training induction model (placeholder pipeline)",
+            extra={"module_name": "arc_model_training", "examples": len(training_data), "training_type": config.get("training_type")},
+        )
+        logger.debug(
+            "Induction training config",
+            extra={"module_name": "arc_model_training", "config": {k: str(v) for k, v in config.items()}},
+        )
         
         # Save config
         config_path = output_path.replace(".pt", "_config.json")
@@ -189,8 +198,14 @@ class ARCModelTraining:
         # 3. Training loop
         # 4. Save model
         
-        print(f"[ARCModelTraining] Training transduction model with {len(training_data)} examples")
-        print(f"[ARCModelTraining] Config: {config}")
+        logger.info(
+            "Training transduction model (placeholder pipeline)",
+            extra={"module_name": "arc_model_training", "examples": len(training_data), "training_type": config.get("training_type")},
+        )
+        logger.debug(
+            "Transduction training config",
+            extra={"module_name": "arc_model_training", "config": {k: str(v) for k, v in config.items()}},
+        )
         
         # Save config
         config_path = output_path.replace(".pt", "_config.json")
@@ -285,9 +300,10 @@ class ARCModelTraining:
             return tasks
             
         except Exception as e:
-            print(
-                f"[ARCModelTraining] Failed to load data from {data_path}: {e}",
-                file=sys.stderr
+            logger.warning(
+                "Failed to load ARC training data",
+                exc_info=True,
+                extra={"module_name": "arc_model_training", "data_path": str(data_path), "error_type": type(e).__name__},
             )
             return []
     
@@ -327,7 +343,10 @@ class ARCModelTraining:
         with open(output_path, "w") as f:
             json.dump(all_tasks, f, indent=2)
         
-        print(f"[ARCModelTraining] Generated {len(all_tasks)} synthetic tasks to {output_path}")
+        logger.info(
+            "Generated synthetic ARC tasks",
+            extra={"module_name": "arc_model_training", "task_count": len(all_tasks), "output_path": str(output_path)},
+        )
         
         return output_path
     
@@ -372,7 +391,7 @@ class ARCModelTraining:
                 "beam_width": 3
             }
         else:
-            raise ValueError(f"Unknown model_type: {model_type}")
+            raise InvalidParameterError("model_type", str(model_type), "Unknown model_type (expected 'induction' or 'transduction')")
         
         # Apply custom overrides
         if custom_config:

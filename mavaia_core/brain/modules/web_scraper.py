@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 from collections import defaultdict
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 # Optional imports - will fail gracefully if dependencies not available
 try:
@@ -103,7 +104,11 @@ class WebScraper(BaseBrainModule):
             return self.extract_links(url, filter_pattern)
 
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation for web_scraper",
+            )
 
     def _rate_limit(self):
         """Enforce rate limiting"""

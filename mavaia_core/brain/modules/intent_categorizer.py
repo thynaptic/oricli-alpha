@@ -5,13 +5,13 @@ Converted from Swift IntentCategorizer.swift
 
 from typing import Any, Dict, List, Optional
 from enum import Enum
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class IntentCategory(str, Enum):
@@ -31,6 +31,7 @@ class IntentCategorizerModule(BaseBrainModule):
     """Intent categorization system for personality response generation"""
 
     def __init__(self):
+        super().__init__()
         self.intent_correction = None
         self._modules_loaded = False
 
@@ -59,14 +60,16 @@ class IntentCategorizerModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.intent_correction = ModuleRegistry.get_module("intent_correction")
 
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load optional intent_correction dependency",
+                exc_info=True,
+                extra={"module_name": "intent_categorizer", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -79,7 +82,11 @@ class IntentCategorizerModule(BaseBrainModule):
         elif operation == "categorize_with_normalization":
             return self._categorize_with_normalization(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for intent_categorizer",
+            )
 
     def _categorize_intent(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Categorize an intent string"""
@@ -95,8 +102,12 @@ class IntentCategorizerModule(BaseBrainModule):
                     "context": user_message or "",
                 })
                 normalized_intent = result.get("normalized", intent)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Intent normalization failed; continuing with original intent",
+                    exc_info=True,
+                    extra={"module_name": "intent_categorizer", "error_type": type(e).__name__},
+                )
 
         # Categorize
         classification = self._categorize_with_normalized(normalized_intent, intent, user_message)

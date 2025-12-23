@@ -6,19 +6,20 @@ Handles follow-up questions, natural curiosity, proactive topic exploration, and
 from typing import Dict, Any, List, Optional
 import json
 import random
-import sys
+import logging
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ConversationalEngagementModule(BaseBrainModule):
     """Proactive conversational engagement and curiosity"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.follow_up_patterns = {}
         self.curiosity_expressions = {}
@@ -112,9 +113,10 @@ class ConversationalEngagementModule(BaseBrainModule):
                     ],
                 }
         except Exception as e:
-            print(
-                f"[ConversationalEngagementModule] Failed to load config: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load conversational_engagement config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "conversational_engagement", "error_type": type(e).__name__},
             )
             self.follow_up_patterns = {}
             self.curiosity_expressions = {}
@@ -122,29 +124,96 @@ class ConversationalEngagementModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a conversational engagement operation"""
-        if operation == "generate_follow_up":
-            context = params.get("context", "")
-            topic = params.get("topic", "")
-            conversation_history = params.get("conversation_history", [])
-            return self.generate_follow_up(context, topic, conversation_history)
-        elif operation == "express_curiosity":
-            topic = params.get("topic", "")
-            intensity = params.get("intensity", "moderate")
-            return self.express_curiosity(topic, intensity)
-        elif operation == "add_back_channeling":
-            response = params.get("response", "")
-            user_input = params.get("user_input", "")
-            return self.add_back_channeling(response, user_input)
-        elif operation == "proactive_exploration":
-            topic = params.get("topic", "")
-            current_response = params.get("current_response", "")
-            return self.proactive_exploration(topic, current_response)
-        elif operation == "should_engage":
-            context = params.get("context", "")
-            conversation_length = params.get("conversation_length", 0)
-            return self.should_engage(context, conversation_length)
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
+        match operation:
+            case "generate_follow_up":
+                context = params.get("context", "")
+                topic = params.get("topic", "")
+                conversation_history = params.get("conversation_history", [])
+                if context is None:
+                    context = ""
+                if topic is None:
+                    topic = ""
+                if conversation_history is None:
+                    conversation_history = []
+                if not isinstance(context, str):
+                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+                if not isinstance(topic, str):
+                    raise InvalidParameterError("topic", str(type(topic).__name__), "topic must be a string")
+                if not isinstance(conversation_history, list):
+                    raise InvalidParameterError(
+                        "conversation_history",
+                        str(type(conversation_history).__name__),
+                        "conversation_history must be a list",
+                    )
+                return self.generate_follow_up(context, topic, conversation_history)
+            case "express_curiosity":
+                topic = params.get("topic", "")
+                intensity = params.get("intensity", "moderate")
+                if topic is None:
+                    topic = ""
+                if intensity is None:
+                    intensity = "moderate"
+                if not isinstance(topic, str):
+                    raise InvalidParameterError("topic", str(type(topic).__name__), "topic must be a string")
+                if not isinstance(intensity, str):
+                    raise InvalidParameterError(
+                        "intensity", str(type(intensity).__name__), "intensity must be a string"
+                    )
+                return self.express_curiosity(topic, intensity)
+            case "add_back_channeling":
+                response = params.get("response", "")
+                user_input = params.get("user_input", "")
+                if response is None:
+                    response = ""
+                if user_input is None:
+                    user_input = ""
+                if not isinstance(response, str):
+                    raise InvalidParameterError("response", str(type(response).__name__), "response must be a string")
+                if not isinstance(user_input, str):
+                    raise InvalidParameterError(
+                        "user_input", str(type(user_input).__name__), "user_input must be a string"
+                    )
+                return self.add_back_channeling(response, user_input)
+            case "proactive_exploration":
+                topic = params.get("topic", "")
+                current_response = params.get("current_response", "")
+                if topic is None:
+                    topic = ""
+                if current_response is None:
+                    current_response = ""
+                if not isinstance(topic, str):
+                    raise InvalidParameterError("topic", str(type(topic).__name__), "topic must be a string")
+                if not isinstance(current_response, str):
+                    raise InvalidParameterError(
+                        "current_response",
+                        str(type(current_response).__name__),
+                        "current_response must be a string",
+                    )
+                return self.proactive_exploration(topic, current_response)
+            case "should_engage":
+                context = params.get("context", "")
+                conversation_length = params.get("conversation_length", 0)
+                if context is None:
+                    context = ""
+                if not isinstance(context, str):
+                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+                try:
+                    conversation_length_int = int(conversation_length)
+                except (TypeError, ValueError):
+                    raise InvalidParameterError(
+                        "conversation_length", str(conversation_length), "conversation_length must be an integer"
+                    )
+                if conversation_length_int < 0:
+                    raise InvalidParameterError(
+                        "conversation_length", str(conversation_length_int), "conversation_length must be >= 0"
+                    )
+                return self.should_engage(context, conversation_length_int)
+            case _:
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for conversational_engagement",
+                )
 
     def generate_follow_up(
         self, context: str, topic: str = "", conversation_history: List[str] = None

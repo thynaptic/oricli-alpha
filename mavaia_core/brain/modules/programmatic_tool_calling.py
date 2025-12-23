@@ -12,7 +12,11 @@ import ast
 from typing import Dict, Any, Optional, List
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mavaia_core.exceptions import ModuleOperationError, InvalidParameterError
+from mavaia_core.exceptions import (
+    ModuleInitializationError,
+    ModuleOperationError,
+    InvalidParameterError,
+)
 
 # Lazy imports to avoid timeout during module discovery
 ToolRegistry = None
@@ -27,6 +31,7 @@ def _lazy_import_tool_registry():
             ToolRegistry = TR
             ToolRegistryError = TRE
         except ImportError:
+            # Tool registry is optional in some deployments.
             pass
 
 
@@ -50,7 +55,10 @@ class ProgrammaticToolCallingModule(BaseBrainModule):
         """Lazy load tool registry only when needed"""
         _lazy_import_tool_registry()
         if ToolRegistry is None:
-            raise RuntimeError("ToolRegistry not available")
+            raise ModuleInitializationError(
+                module_name=self.metadata.name,
+                reason="ToolRegistry is not available (import failed)",
+            )
         if self._tool_registry is None:
             self._tool_registry = ToolRegistry()
     
@@ -86,8 +94,8 @@ class ProgrammaticToolCallingModule(BaseBrainModule):
             return True
     
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        self._ensure_tool_registry()
         """Execute a programmatic tool calling operation."""
+        self._ensure_tool_registry()
         try:
             if operation == "execute_with_tools":
                 return self._execute_with_tools(params)
@@ -98,7 +106,11 @@ class ProgrammaticToolCallingModule(BaseBrainModule):
             elif operation == "invoke_tool":
                 return self._invoke_tool(params)
             else:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    "operation",
+                    str(operation),
+                    "Unknown operation for programmatic_tool_calling",
+                )
         except (ToolRegistryError, InvalidParameterError) as e:
             raise ModuleOperationError(
                 self.metadata.name,
@@ -236,8 +248,8 @@ def mavaia_tools_invoke(tool_name, **kwargs):
         "caller": "code_execution_20250825"
     }}
     
-    # Print tool call marker
-    print(f"__MAVAIA_TOOL_USE__{{json.dumps(tool_call)}}__END_TOOL_USE__")
+    # Emit tool call marker (avoid stdout helper; keep deterministic protocol framing)
+    sys.stdout.write("__MAVAIA_TOOL_USE__" + json.dumps(tool_call) + "__END_TOOL_USE__\\n")
     sys.stdout.flush()
     
     # Wait for tool result (simulated by reading from special variable)
@@ -252,7 +264,7 @@ def mavaia_tools_invoke(tool_name, **kwargs):
         if isinstance(result, str):
             try:
                 return json.loads(result)
-            except:
+            except Exception:
                 return result
         return result
     else:

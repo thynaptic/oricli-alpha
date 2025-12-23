@@ -147,7 +147,11 @@ class PythonLearningSystemModule(BaseBrainModule):
             return self.personalize_generation(user_preferences)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def learn_from_correction(self, original: str, corrected: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """

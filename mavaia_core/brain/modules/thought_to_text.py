@@ -5,22 +5,21 @@ Uses existing grammar, phrasing, and style modules to produce natural sentences 
 """
 
 from typing import List, Dict, Any, Optional, Union
-import sys
+import logging
 import json
 import re
 import random
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
+logger = logging.getLogger(__name__)
 
 class ThoughtToTextModule(BaseBrainModule):
     """Convert thought graphs (MCTS nodes or reasoning trees) to natural language sentences"""
 
     def __init__(self):
+        super().__init__()
         self.grammar_module = None
         self.style_module = None
         self.phrase_module = None
@@ -62,38 +61,67 @@ class ThoughtToTextModule(BaseBrainModule):
             # Try to load modules (they may not all be available)
             try:
                 self.grammar_module = ModuleRegistry.get_module("neural_grammar")
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load optional neural_grammar",
+                    exc_info=True,
+                    extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+                )
 
             try:
                 self.style_module = ModuleRegistry.get_module("style_transfer")
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load optional style_transfer",
+                    exc_info=True,
+                    extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+                )
 
             try:
                 self.phrase_module = ModuleRegistry.get_module("phrase_embeddings")
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load optional phrase_embeddings",
+                    exc_info=True,
+                    extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+                )
 
             try:
                 self.hybrid_phrasing_service = ModuleRegistry.get_module("hybrid_phrasing_service")
-            except:
+            except Exception as e:
                 self.hybrid_phrasing_service = None
+                logger.debug(
+                    "Failed to load optional hybrid_phrasing_service",
+                    exc_info=True,
+                    extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+                )
 
             try:
                 self.text_generation_engine = ModuleRegistry.get_module("text_generation_engine")
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load optional text_generation_engine",
+                    exc_info=True,
+                    extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+                )
 
             try:
                 self.universal_voice_engine = ModuleRegistry.get_module("universal_voice_engine")
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load optional universal_voice_engine",
+                    exc_info=True,
+                    extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+                )
 
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load dependency modules for thought_to_text",
+                exc_info=True,
+                extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a thought-to-text operation"""
@@ -124,7 +152,11 @@ class ThoughtToTextModule(BaseBrainModule):
                 style_config=params.get("style_config", {}),
             )
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for thought_to_text",
+            )
 
     def convert_thought_graph(
         self,
@@ -175,13 +207,18 @@ class ThoughtToTextModule(BaseBrainModule):
             return result
 
         except Exception as e:
+            logger.debug(
+                "Failed to convert thought graph; falling back to string concatenation",
+                exc_info=True,
+                extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+            )
             # Fallback: simple concatenation
             thoughts_text = " ".join([str(node) for node in mcts_nodes])
             return {
                 "text": thoughts_text,
                 "confidence": 0.5,
                 "method": "fallback",
-                "error": str(e),
+                "error": "Thought graph conversion failed",
             }
 
     def convert_reasoning_tree(
@@ -212,7 +249,17 @@ class ThoughtToTextModule(BaseBrainModule):
             return result
 
         except Exception as e:
-            return {"text": "", "confidence": 0.0, "method": "error", "error": str(e)}
+            logger.debug(
+                "Failed to convert reasoning tree",
+                exc_info=True,
+                extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+            )
+            return {
+                "text": "",
+                "confidence": 0.0,
+                "method": "error",
+                "error": "Reasoning tree conversion failed",
+            }
 
     def generate_sentences(
         self, thoughts: List[str], context: str = "", voice_context: Dict[str, Any] = None
@@ -313,6 +360,11 @@ class ThoughtToTextModule(BaseBrainModule):
             return result
 
         except Exception as e:
+            logger.debug(
+                "Sentence generation failed; using fallback join",
+                exc_info=True,
+                extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+            )
             # Fallback: simple join (but still filter instructions)
             fallback_text = ". ".join(thoughts) + "." if thoughts else ""
             fallback_text = self._filter_instructions_from_output(fallback_text)
@@ -320,7 +372,7 @@ class ThoughtToTextModule(BaseBrainModule):
                 "text": fallback_text,
                 "confidence": 0.5,
                 "method": "fallback",
-                "error": str(e),
+                "error": "Sentence generation failed",
             }
 
     def apply_grammar_and_style(
@@ -350,8 +402,12 @@ class ThoughtToTextModule(BaseBrainModule):
                             confidence = max(
                                 confidence, grammar_result["confidence"] * 0.8
                             )
-                except:
-                    pass  # Continue if grammar correction fails
+                except Exception as e:
+                    logger.debug(
+                        "Grammar correction failed; continuing without grammar adjustments",
+                        exc_info=True,
+                        extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+                    )
 
             # Apply style transfer if available
             if self.style_module and style_config:
@@ -364,8 +420,12 @@ class ThoughtToTextModule(BaseBrainModule):
                         "result", {}
                     ):
                         processed_text = style_result["result"]["transformed_text"]
-                except:
-                    pass  # Continue if style transfer fails
+                except Exception as e:
+                    logger.debug(
+                        "Style transfer failed; continuing without style adjustments",
+                        exc_info=True,
+                        extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+                    )
 
             # Basic cleanup
             processed_text = self._cleanup_text(processed_text)
@@ -377,11 +437,16 @@ class ThoughtToTextModule(BaseBrainModule):
             }
 
         except Exception as e:
+            logger.debug(
+                "apply_grammar_and_style failed; returning cleaned text fallback",
+                exc_info=True,
+                extra={"module_name": "thought_to_text", "error_type": type(e).__name__},
+            )
             return {
                 "text": self._cleanup_text(text),
                 "confidence": 0.5,
                 "method": "fallback",
-                "error": str(e),
+                "error": "Grammar/style processing failed",
             }
 
     # Helper methods

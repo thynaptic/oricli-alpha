@@ -5,12 +5,16 @@ Scores and ranks retrieved documents by relevance using multiple signals.
 Part of the Perplexity Multi-Agent Pipeline.
 """
 
+from __future__ import annotations
+
+import logging
 from typing import Any, Dict, List, Optional, Tuple
-from pathlib import Path
-import sys
 import re
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class RerankerAgent(BaseBrainModule):
@@ -27,6 +31,7 @@ class RerankerAgent(BaseBrainModule):
 
     def __init__(self):
         """Initialize the Reranker Agent"""
+        super().__init__()
         self._embeddings = None
         self._phrase_embeddings = None
         self._world_knowledge = None
@@ -61,26 +66,47 @@ class RerankerAgent(BaseBrainModule):
             # Lazy load optional dependencies
             try:
                 self._embeddings = ModuleRegistry.get_module("embeddings")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency embeddings",
+                    exc_info=True,
+                    extra={"module_name": "reranker_agent", "dependency": "embeddings", "error_type": type(e).__name__},
+                )
 
             try:
                 self._phrase_embeddings = ModuleRegistry.get_module("phrase_embeddings")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency phrase_embeddings",
+                    exc_info=True,
+                    extra={"module_name": "reranker_agent", "dependency": "phrase_embeddings", "error_type": type(e).__name__},
+                )
 
             try:
                 self._world_knowledge = ModuleRegistry.get_module("world_knowledge")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency world_knowledge",
+                    exc_info=True,
+                    extra={"module_name": "reranker_agent", "dependency": "world_knowledge", "error_type": type(e).__name__},
+                )
 
             try:
                 self._query_agent = ModuleRegistry.get_module("query_agent")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency query_agent",
+                    exc_info=True,
+                    extra={"module_name": "reranker_agent", "dependency": "query_agent", "error_type": type(e).__name__},
+                )
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "ModuleRegistry not available; reranker_agent will run without dependencies",
+                exc_info=True,
+                extra={"module_name": "reranker_agent", "error_type": type(e).__name__},
+            )
             return True  # Can work without dependencies
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -117,7 +143,11 @@ class RerankerAgent(BaseBrainModule):
                 top_k = params.get("top_k", 10)
                 return self.process_reranking(documents, query, top_k)
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for reranker_agent",
+                )
 
     def rerank_documents(
         self, documents: List[Dict[str, Any]], query: str
@@ -218,8 +248,12 @@ class RerankerAgent(BaseBrainModule):
                         }
                     )
                     semantic_score = similarity_result.get("similarity", 0.0)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Embedding-based similarity failed; continuing with lexical signals",
+                    exc_info=True,
+                    extra={"module_name": "reranker_agent", "dependency": "embeddings", "error_type": type(e).__name__},
+                )
 
         factors["semantic_similarity"] = semantic_score
 
@@ -399,8 +433,12 @@ class RerankerAgent(BaseBrainModule):
                     }
                 )
                 return similarity_result.get("similarity", 0.0)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Embedding similarity failed; using lexical similarity",
+                    exc_info=True,
+                    extra={"module_name": "reranker_agent", "dependency": "embeddings", "error_type": type(e).__name__},
+                )
 
         # Fallback: Jaccard similarity on words
         words1 = set(re.findall(r'\b\w+\b', content1))

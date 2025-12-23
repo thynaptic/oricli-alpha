@@ -4,16 +4,16 @@ Verify conclusions and validate reasoning steps
 """
 
 from typing import List, Dict, Any
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 
 class VerificationModule(BaseBrainModule):
     """Verification module"""
+
+    def __init__(self) -> None:
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -32,7 +32,11 @@ class VerificationModule(BaseBrainModule):
         context = params.get("context", "")
 
         if not query:
-            raise ValueError("Missing required parameter: query")
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="Missing required parameter: query",
+            )
 
         reasoning = self._verify_reasoning(query, context)
 

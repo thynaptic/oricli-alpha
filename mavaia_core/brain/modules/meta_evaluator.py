@@ -129,7 +129,11 @@ class MetaEvaluatorModule(BaseBrainModule):
         elif operation == "regenerate_missing":
             return self._regenerate_missing(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def _evaluate_and_repair(
         self, params: Dict[str, Any]

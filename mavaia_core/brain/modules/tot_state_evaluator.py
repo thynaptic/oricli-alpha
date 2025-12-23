@@ -6,18 +6,18 @@ Combines LLM scoring, semantic similarity, and heuristic metrics.
 Ported from Swift ToTStateEvaluator.swift
 """
 
-import sys
 import re
 import time
-from pathlib import Path
 from typing import Any
 import concurrent.futures
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from tot_models import ToTThoughtNode, ToTConfiguration
+from mavaia_core.brain.modules.tot_models import ToTThoughtNode, ToTConfiguration
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ToTStateEvaluator(BaseBrainModule):
@@ -28,6 +28,7 @@ class ToTStateEvaluator(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._cognitive_generator = None
         self._embeddings = None
 
@@ -49,12 +50,15 @@ class ToTStateEvaluator(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from module_registry import ModuleRegistry
-
             self._cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
             self._embeddings = ModuleRegistry.get_module("embeddings")
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to initialize tot_state_evaluator dependencies",
+                exc_info=True,
+                extra={"module_name": "tot_state_evaluator", "error_type": type(e).__name__},
+            )
             return False
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -70,13 +74,21 @@ class ToTStateEvaluator(BaseBrainModule):
         elif operation == "evaluate_thoughts":
             return self._evaluate_thoughts_op(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for tot_state_evaluator",
+            )
 
     def _evaluate_thought_op(self, params: dict[str, Any]) -> dict[str, Any]:
         """Evaluate a single thought (operation wrapper)"""
         thought_dict = params.get("thought")
-        if not thought_dict:
-            raise ValueError("thought parameter is required")
+        if not isinstance(thought_dict, dict) or not thought_dict:
+            raise InvalidParameterError(
+                parameter="thought",
+                value=str(type(thought_dict).__name__),
+                reason="thought parameter is required and must be a dict",
+            )
 
         thought = ToTThoughtNode.from_dict(thought_dict)
         query = params.get("query", "")
@@ -96,8 +108,12 @@ class ToTStateEvaluator(BaseBrainModule):
     def _evaluate_thoughts_op(self, params: dict[str, Any]) -> dict[str, Any]:
         """Evaluate multiple thoughts in parallel (operation wrapper)"""
         thoughts_dicts = params.get("thoughts", [])
-        if not thoughts_dicts:
-            raise ValueError("thoughts parameter is required")
+        if not isinstance(thoughts_dicts, list) or not thoughts_dicts:
+            raise InvalidParameterError(
+                parameter="thoughts",
+                value=str(type(thoughts_dicts).__name__),
+                reason="thoughts parameter is required and must be a non-empty list",
+            )
 
         thoughts = [ToTThoughtNode.from_dict(t) for t in thoughts_dicts]
         query = params.get("query", "")
@@ -162,9 +178,14 @@ class ToTStateEvaluator(BaseBrainModule):
                     score = future.result()
                     scores[thought.id] = score
                 except Exception as e:
-                    print(
-                        f"[ToTStateEvaluator] Error evaluating thought {thought.id}: {e}",
-                        file=sys.stderr,
+                    logger.debug(
+                        "Error evaluating thought; using default neutral score",
+                        exc_info=True,
+                        extra={
+                            "module_name": "tot_state_evaluator",
+                            "thought_id": str(thought.id),
+                            "error_type": type(e).__name__,
+                        },
                     )
                     scores[thought.id] = 0.5  # Default neutral score on error
 
@@ -195,9 +216,10 @@ class ToTStateEvaluator(BaseBrainModule):
             return self._parse_llm_score(evaluation_text)
 
         except Exception as e:
-            print(
-                f"[ToTStateEvaluator] LLM evaluation failed: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "LLM evaluation failed; using default neutral score",
+                exc_info=True,
+                extra={"module_name": "tot_state_evaluator", "error_type": type(e).__name__},
             )
             return 0.5  # Default neutral score on error
 

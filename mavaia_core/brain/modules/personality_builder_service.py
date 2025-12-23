@@ -8,13 +8,12 @@ The personality-based system has been replaced with a universal voice that adapt
 """
 
 from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports - models package may not be available
 try:
@@ -30,7 +29,7 @@ class PersonalityBuilderServiceModule(BaseBrainModule):
     """Service for converting personality builder data to training configuration"""
 
     def __init__(self):
-        pass
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -72,7 +71,11 @@ class PersonalityBuilderServiceModule(BaseBrainModule):
         elif operation == "generate_dataset_content":
             return self._generate_dataset_content(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for personality_builder_service",
+            )
 
     def _validate_personality(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Validate personality builder data"""

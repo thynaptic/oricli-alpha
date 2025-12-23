@@ -4,15 +4,12 @@ Detects prompt injection, routing hijacks, API leakage, safety blind spots, etc.
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from safety_framework import (
+from mavaia_core.exceptions import InvalidParameterError
+from mavaia_core.brain.modules.safety_framework import (
     SafetyServicePriority,
     SafetyCheckType,
     SafetyCheckContext,
@@ -20,6 +17,7 @@ from safety_framework import (
     SafetySeverity,
 )
 
+logger = logging.getLogger(__name__)
 
 class AdvancedThreatType:
     """Types of advanced threats"""
@@ -37,6 +35,7 @@ class AdvancedThreatSafetyModule(BaseBrainModule):
     """Advanced threat safety service"""
 
     def __init__(self):
+        super().__init__()
         self.service_id = "advanced_threat_safety"
         self.service_name = "Advanced Threat Safety"
         self.priority = SafetyServicePriority.CRITICAL
@@ -83,7 +82,11 @@ class AdvancedThreatSafetyModule(BaseBrainModule):
             detection = self.detect_advanced_threats(text, context, is_response)
             return detection
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for advanced_threat_safety",
+            )
 
     def check_input(self, input_text: str, context: SafetyCheckContext) -> SafetyCheckResult:
         """Check input for advanced threats"""
@@ -321,32 +324,30 @@ class AdvancedThreatSafetyModule(BaseBrainModule):
         """Generate blocked response for threat type"""
         responses = {
             AdvancedThreatType.PROMPT_INJECTION: (
-                "Oh honey, nice try! 😏 I'm not falling for that. "
-                "What else can I help you with?"
+                "Request blocked due to suspected prompt-injection attempt. "
+                "Please restate your request without instructions to ignore or override prior rules."
             ),
             AdvancedThreatType.ROUTING_HIJACK: (
-                "I can't let you manipulate my routing, babe! 💅 "
-                "What else can I help you with?"
+                "Request blocked due to suspected routing-manipulation attempt. "
+                "Please describe the goal rather than instructing internal routing or module selection."
             ),
             AdvancedThreatType.API_LEAKAGE: (
-                "I'm not sharing any secrets, sweetie! 🔒 "
-                "What else can I help you with?"
+                "Response blocked to prevent disclosure of sensitive credentials or secrets. "
+                "If you need help configuring access, provide non-secret configuration details."
             ),
             AdvancedThreatType.CHAIN_OF_THOUGHT_EXTRACTION: (
-                "My thinking process stays private, babe! 🤔 "
-                "What else can I help you with?"
+                "Request blocked: internal reasoning traces are not provided. "
+                "I can provide a concise explanation and the final answer instead."
             ),
         }
 
         return responses.get(
             threat_type,
-            "I can't help with that, babe. What else can I do for you?",
+            "Request blocked due to a detected safety risk. Please rephrase your request.",
         )
 
     def _dict_to_context(self, context_dict: Dict[str, Any]) -> SafetyCheckContext:
         """Convert dictionary to SafetyCheckContext"""
-        from safety_framework import SafetyCheckContext
-
         return SafetyCheckContext(
             conversation_history=context_dict.get("conversation_history", []),
             conversation_id=context_dict.get("conversation_id"),

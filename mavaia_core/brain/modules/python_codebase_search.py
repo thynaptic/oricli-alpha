@@ -154,7 +154,11 @@ class PythonCodebaseSearchModule(BaseBrainModule):
             return self.analyze_impact(project, change)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def search_codebase(self, project: Union[str, Path], query: str, search_type: str = "semantic") -> Dict[str, Any]:
         """

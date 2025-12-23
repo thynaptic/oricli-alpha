@@ -5,18 +5,22 @@ Produces normalized RetrievedDocument-style dictionaries compatible with Swift.
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from typing import Any, Dict, List
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class SearchAgentModule(BaseBrainModule):
     """Performs lightweight search orchestration."""
 
     def __init__(self) -> None:
-        pass
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -31,10 +35,22 @@ class SearchAgentModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         if operation != "search":
-            raise ValueError(f"Unsupported operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unsupported operation for search_agent",
+            )
 
         query: str = params.get("query", "") or ""
-        limit: int = int(params.get("limit", 20) or 20)
+        try:
+            limit: int = int(params.get("limit", 20) or 20)
+        except (TypeError, ValueError) as e:
+            logger.debug(
+                "Invalid limit provided to search_agent; using default",
+                exc_info=True,
+                extra={"module_name": "search_agent", "error_type": type(e).__name__},
+            )
+            limit = 20
         sources_param = params.get("sources") or ["web", "memory"]
         if isinstance(sources_param, str):
             sources = [sources_param]

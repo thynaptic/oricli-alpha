@@ -4,13 +4,12 @@ RL-based agent for optimizing decision-making over time
 """
 
 from typing import Dict, Any, Optional, List, Tuple
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError, ModuleInitializationError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports - handle gracefully if dependencies not available
 try:
@@ -329,6 +328,7 @@ class ReinforcementLearningModule(BaseBrainModule):
     """Reinforcement learning agent for adaptive decision-making"""
 
     def __init__(self):
+        super().__init__()
         self.agent: Optional[PPOAgent] = None
         self.embedding_model = None
         self.embedding_params = None
@@ -357,16 +357,16 @@ class ReinforcementLearningModule(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize the module"""
         if not NUMPY_AVAILABLE:
-            print(
-                "[ReinforcementLearningModule] NumPy not available, using fallback",
-                file=sys.stderr,
+            logger.warning(
+                "NumPy not available; reinforcement_learning may be unavailable",
+                extra={"module_name": "reinforcement_learning"},
             )
             return True  # Can still work with basic fallback
 
         if not JAX_AVAILABLE:
-            print(
-                "[ReinforcementLearningModule] JAX not available, using fallback",
-                file=sys.stderr,
+            logger.warning(
+                "JAX not available; reinforcement_learning may be unavailable",
+                extra={"module_name": "reinforcement_learning"},
             )
             return True  # Can still work with basic fallback
 
@@ -377,23 +377,19 @@ class ReinforcementLearningModule(BaseBrainModule):
         if self.embedding_model is None or self.tokenizer is None:
             try:
                 model_name = "sentence-transformers/all-MiniLM-L6-v2"
-                try:
-                    self.tokenizer = FlaxAutoTokenizer.from_pretrained(model_name)
-                    self.embedding_model = FlaxAutoModel.from_pretrained(model_name)
-                    self.embedding_params = self.embedding_model.params
-                except Exception:
-                    # Fallback: use transformers with JAX conversion
-                    from transformers import AutoTokenizer, AutoModel
-                    self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-                    pt_model = AutoModel.from_pretrained(model_name)
-                    self.embedding_model = pt_model
-                    self.embedding_params = None
+                self.tokenizer = FlaxAutoTokenizer.from_pretrained(model_name)
+                self.embedding_model = FlaxAutoModel.from_pretrained(model_name)
+                self.embedding_params = self.embedding_model.params
             except Exception as e:
-                print(
-                    f"[ReinforcementLearningModule] Failed to load embedding model: {e}",
-                    file=sys.stderr,
+                logger.debug(
+                    "Failed to load Flax embedding model for reinforcement_learning",
+                    exc_info=True,
+                    extra={"module_name": "reinforcement_learning", "error_type": type(e).__name__},
                 )
-                raise
+                raise ModuleInitializationError(
+                    module_name="reinforcement_learning",
+                    reason="Failed to load required Flax embedding model/tokenizer",
+                ) from e
 
     def _get_embeddings(self, texts: List[str]) -> "jnp.ndarray":
         """Get embeddings for texts using Flax model"""
@@ -401,7 +397,11 @@ class ReinforcementLearningModule(BaseBrainModule):
 
         # Use Flax model only
         if not isinstance(self.embedding_model, FlaxAutoModel):
-            raise ValueError("Only Flax models are supported. PyTorch models are not available.")
+            raise ModuleOperationError(
+                module_name="reinforcement_learning",
+                operation="get_embeddings",
+                reason="Only Flax models are supported for embeddings",
+            )
         
         inputs = self.tokenizer(
             texts, return_tensors="jax", padding=True, truncation=True
@@ -436,9 +436,20 @@ class ReinforcementLearningModule(BaseBrainModule):
             elif operation == "save_agent":
                 return self._save_agent(params)
             else:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for reinforcement_learning",
+                )
+        except (InvalidParameterError, ModuleInitializationError, ModuleOperationError):
+            raise
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            logger.debug(
+                "Unhandled reinforcement_learning execution error",
+                exc_info=True,
+                extra={"module_name": "reinforcement_learning", "operation": str(operation), "error_type": type(e).__name__},
+            )
+            return {"success": False, "error": "Reinforcement learning operation failed"}
 
     def _select_action(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Select action using policy network"""

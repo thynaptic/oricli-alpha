@@ -8,18 +8,19 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
 import math
-import sys
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryDynamicsModule(BaseBrainModule):
     """Manage memory dynamics with importance, decay, and replay"""
 
     def __init__(self):
+        super().__init__()
         self.memory_store: Dict[str, Dict[str, Any]] = {}
 
     @property
@@ -52,29 +53,75 @@ class MemoryDynamicsModule(BaseBrainModule):
             case "score_importance":
                 memory = params.get("memory", {})
                 context = params.get("context", {})
+                if memory is None:
+                    memory = {}
+                if context is None:
+                    context = {}
+                if not isinstance(memory, dict):
+                    raise InvalidParameterError("memory", str(type(memory).__name__), "memory must be a dict")
+                if not isinstance(context, dict):
+                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a dict")
                 return self.score_importance(memory, context)
 
             case "apply_forgetting_curve":
                 memory = params.get("memory", {})
                 time_elapsed = params.get("time_elapsed", 0.0)
+                if memory is None:
+                    memory = {}
+                if not isinstance(memory, dict):
+                    raise InvalidParameterError("memory", str(type(memory).__name__), "memory must be a dict")
+                try:
+                    time_elapsed_float = float(time_elapsed)
+                except (TypeError, ValueError):
+                    raise InvalidParameterError("time_elapsed", str(time_elapsed), "time_elapsed must be a number")
                 return self.apply_forgetting_curve(memory, time_elapsed)
 
             case "integrate_knowledge":
                 new_memory = params.get("new_memory", {})
                 existing_memories = params.get("existing_memories", [])
+                if new_memory is None:
+                    new_memory = {}
+                if existing_memories is None:
+                    existing_memories = []
+                if not isinstance(new_memory, dict):
+                    raise InvalidParameterError(
+                        "new_memory", str(type(new_memory).__name__), "new_memory must be a dict"
+                    )
+                if not isinstance(existing_memories, list):
+                    raise InvalidParameterError(
+                        "existing_memories", str(type(existing_memories).__name__), "existing_memories must be a list"
+                    )
                 return self.integrate_knowledge(new_memory, existing_memories)
 
             case "weight_by_freshness":
                 memories = params.get("memories", [])
+                if memories is None:
+                    memories = []
+                if not isinstance(memories, list):
+                    raise InvalidParameterError("memories", str(type(memories).__name__), "memories must be a list")
                 return self.weight_by_freshness(memories)
 
             case "replay_memories":
                 memories = params.get("memories", [])
                 count = params.get("count", 5)
+                if memories is None:
+                    memories = []
+                if not isinstance(memories, list):
+                    raise InvalidParameterError("memories", str(type(memories).__name__), "memories must be a list")
+                try:
+                    count_int = int(count)
+                except (TypeError, ValueError):
+                    raise InvalidParameterError("count", str(count), "count must be an integer")
+                if count_int < 1:
+                    raise InvalidParameterError("count", str(count_int), "count must be >= 1")
                 return self.replay_memories(memories, count)
 
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for memory_dynamics",
+                )
 
     def score_importance(
         self, memory: Dict[str, Any], context: Dict[str, Any] = None
@@ -109,7 +156,12 @@ class MemoryDynamicsModule(BaseBrainModule):
                 recency_factor = math.exp(-days_ago / 30.0)  # Half-life of 30 days
                 importance_score += recency_factor * 0.3
                 factors["recency"] = recency_factor
-            except Exception:
+            except Exception as e:
+                logger.debug(
+                    "Failed to parse created_at; using default recency",
+                    exc_info=True,
+                    extra={"module_name": "memory_dynamics", "error_type": type(e).__name__},
+                )
                 factors["recency"] = 0.5
                 importance_score += 0.15
         else:

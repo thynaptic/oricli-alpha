@@ -4,13 +4,12 @@ Neural network for learned tool selection and routing based on query characteris
 """
 
 from typing import Dict, Any, Optional, List, Tuple
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError, ModuleInitializationError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports
 try:
@@ -92,6 +91,7 @@ class ToolRoutingModule(BaseBrainModule):
     """Neural network-based tool selection and routing"""
 
     def __init__(self):
+        super().__init__()
         self.model_params: Optional[Dict[str, Any]] = None
         self.model: Optional[ToolSelectionModel] = None
         self.tokenizer: Optional[Any] = None
@@ -124,7 +124,10 @@ class ToolRoutingModule(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize the module"""
         if not JAX_AVAILABLE:
-            print("[ToolRoutingModule] JAX not available", file=sys.stderr)
+            logger.warning(
+                "JAX not available; tool_routing is unavailable",
+                extra={"module_name": "tool_routing"},
+            )
             return False
 
         # Initialize RNG
@@ -151,9 +154,20 @@ class ToolRoutingModule(BaseBrainModule):
             elif operation == "save_model":
                 return self._save_model(params)
             else:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for tool_routing",
+                )
+        except (InvalidParameterError, ModuleInitializationError, ModuleOperationError):
+            raise
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            logger.debug(
+                "Unhandled tool_routing execution error",
+                exc_info=True,
+                extra={"module_name": "tool_routing", "operation": str(operation), "error_type": type(e).__name__},
+            )
+            return {"success": False, "error": "Tool routing operation failed"}
 
     def _ensure_embedding_model_loaded(self):
         """Lazy load embedding model using Flax backend"""
@@ -162,54 +176,36 @@ class ToolRoutingModule(BaseBrainModule):
                 # Use FlaxAutoModel for embeddings (all-MiniLM-L6-v2 equivalent)
                 # Using a model that has Flax support
                 model_name = "sentence-transformers/all-MiniLM-L6-v2"
-                
-                # Try to load Flax model, fallback to PyTorch if needed
-                try:
-                    self.tokenizer = FlaxAutoTokenizer.from_pretrained(model_name)
-                    self.embedding_model = FlaxAutoModel.from_pretrained(model_name)
-                    self.embedding_params = self.embedding_model.params
-                except Exception:
-                    # Fallback: use transformers with JAX conversion
-                    from transformers import AutoTokenizer, AutoModel
-                    self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-                    pt_model = AutoModel.from_pretrained(model_name)
-                    # Convert PyTorch model to JAX (simplified - in production use proper conversion)
-                    # For now, we'll use a workaround with mean pooling
-                    self.embedding_model = pt_model
-                    self.embedding_params = None
-                    
+
+                # Require Flax-only here to avoid mixed-framework runtime failures.
+                self.tokenizer = FlaxAutoTokenizer.from_pretrained(model_name)
+                self.embedding_model = FlaxAutoModel.from_pretrained(model_name)
+                self.embedding_params = self.embedding_model.params
             except Exception as e:
-                print(
-                    f"[ToolRoutingModule] Failed to load embedding model: {e}",
-                    file=sys.stderr,
+                logger.debug(
+                    "Failed to load Flax embedding model for tool_routing",
+                    exc_info=True,
+                    extra={"module_name": "tool_routing", "error_type": type(e).__name__},
                 )
-                raise
+                raise ModuleInitializationError(
+                    module_name="tool_routing",
+                    reason="Failed to load required Flax embedding model/tokenizer",
+                ) from e
 
     def _get_embeddings(self, texts: List[str]) -> "jnp.ndarray":
         """Get embeddings for texts using Flax model"""
         self._ensure_embedding_model_loaded()
-        
-        if isinstance(self.embedding_model, FlaxAutoModel):
-            # Use Flax model
-            inputs = self.tokenizer(
-                texts, return_tensors="jax", padding=True, truncation=True
+        if not isinstance(self.embedding_model, FlaxAutoModel):
+            raise ModuleOperationError(
+                module_name="tool_routing",
+                operation="get_embeddings",
+                reason="Only Flax models are supported for embeddings",
             )
-            outputs = self.embedding_model(**inputs, params=self.embedding_params)
-            # Mean pooling
-            embeddings = jnp.mean(outputs.last_hidden_state, axis=1)
-        else:
-            # Fallback: use PyTorch model and convert to JAX
-            inputs = self.tokenizer(
-                texts, return_tensors="pt", padding=True, truncation=True
-            )
-            with jax.default_device(jax.devices()[0]):
-                outputs = self.embedding_model(**inputs)
-                # Mean pooling
-                embeddings_pt = outputs.last_hidden_state.mean(dim=1)
-                # Convert to JAX array
-                embeddings = jnp.array(embeddings_pt.detach().cpu().numpy())
-        
-        return embeddings
+
+        inputs = self.tokenizer(texts, return_tensors="jax", padding=True, truncation=True)
+        outputs = self.embedding_model(**inputs, params=self.embedding_params)
+        # Mean pooling
+        return jnp.mean(outputs.last_hidden_state, axis=1)
 
     def _ensure_model_loaded(self):
         """Lazy load routing model"""
@@ -228,7 +224,11 @@ class ToolRoutingModule(BaseBrainModule):
                 self.rng, init_rng = jax.random.split(self.rng)
                 self.model_params = self.model.init(init_rng, dummy_input, training=False)
             else:
-                raise ValueError("Model not loaded. Call load_model first.")
+                raise ModuleOperationError(
+                    module_name="tool_routing",
+                    operation="ensure_model_loaded",
+                    reason="Model not loaded. Call load_model first.",
+                )
 
     def _predict_tools(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -485,9 +485,13 @@ class ToolRoutingModule(BaseBrainModule):
 
             avg_loss = total_loss / (len(training_data) // batch_size + 1)
             if epoch % 5 == 0:
-                print(
-                    f"[ToolRoutingModule] Epoch {epoch}, Loss: {avg_loss:.4f}",
-                    file=sys.stderr,
+                logger.info(
+                    "Tool routing training progress",
+                    extra={
+                        "module_name": "tool_routing",
+                        "epoch": int(epoch),
+                        "avg_loss": round(float(avg_loss), 6),
+                    },
                 )
 
         self.is_trained = True

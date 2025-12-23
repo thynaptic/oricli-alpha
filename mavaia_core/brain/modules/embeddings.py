@@ -4,13 +4,12 @@ Plug-and-play module that can be easily extended or replaced
 """
 
 from typing import List, Union, Dict, Any
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional import - will fail gracefully if dependencies not available
 try:
@@ -29,7 +28,7 @@ def _lazy_import_model_manager():
     global MODEL_MANAGER_AVAILABLE, ModelManager
     if not MODEL_MANAGER_AVAILABLE:
         try:
-            from model_manager import ModelManager as MM
+            from mavaia_core.brain.modules.model_manager import ModelManager as MM
             ModelManager = MM
             MODEL_MANAGER_AVAILABLE = True
         except ImportError:
@@ -41,6 +40,7 @@ class EmbeddingsModule(BaseBrainModule):
 
     def __init__(self, model_name: str = "embedding_small"):
         """Initialize with a registered model name"""
+        super().__init__()
         self.model_name = model_name
         self.model = None
 
@@ -75,9 +75,10 @@ class EmbeddingsModule(BaseBrainModule):
             try:
                 self.model = ModelManager.get_model(self.model_name)
             except Exception as e:
-                print(
-                    f"[EmbeddingsModule] Failed to load model: {e}",
-                    file=__import__("sys").stderr,
+                logger.debug(
+                    "Failed to load embeddings model; using fallback embeddings",
+                    exc_info=True,
+                    extra={"module_name": "embeddings", "error_type": type(e).__name__},
                 )
                 # Don't raise - allow module to work without model
                 pass
@@ -204,7 +205,11 @@ class EmbeddingsModule(BaseBrainModule):
             model_name = params.get("model_name")
 
             if not texts:
-                raise ValueError("Missing required parameter: texts")
+                raise InvalidParameterError(
+                    parameter="texts",
+                    value=str(texts),
+                    reason="Missing required parameter: texts",
+                )
 
             # Try to use model if available
             if EMBEDDINGS_AVAILABLE and MODEL_MANAGER_AVAILABLE:
@@ -247,7 +252,11 @@ class EmbeddingsModule(BaseBrainModule):
             model_name = params.get("model_name")
 
             if not text1 or not text2:
-                raise ValueError("Missing required parameters: text1, text2")
+                raise InvalidParameterError(
+                    parameter="text1/text2",
+                    value="",
+                    reason="Missing required parameters: text1, text2",
+                )
 
             # Try to use model if available
             if EMBEDDINGS_AVAILABLE and MODEL_MANAGER_AVAILABLE:
@@ -297,8 +306,10 @@ class EmbeddingsModule(BaseBrainModule):
             }
 
         else:
-            raise ValueError(
-                f"Unknown operation: {operation}. Supported: generate, batch_generate, similarity"
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for embeddings",
             )
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:

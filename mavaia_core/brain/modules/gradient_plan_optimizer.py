@@ -4,13 +4,13 @@ Differentiable planning using gradient descent to optimize plan parameters
 """
 
 from typing import Dict, Any, Optional, List, Tuple
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError, ModuleInitializationError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports
 try:
@@ -178,6 +178,7 @@ class GradientPlanOptimizerModule(BaseBrainModule):
     """Gradient-based plan optimization using differentiable planning"""
 
     def __init__(self):
+        super().__init__()
         self.planner_params: Optional[Dict[str, Any]] = None
         self.planner: Optional[DifferentiablePlanner] = None
         self.optimizer: Optional[optax.GradientTransformation] = None
@@ -209,8 +210,9 @@ class GradientPlanOptimizerModule(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize the module"""
         if not JAX_AVAILABLE:
-            print(
-                "[GradientPlanOptimizerModule] JAX not available", file=sys.stderr
+            logger.warning(
+                "JAX not available; gradient_plan_optimizer disabled",
+                extra={"module_name": "gradient_plan_optimizer"},
             )
             return False
 
@@ -224,49 +226,27 @@ class GradientPlanOptimizerModule(BaseBrainModule):
         if self.embedding_model is None or self.tokenizer is None:
             try:
                 model_name = "sentence-transformers/all-MiniLM-L6-v2"
-                try:
-                    self.tokenizer = FlaxAutoTokenizer.from_pretrained(model_name)
-                    self.embedding_model = FlaxAutoModel.from_pretrained(model_name)
-                    self.embedding_params = self.embedding_model.params
-                except Exception:
-                    # Fallback: use transformers with JAX conversion
-                    from transformers import AutoTokenizer, AutoModel
-                    self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-                    pt_model = AutoModel.from_pretrained(model_name)
-                    self.embedding_model = pt_model
-                    self.embedding_params = None
+                self.tokenizer = FlaxAutoTokenizer.from_pretrained(model_name)
+                self.embedding_model = FlaxAutoModel.from_pretrained(model_name)
+                self.embedding_params = self.embedding_model.params
             except Exception as e:
-                print(
-                    f"[GradientPlanOptimizerModule] Failed to load embedding model: {e}",
-                    file=sys.stderr,
+                logger.debug(
+                    "Failed to load Flax embedding model",
+                    exc_info=True,
+                    extra={"module_name": "gradient_plan_optimizer", "error_type": type(e).__name__},
                 )
-                raise
+                raise ModuleInitializationError(
+                    module_name="gradient_plan_optimizer",
+                    reason="Failed to load Flax embedding model",
+                ) from e
 
     def _get_embeddings(self, texts: List[str]) -> "jnp.ndarray":
         """Get embeddings for texts using Flax model"""
         self._ensure_embedding_model_loaded()
 
-        if isinstance(self.embedding_model, FlaxAutoModel):
-            # Use Flax model
-            inputs = self.tokenizer(
-                texts, return_tensors="jax", padding=True, truncation=True
-            )
-            outputs = self.embedding_model(**inputs, params=self.embedding_params)
-            # Mean pooling
-            embeddings = jnp.mean(outputs.last_hidden_state, axis=1)
-        else:
-            # Fallback: use PyTorch model and convert to JAX
-            inputs = self.tokenizer(
-                texts, return_tensors="pt", padding=True, truncation=True
-            )
-            with jax.default_device(jax.devices()[0]):
-                outputs = self.embedding_model(**inputs)
-                # Mean pooling
-                embeddings_pt = outputs.last_hidden_state.mean(dim=1)
-                # Convert to JAX array
-                embeddings = jnp.array(embeddings_pt.detach().cpu().numpy())
-
-        return embeddings
+        inputs = self.tokenizer(texts, return_tensors="jax", padding=True, truncation=True)
+        outputs = self.embedding_model(**inputs, params=self.embedding_params)
+        return jnp.mean(outputs.last_hidden_state, axis=1)
 
     def _ensure_planner_loaded(self, num_tools: int = 50):
         """Lazy load planner"""
@@ -288,22 +268,30 @@ class GradientPlanOptimizerModule(BaseBrainModule):
             return {"success": False, "error": "JAX not available"}
 
         try:
-            if operation == "generate_plan":
-                return self._generate_plan(params)
-            elif operation == "optimize_plan":
-                return self._optimize_plan(params)
-            elif operation == "refine_plan":
-                return self._refine_plan(params)
-            elif operation == "train_planner":
-                return self._train_planner(params)
-            elif operation == "load_model":
-                return self._load_model(params)
-            elif operation == "save_model":
-                return self._save_model(params)
-            else:
-                raise ValueError(f"Unknown operation: {operation}")
+            match operation:
+                case "generate_plan":
+                    return self._generate_plan(params)
+                case "optimize_plan":
+                    return self._optimize_plan(params)
+                case "refine_plan":
+                    return self._refine_plan(params)
+                case "train_planner":
+                    return self._train_planner(params)
+                case "load_model":
+                    return self._load_model(params)
+                case "save_model":
+                    return self._save_model(params)
+                case _:
+                    raise InvalidParameterError("operation", str(operation), "Unknown operation for gradient_plan_optimizer")
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            if isinstance(e, InvalidParameterError):
+                return {"success": False, "error": str(e)}
+            logger.debug(
+                "gradient_plan_optimizer operation failed",
+                exc_info=True,
+                extra={"module_name": "gradient_plan_optimizer", "operation": str(operation), "error_type": type(e).__name__},
+            )
+            return {"success": False, "error": "Operation failed"}
 
     def _generate_plan(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Generate a plan using differentiable planner"""
@@ -513,9 +501,13 @@ class GradientPlanOptimizerModule(BaseBrainModule):
 
             avg_loss = total_loss / len(training_data)
             if epoch % 5 == 0:
-                print(
-                    f"[GradientPlanOptimizerModule] Epoch {epoch}, Loss: {avg_loss:.4f}",
-                    file=sys.stderr,
+                logger.info(
+                    "Gradient plan optimizer training progress",
+                    extra={
+                        "module_name": "gradient_plan_optimizer",
+                        "epoch": epoch,
+                        "avg_loss": float(avg_loss),
+                    },
                 )
 
         return {"success": True, "epochs": epochs, "final_loss": avg_loss}

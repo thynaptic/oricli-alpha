@@ -4,17 +4,14 @@ Provides tamper-proof logging for forensic analysis
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import json
 import hashlib
 import time
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 
 @dataclass
@@ -72,6 +69,7 @@ class SafetyAuditLogModule(BaseBrainModule):
     """Immutable audit log manager"""
 
     def __init__(self):
+        super().__init__()
         self.log_entries: List[SafetyAuditLogEntry] = []
         self.max_in_memory_entries = 1000
         self.log_directory = Path.home() / ".mavaia" / "SafetyAuditLogs"
@@ -130,7 +128,11 @@ class SafetyAuditLogModule(BaseBrainModule):
             is_valid = self.verify_entry_integrity(entry_id)
             return {"success": True, "is_valid": is_valid}
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for safety_audit_log",
+            )
 
     def log_safety_decision(
         self,

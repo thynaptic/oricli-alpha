@@ -6,16 +6,15 @@ Orchestrates MCTS search with complexity detection, memory integration, and refl
 Ported from Swift MCTSService.swift
 """
 
-import sys
 import time
 import uuid
-from pathlib import Path
+import logging
 from typing import Any
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 # Lazy imports to avoid timeout during module discovery
 def _lazy_import_mcts_models():
@@ -23,14 +22,14 @@ def _lazy_import_mcts_models():
     global MCTSNode, MCTSConfiguration, MCTSResult, MCTSSearchResult, MCTSComplexityScore, ToTThoughtNode
     if MCTSNode is None:
         try:
-            from mcts_models import (
+            from mavaia_core.brain.modules.mcts_models import (
                 MCTSNode as MN,
                 MCTSConfiguration as MC,
                 MCTSResult as MR,
                 MCTSSearchResult as MSR,
                 MCTSComplexityScore as MCS,
             )
-            from tot_models import ToTThoughtNode as TTTN
+            from mavaia_core.brain.modules.tot_models import ToTThoughtNode as TTTN
             MCTSNode = MN
             MCTSConfiguration = MC
             MCTSResult = MR
@@ -56,6 +55,7 @@ class MCTSService(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._complexity_detector = None
         self._search_engine = None
         self._memory_graph = None
@@ -131,6 +131,12 @@ class MCTSService(BaseBrainModule):
         - format_reasoning_output: Format path as text
         """
         _lazy_import_mcts_models()
+        if MCTSConfiguration is None:
+            raise ModuleOperationError(
+                module_name=self.metadata.name,
+                operation=operation,
+                reason="MCTS models unavailable (mcts_models import failed)",
+            )
         if operation == "execute_mcts":
             return self._execute_mcts(params)
         elif operation == "analyze_mcts_complexity":
@@ -140,7 +146,11 @@ class MCTSService(BaseBrainModule):
         elif operation == "format_reasoning_output":
             return self._format_reasoning_output(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for mcts_service",
+            )
 
     def _execute_mcts(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -159,11 +169,15 @@ class MCTSService(BaseBrainModule):
         if not self._search_engine:
             self.initialize()
             if not self._search_engine:
-                raise RuntimeError("Search engine module not available")
+                raise ModuleOperationError(
+                    module_name=self.metadata.name,
+                    operation="execute_mcts",
+                    reason="Dependency 'mcts_search_engine' not available",
+                )
 
         query = params.get("query", "")
         if not query:
-            raise ValueError("query parameter is required")
+            raise InvalidParameterError("query", str(query), "query parameter is required")
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -199,8 +213,12 @@ class MCTSService(BaseBrainModule):
                                 f"   Summary: {memory['summary']}\n"
                             )
                     memory_context += "\n"
-            except Exception:
-                pass  # Memory retrieval is optional
+            except Exception as e:
+                logger.debug(
+                    "Memory retrieval failed; continuing without memory context",
+                    exc_info=True,
+                    extra={"module_name": "mcts_service", "error_type": type(e).__name__},
+                )
 
         # Step 2: Combine context
         context_parts = [c for c in [context, memory_context] if c]
@@ -212,10 +230,9 @@ class MCTSService(BaseBrainModule):
         )
 
         if not complexity_score.requires_mcts:
-            print(
-                "[MCTSService] MCTS complexity analysis suggests MCTS may not be "
-                "needed. Continuing anyway since MCTS was explicitly requested.",
-                file=sys.stderr,
+            logger.info(
+                "MCTS complexity suggests MCTS may not be needed; continuing because explicitly requested",
+                extra={"module_name": "mcts_service", "operation": "execute_mcts"},
             )
 
         # Step 4: Adjust configuration based on complexity analysis if needed
@@ -258,11 +275,12 @@ class MCTSService(BaseBrainModule):
                 },
             )
         except Exception as e:
-            print(
-                f"[MCTSService] MCTS search failed: {e}",
-                file=sys.stderr,
+            logger.error(
+                "MCTS search failed",
+                exc_info=True,
+                extra={"module_name": "mcts_service", "error_type": type(e).__name__},
             )
-            raise
+            raise ModuleOperationError(self.metadata.name, "execute_mcts", str(e)) from e
 
         search_result = MCTSSearchResult.from_dict(search_result_dict)
 
@@ -287,7 +305,11 @@ class MCTSService(BaseBrainModule):
                         },
                     )
                 except Exception:
-                    pass  # Memory storage is optional
+                    logger.debug(
+                        "Memory storage failed; continuing without persisting MCTS path node",
+                        exc_info=True,
+                        extra={"module_name": "mcts_service"},
+                    )
 
         # Step 7: Convert search result to MCTSResult
         result = MCTSResult.from_search_result(search_result)
@@ -342,14 +364,24 @@ class MCTSService(BaseBrainModule):
                             exploration_ratio=result.exploration_ratio,
                         )
 
-            except Exception:
-                pass  # Fail open
+            except Exception as e:
+                logger.debug(
+                    "Reflection failed; continuing without reflection improvements",
+                    exc_info=True,
+                    extra={"module_name": "mcts_service", "error_type": type(e).__name__},
+                )
 
-        print(
-            f"[MCTSService] MCTS execution completed: {len(result.path)} steps, "
-            f"confidence {result.confidence:.2f}, {result.total_rollouts} rollouts, "
-            f"exploration ratio {result.exploration_ratio:.2f}, "
-            f"latency {result.total_latency:.2f}s"
+        logger.info(
+            "MCTS execution completed",
+            extra={
+                "module_name": "mcts_service",
+                "operation": "execute_mcts",
+                "path_len": len(result.path),
+                "confidence": float(result.confidence),
+                "total_rollouts": int(result.total_rollouts),
+                "exploration_ratio": float(result.exploration_ratio),
+                "latency_s": float(result.total_latency),
+            },
         )
 
         return result.to_dict()
@@ -360,7 +392,7 @@ class MCTSService(BaseBrainModule):
         """Analyze query complexity for MCTS"""
         query = params.get("query", "")
         if not query:
-            raise ValueError("query parameter is required")
+            raise InvalidParameterError("query", str(query), "query parameter is required")
 
         context = params.get("context")
         return self._analyze_mcts_complexity_internal(query, context).to_dict()
@@ -396,7 +428,7 @@ class MCTSService(BaseBrainModule):
         """Determine if MCTS should be activated"""
         query = params.get("query", "")
         if not query:
-            raise ValueError("query parameter is required")
+            raise InvalidParameterError("query", str(query), "query parameter is required")
 
         context = params.get("context")
 

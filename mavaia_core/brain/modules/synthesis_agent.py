@@ -5,10 +5,14 @@ Uses cognitive_generator if available; falls back to stitched summary.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class SynthesisAgentModule(BaseBrainModule):
@@ -25,7 +29,12 @@ class SynthesisAgentModule(BaseBrainModule):
         self._modules_ensured = True
         try:
             self.cog = ModuleRegistry.get_module("cognitive_generator", auto_discover=True, wait_timeout=1.0)
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to load cognitive_generator for synthesis_agent",
+                exc_info=True,
+                extra={"module_name": "synthesis_agent", "error_type": type(e).__name__},
+            )
             self.cog = None
 
     @property
@@ -34,14 +43,19 @@ class SynthesisAgentModule(BaseBrainModule):
             name="synthesis_agent",
             version="1.0.0",
             description="Generates answers from ranked documents",
-            operations=["synthesize"],
+            # Keep `process_synthesis` as a compatibility alias (older pipeline modules may call it).
+            operations=["synthesize", "process_synthesis"],
             dependencies=[],
             model_required=False,
         )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        if operation != "synthesize":
-            raise ValueError(f"Unsupported operation: {operation}")
+        if operation not in {"synthesize", "process_synthesis"}:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unsupported operation for synthesis_agent",
+            )
 
         # Lazy load modules only when execute is called
         self._ensure_modules()
@@ -62,12 +76,16 @@ class SynthesisAgentModule(BaseBrainModule):
                 text = result.get("response") or result.get("result") or ""
                 if isinstance(text, dict):
                     text = text.get("response", "") or ""
-                return {"success": True, "answer": text, "documents": documents}
+                return {"success": True, "synthesis": text, "answer": text, "documents": documents}
             except Exception as e:
-                return {"success": False, "error": str(e)}
+                logger.debug(
+                    "cognitive_generator synthesis failed; using fallback synthesis",
+                    exc_info=True,
+                    extra={"module_name": "synthesis_agent", "error_type": type(e).__name__},
+                )
 
         answer = self._fallback_synthesis(query, documents)
-        return {"success": True, "answer": answer, "documents": documents}
+        return {"success": True, "synthesis": answer, "answer": answer, "documents": documents}
 
     # ------------------------------------------------------------------ #
     def _build_context(self, documents: List[Dict[str, Any]]) -> str:

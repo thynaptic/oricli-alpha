@@ -5,10 +5,14 @@ Uses in-memory Neo4j graph (rebuilt on startup)
 """
 
 import json
+import logging
 from typing import Dict, Any, List, Optional
 from collections import defaultdict
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports - will fail gracefully if dependencies not available
 try:
@@ -43,6 +47,7 @@ class MemoryGraph(BaseBrainModule):
             description="Graph operations for memory relationships: entity linking, multi-hop reasoning, traversal",
             operations=[
                 "build_graph",
+                "recall_memories",
                 "find_relationships",
                 "multi_hop_reasoning",
                 "traverse_memory",
@@ -80,7 +85,11 @@ class MemoryGraph(BaseBrainModule):
                 self.is_initialized = True
                 return True
         except Exception as e:
-            print(f"[MemoryGraph] Initialization failed: {e}", file=__import__("sys").stderr)
+            logger.warning(
+                "MemoryGraph initialization failed; falling back to dict-based graph",
+                exc_info=True,
+                extra={"module_name": "memory_graph", "error_type": type(e).__name__},
+            )
             # Fallback: use simple dict even if everything fails
             self.graph = {}
             self.is_initialized = True
@@ -132,8 +141,61 @@ class MemoryGraph(BaseBrainModule):
             node_id = params.get("node_id", "")
             return self.get_node(node_id)
 
+        elif operation == "recall_memories":
+            query = params.get("query", "")
+            limit = params.get("limit", 5)
+            return self.recall_memories(query=query, limit=limit)
+
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for memory_graph",
+            )
+
+    def recall_memories(self, query: str, limit: int = 5) -> Dict[str, Any]:
+        """
+        Recall memories relevant to a query from the in-memory graph.
+
+        This is a lightweight heuristic retrieval used by other modules (e.g., MCTS).
+        """
+        if not isinstance(query, str) or not query.strip():
+            return {"success": True, "memories": []}
+        try:
+            limit_i = int(limit)
+        except Exception as e:
+            raise InvalidParameterError("limit", str(limit), "limit must be an int") from e
+        if limit_i < 1:
+            return {"success": True, "memories": []}
+
+        tokens = {t for t in query.lower().split() if len(t) >= 3}
+        if not tokens:
+            return {"success": True, "memories": []}
+
+        # Gather candidate nodes
+        candidates: list[dict[str, Any]] = []
+        if NETWORKX_AVAILABLE and isinstance(self.graph, nx.DiGraph):
+            for node_id, data in self.graph.nodes(data=True):
+                content = str(data.get("content", "") or "")
+                summary = str(data.get("summary", "") or "")
+                text = (content + " " + summary).lower()
+                score = sum(1 for t in tokens if t in text)
+                if score > 0:
+                    candidates.append({"id": node_id, **data, "_score": score})
+        elif isinstance(self.graph, dict):
+            for node_id, data in self.graph.items():
+                if not isinstance(data, dict):
+                    continue
+                content = str(data.get("content", "") or "")
+                summary = str(data.get("summary", "") or "")
+                text = (content + " " + summary).lower()
+                score = sum(1 for t in tokens if t in text)
+                if score > 0:
+                    candidates.append({"id": node_id, **data, "_score": score})
+
+        candidates.sort(key=lambda x: int(x.get("_score", 0)), reverse=True)
+        memories = [{k: v for k, v in c.items() if k != "_score"} for c in candidates[:limit_i]]
+        return {"success": True, "memories": memories}
 
     def build_graph(self, processed_memories: str) -> Dict[str, Any]:
         """Build graph from processed memories"""

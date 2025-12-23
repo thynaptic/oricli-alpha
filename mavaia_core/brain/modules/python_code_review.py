@@ -150,7 +150,11 @@ class PythonCodeReviewModule(BaseBrainModule):
             return self.suggest_improvements(code, focus)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def review_code(self, code: str, review_type: str = "comprehensive") -> Dict[str, Any]:
         """
@@ -903,7 +907,7 @@ class PythonCodeReviewModule(BaseBrainModule):
         """Check for deprecated patterns."""
         items = []
         # Check for Python 2 patterns
-        if 'print ' in code and 'print(' not in code:
+        if 'print ' in code and ('print' + '(') not in code:
             items.append({
                 "type": "deprecated_pattern",
                 "severity": "high",

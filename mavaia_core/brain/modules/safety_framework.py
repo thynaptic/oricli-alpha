@@ -5,16 +5,11 @@ Mirrors Swift SafetyFramework.swift functionality
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import time
 import hashlib
 import json
-from pathlib import Path
 from dataclasses import dataclass, field
 from enum import Enum
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
@@ -296,7 +291,11 @@ class SafetyFrameworkModule(BaseBrainModule):
         elif operation == "get_registered_services":
             return {"services": list(self.services.keys())}
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation for safety_framework",
+            )
 
     def register_service(self, service_data: Dict[str, Any]) -> Dict[str, Any]:
         """Register a safety service"""
@@ -330,8 +329,8 @@ class SafetyFrameworkModule(BaseBrainModule):
                 service_id="safety_framework",
                 service_name="Safety Framework",
                 replacement_response=(
-                    "Hmm, my safety systems aren't available right now, babe. "
-                    "I can't process your request safely. Could you try again in a moment?"
+                    "Safety services are not available right now. "
+                    "I can’t process this request safely. Please try again in a moment."
                 ),
                 detected_patterns=["no_services_available"],
                 metadata={"error": "no_services_registered"},
@@ -364,8 +363,8 @@ class SafetyFrameworkModule(BaseBrainModule):
                     service_id="safety_framework",
                     service_name="Safety Framework",
                     replacement_response=(
-                        "My critical safety systems are having issues right now, sweetie. "
-                        "I can't process your request safely. Could you try again in a moment?"
+                        "Critical safety services are currently unavailable. "
+                        "I can’t process this request safely. Please try again in a moment."
                     ),
                     detected_patterns=["circuit_breaker_triggered"],
                     metadata={"failed_service": service_id, "priority": priority.value},
@@ -411,8 +410,8 @@ class SafetyFrameworkModule(BaseBrainModule):
                 service_id="safety_framework",
                 service_name="Safety Framework",
                 replacement_response=(
-                    "Hmm, my safety systems aren't available right now, babe. "
-                    "I can't validate this response safely. Could you try again in a moment?"
+                    "Safety services are not available right now. "
+                    "I can’t validate this response safely. Please try again in a moment."
                 ),
                 detected_patterns=["no_services_available"],
                 metadata={"error": "no_services_registered", "checkType": "postCheck"},
@@ -441,8 +440,8 @@ class SafetyFrameworkModule(BaseBrainModule):
                     service_id="safety_framework",
                     service_name="Safety Framework",
                     replacement_response=(
-                        "My critical safety systems are having issues right now, sweetie. "
-                        "I can't validate this response safely. Could you try again in a moment?"
+                        "Critical safety services are currently unavailable. "
+                        "I can’t validate this response safely. Please try again in a moment."
                     ),
                     detected_patterns=["circuit_breaker_triggered"],
                     metadata={
@@ -471,8 +470,8 @@ class SafetyFrameworkModule(BaseBrainModule):
                             service_id=service_id,
                             service_name=service.service_name,
                             replacement_response=(
-                                "My safety validation timed out, babe. "
-                                "I can't verify this response right now. Could you try again?"
+                                "Safety validation timed out. "
+                                "I can’t verify this response right now. Please try again."
                             ),
                             confidence=0.8,
                             detected_patterns=["service_timeout"],

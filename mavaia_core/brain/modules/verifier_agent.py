@@ -5,12 +5,16 @@ Fact-checks and validates synthesized information against knowledge base
 and performs consistency checking. Part of the Perplexity Multi-Agent Pipeline.
 """
 
-from typing import Any, Dict, List, Optional, Set
-from pathlib import Path
-import sys
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List
 import re
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class VerifierAgent(BaseBrainModule):
@@ -27,6 +31,7 @@ class VerifierAgent(BaseBrainModule):
 
     def __init__(self):
         """Initialize the Verifier Agent"""
+        super().__init__()
         self._world_knowledge = None
         self._verification = None
         self._evidence_evaluation = None
@@ -61,26 +66,47 @@ class VerifierAgent(BaseBrainModule):
             # Lazy load optional dependencies
             try:
                 self._world_knowledge = ModuleRegistry.get_module("world_knowledge")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency world_knowledge",
+                    exc_info=True,
+                    extra={"module_name": "verifier_agent", "dependency": "world_knowledge", "error_type": type(e).__name__},
+                )
 
             try:
                 self._verification = ModuleRegistry.get_module("verification")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency verification",
+                    exc_info=True,
+                    extra={"module_name": "verifier_agent", "dependency": "verification", "error_type": type(e).__name__},
+                )
 
             try:
                 self._evidence_evaluation = ModuleRegistry.get_module("evidence_evaluation")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency evidence_evaluation",
+                    exc_info=True,
+                    extra={"module_name": "verifier_agent", "dependency": "evidence_evaluation", "error_type": type(e).__name__},
+                )
 
             try:
                 self._embeddings = ModuleRegistry.get_module("embeddings")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load dependency embeddings",
+                    exc_info=True,
+                    extra={"module_name": "verifier_agent", "dependency": "embeddings", "error_type": type(e).__name__},
+                )
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "ModuleRegistry not available; verifier_agent will run without dependencies",
+                exc_info=True,
+                extra={"module_name": "verifier_agent", "error_type": type(e).__name__},
+            )
             return True  # Can work without dependencies
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -116,7 +142,11 @@ class VerifierAgent(BaseBrainModule):
                 information = params.get("information", {})
                 return self.process_verification(answer, documents, information)
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for verifier_agent",
+                )
 
     def verify_facts(
         self, answer: str, documents: List[Dict[str, Any]]
@@ -255,8 +285,12 @@ class VerifierAgent(BaseBrainModule):
                         "confidence": 1.0 - confidence,
                         "evidence": [{"source": "knowledge_base", "type": "contradiction"}],
                     }
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "world_knowledge validate_fact failed; continuing with document-based verification",
+                    exc_info=True,
+                    extra={"module_name": "verifier_agent", "dependency": "world_knowledge", "error_type": type(e).__name__},
+                )
 
         # Check against source documents
         supporting_evidence = []

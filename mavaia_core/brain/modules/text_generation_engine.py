@@ -5,20 +5,21 @@ Integrates with hybrid_phrasing_service, universal_voice_engine, and thought_to_
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import re
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class TextGenerationEngineModule(BaseBrainModule):
     """Generate complete responses from reasoning results with sentence-level control"""
 
     def __init__(self):
+        super().__init__()
         self.universal_voice_engine = None
         self.hybrid_phrasing_service = None
         self.phrase_embeddings = None
@@ -55,8 +56,6 @@ class TextGenerationEngineModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             try:
                 self.universal_voice_engine = ModuleRegistry.get_module(
                     "universal_voice_engine"
@@ -95,9 +94,10 @@ class TextGenerationEngineModule(BaseBrainModule):
 
             self._modules_loaded = True
         except Exception as e:
-            print(
-                f"[TextGenerationEngine] Error loading modules: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Failed to load one or more text_generation_engine dependencies",
+                exc_info=True,
+                extra={"module_name": "text_generation_engine", "error_type": type(e).__name__},
             )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -117,7 +117,11 @@ class TextGenerationEngineModule(BaseBrainModule):
         elif operation == "generate_with_neural":
             return self._generate_with_neural(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for text_generation_engine",
+            )
 
     def _generate_full_response(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -201,9 +205,10 @@ class TextGenerationEngineModule(BaseBrainModule):
                 )
                 initial_text = result.get("text", "")
             except Exception as e:
-                print(
-                    f"[TextGenerationEngine] Error in thought_to_text: {e}",
-                    file=sys.stderr,
+                logger.debug(
+                    "thought_to_text failed; using fallback join",
+                    exc_info=True,
+                    extra={"module_name": "text_generation_engine", "error_type": type(e).__name__},
                 )
                 # Fallback: simple join
                 initial_text = ". ".join(str(t) for t in thoughts) + "."

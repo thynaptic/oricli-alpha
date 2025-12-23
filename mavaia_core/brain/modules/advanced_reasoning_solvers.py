@@ -3,16 +3,18 @@ Advanced Reasoning Solvers Module
 Specialized solvers for complex reasoning puzzles: zebra puzzles, spatial reasoning, ARC, web of lies
 """
 
+from __future__ import annotations
+
+import logging
 from typing import Dict, Any, Optional, List, Tuple
-import sys
 import json
 from pathlib import Path
 from datetime import datetime
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class AdvancedReasoningSolversModule(BaseBrainModule):
@@ -20,6 +22,7 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
     
     def __init__(self):
         """Initialize the module"""
+        super().__init__()
         self._module_registry = None
         self._symbolic_solver_module = None
         self._meta_evaluator = None
@@ -54,7 +57,10 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                 from mavaia_core.brain.registry import ModuleRegistry
                 self._module_registry = ModuleRegistry
             except ImportError:
-                print("[AdvancedReasoningSolversModule] ModuleRegistry not available", file=sys.stderr)
+                logger.debug(
+                    "ModuleRegistry not available for advanced_reasoning_solvers",
+                    extra={"module_name": "advanced_reasoning_solvers"},
+                )
                 self._module_registry = None
     
     def _get_symbolic_solver_module(self):
@@ -76,7 +82,11 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                             except Exception:
                                 pass
                 except Exception as e:
-                    print(f"[AdvancedReasoningSolversModule] Failed to load symbolic_solver module: {e}", file=sys.stderr)
+                    logger.debug(
+                        "Failed to load symbolic_solver module",
+                        exc_info=True,
+                        extra={"module_name": "advanced_reasoning_solvers", "dependency": "symbolic_solver", "error_type": type(e).__name__},
+                    )
         return self._symbolic_solver_module
     
     def _get_meta_evaluator(self):
@@ -86,8 +96,12 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
             if self._module_registry:
                 try:
                     self._meta_evaluator = self._module_registry.get_module("meta_evaluator")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        "Failed to load meta_evaluator module",
+                        exc_info=True,
+                        extra={"module_name": "advanced_reasoning_solvers", "dependency": "meta_evaluator", "error_type": type(e).__name__},
+                    )
         return self._meta_evaluator
     
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -109,8 +123,17 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                 puzzle_text = params.get("text") or params.get("query") or params.get("input", "")
                 return self._parse_puzzle_constraints(puzzle_text)
             else:
-                return {"success": False, "error": f"Unknown operation: {operation}"}
+                raise InvalidParameterError("operation", operation, "Unknown operation for advanced_reasoning_solvers")
         except Exception as e:
+            logger.error(
+                "advanced_reasoning_solvers operation failed",
+                exc_info=True,
+                extra={
+                    "module_name": "advanced_reasoning_solvers",
+                    "operation": operation,
+                    "error_type": type(e).__name__,
+                },
+            )
             return {"success": False, "error": str(e)}
     
     # Solver methods are implemented below - see _solve_zebra_puzzle, _solve_spatial_problem, etc.
@@ -253,9 +276,16 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(puzzle_data, f, indent=2, ensure_ascii=False)
             
-            print(f"[CustomReasoningModule] Saved failed puzzle to: {filename}", file=sys.stderr)
+            logger.info(
+                "Saved failed puzzle for analysis",
+                extra={"module_name": "advanced_reasoning_solvers", "artifact": str(filename), "reason": reason},
+            )
         except Exception as e:
-            print(f"[CustomReasoningModule] Failed to save puzzle for analysis: {e}", file=sys.stderr)
+            logger.warning(
+                "Failed to save puzzle for analysis",
+                exc_info=True,
+                extra={"module_name": "advanced_reasoning_solvers", "error_type": type(e).__name__, "reason": reason},
+            )
     
     def _solve_with_lenient_solver(
         self,
@@ -1393,7 +1423,11 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
             return repaired if repaired else response
         except Exception as e:
             # If meta-evaluator fails, try manual repair
-            print(f"[CustomReasoningModule] Meta-evaluator failed: {e}", file=sys.stderr)
+            logger.debug(
+                "Meta-evaluator failed; using manual repair",
+                exc_info=True,
+                extra={"module_name": "advanced_reasoning_solvers", "dependency": "meta_evaluator", "error_type": type(e).__name__},
+            )
             if task_type:
                 manually_repaired = self._repair_response_format(response, task_type, question_text, params)
                 if manually_repaired:
@@ -2289,7 +2323,15 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                                             # Also add: they cannot be at the same position
                                             for k in range(num_people):
                                                 solver.add(z3.Not(z3.And(var_list1[k] == entity1[1], var_list2[k] == entity2[1])))
-                                            print(f"[CustomReasoningModule] Added cross-attribute constraint: {entity1_text} (pos >) {entity2_text}", file=sys.stderr)
+                                            logger.debug(
+                                                "Added cross-attribute constraint (pos >)",
+                                                extra={
+                                                    "module_name": "advanced_reasoning_solvers",
+                                                    "constraint_type": "cross_attribute_pos_gt",
+                                                    "entity_left": entity1_text,
+                                                    "entity_right": entity2_text,
+                                                },
+                                            )
                                     elif entity2_before and not entity1_before:
                                         # Entity2 is before "to the right", so it should be at higher position
                                         constraint_parts = []
@@ -2302,7 +2344,15 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                                             # Also add: they cannot be at the same position
                                             for k in range(num_people):
                                                 solver.add(z3.Not(z3.And(var_list1[k] == entity1[1], var_list2[k] == entity2[1])))
-                                            print(f"[CustomReasoningModule] Added cross-attribute constraint: {entity2_text} (pos >) {entity1_text}", file=sys.stderr)
+                                            logger.debug(
+                                                "Added cross-attribute constraint (pos >)",
+                                                extra={
+                                                    "module_name": "advanced_reasoning_solvers",
+                                                    "constraint_type": "cross_attribute_pos_gt",
+                                                    "entity_left": entity2_text,
+                                                    "entity_right": entity1_text,
+                                                },
+                                            )
                                     else:
                                         # Both or neither found - use default: entity1 to the right of entity2
                                         if "right" in s_lower:
@@ -2559,7 +2609,14 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                                 if len(xor_constraints) == 2:
                                     # XOR: exactly one is true
                                     solver.add(z3.Xor(xor_constraints[0], xor_constraints[1]))
-                                    print(f"[CustomReasoningModule] Added XOR constraint: {main_attr_name}={main_val} same as exactly one of {[f'{a}={v}' for _, _, a, v in other_entities]}", file=sys.stderr)
+                                    logger.debug(
+                                        "Added XOR constraint",
+                                        extra={
+                                            "module_name": "advanced_reasoning_solvers",
+                                            "constraint_type": "xor_same_position",
+                                            "main": f"{main_attr_name}={main_val}",
+                                        },
+                                    )
                                 elif len(xor_constraints) == 1:
                                     # Just one alternative - this means main is NOT at same position as other
                                     solver.add(z3.Not(xor_constraints[0]))
@@ -2675,7 +2732,14 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                                 
                                 if or_constraints:
                                     solver.add(z3.Or(or_constraints))
-                                    print(f"[CustomReasoningModule] Added OR constraint: {main_attr}={main_value} same as {[f'{a}={v}' for a, v in other_attrs_values]}", file=sys.stderr)
+                                    logger.debug(
+                                        "Added OR constraint",
+                                        extra={
+                                            "module_name": "advanced_reasoning_solvers",
+                                            "constraint_type": "or_same_position",
+                                            "main": f"{main_attr}={main_value}",
+                                        },
+                                    )
             
             # Pattern 11.5: "not anywhere to the right/left" - means "to the left/right" or "same position"
             if "not anywhere to the right" in s_lower or "not anywhere to the left" in s_lower:
@@ -2876,52 +2940,97 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
         # Log constraint information before solving
         constraint_count = len([c for c in solver.assertions()])
         if constraint_count < 5:
-            print(f"[CustomReasoningModule] Warning: Only {constraint_count} constraints parsed - puzzle may be under-constrained", file=sys.stderr)
+            logger.warning(
+                "Low constraint count; puzzle may be under-constrained",
+                extra={"module_name": "advanced_reasoning_solvers", "constraint_count": constraint_count},
+            )
         
         # Log detected attributes and entity lists
         if detected_attributes:
-            print(f"[CustomReasoningModule] Detected attributes: {list(detected_attributes.keys())}", file=sys.stderr)
+            logger.debug(
+                "Detected attributes",
+                extra={"module_name": "advanced_reasoning_solvers", "attributes": list(detected_attributes.keys())},
+            )
             for attr_name, attr_values in detected_attributes.items():
-                print(f"[CustomReasoningModule]   {attr_name}: {attr_values}", file=sys.stderr)
+                logger.debug(
+                    "Detected attribute values",
+                    extra={"module_name": "advanced_reasoning_solvers", "attribute": attr_name, "value_count": len(attr_values)},
+                )
         
-        print(f"[CustomReasoningModule] Entity lists - Colors: {colors[:5]}, Nationalities: {nationalities[:5]}, Drinks: {drinks[:5]}, Pets: {pets[:5]}", file=sys.stderr)
-        print(f"[CustomReasoningModule] Total constraints added to Z3 solver: {constraint_count}", file=sys.stderr)
+        logger.debug(
+            "Z3 entity lists and constraint count",
+            extra={
+                "module_name": "advanced_reasoning_solvers",
+                "colors_n": len(colors),
+                "nationalities_n": len(nationalities),
+                "drinks_n": len(drinks),
+                "pets_n": len(pets),
+                "constraint_count": constraint_count,
+            },
+        )
         
         # Log solver state before checking
         try:
             assertions = solver.assertions()
-            print(f"[CustomReasoningModule] Z3 solver has {len(assertions)} assertions", file=sys.stderr)
+            logger.debug(
+                "Z3 solver assertions collected",
+                extra={"module_name": "advanced_reasoning_solvers", "assertion_count": len(assertions)},
+            )
             if len(assertions) < 10:
-                print(f"[CustomReasoningModule] First few assertions: {[str(a) for a in assertions[:5]]}", file=sys.stderr)
+                logger.debug(
+                    "Z3 first assertions",
+                    extra={"module_name": "advanced_reasoning_solvers", "assertions_preview": [str(a) for a in assertions[:5]]},
+                )
         except Exception as e:
-            print(f"[CustomReasoningModule] Could not log solver assertions: {e}", file=sys.stderr)
+            logger.debug(
+                "Could not inspect solver assertions",
+                exc_info=True,
+                extra={"module_name": "advanced_reasoning_solvers", "error_type": type(e).__name__},
+            )
         
         result = solver.check()
         
         # Log solver result
         if result == z3.sat:
-            print(f"[CustomReasoningModule] Z3 solver found solution (SAT)", file=sys.stderr)
+            logger.debug("Z3 solver SAT", extra={"module_name": "advanced_reasoning_solvers"})
         elif result == z3.unsat:
-            print(f"[CustomReasoningModule] Z3 solver found constraints unsatisfiable (UNSAT)", file=sys.stderr)
+            logger.debug("Z3 solver UNSAT", extra={"module_name": "advanced_reasoning_solvers"})
         elif result == z3.unknown:
-            print(f"[CustomReasoningModule] Z3 solver could not determine satisfiability (UNKNOWN)", file=sys.stderr)
+            logger.debug("Z3 solver UNKNOWN", extra={"module_name": "advanced_reasoning_solvers"})
         
         if result == z3.sat:
             model = solver.model()
             
             # Debug: print Z3 model values
             if detected_attributes:
-                print(f"[CustomReasoningModule] Z3 model values:", file=sys.stderr)
+                logger.debug("Z3 model values", extra={"module_name": "advanced_reasoning_solvers"})
                 for pos in range(num_people):
                     color_idx = model.eval(color_pos[pos]).as_long()
                     nat_idx = model.eval(nat_pos[pos]).as_long()
                     drink_idx = model.eval(drink_pos[pos]).as_long()
                     pet_idx = model.eval(pet_pos[pos]).as_long()
-                    print(f"  Pos {pos+1}: color_idx={color_idx}, nat_idx={nat_idx}, drink_idx={drink_idx}, pet_idx={pet_idx}", file=sys.stderr)
+                    logger.debug(
+                        "Z3 position indices",
+                        extra={
+                            "module_name": "advanced_reasoning_solvers",
+                            "pos": pos + 1,
+                            "color_idx": color_idx,
+                            "nat_idx": nat_idx,
+                            "drink_idx": drink_idx,
+                            "pet_idx": pet_idx,
+                        },
+                    )
                     if len(attribute_names) >= 3:
-                        print(f"    -> {attribute_names[0]}={colors[color_idx] if color_idx < len(colors) else '?'}, "
-                              f"{attribute_names[1]}={nationalities[nat_idx] if nat_idx < len(nationalities) else '?'}, "
-                              f"{attribute_names[2]}={drinks[drink_idx] if drink_idx < len(drinks) else '?'}", file=sys.stderr)
+                        logger.debug(
+                            "Z3 position mapping preview",
+                            extra={
+                                "module_name": "advanced_reasoning_solvers",
+                                "pos": pos + 1,
+                                "attr1": colors[color_idx] if color_idx < len(colors) else "?",
+                                "attr2": nationalities[nat_idx] if nat_idx < len(nationalities) else "?",
+                                "attr3": drinks[drink_idx] if drink_idx < len(drinks) else "?",
+                            },
+                        )
             
             # Build position -> attribute maps
             # Use detected attribute names if available, otherwise use standard names
@@ -2957,10 +3066,17 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                         }
                     else:
                         # Invalid indices - model might be incomplete
-                        print(f"[CustomReasoningModule] Z3 model has invalid indices at position {pos+1}", file=sys.stderr)
+                        logger.debug(
+                            "Z3 model has invalid indices at position",
+                            extra={"module_name": "advanced_reasoning_solvers", "pos": pos + 1},
+                        )
                         return None
                 except Exception as e:
-                    print(f"[CustomReasoningModule] Error extracting Z3 model values: {e}", file=sys.stderr)
+                    logger.debug(
+                        "Error extracting Z3 model values",
+                        exc_info=True,
+                        extra={"module_name": "advanced_reasoning_solvers", "error_type": type(e).__name__},
+                    )
                     return None
             
             # Extract questions and build answers
@@ -3082,16 +3198,19 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                     "position_map": position_map
                 }
         elif result == z3.unsat:
-            print(f"[CustomReasoningModule] Z3 solver found constraints unsatisfiable (unsat)", file=sys.stderr)
-            # Log puzzle text for analysis
-            puzzle_preview = puzzle_text[:500] if len(puzzle_text) > 500 else puzzle_text
-            print(f"[CustomReasoningModule] UNSAT puzzle preview: {puzzle_preview}...", file=sys.stderr)
+            logger.info(
+                "Z3 solver UNSAT for zebra puzzle",
+                extra={"module_name": "advanced_reasoning_solvers", "constraint_count": constraint_count, "puzzle_len": len(puzzle_text)},
+            )
             
             # Save failed puzzle to file for analysis
             self._save_failed_puzzle(puzzle_text, colors, nationalities, drinks, pets, detected_attributes, constraint_count)
             
             # Try lenient solver as fallback
-            print(f"[CustomReasoningModule] Attempting lenient solver as fallback...", file=sys.stderr)
+            logger.debug(
+                "Attempting lenient solver fallback after UNSAT",
+                extra={"module_name": "advanced_reasoning_solvers"},
+            )
             lenient_result = self._solve_with_lenient_solver(
                 puzzle_text, colors, nationalities, drinks, pets,
                 detected_attributes, attribute_names, num_people
@@ -3099,7 +3218,10 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
             
             if lenient_result and lenient_result.get("success"):
                 confidence = lenient_result.get("confidence", 0.0)
-                print(f"[CustomReasoningModule] Lenient solver found solution with confidence {confidence:.2f}", file=sys.stderr)
+                logger.info(
+                    "Lenient solver found solution after UNSAT",
+                    extra={"module_name": "advanced_reasoning_solvers", "confidence": float(confidence)},
+                )
                 
                 # Apply meta-evaluator to repair and validate
                 response_text = self._apply_meta_evaluator(
@@ -3120,16 +3242,25 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                 }
             
             # If lenient solver also fails, use basic fallback
-            print(f"[CustomReasoningModule] Lenient solver failed, using basic fallback", file=sys.stderr)
+            logger.debug(
+                "Lenient solver failed after UNSAT; using heuristic fallback answers",
+                extra={"module_name": "advanced_reasoning_solvers"},
+            )
             return self._generate_zebra_fallback_answers(puzzle_text, colors, nationalities, drinks, pets)
         elif result == z3.unknown:
-            print(f"[CustomReasoningModule] Z3 solver could not determine satisfiability (unknown, possibly timeout)", file=sys.stderr)
+            logger.info(
+                "Z3 solver UNKNOWN for zebra puzzle",
+                extra={"module_name": "advanced_reasoning_solvers", "constraint_count": constraint_count, "puzzle_len": len(puzzle_text)},
+            )
             
             # Save failed puzzle to file for analysis
             self._save_failed_puzzle(puzzle_text, colors, nationalities, drinks, pets, detected_attributes, constraint_count, reason="unknown")
             
             # Try lenient solver as fallback
-            print(f"[CustomReasoningModule] Attempting lenient solver as fallback for UNKNOWN result...", file=sys.stderr)
+            logger.debug(
+                "Attempting lenient solver fallback after UNKNOWN",
+                extra={"module_name": "advanced_reasoning_solvers"},
+            )
             lenient_result = self._solve_with_lenient_solver(
                 puzzle_text, colors, nationalities, drinks, pets,
                 detected_attributes, attribute_names, num_people
@@ -3137,7 +3268,10 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
             
             if lenient_result and lenient_result.get("success"):
                 confidence = lenient_result.get("confidence", 0.0)
-                print(f"[CustomReasoningModule] Lenient solver found solution with confidence {confidence:.2f}", file=sys.stderr)
+                logger.info(
+                    "Lenient solver found solution after UNKNOWN",
+                    extra={"module_name": "advanced_reasoning_solvers", "confidence": float(confidence)},
+                )
                 
                 # Apply meta-evaluator to repair and validate
                 response_text = self._apply_meta_evaluator(
@@ -3158,7 +3292,10 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                 }
             
             # If lenient solver also fails, use basic fallback
-            print(f"[CustomReasoningModule] Lenient solver failed, using basic fallback", file=sys.stderr)
+            logger.debug(
+                "Lenient solver failed after UNKNOWN; using heuristic fallback answers",
+                extra={"module_name": "advanced_reasoning_solvers"},
+            )
             return self._generate_zebra_fallback_answers(puzzle_text, colors, nationalities, drinks, pets)
         
         return None
@@ -3929,12 +4066,18 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                 
                 if solver_result and solver_result.get("success"):
                     response_text = solver_result.get("response", "")
-                    print(f"[CustomReasoningModule] Z3 solver succeeded in {z3_time:.2f}s", file=sys.stderr)
+                    logger.info(
+                        "Z3 solver succeeded for zebra puzzle",
+                        extra={"module_name": "advanced_reasoning_solvers", "latency_s": round(float(z3_time), 3)},
+                    )
                     
                     # Validate response format before meta-evaluator
                     validation = self._validate_answer_quality(response_text, "zebra_puzzle", puzzle_text)
                     if not validation.get("is_valid"):
-                        print(f"[CustomReasoningModule] Z3 response validation issues: {validation.get('issues', [])}", file=sys.stderr)
+                        logger.debug(
+                            "Z3 response validation issues",
+                            extra={"module_name": "advanced_reasoning_solvers", "issues": validation.get("issues", [])},
+                        )
                     
                     # Apply meta-evaluator to repair and validate
                     response_text = self._apply_meta_evaluator(
@@ -3947,9 +4090,15 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                     # Validate again after meta-evaluator
                     post_validation = self._validate_answer_quality(response_text, "zebra_puzzle", puzzle_text)
                     if post_validation.get("is_valid"):
-                        print(f"[CustomReasoningModule] Response validated successfully after meta-evaluator", file=sys.stderr)
+                        logger.debug(
+                            "Response validated successfully after meta-evaluator",
+                            extra={"module_name": "advanced_reasoning_solvers"},
+                        )
                     else:
-                        print(f"[CustomReasoningModule] Response still has issues after meta-evaluator: {post_validation.get('issues', [])}", file=sys.stderr)
+                        logger.debug(
+                            "Response still has validation issues after meta-evaluator",
+                            extra={"module_name": "advanced_reasoning_solvers", "issues": post_validation.get("issues", [])},
+                        )
                     
                     return {
                         "success": True,
@@ -3961,13 +4110,25 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                 elif solver_result is None:
                     # Z3 couldn't find a solution (unsat or unknown)
                     # This might mean constraints are incomplete - log for debugging
-                    print(f"[CustomReasoningModule] Z3 solver returned no solution after {z3_time:.2f}s (possibly incomplete constraints)", file=sys.stderr)
+                    logger.debug(
+                        "Z3 solver returned no solution (possibly incomplete constraints)",
+                        extra={"module_name": "advanced_reasoning_solvers", "latency_s": round(float(z3_time), 3)},
+                    )
                 else:
-                    print(f"[CustomReasoningModule] Z3 solver failed after {z3_time:.2f}s: {solver_result.get('error', 'unknown')}", file=sys.stderr)
+                    logger.debug(
+                        "Z3 solver failed",
+                        extra={
+                            "module_name": "advanced_reasoning_solvers",
+                            "latency_s": round(float(z3_time), 3),
+                            "error": solver_result.get("error", "unknown") if isinstance(solver_result, dict) else "unknown",
+                        },
+                    )
             except Exception as e:
-                print(f"[CustomReasoningModule] Z3 direct solve failed: {e}", file=sys.stderr)
-                import traceback
-                traceback.print_exc(file=sys.stderr)
+                logger.debug(
+                    "Z3 direct solve failed",
+                    exc_info=True,
+                    extra={"module_name": "advanced_reasoning_solvers", "error_type": type(e).__name__},
+                )
         
         # Fallback to symbolic solver module
         parsed = self._parse_puzzle_constraints(puzzle_text)
@@ -5558,7 +5719,11 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                             result[y][x] = value
             except Exception as e:
                 # Skip transformations that fail
-                print(f"[CustomReasoningModule] Transformation {transform_type} failed: {e}", file=sys.stderr)
+                logger.debug(
+                    "ARC transformation failed; skipping",
+                    exc_info=True,
+                    extra={"module_name": "advanced_reasoning_solvers", "transform_type": transform_type, "error_type": type(e).__name__},
+                )
                 continue
         
         return result
@@ -6068,7 +6233,11 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                 applied_transforms.append(transform.get("type", "unknown"))
             except Exception as e:
                 # Skip transformations that fail
-                print(f"[CustomReasoningModule] Transformation application failed: {e}", file=sys.stderr)
+                logger.debug(
+                    "ARC transformation application failed; skipping",
+                    exc_info=True,
+                    extra={"module_name": "advanced_reasoning_solvers", "error_type": type(e).__name__},
+                )
                 continue
         
         # Apply rules if provided
@@ -6078,7 +6247,11 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                 result = self._apply_rules(result, rules)
                 applied_rules = [r.get("type") for r in rules]
             except Exception as e:
-                print(f"[CustomReasoningModule] Rule application failed: {e}", file=sys.stderr)
+                logger.debug(
+                    "ARC rule application failed",
+                    exc_info=True,
+                    extra={"module_name": "advanced_reasoning_solvers", "error_type": type(e).__name__},
+                )
         
         # Calculate confidence based on how many transformations were applied
         confidence = len(applied_transforms) / max(len(transformations), 1) * model.get("consistency", 0.5)
@@ -6145,7 +6318,11 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
                         result = self._apply_duplication(result, tiles_x, tiles_y)
             except Exception as e:
                 # Skip rules that fail
-                print(f"[CustomReasoningModule] Rule {rule_type} application failed: {e}", file=sys.stderr)
+                logger.debug(
+                    "ARC rule application failed; skipping rule",
+                    exc_info=True,
+                    extra={"module_name": "advanced_reasoning_solvers", "rule_type": rule_type, "error_type": type(e).__name__},
+                )
                 continue
         
         return result
@@ -7413,7 +7590,10 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
         # Validate format before meta-evaluator
         validation = self._validate_answer_quality(response, "web_of_lies", text)
         if not validation.get("is_valid"):
-            print(f"[CustomReasoningModule] Web of lies response validation issues: {validation.get('issues', [])}", file=sys.stderr)
+            logger.debug(
+                "Web-of-lies response validation issues",
+                extra={"module_name": "advanced_reasoning_solvers", "issues": validation.get("issues", [])},
+            )
         
         # Apply meta-evaluator to repair and validate
         response = self._apply_meta_evaluator(
@@ -7426,9 +7606,15 @@ class AdvancedReasoningSolversModule(BaseBrainModule):
         # Validate again after meta-evaluator
         post_validation = self._validate_answer_quality(response, "web_of_lies", text)
         if post_validation.get("is_valid"):
-            print(f"[CustomReasoningModule] Web of lies response validated successfully", file=sys.stderr)
+            logger.debug(
+                "Web-of-lies response validated successfully",
+                extra={"module_name": "advanced_reasoning_solvers"},
+            )
         else:
-            print(f"[CustomReasoningModule] Web of lies response still has issues: {post_validation.get('issues', [])}", file=sys.stderr)
+            logger.debug(
+                "Web-of-lies response still has issues",
+                extra={"module_name": "advanced_reasoning_solvers", "issues": post_validation.get("issues", [])},
+            )
         
         return {
             "success": True,

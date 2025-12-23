@@ -5,22 +5,22 @@ Reflection service that reviews reasoning steps and generates corrections.
 Ported from Swift ReasoningReflectionService.swift
 """
 
-import sys
 import re
 import uuid
-from pathlib import Path
 from typing import Any
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from cot_models import (
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.brain.modules.cot_models import (
     CoTStep,
     ReflectionResult,
     Correction,
     ReflectionIssue,
 )
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 
 class ReasoningReflectionService(BaseBrainModule):
@@ -31,6 +31,7 @@ class ReasoningReflectionService(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._cognitive_generator = None
         # Track reflection depth to prevent infinite loops
         self._reflection_depth: dict[str, int] = {}
@@ -56,11 +57,14 @@ class ReasoningReflectionService(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from module_registry import ModuleRegistry
-
             self._cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to load cognitive_generator for reasoning_reflection",
+                exc_info=True,
+                extra={"module_name": "reasoning_reflection", "error_type": type(e).__name__},
+            )
             return False
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -81,7 +85,11 @@ class ReasoningReflectionService(BaseBrainModule):
         elif operation == "clear_reflection_depth":
             return self._clear_reflection_depth(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for reasoning_reflection",
+            )
 
     def _reflect_on_reasoning(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -100,11 +108,15 @@ class ReasoningReflectionService(BaseBrainModule):
         if not self._cognitive_generator:
             self.initialize()
             if not self._cognitive_generator:
-                raise RuntimeError("Cognitive generator module not available")
+                raise ModuleOperationError(
+                    module_name=self.metadata.name,
+                    operation="reflect_on_reasoning",
+                    reason="Dependency 'cognitive_generator' not available",
+                )
 
         steps_dicts = params.get("steps", [])
         if not steps_dicts:
-            raise ValueError("steps parameter is required")
+            raise InvalidParameterError("steps", str(steps_dicts), "steps parameter is required and must be non-empty")
 
         steps = [CoTStep.from_dict(s) for s in steps_dicts]
         final_answer = params.get("final_answer", "")
@@ -165,11 +177,11 @@ class ReasoningReflectionService(BaseBrainModule):
 
     def _reflect_on_tot_path(self, params: dict[str, Any]) -> dict[str, Any]:
         """Reflect on ToT path (converts ToT nodes to CoT steps)"""
-        from tot_models import ToTThoughtNode
+        from mavaia_core.brain.modules.tot_models import ToTThoughtNode
 
         path_dicts = params.get("path", [])
         if not path_dicts:
-            raise ValueError("path parameter is required")
+            raise InvalidParameterError("path", str(path_dicts), "path parameter is required and must be non-empty")
 
         path = [ToTThoughtNode.from_dict(n) for n in path_dicts]
         final_answer = params.get("final_answer", "")
@@ -198,11 +210,11 @@ class ReasoningReflectionService(BaseBrainModule):
 
     def _reflect_on_mcts_path(self, params: dict[str, Any]) -> dict[str, Any]:
         """Reflect on MCTS path (converts MCTS nodes to CoT steps)"""
-        from mcts_models import MCTSNode
+        from mavaia_core.brain.modules.mcts_models import MCTSNode
 
         path_dicts = params.get("path", [])
         if not path_dicts:
-            raise ValueError("path parameter is required")
+            raise InvalidParameterError("path", str(path_dicts), "path parameter is required and must be non-empty")
 
         path = [MCTSNode.from_dict(n) for n in path_dicts]
         final_answer = params.get("final_answer", "")
@@ -339,9 +351,10 @@ If no issues found, respond with "No issues found."
             return {"issues": issues, "summary": response_text}
 
         except Exception as e:
-            print(
-                f"[ReasoningReflectionService] Error performing reflection: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Error performing reflection",
+                exc_info=True,
+                extra={"module_name": "reasoning_reflection", "error_type": type(e).__name__},
             )
             return {"issues": [], "summary": ""}
 

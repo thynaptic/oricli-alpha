@@ -4,26 +4,25 @@ Verifies all converted services are discoverable and accessible
 """
 
 import sys
-from pathlib import Path
+import logging
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+from mavaia_core.brain.registry import ModuleRegistry
 
-from module_registry import ModuleRegistry
+logger = logging.getLogger(__name__)
 
 
 def test_service_discovery():
     """Test that all converted services are discoverable"""
-    print("=" * 80)
-    print("Testing Service Discovery")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info("Testing Service Discovery")
+    logger.info("=" * 80)
     
     # Discover all modules
     ModuleRegistry.discover_modules(verbose=True)
     
     # List all discovered modules
     all_modules = ModuleRegistry.list_modules()
-    print(f"\nTotal modules discovered: {len(all_modules)}")
+    logger.info("Total modules discovered: %s", len(all_modules))
     
     # Expected new services from conversion
     expected_new_services = [
@@ -70,9 +69,9 @@ def test_service_discovery():
         "shell_sandbox_service",
     ]
     
-    print("\n" + "=" * 80)
-    print("Checking Expected New Services")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info("Checking Expected New Services")
+    logger.info("=" * 80)
     
     found_services = []
     missing_services = []
@@ -82,28 +81,33 @@ def test_service_discovery():
             found_services.append(service_name)
             metadata = ModuleRegistry.get_metadata(service_name)
             if metadata:
-                print(f"✓ {service_name} v{metadata.version} - {metadata.description[:60]}...")
+                logger.info(
+                    "✓ %s v%s - %s...",
+                    service_name,
+                    metadata.version,
+                    (metadata.description or "")[:60],
+                )
             else:
-                print(f"✓ {service_name} (metadata not available)")
+                logger.info("✓ %s (metadata not available)", service_name)
         else:
             missing_services.append(service_name)
-            print(f"✗ {service_name} - NOT FOUND")
+            logger.warning("✗ %s - NOT FOUND", service_name)
     
-    print("\n" + "=" * 80)
-    print("Summary")
-    print("=" * 80)
-    print(f"Found: {len(found_services)}/{len(expected_new_services)}")
-    print(f"Missing: {len(missing_services)}")
+    logger.info("=" * 80)
+    logger.info("Summary")
+    logger.info("=" * 80)
+    logger.info("Found: %s/%s", len(found_services), len(expected_new_services))
+    logger.info("Missing: %s", len(missing_services))
     
     if missing_services:
-        print("\nMissing services:")
+        logger.info("Missing services:")
         for service in missing_services:
-            print(f"  - {service}")
+            logger.info("  - %s", service)
     
     # Test module initialization
-    print("\n" + "=" * 80)
-    print("Testing Module Initialization")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info("Testing Module Initialization")
+    logger.info("=" * 80)
     
     initialized_count = 0
     failed_count = 0
@@ -113,20 +117,26 @@ def test_service_discovery():
             module = ModuleRegistry.get_module(service_name, auto_discover=False)
             if module:
                 initialized_count += 1
-                print(f"✓ {service_name} - Initialized successfully")
+                logger.info("✓ %s - Initialized successfully", service_name)
             else:
                 failed_count += 1
-                print(f"✗ {service_name} - Initialization failed")
+                logger.warning("✗ %s - Initialization failed", service_name)
         except Exception as e:
             failed_count += 1
-            print(f"✗ {service_name} - Error: {str(e)[:60]}")
+            logger.debug(
+                "✗ %s - Error during initialization",
+                service_name,
+                exc_info=True,
+                extra={"service_name": service_name, "error_type": type(e).__name__},
+            )
     
-    print(f"\nInitialized: {initialized_count}, Failed: {failed_count}")
+    logger.info("Initialized: %s, Failed: %s", initialized_count, failed_count)
     
     return len(found_services) == len(expected_new_services)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     success = test_service_discovery()
     sys.exit(0 if success else 1)
 

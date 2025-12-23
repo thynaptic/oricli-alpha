@@ -5,15 +5,14 @@ Automatically finds all modules in brain_modules directory
 
 import importlib.util
 import inspect
+import logging
 import os
-import sys
 from pathlib import Path
 from typing import Type
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 
-from base_module import BaseBrainModule, ModuleMetadata
+logger = logging.getLogger(__name__)
 
 
 class ModuleRegistry:
@@ -90,24 +89,30 @@ class ModuleRegistry:
                             cls.register_module(metadata.name, obj, metadata)
                             discovered_count += 1
                             if verbose:
-                                print(
-                                    f"[ModuleRegistry] Discovered module: {metadata.name} v{metadata.version}",
-                                    file=__import__("sys").stderr,
+                                logger.info(
+                                    "Discovered module %s v%s",
+                                    metadata.name,
+                                    metadata.version,
+                                    extra={"module_name": "module_registry", "discovered": metadata.name},
                                 )
                         except Exception as e:
                             failed_count += 1
                             if verbose:
-                                print(
-                                    f"[ModuleRegistry] Failed to initialize {name}: {e}",
-                                    file=__import__("sys").stderr,
+                                logger.warning(
+                                    "Failed to initialize candidate module class %s",
+                                    name,
+                                    exc_info=True,
+                                    extra={"module_name": "module_registry", "error_type": type(e).__name__},
                                 )
 
             except Exception as e:
                 failed_count += 1
                 if verbose:
-                    print(
-                        f"[ModuleRegistry] Failed to load {module_file.name}: {e}",
-                        file=__import__("sys").stderr,
+                    logger.warning(
+                        "Failed to load module file %s",
+                        module_file.name,
+                        exc_info=True,
+                        extra={"module_name": "module_registry", "error_type": type(e).__name__},
                     )
 
         # Mark as discovered and log summary
@@ -117,7 +122,15 @@ class ModuleRegistry:
             if failed_count > 0:
                 status += f", {failed_count} failed"
             if verbose:
-                print(f"[ModuleRegistry] {status}", file=__import__("sys").stderr)
+                logger.info(
+                    "%s",
+                    status,
+                    extra={
+                        "module_name": "module_registry",
+                        "discovered_count": discovered_count,
+                        "failed_count": failed_count,
+                    },
+                )
 
     @classmethod
     def register_module(
@@ -147,9 +160,10 @@ class ModuleRegistry:
             if instance.initialize():
                 cls._instances[name] = instance
             else:
-                print(
-                    f"[ModuleRegistry] Failed to initialize module: {name}",
-                    file=__import__("sys").stderr,
+                logger.warning(
+                    "Failed to initialize module instance %s",
+                    name,
+                    extra={"module_name": "module_registry", "instance": name},
                 )
                 return None
 

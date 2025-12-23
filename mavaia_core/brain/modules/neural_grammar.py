@@ -7,20 +7,21 @@ No LLM dependencies - uses pattern matching, templates, and rule-based transform
 from typing import Any
 import json
 import os
-import sys
 from pathlib import Path
 import re
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class NeuralGrammarModule(BaseBrainModule):
     """Grammar correction and naturalization using rule-based methods"""
 
     def __init__(self) -> None:
+        super().__init__()
         self.config = None
         self._load_config()
 
@@ -43,9 +44,9 @@ class NeuralGrammarModule(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize the module"""
         if not self.config:
-            print(
-                f"[NeuralGrammarModule] Warning: Config not loaded, but continuing with defaults",
-                file=sys.stderr,
+            logger.warning(
+                "NeuralGrammar config not loaded; continuing with defaults",
+                extra={"module_name": "neural_grammar"},
             )
         return True
 
@@ -56,7 +57,11 @@ class NeuralGrammarModule(BaseBrainModule):
             with open(config_path, "r", encoding="utf-8") as f:
                 self.config = json.load(f)
         except Exception as e:
-            print(f"[NeuralGrammarModule] Failed to load config: {e}", file=sys.stderr)
+            logger.warning(
+                "Failed to load neural_grammar config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "neural_grammar", "error_type": type(e).__name__},
+            )
             self.config = {}
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -86,8 +91,10 @@ class NeuralGrammarModule(BaseBrainModule):
                     context=params.get("context", ""),
                 )
             case _:
-                raise ValueError(
-                    f"Unknown operation: {operation}. Supported: generate_grammar, correct_grammar, naturalize_response, generate_variations"
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for neural_grammar",
                 )
 
     def _generate_grammar(
@@ -215,9 +222,10 @@ class NeuralGrammarModule(BaseBrainModule):
             confidence = max(0.0, min(1.0, confidence))
 
         except Exception as e:
-            print(
-                f"[NeuralGrammarModule] Confidence calculation error: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Confidence calculation error; using default confidence",
+                exc_info=True,
+                extra={"module_name": "neural_grammar", "error_type": type(e).__name__},
             )
             confidence = 0.5  # Default on error
 

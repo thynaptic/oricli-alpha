@@ -4,15 +4,17 @@ Agent coordinator for lifecycle management and result aggregation
 Converted from Swift AgentCoordinator.swift
 """
 
-from typing import Any, Dict, List, Optional
-import sys
-import time
-from pathlib import Path
+from __future__ import annotations
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
+from typing import Any, Dict, List, Optional
+import time
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class AgentType:
@@ -97,6 +99,7 @@ class AgentCoordinatorModule(BaseBrainModule):
     """Agent coordinator for lifecycle management and result aggregation"""
 
     def __init__(self):
+        super().__init__()
         self.agents: Dict[str, Any] = {}
         self.results: Dict[str, AgentResult] = {}
         self._modules_loaded = False
@@ -138,13 +141,79 @@ class AgentCoordinatorModule(BaseBrainModule):
             # Convert enum to string for dictionary key
             agent_type_str = agent_type_enum if isinstance(agent_type_enum, str) else str(agent_type_enum)
             try:
-                from module_registry import ModuleRegistry
-                agent = ModuleRegistry.get_module(f"{agent_type_str}_agent")
+                agent = ModuleRegistry.get_module(f"{agent_type_str}_agent", auto_discover=True, wait_timeout=1.0)
                 if agent:
                     # Store with string key to ensure consistency
                     self.agents[str(agent_type_str)] = agent
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to register agent",
+                    exc_info=True,
+                    extra={"module_name": "agent_coordinator", "dependency": f"{agent_type_str}_agent", "error_type": type(e).__name__},
+                )
+
+    def _extract_documents_from_results(self, previous_results: List[AgentResult]) -> List[Dict[str, Any]]:
+        """Best-effort extraction of documents from prior agent outputs."""
+        for r in reversed(previous_results):
+            if r.agent_type not in {AgentType.SEARCH, AgentType.RANKING}:
+                continue
+            if isinstance(r.output, dict):
+                docs = r.output.get("documents") or r.output.get("rankedDocuments") or r.output.get("ranked_documents")
+                if isinstance(docs, list):
+                    return docs
+        return []
+
+    def _extract_answer_from_results(self, previous_results: List[AgentResult]) -> str:
+        """Best-effort extraction of answer text from prior outputs."""
+        for r in reversed(previous_results):
+            if r.agent_type not in {AgentType.SYNTHESIS, AgentType.ANSWER}:
+                continue
+            if isinstance(r.output, dict):
+                ans = r.output.get("answer") or r.output.get("synthesis")
+                if isinstance(ans, str):
+                    return ans
+        return ""
+
+    def _execute_agent(
+        self,
+        *,
+        agent_type: str,
+        agent: Any,
+        task: AgentTask,
+        context: Dict[str, Any],
+        previous_results: List[AgentResult],
+    ) -> Dict[str, Any]:
+        """Dispatch to the correct agent operation based on agent_type."""
+        query = task.query or ""
+
+        if agent_type == AgentType.SEARCH:
+            limit = context.get("limit", 10)
+            sources = context.get("sources") or ["web", "memory"]
+            return agent.execute("search", {"query": query, "limit": limit, "sources": sources})
+
+        documents = context.get("documents")
+        if not isinstance(documents, list):
+            documents = self._extract_documents_from_results(previous_results)
+
+        if agent_type == AgentType.RANKING:
+            return agent.execute("rank", {"query": query, "documents": documents})
+
+        if agent_type == AgentType.SYNTHESIS:
+            return agent.execute("synthesize", {"query": query, "documents": documents, "persona": context.get("persona", "mavaia")})
+
+        if agent_type == AgentType.RESEARCH:
+            return agent.execute("research", {"query": query, "max_passes": context.get("max_passes", 3), "limit": context.get("limit", 10)})
+
+        if agent_type == AgentType.ANALYSIS:
+            return agent.execute("analyze", {"query": query, "documents": documents})
+
+        if agent_type == AgentType.ANSWER:
+            raw_answer = context.get("answer")
+            if not isinstance(raw_answer, str) or not raw_answer:
+                raw_answer = self._extract_answer_from_results(previous_results)
+            return agent.execute("format_answer", {"query": query, "answer": raw_answer, "documents": documents})
+
+        raise InvalidParameterError("agent_type", agent_type, "Unknown agent_type for execution")
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -157,7 +226,7 @@ class AgentCoordinatorModule(BaseBrainModule):
         elif operation == "get_all_results":
             return self._get_all_results()
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError("operation", operation, "Unknown operation for agent_coordinator")
 
     def _execute_task(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a single task"""
@@ -209,6 +278,9 @@ class AgentCoordinatorModule(BaseBrainModule):
                 agent_type_str = agent_type_str.value
             else:
                 agent_type_str = str(agent_type_str)
+        # Normalize common naming variants (e.g., "search_agent" -> "search")
+        if agent_type_str.endswith("_agent"):
+            agent_type_str = agent_type_str[: -len("_agent")]
         
         agent = self.agents.get(agent_type_str)
         if not agent:
@@ -236,28 +308,19 @@ class AgentCoordinatorModule(BaseBrainModule):
 
         for attempt in range(max_retries + 1):
             try:
-                if hasattr(agent, "execute"):
-                    result_data = agent.execute(
-                        "execute",
-                        {
-                            "task": task.to_dict(),
-                            "context": context,
-                        }
-                    )
-                else:
-                    result_data = agent.execute(
-                        "execute_task",
-                        {
-                            "task": task.to_dict(),
-                            "context": context,
-                        }
-                    )
+                result_data = self._execute_agent(
+                    agent_type=agent_type_str,
+                    agent=agent,
+                    task=task,
+                    context=context,
+                    previous_results=previous_results,
+                )
 
                 result = AgentResult(
                     task_id=task.id,
                     agent_type=agent_type_str,
                     success=result_data.get("success", False),
-                    output=result_data.get("result", ""),
+                    output=result_data,
                     error=result_data.get("error"),
                 )
 
@@ -278,7 +341,7 @@ class AgentCoordinatorModule(BaseBrainModule):
             agent_type=agent_type_str,
             success=False,
             output="",
-            error=str(last_error) if last_error else "Unknown error",
+            error=type(last_error).__name__ if last_error else "Unknown error",
         )
 
         self.results[task.id] = result

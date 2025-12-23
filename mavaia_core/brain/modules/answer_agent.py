@@ -4,9 +4,13 @@ Answer Agent Module - final answer formatting and source attribution.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class AnswerAgentModule(BaseBrainModule):
@@ -24,7 +28,12 @@ class AnswerAgentModule(BaseBrainModule):
         try:
             from mavaia_core.brain.registry import ModuleRegistry
             self.cog = ModuleRegistry.get_module("cognitive_generator", auto_discover=True, wait_timeout=1.0)
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to load cognitive_generator for answer_agent",
+                exc_info=True,
+                extra={"module_name": "answer_agent", "error_type": type(e).__name__},
+            )
             self.cog = None
 
     @property
@@ -33,14 +42,19 @@ class AnswerAgentModule(BaseBrainModule):
             name="answer_agent",
             version="1.0.0",
             description="Formats answers with citations and validation hints",
-            operations=["format_answer"],
+            # Keep `answer` as a compatibility alias (used by multi_agent_orchestrator).
+            operations=["format_answer", "answer"],
             dependencies=[],
             model_required=False,
         )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        if operation != "format_answer":
-            raise ValueError(f"Unsupported operation: {operation}")
+        if operation not in {"format_answer", "answer"}:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unsupported operation for answer_agent",
+            )
 
         # Lazy load modules only when execute is called
         self._ensure_modules()
@@ -63,8 +77,12 @@ class AnswerAgentModule(BaseBrainModule):
                 if isinstance(formatted, dict):
                     formatted = formatted.get("response", raw_answer)
                 return {"success": True, "answer": formatted, "documents": documents}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "cognitive_generator formatting failed; using fallback formatting",
+                    exc_info=True,
+                    extra={"module_name": "answer_agent", "error_type": type(e).__name__},
+                )
 
         return {"success": True, "answer": self._fallback(raw_answer, documents), "documents": documents}
 

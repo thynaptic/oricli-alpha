@@ -4,16 +4,19 @@ Identify cause-and-effect relationships
 """
 
 from typing import List, Dict, Any
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class CausalInferenceModule(BaseBrainModule):
     """Causal inference module"""
+
+    def __init__(self) -> None:
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -31,8 +34,20 @@ class CausalInferenceModule(BaseBrainModule):
         query = params.get("query", "")
         context = params.get("context", "")
 
-        if not query:
-            raise ValueError("Missing required parameter: query")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="Missing required parameter: query (must be a non-empty string)",
+            )
+        if context is None:
+            context = ""
+        if not isinstance(context, str):
+            raise InvalidParameterError(
+                parameter="context",
+                value=str(type(context).__name__),
+                reason="context must be a string",
+            )
 
         reasoning = self._causal_inference(query, context)
 

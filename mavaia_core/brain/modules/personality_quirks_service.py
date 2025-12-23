@@ -7,13 +7,13 @@ The personality-based system has been replaced with a universal voice that adapt
 """
 
 from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 try:
     from models.personality_models import PersonalityConfiguration
 except ImportError:
@@ -25,6 +25,7 @@ class PersonalityQuirksServiceModule(BaseBrainModule):
     """Manages Mavaia's personality quirks, signature phrases, and response style"""
 
     def __init__(self):
+        super().__init__()
         self.personality_adaptation = None
         self._modules_loaded = False
 
@@ -60,14 +61,16 @@ class PersonalityQuirksServiceModule(BaseBrainModule):
             return
 
         try:
-            from module_registry import ModuleRegistry
-
             self.personality_adaptation = ModuleRegistry.get_module("personality_adaptation_service")
 
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load optional dependency module for personality_quirks_service",
+                exc_info=True,
+                extra={"module_name": "personality_quirks_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -82,7 +85,11 @@ class PersonalityQuirksServiceModule(BaseBrainModule):
         elif operation == "get_personality_tone":
             return self._get_personality_tone(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for personality_quirks_service",
+            )
 
     def _apply_quirks(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Apply personality quirks to response"""
@@ -111,8 +118,12 @@ class PersonalityQuirksServiceModule(BaseBrainModule):
                     "user_profile": user_profile,
                     "conversation_context": conversation_context,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "personality_adaptation_service adapt_to_user failed; using unadapted config",
+                    exc_info=True,
+                    extra={"module_name": "personality_quirks_service", "error_type": type(e).__name__},
+                )
 
         # Fallback: return config as-is
         return {

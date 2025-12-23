@@ -126,7 +126,11 @@ class PythonCodeSafetyModule(BaseBrainModule):
             return self.suggest_safe_patterns(code)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation for python_code_safety",
+            )
 
     def analyze_runtime_safety(self, code: str) -> Dict[str, Any]:
         """

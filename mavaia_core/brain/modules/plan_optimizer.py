@@ -4,13 +4,12 @@ Neural network for optimizing execution plans
 """
 
 from typing import Dict, Any, Optional, List
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError, ModuleInitializationError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports
 try:
@@ -79,6 +78,7 @@ class PlanOptimizerModule(BaseBrainModule):
     """Neural network for optimizing execution plans"""
 
     def __init__(self):
+        super().__init__()
         self.scorer_params: Optional[Dict[str, Any]] = None
         self.scorer: Optional[PlanScorer] = None
         self.optimizer: Optional[optax.GradientTransformation] = None
@@ -107,7 +107,10 @@ class PlanOptimizerModule(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize the module"""
         if not JAX_AVAILABLE:
-            print("[PlanOptimizerModule] JAX not available", file=sys.stderr)
+            logger.warning(
+                "JAX not available; plan_optimizer is unavailable",
+                extra={"module_name": "plan_optimizer"},
+            )
             return False
 
         # Initialize RNG
@@ -147,9 +150,20 @@ class PlanOptimizerModule(BaseBrainModule):
             elif operation == "save_model":
                 return self._save_model(params)
             else:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for plan_optimizer",
+                )
+        except (InvalidParameterError, ModuleInitializationError, ModuleOperationError):
+            raise
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            logger.debug(
+                "Unhandled plan_optimizer execution error",
+                exc_info=True,
+                extra={"module_name": "plan_optimizer", "operation": str(operation), "error_type": type(e).__name__},
+            )
+            return {"success": False, "error": "Plan optimizer operation failed"}
 
     def _extract_plan_features(self, plan: Dict[str, Any]) -> "jnp.ndarray":
         """
@@ -376,9 +390,13 @@ class PlanOptimizerModule(BaseBrainModule):
 
             avg_loss = total_loss / len(training_data)
             if epoch % 5 == 0:
-                print(
-                    f"[PlanOptimizerModule] Epoch {epoch}, Loss: {avg_loss:.4f}",
-                    file=sys.stderr,
+                logger.info(
+                    "Plan scorer training progress",
+                    extra={
+                        "module_name": "plan_optimizer",
+                        "epoch": int(epoch),
+                        "avg_loss": round(float(avg_loss), 6),
+                    },
                 )
 
         self.is_trained = True

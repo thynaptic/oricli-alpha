@@ -4,16 +4,16 @@ Consider alternative scenarios and what-if analysis
 """
 
 from typing import List, Dict, Any
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 
 class CounterfactualModule(BaseBrainModule):
     """Counterfactual reasoning module"""
+
+    def __init__(self) -> None:
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -28,11 +28,19 @@ class CounterfactualModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute counterfactual reasoning"""
+        if operation not in ("reason", "counterfactual"):
+            raise InvalidParameterError("operation", str(operation), "Unknown operation for counterfactual")
+
         query = params.get("query", "")
         context = params.get("context", "")
-
-        if not query:
-            raise ValueError("Missing required parameter: query")
+        if query is None:
+            query = ""
+        if context is None:
+            context = ""
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError("query", str(query), "query must be a non-empty string")
+        if not isinstance(context, str):
+            raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
 
         reasoning = self._counterfactual_reasoning(query, context)
 

@@ -5,19 +5,19 @@ Converted from Swift StepSafetyFilter.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
 
 # Lazy imports to avoid timeout during module discovery
 CoTStep = None
 ToTThoughtNode = None
 MCTSNode = None
+
+logger = logging.getLogger(__name__)
 
 def _lazy_import_safety_models():
     """Lazy import safety models only when needed"""
@@ -81,6 +81,7 @@ class StepSafetyFilterModule(BaseBrainModule):
     """Safety-aware step filtering service"""
 
     def __init__(self):
+        super().__init__()
         self.safety_framework = None
         self.step_history: Dict[str, List[StepSafetyCheck]] = {}
         self.max_history_size = 10
@@ -111,13 +112,15 @@ class StepSafetyFilterModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self.safety_framework = ModuleRegistry.get_module("safety_framework", auto_discover=True, wait_timeout=1.0)
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Failed to load optional dependency modules for step_safety_filter",
+                exc_info=True,
+                extra={"module_name": "step_safety_filter", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -131,7 +134,11 @@ class StepSafetyFilterModule(BaseBrainModule):
         elif operation == "filter_mcts_node":
             return self._filter_mcts_node(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for step_safety_filter",
+            )
 
     def _filter_step(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Filter a reasoning step for safety issues"""

@@ -5,16 +5,20 @@ Approximates Swift DocumentRanker using lightweight heuristics.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class RankingAgentModule(BaseBrainModule):
     """Ranks documents by combined relevance heuristics."""
 
     def __init__(self) -> None:
-        pass
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -29,12 +33,22 @@ class RankingAgentModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         if operation != "rank":
-            raise ValueError(f"Unsupported operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unsupported operation for ranking_agent",
+            )
 
         documents: List[Dict[str, Any]] = params.get("documents") or []
         query: str = params.get("query", "") or ""
         ranked = self._rank_documents(documents, query=query)
-        return {"success": True, "rankedDocuments": ranked, "count": len(ranked)}
+        # Provide both camelCase and snake_case for downstream compatibility.
+        return {
+            "success": True,
+            "rankedDocuments": ranked,
+            "ranked_documents": ranked,
+            "count": len(ranked),
+        }
 
     # ------------------------------------------------------------------ #
     # Helpers

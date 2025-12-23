@@ -7,19 +7,20 @@ from typing import Dict, Any, List, Optional
 import json
 import re
 import random
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class NaturalLanguageFlowModule(BaseBrainModule):
     """Natural language flow for human-like sentence variation and structure"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.sentence_patterns = {}
         self.flow_transitions = {}
@@ -78,9 +79,10 @@ class NaturalLanguageFlowModule(BaseBrainModule):
                     "result": ["so", "therefore", "thus", "as a result"],
                 }
         except Exception as e:
-            print(
-                f"[NaturalLanguageFlowModule] Failed to load config: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load natural_language_flow config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "natural_language_flow", "error_type": type(e).__name__},
             )
             self.sentence_patterns = {}
             self.flow_transitions = {}
@@ -89,23 +91,83 @@ class NaturalLanguageFlowModule(BaseBrainModule):
         """Execute a natural language flow operation"""
         if operation == "vary_sentence_structure":
             text = params.get("text", "")
+            if text is None:
+                text = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError(
+                    parameter="text",
+                    value=str(type(text).__name__),
+                    reason="text must be a string",
+                )
             return self.vary_sentence_structure(text)
         elif operation == "add_flow_transitions":
             text = params.get("text", "")
             context = params.get("context", "")
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError(
+                    parameter="text",
+                    value=str(type(text).__name__),
+                    reason="text must be a string",
+                )
+            if not isinstance(context, str):
+                raise InvalidParameterError(
+                    parameter="context",
+                    value=str(type(context).__name__),
+                    reason="context must be a string",
+                )
             return self.add_flow_transitions(text, context)
         elif operation == "naturalize_rhythm":
             text = params.get("text", "")
+            if text is None:
+                text = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError(
+                    parameter="text",
+                    value=str(type(text).__name__),
+                    reason="text must be a string",
+                )
             return self.naturalize_rhythm(text)
         elif operation == "mix_sentence_lengths":
             sentences = params.get("sentences", [])
+            if sentences is None:
+                sentences = []
+            if not isinstance(sentences, list):
+                raise InvalidParameterError(
+                    parameter="sentences",
+                    value=str(type(sentences).__name__),
+                    reason="sentences must be a list",
+                )
             return self.mix_sentence_lengths(sentences)
         elif operation == "create_natural_flow":
             text = params.get("text", "")
             previous_text = params.get("previous_text", "")
+            if text is None:
+                text = ""
+            if previous_text is None:
+                previous_text = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError(
+                    parameter="text",
+                    value=str(type(text).__name__),
+                    reason="text must be a string",
+                )
+            if not isinstance(previous_text, str):
+                raise InvalidParameterError(
+                    parameter="previous_text",
+                    value=str(type(previous_text).__name__),
+                    reason="previous_text must be a string",
+                )
             return self.create_natural_flow(text, previous_text)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for natural_language_flow",
+            )
 
     def vary_sentence_structure(self, text: str) -> Dict[str, Any]:
         """Vary sentence structure for natural flow"""

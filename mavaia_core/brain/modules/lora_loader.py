@@ -5,14 +5,13 @@ DISABLED: PEFT library is PyTorch-only. This module is disabled in the JAX migra
 
 from typing import Dict, Any, Optional
 import os
-import sys
-from pathlib import Path
 import json
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Module disabled - PEFT is PyTorch-only
 LORA_LOADER_AVAILABLE = False
@@ -22,6 +21,7 @@ class LoRALoaderModule(BaseBrainModule):
     """Load and manage LoRA adapters for personality switching"""
 
     def __init__(self):
+        super().__init__()
         self.loaded_adapters: Dict[str, Dict[str, Any]] = {}
         self.base_models: Dict[str, Any] = {}
 
@@ -43,11 +43,21 @@ class LoRALoaderModule(BaseBrainModule):
 
     def initialize(self) -> bool:
         """Initialize the module"""
-        print("[LoRALoaderModule] DISABLED: PEFT is PyTorch-only, not available in JAX/Flax", file=sys.stderr)
+        logger.info(
+            "LoRALoaderModule is disabled (PEFT is PyTorch-only; not available in JAX/Flax)",
+            extra={"module_name": "lora_loader"},
+        )
         return False
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a LoRA loader operation"""
+        # Module is disabled in this codebase; keep behavior explicit and safe.
+        return {
+            "success": False,
+            "error": "LoRALoaderModule is disabled. PEFT/PyTorch LoRA loading is not available in JAX/Flax.",
+        }
+
+        # Unreachable legacy implementation retained for historical reference.
         if operation == "load_adapter":
             return self._load_adapter(
                 adapter_path=params.get("adapter_path"),
@@ -61,7 +71,11 @@ class LoRALoaderModule(BaseBrainModule):
         elif operation == "validate_adapter":
             return self._validate_adapter(adapter_path=params.get("adapter_path"))
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for lora_loader",
+            )
 
     def _load_adapter(
         self, adapter_path: str, base_model: str, personality: str
@@ -98,7 +112,10 @@ class LoRALoaderModule(BaseBrainModule):
 
             # Load base model if not already loaded
             if base_model not in self.base_models:
-                print(f"[LoRALoaderModule] Loading base model: {base_model}")
+                logger.info(
+                    "Loading base model for LoRA adapter",
+                    extra={"module_name": "lora_loader", "base_model": str(base_model)},
+                )
                 try:
                     tokenizer = AutoTokenizer.from_pretrained(
                         base_model, trust_remote_code=True
@@ -118,7 +135,10 @@ class LoRALoaderModule(BaseBrainModule):
                         "model": model,
                         "tokenizer": tokenizer,
                     }
-                    print(f"[LoRALoaderModule] Base model loaded: {base_model}")
+                    logger.info(
+                        "Base model loaded for LoRA adapter",
+                        extra={"module_name": "lora_loader", "base_model": str(base_model)},
+                    )
                 except Exception as e:
                     return {
                         "success": False,
@@ -126,7 +146,14 @@ class LoRALoaderModule(BaseBrainModule):
                     }
 
             # Load LoRA adapter
-            print(f"[LoRALoaderModule] Loading LoRA adapter from: {adapter_path}")
+            logger.info(
+                "Loading LoRA adapter",
+                extra={
+                    "module_name": "lora_loader",
+                    "adapter_path": str(adapter_path),
+                    "personality": str(personality),
+                },
+            )
             base_model_dict = self.base_models[base_model]
             base_model_obj = base_model_dict["model"]
 
@@ -145,8 +172,9 @@ class LoRALoaderModule(BaseBrainModule):
                 "adapter_path": adapter_path,
             }
 
-            print(
-                f"[LoRALoaderModule] ✅ Adapter loaded for personality: {personality}"
+            logger.info(
+                "Adapter loaded for personality",
+                extra={"module_name": "lora_loader", "personality": str(personality)},
             )
 
             return {
@@ -171,7 +199,10 @@ class LoRALoaderModule(BaseBrainModule):
             # Note: We don't unload base models as they might be shared
             # In production, implement reference counting for base models
 
-            print(f"[LoRALoaderModule] Unloaded adapter for {personality}")
+            logger.info(
+                "Unloaded adapter for personality",
+                extra={"module_name": "lora_loader", "personality": str(personality)},
+            )
 
             return {"success": True, "personality": personality}
         except Exception as e:

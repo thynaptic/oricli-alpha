@@ -149,7 +149,11 @@ class PythonSemanticUnderstandingModule(BaseBrainModule):
             return self.analyze_control_flow(code)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def analyze_semantics(self, code: str) -> Dict[str, Any]:
         """
