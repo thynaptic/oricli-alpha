@@ -27,6 +27,14 @@ Cognitive Runtime → Modules → API/SDK Surface → Deployment
 **API/SDK Surface**: OpenAI-compatible HTTP API and Python client for direct module access  
 **Deployment**: Local-first, on-prem, or VPC deployment with environment-based configuration
 
+### Module Overview (Runtime v0.9.3)
+
+- **ReasoningModule** — structured reasoning, chain-of-thought gates
+- **MemoryModule** — semantic, episodic, emotional state storage
+- **SafetyModule** — runtime safety, domain constraints, injection detection
+- **RetrievalModule** — index/query interface for documents and embeddings
+- **Orchestration** — framestack execution, routing, fallback strategy
+
 Design partners typically integrate via:
 - **OpenAI-compatible API** (drop-in for many clients)
 - **Python SDK** (direct module execution)
