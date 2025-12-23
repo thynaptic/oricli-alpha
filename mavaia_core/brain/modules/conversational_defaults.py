@@ -6,19 +6,20 @@ Handles context-appropriate defaults, personality-aware defaults, and fallback r
 from typing import Dict, Any, List, Optional
 import json
 import random
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ConversationalDefaultsModule(BaseBrainModule):
     """Default responses and behaviors for conversational scenarios"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.defaults = {}
         self.personality_defaults = {}
@@ -90,9 +91,10 @@ class ConversationalDefaultsModule(BaseBrainModule):
                 }
                 self.personality_defaults = {}
         except Exception as e:
-            print(
-                f"[ConversationalDefaultsModule] Failed to load config: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load conversational_defaults config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "conversational_defaults", "error_type": type(e).__name__},
             )
             self.defaults = {}
             self.personality_defaults = {}
@@ -103,26 +105,90 @@ class ConversationalDefaultsModule(BaseBrainModule):
             scenario = params.get("scenario", "")
             context = params.get("context", {})
             personality = params.get("personality", "")
+            if scenario is None:
+                scenario = ""
+            if context is None:
+                context = {}
+            if personality is None:
+                personality = ""
+            if not isinstance(scenario, str):
+                raise InvalidParameterError("scenario", str(type(scenario).__name__), "scenario must be a string")
+            if not isinstance(context, dict):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a dict")
+            if not isinstance(personality, str):
+                raise InvalidParameterError(
+                    "personality", str(type(personality).__name__), "personality must be a string"
+                )
             return self.get_default_response(scenario, context, personality)
         elif operation == "generate_fallback":
             context = params.get("context", "")
             personality = params.get("personality", "")
             previous_attempt = params.get("previous_attempt", "")
+            if context is None:
+                context = ""
+            if personality is None:
+                personality = ""
+            if previous_attempt is None:
+                previous_attempt = ""
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            if not isinstance(personality, str):
+                raise InvalidParameterError(
+                    "personality", str(type(personality).__name__), "personality must be a string"
+                )
+            if not isinstance(previous_attempt, str):
+                raise InvalidParameterError(
+                    "previous_attempt", str(type(previous_attempt).__name__), "previous_attempt must be a string"
+                )
             return self.generate_fallback(context, personality, previous_attempt)
         elif operation == "adapt_default":
             default = params.get("default", "")
             target_context = params.get("target_context", {})
             personality = params.get("personality", "")
+            if default is None:
+                default = ""
+            if target_context is None:
+                target_context = {}
+            if personality is None:
+                personality = ""
+            if not isinstance(default, str):
+                raise InvalidParameterError("default", str(type(default).__name__), "default must be a string")
+            if not isinstance(target_context, dict):
+                raise InvalidParameterError(
+                    "target_context", str(type(target_context).__name__), "target_context must be a dict"
+                )
+            if not isinstance(personality, str):
+                raise InvalidParameterError(
+                    "personality", str(type(personality).__name__), "personality must be a string"
+                )
             return self.adapt_default(default, target_context, personality)
         elif operation == "get_scenario_default":
             scenario = params.get("scenario", "")
+            if scenario is None:
+                scenario = ""
+            if not isinstance(scenario, str):
+                raise InvalidParameterError("scenario", str(type(scenario).__name__), "scenario must be a string")
             return self.get_scenario_default(scenario)
         elif operation == "get_personality_default":
             personality = params.get("personality", "")
             scenario = params.get("scenario", "")
+            if personality is None:
+                personality = ""
+            if scenario is None:
+                scenario = ""
+            if not isinstance(personality, str):
+                raise InvalidParameterError(
+                    "personality", str(type(personality).__name__), "personality must be a string"
+                )
+            if not isinstance(scenario, str):
+                raise InvalidParameterError("scenario", str(type(scenario).__name__), "scenario must be a string")
             return self.get_personality_default(personality, scenario)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation for conversational_defaults",
+            )
 
     def get_default_response(
         self, scenario: str, context: Dict[str, Any] = None, personality: str = ""

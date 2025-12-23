@@ -8,17 +8,17 @@ The personality-based system has been replaced with a universal voice that adapt
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import json
 import os
 import time
 from pathlib import Path
+import logging
 from datetime import datetime
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports - models package may not be available
 try:
@@ -40,6 +40,7 @@ class PersonalityBuilderStorageServiceModule(BaseBrainModule):
     """Storage service for personality builder plugins and templates"""
 
     def __init__(self):
+        super().__init__()
         self.plugins: List[Dict[str, Any]] = []
         self.plugins_file_name = "personality_plugins.json"
         self.templates_file_name = "personality_templates.json"
@@ -108,7 +109,11 @@ class PersonalityBuilderStorageServiceModule(BaseBrainModule):
         elif operation == "save_templates":
             return self._save_templates(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for personality_builder_storage_service",
+            )
 
     def _load_plugins(self) -> Dict[str, Any]:
         """Load all personality plugins from disk"""
@@ -125,8 +130,12 @@ class PersonalityBuilderStorageServiceModule(BaseBrainModule):
         try:
             with open(plugins_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                plugin_list = PersonalityPluginList.from_dict(data)
-                self.plugins = [p.to_dict() for p in plugin_list.plugins]
+                if PersonalityPluginList is not None:
+                    plugin_list = PersonalityPluginList.from_dict(data)
+                    self.plugins = [p.to_dict() for p in plugin_list.plugins]
+                else:
+                    # Fallback for missing models package
+                    self.plugins = data.get("plugins", []) if isinstance(data, dict) else []
                 self._plugins_loaded = True
                 return {
                     "success": True,
@@ -136,53 +145,80 @@ class PersonalityBuilderStorageServiceModule(BaseBrainModule):
                     },
                 }
         except Exception as e:
+            logger.debug(
+                "Failed to load plugins; returning empty list",
+                exc_info=True,
+                extra={"module_name": "personality_builder_storage_service", "error_type": type(e).__name__},
+            )
             self.plugins = []
             self._plugins_loaded = True
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Failed to load plugins",
                 "result": {"plugins": [], "count": 0},
             }
 
     def _save_plugins(self) -> Dict[str, Any]:
         """Save all personality plugins to disk"""
         try:
-            plugin_list = PersonalityPluginList(
-                plugins=[PersonalityPlugin.from_dict(p) for p in self.plugins],
-                last_updated=time.time(),
-            )
-
             plugins_path = self._get_plugins_path()
             plugins_path.parent.mkdir(parents=True, exist_ok=True)
+            if PersonalityPluginList is not None and PersonalityPlugin is not None:
+                plugin_list = PersonalityPluginList(
+                    plugins=[PersonalityPlugin.from_dict(p) for p in self.plugins],
+                    last_updated=time.time(),
+                )
+                payload = plugin_list.to_dict()
+            else:
+                payload = {"plugins": self.plugins, "last_updated": time.time()}
 
             with open(plugins_path, "w", encoding="utf-8") as f:
-                json.dump(plugin_list.to_dict(), f, indent=2, ensure_ascii=False)
+                json.dump(payload, f, indent=2, ensure_ascii=False)
 
             return {
                 "success": True,
                 "result": {"saved": True, "count": len(self.plugins)},
             }
         except Exception as e:
+            logger.debug(
+                "Failed to save plugins",
+                exc_info=True,
+                extra={"module_name": "personality_builder_storage_service", "error_type": type(e).__name__},
+            )
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Failed to save plugins",
             }
 
     def _store_personality(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Store a personality plugin"""
         plugin_data = params.get("plugin", {})
-        plugin = PersonalityPlugin.from_dict(plugin_data)
+        if plugin_data is None:
+            plugin_data = {}
+        if not isinstance(plugin_data, dict):
+            raise InvalidParameterError("plugin", str(type(plugin_data).__name__), "plugin must be a dict")
+
+        plugin_id = plugin_data.get("id") or plugin_data.get("builder_data", {}).get("id")
+        if PersonalityPlugin is not None:
+            plugin = PersonalityPlugin.from_dict(plugin_data)
+            plugin_id = plugin.id
+            plugin_dict = plugin.to_dict()
+        else:
+            plugin = None
+            plugin_dict = plugin_data
+            if not plugin_id:
+                raise InvalidParameterError("plugin.id", str(plugin_id), "plugin must include an id")
 
         # Check if plugin already exists
         existing_idx = next(
-            (i for i, p in enumerate(self.plugins) if p.get("id") == plugin.id),
+            (i for i, p in enumerate(self.plugins) if p.get("id") == plugin_id),
             None
         )
 
         if existing_idx is not None:
-            self.plugins[existing_idx] = plugin.to_dict()
+            self.plugins[existing_idx] = plugin_dict
         else:
-            self.plugins.append(plugin.to_dict())
+            self.plugins.append(plugin_dict)
 
         # Save to disk
         save_result = self._save_plugins()
@@ -190,7 +226,7 @@ class PersonalityBuilderStorageServiceModule(BaseBrainModule):
         return {
             "success": save_result.get("success", True),
             "result": {
-                "plugin_id": plugin.id,
+                "plugin_id": plugin_id,
                 "stored": True,
             },
         }
@@ -198,6 +234,8 @@ class PersonalityBuilderStorageServiceModule(BaseBrainModule):
     def _load_personality(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Load a personality plugin by ID"""
         personality_id = params.get("personality_id")
+        if personality_id is None or not isinstance(personality_id, str) or not personality_id.strip():
+            raise InvalidParameterError("personality_id", str(personality_id), "personality_id must be a non-empty string")
 
         if not self._plugins_loaded:
             self._load_plugins()

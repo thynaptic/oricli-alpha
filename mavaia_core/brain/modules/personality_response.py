@@ -10,20 +10,22 @@ The personality-based system has been replaced with a universal voice that adapt
 from typing import Any
 import json
 import os
-import sys
 from pathlib import Path
 import random
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class PersonalityResponseModule(BaseBrainModule):
     """Generate personality-specific responses using example-based selection and templates"""
 
     def __init__(self) -> None:
+        super().__init__()
         self.config = None
         self._load_config()
 
@@ -47,9 +49,9 @@ class PersonalityResponseModule(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize the module"""
         if not self.config:
-            print(
-                f"[PersonalityResponseModule] Warning: Config not loaded, but continuing with defaults",
-                file=sys.stderr,
+            logger.warning(
+                "PersonalityResponse config not loaded; continuing with defaults",
+                extra={"module_name": "personality_response"},
             )
         return True
 
@@ -60,9 +62,10 @@ class PersonalityResponseModule(BaseBrainModule):
             with open(config_path, "r", encoding="utf-8") as f:
                 self.config = json.load(f)
         except Exception as e:
-            print(
-                f"[PersonalityResponseModule] Failed to load config: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load personality_response config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "personality_response", "error_type": type(e).__name__},
             )
             self.config = {}
 
@@ -92,8 +95,10 @@ class PersonalityResponseModule(BaseBrainModule):
                     emotional_tone=params.get("emotional_tone"),
                 )
             case _:
-                raise ValueError(
-                    f"Unknown operation: {operation}. Supported: generate, generate_variations"
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for personality_response",
                 )
 
     def _generate_response(
@@ -479,9 +484,10 @@ class PersonalityResponseModule(BaseBrainModule):
                 ) >= 0.70:
                     return text
         except Exception as e:
-            print(
-                f"[PersonalityResponseModule] Neural grammar fallback failed: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Neural grammar fallback failed",
+                exc_info=True,
+                extra={"module_name": "personality_response", "error_type": type(e).__name__},
             )
 
         return None

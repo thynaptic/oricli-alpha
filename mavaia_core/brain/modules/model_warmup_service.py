@@ -4,20 +4,21 @@ Converted from Swift ModelWarmupService.swift
 """
 
 from typing import Any, Dict, List, Optional, Set
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ModelWarmupServiceModule(BaseBrainModule):
     """Service to warm up all AI models before Mavaia becomes available"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self._modules_loaded = False
         self._is_warming_up = False
@@ -54,14 +55,16 @@ class ModelWarmupServiceModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
 
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load model_warmup_service dependencies",
+                exc_info=True,
+                extra={"module_name": "model_warmup_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -74,7 +77,11 @@ class ModelWarmupServiceModule(BaseBrainModule):
         elif operation == "check_readiness":
             return self._check_readiness(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for model_warmup_service",
+            )
 
     def _warmup_models(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Warmup all models"""
@@ -109,6 +116,15 @@ class ModelWarmupServiceModule(BaseBrainModule):
                 self._ready_models.add(module_name)
                 self._completed_models += 1
             except Exception as e:
+                logger.debug(
+                    "Model warmup failed",
+                    exc_info=True,
+                    extra={
+                        "module_name": "model_warmup_service",
+                        "target_module": str(module_name),
+                        "error_type": type(e).__name__,
+                    },
+                )
                 self._failed_models.add(module_name)
                 self._completed_models += 1
 
@@ -122,7 +138,12 @@ class ModelWarmupServiceModule(BaseBrainModule):
                 })
                 self._ready_models.add("cognitive_generator")
                 self._completed_models += 1
-            except:
+            except Exception as e:
+                logger.debug(
+                    "cognitive_generator warmup failed",
+                    exc_info=True,
+                    extra={"module_name": "model_warmup_service", "error_type": type(e).__name__},
+                )
                 self._failed_models.add("cognitive_generator")
                 self._completed_models += 1
 
@@ -155,12 +176,18 @@ class ModelWarmupServiceModule(BaseBrainModule):
     def _warmup_local_model(self, model: str) -> None:
         """Warmup a local model"""
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             module = ModuleRegistry.get_module(model)
             if module:
                 # Simple ping to initialize
                 module.initialize()
-        except:
-            pass
+        except Exception as e:
+            logger.debug(
+                "Local module warmup failed",
+                exc_info=True,
+                extra={
+                    "module_name": "model_warmup_service",
+                    "target_module": str(model),
+                    "error_type": type(e).__name__,
+                },
+            )
 

@@ -8,18 +8,19 @@ from typing import Any, Dict, List
 import json
 import random
 import re
-import sys
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ResponseCadenceModule(BaseBrainModule):
     """Control response cadence, prosody, and rhythm for natural flow"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.rhythm_patterns = {}
         self.pause_patterns = {}
@@ -79,8 +80,10 @@ class ResponseCadenceModule(BaseBrainModule):
                     "phrasing_breaks": ["Well,", "So,", "You know,", "I mean,"],
                 }
         except Exception as e:
-            print(
-                f"[ResponseCadenceModule] Failed to load config: {e}", file=sys.stderr
+            logger.warning(
+                "Failed to load response_cadence config; using defaults",
+                exc_info=True,
+                extra={"module_name": "response_cadence", "error_type": type(e).__name__},
             )
             self.rhythm_patterns = {}
             self.pause_patterns = {}
@@ -107,7 +110,11 @@ class ResponseCadenceModule(BaseBrainModule):
                 personality = params.get("personality", "mavaia")
                 return self.apply_cadence(text, personality)
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for response_cadence",
+                )
 
     def calculate_sentence_rhythm(self, text: str) -> Dict[str, Any]:
         """Calculate and analyze sentence rhythm"""

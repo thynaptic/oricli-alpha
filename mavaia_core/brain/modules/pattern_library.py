@@ -7,19 +7,20 @@ from typing import Dict, Any, List, Optional
 import json
 import random
 import re
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class PatternLibraryModule(BaseBrainModule):
     """Pattern library for response templates and conversation patterns"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.patterns = {}
         self.templates = {}
@@ -67,7 +68,11 @@ class PatternLibraryModule(BaseBrainModule):
                 self.flows = {}
                 self.social_patterns = {}
         except Exception as e:
-            print(f"[PatternLibraryModule] Failed to load config: {e}", file=sys.stderr)
+            logger.warning(
+                "Failed to load pattern_library config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "pattern_library", "error_type": type(e).__name__},
+            )
             self.patterns = {}
             self.templates = {}
             self.flows = {}
@@ -97,7 +102,11 @@ class PatternLibraryModule(BaseBrainModule):
             variables = params.get("variables", {})
             return self.fill_template(template, variables)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for pattern_library",
+            )
 
     def get_pattern(self, pattern_name: str) -> Dict[str, Any]:
         """Get a pattern by name"""

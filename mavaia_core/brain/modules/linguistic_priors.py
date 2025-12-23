@@ -6,13 +6,13 @@ Handles linguistic structure analysis, implicature detection, and coherent respo
 from typing import Dict, Any, List, Optional, Tuple
 import json
 import re
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports for advanced NLP
 try:
@@ -37,6 +37,7 @@ class LinguisticPriorsModule(BaseBrainModule):
     """Linguistic priors for syntax, semantics, pragmatics, and discourse"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.nlp = None
         self._nltk_downloaded = False
@@ -113,8 +114,10 @@ class LinguisticPriorsModule(BaseBrainModule):
                     },
                 }
         except Exception as e:
-            print(
-                f"[LinguisticPriorsModule] Failed to load config: {e}", file=sys.stderr
+            logger.warning(
+                "Failed to load linguistic_priors config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "linguistic_priors", "error_type": type(e).__name__},
             )
             self.config = {}
 
@@ -128,9 +131,16 @@ class LinguisticPriorsModule(BaseBrainModule):
                     return True
                 except OSError:
                     # Model not installed, use basic patterns
-                    pass
-            except Exception:
-                pass
+                    logger.debug(
+                        "spaCy model 'en_core_web_sm' not available; continuing without spaCy pipeline",
+                        extra={"module_name": "linguistic_priors"},
+                    )
+            except Exception as e:
+                logger.debug(
+                    "spaCy initialization failed; continuing without spaCy pipeline",
+                    exc_info=True,
+                    extra={"module_name": "linguistic_priors", "error_type": type(e).__name__},
+                )
 
         if NLTK_AVAILABLE:
             try:
@@ -139,8 +149,12 @@ class LinguisticPriorsModule(BaseBrainModule):
                 nltk.download("maxent_ne_chunker", quiet=True)
                 nltk.download("words", quiet=True)
                 self._nltk_downloaded = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "NLTK resource download failed; continuing with reduced NLP features",
+                    exc_info=True,
+                    extra={"module_name": "linguistic_priors", "error_type": type(e).__name__},
+                )
 
         return True
 
@@ -148,31 +162,83 @@ class LinguisticPriorsModule(BaseBrainModule):
         """Execute a linguistic priors operation"""
         if operation == "analyze_structure":
             text = params.get("text", "")
+            if text is None:
+                text = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
             return self.analyze_structure(text)
         elif operation == "detect_implicature":
             text = params.get("text", "")
             context = params.get("context", "")
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
             return self.detect_implicature(text, context)
         elif operation == "generate_coherent_response":
             input_text = params.get("input", "")
             context = params.get("context", "")
             previous_response = params.get("previous_response", "")
+            if input_text is None:
+                input_text = ""
+            if context is None:
+                context = ""
+            if previous_response is None:
+                previous_response = ""
+            if not isinstance(input_text, str):
+                raise InvalidParameterError("input", str(type(input_text).__name__), "input must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            if not isinstance(previous_response, str):
+                raise InvalidParameterError(
+                    "previous_response", str(type(previous_response).__name__), "previous_response must be a string"
+                )
             return self.generate_coherent_response(
                 input_text, context, previous_response
             )
         elif operation == "analyze_discourse":
             text = params.get("text", "")
             previous_turns = params.get("previous_turns", [])
+            if text is None:
+                text = ""
+            if previous_turns is None:
+                previous_turns = []
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(previous_turns, list):
+                raise InvalidParameterError(
+                    "previous_turns", str(type(previous_turns).__name__), "previous_turns must be a list"
+                )
             return self.analyze_discourse(text, previous_turns)
         elif operation == "detect_speech_act":
             text = params.get("text", "")
+            if text is None:
+                text = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
             return self.detect_speech_act(text)
         elif operation == "check_coherence":
             text = params.get("text", "")
             context = params.get("context", "")
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
             return self.check_coherence(text, context)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for linguistic_priors",
+            )
 
     def analyze_structure(self, text: str) -> Dict[str, Any]:
         """Analyze syntactic structure of text"""

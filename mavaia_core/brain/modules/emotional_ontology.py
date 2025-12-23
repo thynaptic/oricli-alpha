@@ -6,19 +6,20 @@ Handles emotion detection, emotion-appropriate responses, and emotion state tran
 from typing import Dict, Any, List, Optional, Tuple
 import json
 import re
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class EmotionalOntologyModule(BaseBrainModule):
     """Complex emotional ontology with taxonomy and transitions"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.emotion_taxonomy = {}
         self.emotion_transitions = {}
@@ -59,8 +60,10 @@ class EmotionalOntologyModule(BaseBrainModule):
                 # Will use defaults from _initialize_taxonomy
                 self.config = {}
         except Exception as e:
-            print(
-                f"[EmotionalOntologyModule] Failed to load config: {e}", file=sys.stderr
+            logger.warning(
+                "Failed to load emotional_ontology config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "emotional_ontology", "error_type": type(e).__name__},
             )
             self.config = {}
 
@@ -371,30 +374,82 @@ class EmotionalOntologyModule(BaseBrainModule):
         if operation == "detect_emotion":
             text = params.get("text", "")
             context = params.get("context", "")
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
             return self.detect_emotion(text, context)
         elif operation == "transition_emotion":
             current_emotion = params.get("current_emotion", "")
             context = params.get("context", "")
             trigger = params.get("trigger", "")
+            if current_emotion is None:
+                current_emotion = ""
+            if context is None:
+                context = ""
+            if trigger is None:
+                trigger = ""
+            if not isinstance(current_emotion, str):
+                raise InvalidParameterError(
+                    "current_emotion", str(type(current_emotion).__name__), "current_emotion must be a string"
+                )
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            if not isinstance(trigger, str):
+                raise InvalidParameterError("trigger", str(type(trigger).__name__), "trigger must be a string")
             return self.transition_emotion(current_emotion, context, trigger)
         elif operation == "select_emotion_response":
             detected_emotion = params.get("detected_emotion", "")
             emotion_intensity = params.get("intensity", 0.5)
             context = params.get("context", "")
+            if detected_emotion is None:
+                detected_emotion = ""
+            if context is None:
+                context = ""
+            if not isinstance(detected_emotion, str):
+                raise InvalidParameterError(
+                    "detected_emotion", str(type(detected_emotion).__name__), "detected_emotion must be a string"
+                )
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            try:
+                intensity_float = float(emotion_intensity)
+            except (TypeError, ValueError):
+                raise InvalidParameterError("intensity", str(emotion_intensity), "intensity must be a number")
             return self.select_emotion_response(
-                detected_emotion, emotion_intensity, context
+                detected_emotion, intensity_float, context
             )
         elif operation == "get_emotion_graph":
             return self.get_emotion_graph()
         elif operation == "get_emotion_intensity":
             text = params.get("text", "")
             emotion = params.get("emotion", "")
+            if text is None:
+                text = ""
+            if emotion is None:
+                emotion = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(emotion, str):
+                raise InvalidParameterError("emotion", str(type(emotion).__name__), "emotion must be a string")
             return self.get_emotion_intensity(text, emotion)
         elif operation == "get_emotion_valence_arousal":
             emotion = params.get("emotion", "")
+            if emotion is None:
+                emotion = ""
+            if not isinstance(emotion, str):
+                raise InvalidParameterError("emotion", str(type(emotion).__name__), "emotion must be a string")
             return self.get_emotion_valence_arousal(emotion)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for emotional_ontology",
+            )
 
     def detect_emotion(self, text: str, context: str = "") -> Dict[str, Any]:
         """Detect emotion(s) from text"""

@@ -5,6 +5,11 @@ Provides interface to PySAT for Boolean satisfiability problems
 
 from typing import Dict, Any, Optional, List
 import time
+import logging
+
+from mavaia_core.exceptions import ModuleInitializationError, ModuleOperationError, InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional import - will fail gracefully if PySAT not available
 try:
@@ -48,7 +53,12 @@ class PySATSolver:
             Solution dictionary
         """
         if not self._available:
-            raise RuntimeError(self._error_message)
+            raise ModuleInitializationError(
+                module_name="symbolic_solver",
+                reason=self._error_message or "PySAT not available",
+            )
+        if not isinstance(problem, dict):
+            raise InvalidParameterError("problem", str(type(problem).__name__), "problem must be a dict")
 
         start_time = time.time()
 
@@ -88,7 +98,16 @@ class PySATSolver:
             }
 
         except Exception as e:
-            raise RuntimeError(f"PySAT solver error: {str(e)}")
+            logger.debug(
+                "PySAT solver failed",
+                exc_info=True,
+                extra={"solver": "pysat", "error_type": type(e).__name__},
+            )
+            raise ModuleOperationError(
+                module_name="symbolic_solver",
+                operation="solve",
+                reason="PySAT solver error",
+            ) from e
 
     def _build_cnf(self, problem: Dict[str, Any]) -> Any:
         """Build CNF formula from problem"""

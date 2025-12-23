@@ -9,22 +9,36 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 from collections import defaultdict
 import math
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mavaia_core.exceptions import ModuleOperationError, InvalidParameterError
+from mavaia_core.exceptions import (
+    InvalidParameterError,
+    ModuleInitializationError,
+    ModuleOperationError,
+)
 
 # Lazy import to avoid timeout during module discovery
 ToolRegistry = None
+_TOOL_REGISTRY_IMPORT_FAILURE_LOGGED = False
+
+logger = logging.getLogger(__name__)
 
 def _lazy_import_tool_registry():
     """Lazy import ToolRegistry only when needed"""
-    global ToolRegistry
+    global ToolRegistry, _TOOL_REGISTRY_IMPORT_FAILURE_LOGGED
     if ToolRegistry is None:
         try:
             from mavaia_core.services.tool_registry import ToolRegistry as TR
             ToolRegistry = TR
         except ImportError:
-            pass
+            if not _TOOL_REGISTRY_IMPORT_FAILURE_LOGGED:
+                _TOOL_REGISTRY_IMPORT_FAILURE_LOGGED = True
+                logger.debug(
+                    "ToolRegistry not available; tool_search disabled until installed",
+                    exc_info=True,
+                    extra={"module_name": "tool_search"},
+                )
 
 
 class ToolSearchModule(BaseBrainModule):
@@ -47,7 +61,10 @@ class ToolSearchModule(BaseBrainModule):
         """Lazy load tool registry only when needed"""
         _lazy_import_tool_registry()
         if ToolRegistry is None:
-            raise RuntimeError("ToolRegistry not available")
+            raise ModuleInitializationError(
+                module_name=self.metadata.name,
+                reason="ToolRegistry not available",
+            )
         if self._tool_registry is None:
             self._tool_registry = ToolRegistry()
     
@@ -79,18 +96,23 @@ class ToolSearchModule(BaseBrainModule):
             elif operation == "search_bm25":
                 return self._search_bm25(params)
             else:
-                raise ValueError(f"Unknown operation: {operation}")
-        except (InvalidParameterError, ValueError) as e:
+                raise InvalidParameterError("operation", str(operation), "Unknown operation for tool_search")
+        except (InvalidParameterError, ModuleInitializationError) as e:
             raise ModuleOperationError(
                 self.metadata.name,
                 operation,
                 str(e),
             )
         except Exception as e:
+            logger.debug(
+                "tool_search operation failed",
+                exc_info=True,
+                extra={"module_name": "tool_search", "operation": str(operation), "error_type": type(e).__name__},
+            )
             raise ModuleOperationError(
                 self.metadata.name,
                 operation,
-                f"Unexpected error: {str(e)}",
+                "Unexpected error during tool search",
             )
     
     def _tokenize(self, text: str) -> List[str]:
@@ -275,12 +297,22 @@ class ToolSearchModule(BaseBrainModule):
         query = params.get("query")
         if query is None:
             raise InvalidParameterError("query", None, "query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError("query", str(query), "query must be a non-empty string")
         
         limit = params.get("limit", 10)
-        if limit < 1:
-            raise InvalidParameterError("limit", limit, "limit must be >= 1")
+        try:
+            limit_int = int(limit)
+        except (TypeError, ValueError):
+            raise InvalidParameterError("limit", str(limit), "limit must be an integer")
+        if limit_int < 1:
+            raise InvalidParameterError("limit", str(limit_int), "limit must be >= 1")
         
         search_deferred_only = params.get("search_deferred_only", False)
+        if not isinstance(search_deferred_only, bool):
+            raise InvalidParameterError(
+                "search_deferred_only", str(search_deferred_only), "search_deferred_only must be a boolean"
+            )
         
         # Compile regex pattern
         try:
@@ -313,7 +345,7 @@ class ToolSearchModule(BaseBrainModule):
                 })
         
         # Limit results
-        matches = matches[:limit]
+        matches = matches[:limit_int]
         
         return {
             "success": True,
@@ -337,12 +369,22 @@ class ToolSearchModule(BaseBrainModule):
         query = params.get("query")
         if query is None:
             raise InvalidParameterError("query", None, "query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError("query", str(query), "query must be a non-empty string")
         
         limit = params.get("limit", 10)
-        if limit < 1:
-            raise InvalidParameterError("limit", limit, "limit must be >= 1")
+        try:
+            limit_int = int(limit)
+        except (TypeError, ValueError):
+            raise InvalidParameterError("limit", str(limit), "limit must be an integer")
+        if limit_int < 1:
+            raise InvalidParameterError("limit", str(limit_int), "limit must be >= 1")
         
         search_deferred_only = params.get("search_deferred_only", False)
+        if not isinstance(search_deferred_only, bool):
+            raise InvalidParameterError(
+                "search_deferred_only", str(search_deferred_only), "search_deferred_only must be a boolean"
+            )
         
         # Tokenize query
         query_terms = self._tokenize(query)
@@ -439,7 +481,7 @@ class ToolSearchModule(BaseBrainModule):
                 })
         
         # Limit results
-        matches = matches[:limit]
+        matches = matches[:limit_int]
         
         return {
             "success": True,

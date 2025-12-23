@@ -4,21 +4,20 @@ Orchestrates all cognitive reasoning features into a unified flow
 Converted from Swift CognitiveReasoningOrchestrator.swift
 """
 
+import logging
 from typing import Any, Dict, Optional
-import sys
-import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
 
+logger = logging.getLogger(__name__)
 
 class CognitiveReasoningOrchestratorModule(BaseBrainModule):
     """Orchestrates all cognitive reasoning features into a unified flow"""
 
     def __init__(self):
+        super().__init__()
         self.cot_service = None
         self.tot_service = None
         self.mcts_service = None
@@ -54,8 +53,6 @@ class CognitiveReasoningOrchestratorModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self.cot_service = ModuleRegistry.get_module("chain_of_thought")
             self.tot_service = ModuleRegistry.get_module("tree_of_thought")
             self.mcts_service = ModuleRegistry.get_module("mcts_service")
@@ -67,7 +64,11 @@ class CognitiveReasoningOrchestratorModule(BaseBrainModule):
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.warning(
+                "Failed to load one or more dependent modules for cognitive_reasoning_orchestrator",
+                exc_info=True,
+                extra={"module_name": "cognitive_reasoning_orchestrator", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -80,7 +81,11 @@ class CognitiveReasoningOrchestratorModule(BaseBrainModule):
         elif operation == "orchestrate_reasoning":
             return self._orchestrate_reasoning(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for cognitive_reasoning_orchestrator",
+            )
 
     def _execute_cognitive_reasoning(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute cognitive reasoning with all features integrated"""
@@ -90,7 +95,11 @@ class CognitiveReasoningOrchestratorModule(BaseBrainModule):
 
         # Step 1: Determine adaptive depth
         if not self.adaptive_depth:
-            raise ValueError("Adaptive depth controller not available")
+            raise ModuleOperationError(
+                module_name=self.metadata.name,
+                operation="execute_cognitive_reasoning",
+                reason="Dependency 'adaptive_depth_controller' not available",
+            )
 
         depth_result = self.adaptive_depth.execute(
             "determine_depth",
@@ -195,7 +204,11 @@ class CognitiveReasoningOrchestratorModule(BaseBrainModule):
                 final_model = cot_result.get("result", {}).get("model_used", "cognitive_generator")
 
         if not reasoning_result:
-            raise ValueError("Failed to execute reasoning")
+            raise ModuleOperationError(
+                module_name=self.metadata.name,
+                operation="execute_cognitive_reasoning",
+                reason="Failed to execute any reasoning method (no reasoning_result)",
+            )
 
         # Extract answer and confidence
         result_data = reasoning_result["result"].get("result", {})
@@ -214,7 +227,13 @@ class CognitiveReasoningOrchestratorModule(BaseBrainModule):
                 }
             )
 
-            should_cascade = should_cascade_result.get("result", False)
+            # Backwards/forwards compatible: accept either a boolean `result`,
+            # or a dict with `should_trigger`.
+            should_cascade_value = should_cascade_result.get("result", False)
+            if isinstance(should_cascade_value, dict):
+                should_cascade = bool(should_cascade_value.get("should_trigger", False))
+            else:
+                should_cascade = bool(should_cascade_value)
 
             if should_cascade and final_confidence < 0.7:
                 try:
@@ -234,7 +253,11 @@ class CognitiveReasoningOrchestratorModule(BaseBrainModule):
                         final_confidence = cascade_data.get("final_confidence", final_confidence)
                         cascade_used = True
                 except Exception as e:
-                    print(f"Model cascading failed: {e}")
+                    logger.warning(
+                        "Model cascading failed",
+                        exc_info=True,
+                        extra={"module_name": "cognitive_reasoning_orchestrator", "error_type": type(e).__name__},
+                    )
 
         # Step 5: Self-verification
         verification_result_data = {}
@@ -258,7 +281,11 @@ class CognitiveReasoningOrchestratorModule(BaseBrainModule):
                     final_answer = verification_result_data.get("verified_answer", final_answer)
                     final_confidence = verified_confidence
             except Exception as e:
-                print(f"Self-verification failed: {e}")
+                logger.warning(
+                    "Self-verification failed",
+                    exc_info=True,
+                    extra={"module_name": "cognitive_reasoning_orchestrator", "error_type": type(e).__name__},
+                )
 
         return {
             "success": True,

@@ -4,20 +4,21 @@ Converted from Swift OptimizationService.swift
 """
 
 from typing import Any, Dict, List, Optional, Tuple
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class OptimizationServiceModule(BaseBrainModule):
     """Core optimization service providing caching, parallelization, batching, and performance tracking"""
 
     def __init__(self):
+        super().__init__()
         self.response_cache = None
         self.performance_profiler = None
         self._modules_loaded = False
@@ -52,15 +53,17 @@ class OptimizationServiceModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self.response_cache = ModuleRegistry.get_module("response_cache")
             # Performance profiler would be a separate module if needed
 
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load optional response_cache for optimization_service",
+                exc_info=True,
+                extra={"module_name": "optimization_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -75,7 +78,11 @@ class OptimizationServiceModule(BaseBrainModule):
         elif operation == "configure":
             return self._configure(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for optimization_service",
+            )
 
     def _optimize_operation(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Optimize operation (alias for execute_operation)"""
@@ -86,6 +93,27 @@ class OptimizationServiceModule(BaseBrainModule):
         module = params.get("module", "")
         operation = params.get("operation", "")
         op_params = params.get("params", {})
+
+        if not isinstance(module, str) or not module.strip():
+            raise InvalidParameterError(
+                parameter="module",
+                value=str(module),
+                reason="module must be a non-empty string",
+            )
+        if not isinstance(operation, str) or not operation.strip():
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="operation must be a non-empty string",
+            )
+        if op_params is None:
+            op_params = {}
+        if not isinstance(op_params, dict):
+            raise InvalidParameterError(
+                parameter="params",
+                value=str(type(op_params).__name__),
+                reason="params must be a dict",
+            )
 
         start_time = time.time()
 
@@ -103,13 +131,20 @@ class OptimizationServiceModule(BaseBrainModule):
                         "result": cached.get("value"),
                         "cached": True,
                     }
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Cache get failed; continuing without cache",
+                    exc_info=True,
+                    extra={
+                        "module_name": "optimization_service",
+                        "target_module": module,
+                        "target_operation": operation,
+                        "error_type": type(e).__name__,
+                    },
+                )
 
         # Execute actual operation via module registry
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             target_module = ModuleRegistry.get_module(module)
             if not target_module:
                 return {
@@ -129,8 +164,17 @@ class OptimizationServiceModule(BaseBrainModule):
                         "params": op_params,
                         "value": result,
                     })
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        "Cache set failed; continuing",
+                        exc_info=True,
+                        extra={
+                            "module_name": "optimization_service",
+                            "target_module": module,
+                            "target_operation": operation,
+                            "error_type": type(e).__name__,
+                        },
+                    )
 
             # Track module usage
             self._module_usage_counts[module] = self._module_usage_counts.get(module, 0) + 1
@@ -142,9 +186,21 @@ class OptimizationServiceModule(BaseBrainModule):
                 "duration": duration,
             }
         except Exception as e:
+            logger.debug(
+                "Optimized operation execution failed",
+                exc_info=True,
+                extra={
+                    "module_name": "optimization_service",
+                    "target_module": module,
+                    "target_operation": operation,
+                    "error_type": type(e).__name__,
+                },
+            )
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Operation execution failed",
+                "module": module,
+                "operation": operation,
             }
 
     def _execute_parallel(self, params: Dict[str, Any]) -> Dict[str, Any]:

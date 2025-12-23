@@ -7,6 +7,11 @@ Uses JAX/Flax backend (Python 3.14 compatible)
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 import os
+import logging
+
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports - will fail gracefully if HuggingFace not installed
 try:
@@ -30,7 +35,9 @@ try:
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
-    raise ImportError("JAX is required. Install with: pip install jax jaxlib flax")
+    # Defer hard failure until a model load is attempted.
+    # This prevents import-time crashes during module discovery or partial installs.
+    logger.debug("JAX not available; model loading will be disabled", extra={"module_name": "model_manager"})
 
 
 @dataclass
@@ -76,7 +83,11 @@ class ModelManager:
             )
 
         if name not in cls._configs:
-            raise ValueError(f"Model '{name}' not registered")
+            raise InvalidParameterError(
+                parameter="name",
+                value=str(name),
+                reason=f"Model '{name}' is not registered",
+            )
 
         config = cls._configs[name]
 
@@ -141,7 +152,11 @@ class ModelManager:
             )
             return {"tokenizer": tokenizer, "model": model, "backend": "flax"}
         else:
-            raise ValueError(f"Unknown model type: {config.model_type}")
+            raise InvalidParameterError(
+                parameter="model_type",
+                value=str(config.model_type),
+                reason="Unknown model type",
+            )
 
     @classmethod
     def clear_cache(cls, name: Optional[str] = None):

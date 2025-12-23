@@ -5,6 +5,11 @@ Provides interface to SymPy for symbolic mathematics
 
 from typing import Dict, Any, Optional, List
 import time
+import logging
+
+from mavaia_core.exceptions import ModuleInitializationError, ModuleOperationError, InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional import - will fail gracefully if SymPy not available
 try:
@@ -50,7 +55,12 @@ class SymPySolver:
             Solution dictionary
         """
         if not self._available:
-            raise RuntimeError(self._error_message)
+            raise ModuleInitializationError(
+                module_name="symbolic_solver",
+                reason=self._error_message or "SymPy not available",
+            )
+        if not isinstance(problem, dict):
+            raise InvalidParameterError("problem", str(type(problem).__name__), "problem must be a dict")
 
         start_time = time.time()
 
@@ -116,8 +126,16 @@ class SymPySolver:
             }
 
         except Exception as e:
-            execution_time = time.time() - start_time
-            raise RuntimeError(f"SymPy solver error: {str(e)}")
+            logger.debug(
+                "SymPy solver failed",
+                exc_info=True,
+                extra={"solver": "sympy", "error_type": type(e).__name__},
+            )
+            raise ModuleOperationError(
+                module_name="symbolic_solver",
+                operation="solve",
+                reason="SymPy solver error",
+            ) from e
 
     def _parse_equation(
         self, expression: str, var_dict: Dict[str, Any]

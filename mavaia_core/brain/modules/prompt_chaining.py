@@ -5,16 +5,15 @@ Prompt chaining framework for multi-step reasoning.
 Ported from Swift PromptChainingService.swift
 """
 
-import sys
 import re
-from pathlib import Path
 from typing import Any
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from cot_models import CoTStep
+from mavaia_core.brain.modules.cot_models import CoTStep
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class PromptChainingService(BaseBrainModule):
@@ -25,7 +24,7 @@ class PromptChainingService(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
-        pass
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -63,7 +62,11 @@ class PromptChainingService(BaseBrainModule):
         elif operation == "build_context_for_next_step":
             return self._build_context_for_next_step(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for prompt_chaining",
+            )
 
     def _decompose_into_steps(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -79,14 +82,34 @@ class PromptChainingService(BaseBrainModule):
             Dictionary with list of CoT steps
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         max_steps = params.get("max_steps", 5)
+        if context is not None and not isinstance(context, str):
+            raise InvalidParameterError(
+                parameter="context",
+                value=str(type(context).__name__),
+                reason="context must be a string when provided",
+            )
+        try:
+            max_steps_int = int(max_steps)
+        except (TypeError, ValueError):
+            raise InvalidParameterError(
+                parameter="max_steps",
+                value=str(max_steps),
+                reason="max_steps must be an integer",
+            )
+        if max_steps_int < 1:
+            raise InvalidParameterError("max_steps", str(max_steps_int), "max_steps must be >= 1")
 
         # Analyze query to determine natural breakpoints
-        steps = self._identify_breakpoints(query, context, max_steps)
+        steps = self._identify_breakpoints(query, context, max_steps_int)
 
         # Create CoT steps from breakpoints
         cot_steps: list[CoTStep] = []
@@ -247,8 +270,12 @@ class PromptChainingService(BaseBrainModule):
             Updated CoTStep as dictionary
         """
         step_dict = params.get("step")
-        if not step_dict:
-            raise ValueError("step parameter is required")
+        if not isinstance(step_dict, dict) or not step_dict:
+            raise InvalidParameterError(
+                parameter="step",
+                value=str(type(step_dict).__name__),
+                reason="step parameter is required and must be a dict",
+            )
 
         step = CoTStep.from_dict(step_dict)
         reasoning = params.get("reasoning", "")
@@ -277,8 +304,12 @@ class PromptChainingService(BaseBrainModule):
             Dictionary with context string
         """
         steps_dicts = params.get("completed_steps", [])
-        if not steps_dicts:
-            raise ValueError("completed_steps parameter is required")
+        if not isinstance(steps_dicts, list) or not steps_dicts:
+            raise InvalidParameterError(
+                parameter="completed_steps",
+                value=str(type(steps_dicts).__name__),
+                reason="completed_steps parameter is required and must be a non-empty list",
+            )
 
         steps = [CoTStep.from_dict(s) for s in steps_dicts]
         context_parts: list[str] = []

@@ -4,17 +4,13 @@ Prevents prompt injection, system prompt extraction, jailbreak attempts
 """
 
 from typing import Any, Dict, List, Optional
-import sys
+import logging
 import re
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from safety_framework import (
-    SafetyService,
+from mavaia_core.exceptions import InvalidParameterError
+from mavaia_core.brain.modules.safety_framework import (
     SafetyServicePriority,
     SafetyCheckType,
     SafetyCheckContext,
@@ -22,11 +18,13 @@ from safety_framework import (
     SafetySeverity,
 )
 
+logger = logging.getLogger(__name__)
 
 class PromptInjectionSafetyModule(BaseBrainModule):
     """Critical prompt injection safety service"""
 
     def __init__(self):
+        super().__init__()
         self.service_id = "prompt_injection_safety"
         self.service_name = "Prompt Injection Safety"
         self.priority = SafetyServicePriority.CRITICAL
@@ -76,7 +74,11 @@ class PromptInjectionSafetyModule(BaseBrainModule):
                 "confidence": detection.get("confidence", 0.0),
             }
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for prompt_injection_safety",
+            )
 
     def check_input(self, input_text: str, context: SafetyCheckContext) -> SafetyCheckResult:
         """Check user input for prompt injection"""
@@ -334,29 +336,29 @@ class PromptInjectionSafetyModule(BaseBrainModule):
     def generate_blocked_response(
         self, injection_type: str, user_input: str, detected_patterns: List[str]
     ) -> str:
-        """Generate sassy blocked response"""
+        """Generate a user-facing blocked response (professional tone)."""
         responses = {
             "systemPromptExtraction": (
-                "Oh honey, nice try! 😏 I'm not about to spill my secrets like that. "
-                "What else can I help you with?"
+                "Request blocked due to suspected system prompt extraction attempt. "
+                "Please rephrase your request without asking for internal instructions or prompts."
             ),
             "jailbreak": (
-                "Aww, you thought that would work? Cute! 😊 "
-                "I'm staying in character, babe. What can I actually help you with?"
+                "Request blocked due to suspected jailbreak attempt. "
+                "Please describe the allowed goal directly without attempting to override safety rules."
             ),
             "rolePlaying": (
-                "Nice attempt at role-play, but I'm not switching characters for you, sweetie! 💅 "
-                "What do you really need help with?"
+                "Request blocked due to suspected role/identity manipulation attempt. "
+                "Please restate what you need help with."
             ),
             "instructionFollowing": (
-                "Hmm, trying to give me new instructions? That's not how this works, babe! 😌 "
-                "What else can I help you with?"
+                "Request blocked due to suspected instruction override attempt. "
+                "Please rephrase without instructions to ignore or replace existing rules."
             ),
         }
 
         return responses.get(
             injection_type,
-            "I can't help with that, babe. What else can I do for you?",
+            "Request blocked due to a detected safety risk. Please rephrase your request.",
         )
 
     def get_system_prompt_extraction_patterns(self) -> List[tuple]:
@@ -425,8 +427,6 @@ class PromptInjectionSafetyModule(BaseBrainModule):
 
     def _dict_to_context(self, context_dict: Dict[str, Any]) -> SafetyCheckContext:
         """Convert dictionary to SafetyCheckContext"""
-        from safety_framework import SafetyCheckContext
-
         return SafetyCheckContext(
             conversation_history=context_dict.get("conversation_history", []),
             conversation_id=context_dict.get("conversation_id"),

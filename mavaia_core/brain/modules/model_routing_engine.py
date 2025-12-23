@@ -4,14 +4,14 @@ Routing logic engine with confidence weighting, casual detection, and per-model 
 Converted from Swift ModelRoutingEngine.swift
 """
 
+import logging
 from typing import Any, Dict, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports - models package may not be available
 try:
@@ -41,6 +41,7 @@ class ModelRoutingEngineModule(BaseBrainModule):
     """Routing logic engine for model selection"""
 
     def __init__(self):
+        super().__init__()
         self.cluster_model_cache: Dict[str, str] = {}
         self.model_cooldown: Dict[str, int] = {}
         self.cooldown_turns = 3
@@ -71,13 +72,15 @@ class ModelRoutingEngineModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self.casual_detector = ModuleRegistry.get_module("casual_conversation_detector")
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.warning(
+                "Failed to load optional dependency modules for model_routing_engine",
+                exc_info=True,
+                extra={"module_name": "model_routing_engine", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -88,7 +91,27 @@ class ModelRoutingEngineModule(BaseBrainModule):
         elif operation == "route_request":
             return self._route_request(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for model_routing_engine",
+            )
+
+    def _default_model(self) -> str:
+        """Get default model even if ModelTierMap isn't available."""
+        if ModelTierMap is None:
+            return "cognitive_generator"
+        return ModelTierMap.default_model()
+
+    def _supports_thinking(self, model: str) -> bool:
+        if ModelTierMap is None:
+            return False
+        return bool(ModelTierMap.supports_thinking(model))
+
+    def _is_local_model(self, model: str) -> bool:
+        if ModelTierMap is None:
+            return True
+        return bool(ModelTierMap.is_local_model(model))
 
     def _select_model(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Select the best model for a given input"""
@@ -101,9 +124,22 @@ class ModelRoutingEngineModule(BaseBrainModule):
         previous_decision = params.get("previous_decision")
         is_creation_action = params.get("is_creation_action", False)
 
+        if not isinstance(input_text, str):
+            raise InvalidParameterError("input", str(type(input_text)), "input must be a string")
+        if intent_cluster is not None and not isinstance(intent_cluster, str):
+            raise InvalidParameterError("intent_cluster", str(type(intent_cluster)), "intent_cluster must be a string")
+        try:
+            confidence = float(confidence)
+        except Exception as e:
+            raise InvalidParameterError("confidence", str(confidence), "confidence must be a number") from e
+        try:
+            message_length = int(message_length)
+        except Exception as e:
+            raise InvalidParameterError("message_length", str(message_length), "message_length must be an int") from e
+
         if retry_mode_active and previous_decision:
             decision = ModelRoutingDecision(
-                model=previous_decision.get("model", ModelTierMap.default_model()),
+                model=previous_decision.get("model", self._default_model()),
                 use_thinking=previous_decision.get("use_thinking", False),
                 is_casual=previous_decision.get("is_casual", False),
             )
@@ -114,8 +150,8 @@ class ModelRoutingEngineModule(BaseBrainModule):
 
         # 1. Research mode - use cognitive generator
         if is_research_mode:
-            selected_model = ModelTierMap.default_model()
-            use_thinking = ModelTierMap.supports_thinking(selected_model)
+            selected_model = self._default_model()
+            use_thinking = self._supports_thinking(selected_model)
             self._activate_cooldown(selected_model)
 
             decision = ModelRoutingDecision(
@@ -130,7 +166,7 @@ class ModelRoutingEngineModule(BaseBrainModule):
 
         # 2. Creation action - use cognitive generator with thinking
         if is_creation_action:
-            creation_model = ModelTierMap.default_model()
+            creation_model = self._default_model()
             self._activate_cooldown(creation_model)
             decision = ModelRoutingDecision(
                 model=creation_model,
@@ -155,8 +191,12 @@ class ModelRoutingEngineModule(BaseBrainModule):
                     }
                 )
                 is_casual = casual_result.get("result", {}).get("is_casual", False)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Casual detection failed; continuing without casual signal",
+                    exc_info=True,
+                    extra={"module_name": "model_routing_engine", "error_type": type(e).__name__},
+                )
 
         # Check for imperative verbs (short commands that are NOT casual)
         has_imperative_verb = self._has_imperative_command(input_text, message_length)
@@ -165,8 +205,8 @@ class ModelRoutingEngineModule(BaseBrainModule):
         # 4. Cluster memory - remember preferred model for this topic
         if intent_cluster and intent_cluster in self.cluster_model_cache:
             cached_model = self.cluster_model_cache[intent_cluster]
-            if ModelTierMap.is_local_model(cached_model):
-                use_thinking = ModelTierMap.supports_thinking(cached_model) and not actual_is_casual
+            if self._is_local_model(cached_model):
+                use_thinking = self._supports_thinking(cached_model) and not actual_is_casual
                 self._activate_cooldown(cached_model)
 
                 decision = ModelRoutingDecision(
@@ -182,7 +222,7 @@ class ModelRoutingEngineModule(BaseBrainModule):
         # 5. Cooldown/stickiness (model continuity)
         for model, remaining_turns in self.model_cooldown.items():
             if remaining_turns > 0:
-                use_thinking = ModelTierMap.supports_thinking(model) and not actual_is_casual
+                use_thinking = self._supports_thinking(model) and not actual_is_casual
                 decision = ModelRoutingDecision(
                     model=model,
                     use_thinking=use_thinking,
@@ -194,8 +234,8 @@ class ModelRoutingEngineModule(BaseBrainModule):
                 }
 
         # 6. Default: use cognitive generator
-        default_model = ModelTierMap.default_model()
-        use_thinking = ModelTierMap.supports_thinking(default_model) and not actual_is_casual
+        default_model = self._default_model()
+        use_thinking = self._supports_thinking(default_model) and not actual_is_casual
         self._activate_cooldown(default_model)
 
         # Cache model for this cluster

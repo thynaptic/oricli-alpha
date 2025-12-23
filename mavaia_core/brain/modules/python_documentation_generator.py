@@ -141,7 +141,11 @@ class PythonDocumentationGeneratorModule(BaseBrainModule):
             return self.explain_code_natural_language(code, audience)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def generate_docstring(self, code: str, style: str = "google") -> Dict[str, Any]:
         """

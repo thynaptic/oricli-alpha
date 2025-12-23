@@ -7,18 +7,16 @@ reasoning across sections, cross-sectional linking, and structured synthesis
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import re
-import sys
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 
 class DocumentOrchestrationModule(BaseBrainModule):
     """Orchestrate multi-document operations"""
 
     def __init__(self):
+        super().__init__()
         self.section_patterns = [
             r"^#{1,3}\s+(.+)$",  # Markdown headers
             r"^[A-Z][A-Z\s]{5,}$",  # ALL CAPS headers
@@ -77,7 +75,11 @@ class DocumentOrchestrationModule(BaseBrainModule):
                 return self.synthesize_documents(documents, query)
 
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for document_orchestration",
+                )
 
     def route_multi_document(
         self, query: str, documents: List[Dict[str, Any]]

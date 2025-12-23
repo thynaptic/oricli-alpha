@@ -6,19 +6,20 @@ Handles natural topic shifting, smooth conversation flow, handling interruptions
 from typing import Dict, Any, List, Optional
 import json
 import random
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class NaturalTransitionsModule(BaseBrainModule):
     """Natural topic transitions and conversation flow"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.transition_phrases = {}
         self.topic_shift_patterns = {}
@@ -92,9 +93,10 @@ class NaturalTransitionsModule(BaseBrainModule):
                     "continuation": ["And also,", "Plus,", "Additionally,"],
                 }
         except Exception as e:
-            print(
-                f"[NaturalTransitionsModule] Failed to load config: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load natural_transitions config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "natural_transitions", "error_type": type(e).__name__},
             )
             self.transition_phrases = {}
             self.topic_shift_patterns = {}
@@ -106,25 +108,85 @@ class NaturalTransitionsModule(BaseBrainModule):
             from_topic = params.get("from_topic", "")
             to_topic = params.get("to_topic", "")
             transition_type = params.get("transition_type", "smooth")
+            if from_topic is None:
+                from_topic = ""
+            if to_topic is None:
+                to_topic = ""
+            if transition_type is None:
+                transition_type = "smooth"
+            if not isinstance(from_topic, str):
+                raise InvalidParameterError("from_topic", str(type(from_topic).__name__), "from_topic must be a string")
+            if not isinstance(to_topic, str):
+                raise InvalidParameterError("to_topic", str(type(to_topic).__name__), "to_topic must be a string")
+            if not isinstance(transition_type, str):
+                raise InvalidParameterError(
+                    "transition_type", str(type(transition_type).__name__), "transition_type must be a string"
+                )
             return self.create_transition(from_topic, to_topic, transition_type)
         elif operation == "detect_topic_shift":
             current_text = params.get("current_text", "")
             previous_texts = params.get("previous_texts", [])
+            if current_text is None:
+                current_text = ""
+            if previous_texts is None:
+                previous_texts = []
+            if not isinstance(current_text, str):
+                raise InvalidParameterError(
+                    "current_text", str(type(current_text).__name__), "current_text must be a string"
+                )
+            if not isinstance(previous_texts, list):
+                raise InvalidParameterError(
+                    "previous_texts", str(type(previous_texts).__name__), "previous_texts must be a list"
+                )
             return self.detect_topic_shift(current_text, previous_texts)
         elif operation == "bridge_topics":
             topic1 = params.get("topic1", "")
             topic2 = params.get("topic2", "")
+            if topic1 is None:
+                topic1 = ""
+            if topic2 is None:
+                topic2 = ""
+            if not isinstance(topic1, str):
+                raise InvalidParameterError("topic1", str(type(topic1).__name__), "topic1 must be a string")
+            if not isinstance(topic2, str):
+                raise InvalidParameterError("topic2", str(type(topic2).__name__), "topic2 must be a string")
             return self.bridge_topics(topic1, topic2)
         elif operation == "handle_interruption":
             previous_text = params.get("previous_text", "")
             interruption_text = params.get("interruption_text", "")
+            if previous_text is None:
+                previous_text = ""
+            if interruption_text is None:
+                interruption_text = ""
+            if not isinstance(previous_text, str):
+                raise InvalidParameterError(
+                    "previous_text", str(type(previous_text).__name__), "previous_text must be a string"
+                )
+            if not isinstance(interruption_text, str):
+                raise InvalidParameterError(
+                    "interruption_text", str(type(interruption_text).__name__), "interruption_text must be a string"
+                )
             return self.handle_interruption(previous_text, interruption_text)
         elif operation == "smooth_flow":
             text = params.get("text", "")
             previous_text = params.get("previous_text", "")
+            if text is None:
+                text = ""
+            if previous_text is None:
+                previous_text = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(previous_text, str):
+                raise InvalidParameterError(
+                    "previous_text", str(type(previous_text).__name__), "previous_text must be a string"
+                )
             return self.smooth_flow(text, previous_text)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for natural_transitions",
+            )
 
     def create_transition(
         self, from_topic: str, to_topic: str, transition_type: str = "smooth"

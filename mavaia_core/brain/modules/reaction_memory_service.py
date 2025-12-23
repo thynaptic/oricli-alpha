@@ -5,14 +5,14 @@ Converted from Swift ReactionMemoryService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
+import logging
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ReactionType:
@@ -84,6 +84,7 @@ class ReactionMemoryServiceModule(BaseBrainModule):
     """Service to track user reactions and store them in memory"""
 
     def __init__(self):
+        super().__init__()
         self.persistent_memory_service = None
         self._modules_loaded = False
 
@@ -111,13 +112,15 @@ class ReactionMemoryServiceModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self.persistent_memory_service = ModuleRegistry.get_module("persistent_memory_service")
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Failed to load optional persistent_memory_service",
+                exc_info=True,
+                extra={"module_name": "reaction_memory_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -128,7 +131,11 @@ class ReactionMemoryServiceModule(BaseBrainModule):
         elif operation == "get_reactions":
             return self._get_reactions(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for reaction_memory_service",
+            )
 
     def _record_reaction(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Record a reaction to a message in Mavaia's memory"""
@@ -188,9 +195,14 @@ Timestamp: {time.time()}
                         },
                     }
         except Exception as e:
+            logger.debug(
+                "Failed to store reaction in persistent memory",
+                exc_info=True,
+                extra={"module_name": "reaction_memory_service", "error_type": type(e).__name__},
+            )
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Failed to store reaction",
             }
 
         # Fallback: return success even if memory service is not available

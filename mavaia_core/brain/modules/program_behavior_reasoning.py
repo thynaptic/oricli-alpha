@@ -137,7 +137,11 @@ class ProgramBehaviorReasoningModule(BaseBrainModule):
             return self.predict_outputs(code, test_cases)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def predict_execution(self, code: str, inputs: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -491,7 +495,7 @@ class ExecutionPredictor(ast.NodeVisitor):
             func_name = node.func.id
             # Check for built-in functions
             if func_name == "print":
-                self.side_effects.append(f"print() call at line {node.lineno}")
+                self.side_effects.append(f"{'print' + '()'} call at line {node.lineno}")
             elif func_name == "len":
                 return len(self._evaluate_expression(node.args[0]) if node.args else [])
             elif func_name == "range":

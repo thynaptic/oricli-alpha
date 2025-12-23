@@ -5,14 +5,14 @@ Converted from Swift VisionPipelineService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import base64
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 
 class PipelineContext:
@@ -73,6 +73,7 @@ class VisionPipelineServiceModule(BaseBrainModule):
     """Vision pipeline using ONLY Python vision_analysis module"""
 
     def __init__(self):
+        super().__init__()
         self.python_brain_service = None
         self._modules_loaded = False
 
@@ -100,13 +101,15 @@ class VisionPipelineServiceModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self.python_brain_service = ModuleRegistry.get_module("python_brain_service")
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Failed to load python_brain_service for vision_pipeline_service",
+                exc_info=True,
+                extra={"module_name": "vision_pipeline_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -117,7 +120,11 @@ class VisionPipelineServiceModule(BaseBrainModule):
         elif operation == "analyze_image":
             return self._analyze_image(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for vision_pipeline_service",
+            )
 
     def _process_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Process image using Python vision_analysis module"""
@@ -158,7 +165,11 @@ class VisionPipelineServiceModule(BaseBrainModule):
         base64_image = base64.b64encode(image_data).decode("utf-8")
 
         if not self.python_brain_service:
-            raise ValueError("Python brain service not available")
+            raise ModuleOperationError(
+                module_name="vision_pipeline_service",
+                operation="process_image",
+                reason="python_brain_service not available",
+            )
 
         # Use Python vision_analysis module ONLY
         try:
@@ -174,8 +185,11 @@ class VisionPipelineServiceModule(BaseBrainModule):
             )
 
             if not vision_result.get("success", False):
-                error_msg = vision_result.get("error", "Vision analysis failed")
-                raise ValueError(error_msg)
+                raise ModuleOperationError(
+                    module_name="vision_pipeline_service",
+                    operation="process_image",
+                    reason="Vision analysis failed",
+                )
 
             # Get structured thought from vision analysis
             result_data = vision_result.get("result", {})
@@ -183,7 +197,11 @@ class VisionPipelineServiceModule(BaseBrainModule):
             thought_text = structured_thought.get("text", "")
 
             if not thought_text:
-                raise ValueError("Invalid vision analysis result")
+                raise ModuleOperationError(
+                    module_name="vision_pipeline_service",
+                    operation="process_image",
+                    reason="Invalid vision analysis result (missing structured thought text)",
+                )
 
             # Extract classification and labels
             classification = result_data.get("classification", {})
@@ -232,5 +250,14 @@ class VisionPipelineServiceModule(BaseBrainModule):
             )
 
         except Exception as e:
-            raise ValueError(f"Vision processing failed: {str(e)}")
+            logger.debug(
+                "Vision processing failed",
+                exc_info=True,
+                extra={"module_name": "vision_pipeline_service", "error_type": type(e).__name__},
+            )
+            raise ModuleOperationError(
+                module_name="vision_pipeline_service",
+                operation="process_image",
+                reason="Vision processing failed",
+            ) from e
 

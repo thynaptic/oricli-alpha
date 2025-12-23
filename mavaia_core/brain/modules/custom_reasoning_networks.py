@@ -4,12 +4,12 @@ Specialized neural architectures for specific reasoning tasks
 """
 
 from typing import Dict, Any, Optional, List, Tuple
-import sys
 from pathlib import Path
-
-# Removed sys.path manipulation - use proper package imports
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+
+logger = logging.getLogger(__name__)
 
 # Lazy import JAX/Flax - don't import at module level
 JAX_AVAILABLE = None
@@ -53,9 +53,9 @@ def _check_jax_available():
 
 # Only define Flax-based classes if JAX is available
 # Otherwise define stub classes that will raise errors when used
-# Lazy check - don't import JAX at module level to avoid slow imports
-# JAX will be checked lazily when needed
-if False:  # Changed to False - JAX classes will be defined lazily when needed
+# Ensure JAX is checked and nn is set before using it
+_check_jax_available()
+if JAX_AVAILABLE and nn is not None:
     class TransformerEncoderLayer(nn.Module):
         """Flax implementation of Transformer Encoder Layer"""
         d_model: int
@@ -443,7 +443,10 @@ class CustomReasoningModule(BaseBrainModule):
             # Initialize RNG for neural operations
             self.rng = jax.random.PRNGKey(0)
         else:
-            print("[CustomReasoningModule] JAX not available - neural operations disabled, but solver operations available via advanced_reasoning_solvers", file=sys.stderr)
+            logger.debug(
+                "JAX not available; neural operations disabled (solver operations may still be available)",
+                extra={"module_name": "custom_reasoning"},
+            )
             self.rng = None
 
         return True
@@ -455,7 +458,10 @@ class CustomReasoningModule(BaseBrainModule):
                 from mavaia_core.brain.registry import ModuleRegistry
                 self._module_registry = ModuleRegistry
             except ImportError:
-                print("[CustomReasoningModule] ModuleRegistry not available", file=sys.stderr)
+                logger.debug(
+                    "ModuleRegistry not available; cross-module fallbacks disabled",
+                    extra={"module_name": "custom_reasoning"},
+                )
                 self._module_registry = None
     
     def _get_reasoning_module(self):
@@ -466,7 +472,11 @@ class CustomReasoningModule(BaseBrainModule):
                 if self._reasoning_module and not self._reasoning_module.initialized:
                     self._reasoning_module.initialize()
             except Exception as e:
-                print(f"[CustomReasoningModule] Failed to load reasoning module: {e}", file=sys.stderr)
+                logger.debug(
+                    "Failed to load reasoning module",
+                    exc_info=True,
+                    extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                )
         return self._reasoning_module
     
     def _get_chain_of_thought_module(self):
@@ -477,7 +487,11 @@ class CustomReasoningModule(BaseBrainModule):
                 if self._chain_of_thought_module and not self._chain_of_thought_module.initialized:
                     self._chain_of_thought_module.initialize()
             except Exception as e:
-                print(f"[CustomReasoningModule] Failed to load chain_of_thought module: {e}", file=sys.stderr)
+                logger.debug(
+                    "Failed to load chain_of_thought module",
+                    exc_info=True,
+                    extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                )
         return self._chain_of_thought_module
     
     def _get_logical_deduction_module(self):
@@ -488,7 +502,11 @@ class CustomReasoningModule(BaseBrainModule):
                 if self._logical_deduction_module and not self._logical_deduction_module.initialized:
                     self._logical_deduction_module.initialize()
             except Exception as e:
-                print(f"[CustomReasoningModule] Failed to load logical_deduction module: {e}", file=sys.stderr)
+                logger.debug(
+                    "Failed to load logical_deduction module",
+                    exc_info=True,
+                    extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                )
         return self._logical_deduction_module
     
     def _get_symbolic_solver_module(self):
@@ -509,7 +527,11 @@ class CustomReasoningModule(BaseBrainModule):
                         except Exception:
                             pass
             except Exception as e:
-                print(f"[CustomReasoningModule] Failed to load symbolic_solver module: {e}", file=sys.stderr)
+                logger.debug(
+                    "Failed to load symbolic_solver module",
+                    exc_info=True,
+                    extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                )
         return self._symbolic_solver_module
     
     def _get_meta_evaluator(self):
@@ -541,7 +563,11 @@ class CustomReasoningModule(BaseBrainModule):
                         except Exception:
                             pass
                 except Exception as e:
-                    print(f"[CustomReasoningModule] Failed to load advanced_reasoning_solvers module: {e}", file=sys.stderr)
+                    logger.debug(
+                        "Failed to load advanced_reasoning_solvers module",
+                        exc_info=True,
+                        extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                    )
                     self._advanced_solvers_module = None
         return self._advanced_solvers_module
     
@@ -795,7 +821,11 @@ class CustomReasoningModule(BaseBrainModule):
             return repaired if repaired else response
         except Exception as e:
             # If meta-evaluator fails, try manual repair
-            print(f"[CustomReasoningModule] Meta-evaluator failed: {e}", file=sys.stderr)
+            logger.debug(
+                "Meta-evaluator failed; attempting manual repair",
+                exc_info=True,
+                extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+            )
             if task_type:
                 manually_repaired = self._repair_response_format(response, task_type, question_text, params)
                 if manually_repaired:
@@ -895,9 +925,9 @@ class CustomReasoningModule(BaseBrainModule):
             
             if not transformers_available:
                 # transformers not available - use simple fallback
-                print(
-                    "[CustomReasoningModule] transformers not available, using simple embeddings",
-                    file=sys.stderr,
+                logger.info(
+                    "transformers not available; using simple embeddings fallback",
+                    extra={"module_name": "custom_reasoning"},
                 )
                 self.embedding_model = "simple"
                 self.tokenizer = None
@@ -910,23 +940,24 @@ class CustomReasoningModule(BaseBrainModule):
                     self.tokenizer = FlaxAutoTokenizer.from_pretrained(model_name)
                     self.embedding_model = FlaxAutoModel.from_pretrained(model_name)
                     self.embedding_params = self.embedding_model.params
-                    print(
-                        "[CustomReasoningModule] Using Flax embedding model",
-                        file=sys.stderr,
+                    logger.info(
+                        "Using Flax embedding model",
+                        extra={"module_name": "custom_reasoning", "embedding_backend": "flax"},
                     )
                     return
                 except Exception as e:
-                    print(
-                        f"[CustomReasoningModule] Flax model load failed: {e}, trying PyTorch",
-                        file=sys.stderr,
+                    logger.debug(
+                        "Flax model load failed; trying PyTorch embeddings fallback",
+                        exc_info=True,
+                        extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
                     )
             
             # Fallback to PyTorch models
             try:
                 from transformers import AutoTokenizer, AutoModel
-                print(
-                    "[CustomReasoningModule] Loading PyTorch embedding model (will convert to JAX)",
-                    file=sys.stderr,
+                logger.info(
+                    "Loading PyTorch embedding model (will convert to JAX)",
+                    extra={"module_name": "custom_reasoning", "embedding_backend": "pytorch"},
                 )
                 self.tokenizer = AutoTokenizer.from_pretrained(model_name)
                 pt_model = AutoModel.from_pretrained(model_name)
@@ -934,9 +965,10 @@ class CustomReasoningModule(BaseBrainModule):
                 self.embedding_params = None
                 return
             except Exception as e:
-                print(
-                    f"[CustomReasoningModule] Failed to load embedding model: {e}, using simple embeddings",
-                    file=sys.stderr,
+                logger.debug(
+                    "Failed to load embedding model; using simple embeddings fallback",
+                    exc_info=True,
+                    extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
                 )
                 # Don't raise - use simple fallback instead
                 self.embedding_model = "simple"
@@ -1067,7 +1099,11 @@ class CustomReasoningModule(BaseBrainModule):
                         if result.get("success") and result.get("response"):
                             return result["response"]
                     except Exception as e:
-                        print(f"[CustomReasoningModule] Error solving zebra puzzle in _generate_text_from_embeddings: {e}", file=sys.stderr)
+                        logger.debug(
+                            "Error solving zebra puzzle in _generate_text_from_embeddings",
+                            exc_info=True,
+                            extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                        )
                 
                 # Last resort: generate structured format with defaults
                 default_answers = ["House 1", "House 2", "House 3", "House 4", "House 5"]
@@ -1082,7 +1118,11 @@ class CustomReasoningModule(BaseBrainModule):
                         if result.get("success") and result.get("response"):
                             return result["response"]
                     except Exception as e:
-                        print(f"[CustomReasoningModule] Error solving web of lies in _generate_text_from_embeddings: {e}", file=sys.stderr)
+                        logger.debug(
+                            "Error solving web_of_lies in _generate_text_from_embeddings",
+                            exc_info=True,
+                            extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                        )
                 
                 # Fallback: count questions and generate yes/no answers
                 question_count = original_text.count("?")
@@ -1102,7 +1142,11 @@ class CustomReasoningModule(BaseBrainModule):
                         if result.get("success") and result.get("response"):
                             return result["response"]
                     except Exception as e:
-                        print(f"[CustomReasoningModule] Error solving spatial problem in _generate_text_from_embeddings: {e}", file=sys.stderr)
+                        logger.debug(
+                            "Error solving spatial problem in _generate_text_from_embeddings",
+                            exc_info=True,
+                            extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                        )
                 
                 # Fallback: return generic spatial reasoning response
                 return f"Based on {reasoning_steps} steps of spatial reasoning, analyzing the spatial relationships."
@@ -2013,7 +2057,11 @@ class CustomReasoningModule(BaseBrainModule):
             return self._generate_simple_arc_program(train_examples)
             
         except Exception as e:
-            print(f"[CustomReasoningModule] Program synthesis failed: {e}", file=sys.stderr)
+            logger.debug(
+                "Program synthesis failed",
+                exc_info=True,
+                extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+            )
             return None
     
     def _get_code_generator_module(self):
@@ -2107,7 +2155,11 @@ def transform(input_grid: List[List[int]]) -> List[List[int]]:
             return None
             
         except Exception as e:
-            print(f"[CustomReasoningModule] Program execution failed: {e}", file=sys.stderr)
+            logger.debug(
+                "Program execution failed",
+                exc_info=True,
+                extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+            )
             return None
     
 
@@ -2507,7 +2559,11 @@ def transform(input_grid: List[List[int]]) -> List[List[int]]:
                         if result and result.get("success"):
                             return result
                     except Exception as e:
-                        print(f"[CustomReasoningModule] Advanced solvers error in multi_step_reasoning: {e}", file=sys.stderr)
+                        logger.debug(
+                            "Advanced solvers error in multi_step_reasoning",
+                            exc_info=True,
+                            extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                        )
                 
                 # If not a puzzle or advanced solvers failed, use neural operations (requires JAX)
                 if not _check_jax_available():
@@ -2556,7 +2612,11 @@ def transform(input_grid: List[List[int]]) -> List[List[int]]:
                         if result and result.get("success"):
                             return result
                     except Exception as e:
-                        print(f"[CustomReasoningModule] Advanced solvers zebra puzzle error: {e}", file=sys.stderr)
+                        logger.debug(
+                            "Advanced solvers zebra puzzle error",
+                            exc_info=True,
+                            extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                        )
                 # Fallback to multi-step reasoning (requires JAX) only if advanced solvers failed
                 if _check_jax_available():
                     return self._multi_step_reasoning(params)
@@ -2571,7 +2631,11 @@ def transform(input_grid: List[List[int]]) -> List[List[int]]:
                         if result.get("success"):
                             return result
                     except Exception as e:
-                        print(f"[CustomReasoningModule] Advanced solvers spatial error: {e}", file=sys.stderr)
+                        logger.debug(
+                            "Advanced solvers spatial error",
+                            exc_info=True,
+                            extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                        )
                 # Fallback to multi-step reasoning (requires JAX)
                 if _check_jax_available():
                     spatial_params = params.copy()
@@ -2587,7 +2651,11 @@ def transform(input_grid: List[List[int]]) -> List[List[int]]:
                         if result.get("success"):
                             return result
                     except Exception as e:
-                        print(f"[CustomReasoningModule] Advanced solvers ARC error: {e}", file=sys.stderr)
+                        logger.debug(
+                            "Advanced solvers ARC error",
+                            exc_info=True,
+                            extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                        )
                 # Fallback to multi-step reasoning (requires JAX)
                 if _check_jax_available():
                     return self._multi_step_reasoning(params)
@@ -2611,7 +2679,11 @@ def transform(input_grid: List[List[int]]) -> List[List[int]]:
                         if result and result.get("success"):
                             return result
                     except Exception as e:
-                        print(f"[CustomReasoningModule] Advanced solvers puzzle error: {e}", file=sys.stderr)
+                        logger.debug(
+                            "Advanced solvers puzzle error",
+                            exc_info=True,
+                            extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                        )
                 
                 # Fallback: generate default response if advanced solvers not available
                 if not advanced_solvers:
@@ -2881,7 +2953,11 @@ def transform(input_grid: List[List[int]]) -> List[List[int]]:
                             "solver_used": "reasoning_module_fallback"
                         }
             except Exception as e:
-                print(f"[CustomReasoningModule] Reasoning module fallback failed: {e}", file=sys.stderr)
+                logger.debug(
+                    "Reasoning module fallback failed",
+                    exc_info=True,
+                    extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                )
         
         # Try chain-of-thought module
         cot_module = self._get_chain_of_thought_module()
@@ -2952,7 +3028,11 @@ def transform(input_grid: List[List[int]]) -> List[List[int]]:
                             "solver_used": "chain_of_thought_fallback"
                         }
             except Exception as e:
-                print(f"[CustomReasoningModule] Chain-of-thought fallback failed: {e}", file=sys.stderr)
+                logger.debug(
+                    "Chain-of-thought fallback failed",
+                    exc_info=True,
+                    extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                )
         
         return None
 
@@ -2978,15 +3058,30 @@ def transform(input_grid: List[List[int]]) -> List[List[int]]:
                 result = advanced_solvers.execute("solve_zebra_puzzle", params)
                 solver_time = time.time() - start_time
                 if result.get("success"):
-                    print(f"[CustomReasoningModule] Zebra puzzle solved in {solver_time:.2f}s using {result.get('solver_used', 'unknown')}", file=sys.stderr)
+                    logger.info(
+                        "Zebra puzzle solved",
+                        extra={
+                            "module_name": "custom_reasoning",
+                            "solver_time_s": round(float(solver_time), 3),
+                            "solver_used": str(result.get("solver_used", "unknown")),
+                        },
+                    )
                     return result
                 else:
-                    print(f"[CustomReasoningModule] Zebra puzzle solver failed after {solver_time:.2f}s: {result.get('error', 'unknown error')}", file=sys.stderr)
+                    logger.debug(
+                        "Zebra puzzle solver failed; continuing with fallback reasoning",
+                        extra={
+                            "module_name": "custom_reasoning",
+                            "solver_time_s": round(float(solver_time), 3),
+                        },
+                    )
             except Exception as e:
                 # Continue with normal reasoning if solver fails
-                print(f"[CustomReasoningModule] Zebra puzzle solver error in multi_step: {e}", file=sys.stderr)
-                import traceback
-                traceback.print_exc(file=sys.stderr)
+                logger.debug(
+                    "Zebra puzzle solver error in multi_step; continuing with fallback reasoning",
+                    exc_info=True,
+                    extra={"module_name": "custom_reasoning", "error_type": type(e).__name__},
+                )
 
         # Check JAX availability
         if not _check_jax_available():
@@ -3235,7 +3330,10 @@ def transform(input_grid: List[List[int]]) -> List[List[int]]:
             # For now, we initialize the model without training data
             # The model is ready for inference but would benefit from training
             if epoch % 5 == 0:
-                print(f"[CustomReasoningModule] Epoch {epoch}", file=sys.stderr)
+                logger.info(
+                    "Custom reasoning training progress",
+                    extra={"module_name": "custom_reasoning", "epoch": int(epoch)},
+                )
 
         self.models[model_type] = model
         self.model_params[model_type] = params_dict

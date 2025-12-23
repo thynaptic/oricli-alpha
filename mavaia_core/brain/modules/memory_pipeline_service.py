@@ -4,17 +4,19 @@ Converted from Swift MemoryPipelineService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryPipelineServiceModule(BaseBrainModule):
     """Orchestrates three-layer memory pipeline"""
 
     def __init__(self):
+        super().__init__()
         self.persistent_memory = None
         self.memory_graph = None
         self._modules_loaded = False
@@ -48,12 +50,19 @@ class MemoryPipelineServiceModule(BaseBrainModule):
             return
 
         try:
+            from mavaia_core.brain.registry import ModuleRegistry
+
             self.persistent_memory = ModuleRegistry.get_module("persistent_memory_service")
             self.memory_graph = ModuleRegistry.get_module("memory_graph")
+
             self._modules_loaded = True
-        except Exception:
+        except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load one or more memory pipeline dependencies",
+                exc_info=True,
+                extra={"module_name": "memory_pipeline_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -70,7 +79,11 @@ class MemoryPipelineServiceModule(BaseBrainModule):
         elif operation == "get_graph_stats":
             return self._get_graph_stats(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for memory_pipeline_service",
+            )
 
     def _store_memory(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Store a memory in the pipeline"""
@@ -117,14 +130,22 @@ class MemoryPipelineServiceModule(BaseBrainModule):
         # Use graph-based recall if available and requested
         if self.memory_graph and use_graph:
             try:
-                result = self.memory_graph.execute("recall_with_reasoning", {
-                    "query": query,
-                    "limit": limit,
-                })
+                # Prefer standardized operation name if available.
+                # memory_graph now supports `recall_memories`.
+                result = self.memory_graph.execute(
+                    "recall_memories",
+                    {"query": query, "limit": limit, "use_graph": True},
+                )
+                # Normalize result shape
+                if isinstance(result, dict) and "memories" in result:
+                    return {"success": True, "memories": result.get("memories", [])}
                 return result
-            except:
-                # Fall back to regular recall
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Graph-based recall failed; falling back to persistent memory recall",
+                    exc_info=True,
+                    extra={"module_name": "memory_pipeline_service", "error_type": type(e).__name__},
+                )
 
         # Fall back to persistent memory service
         return self.persistent_memory.execute("recall_memories", {

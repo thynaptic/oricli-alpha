@@ -3,14 +3,12 @@ Optimization Helpers - Batch execution and performance utilities
 Provides batch execution support for multiple module operations
 """
 
-from typing import List, Dict, Any, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+from typing import List, Dict, Any
+import logging
 
 from mavaia_core.brain.registry import ModuleRegistry
+
+logger = logging.getLogger(__name__)
 
 
 def execute_batch_operations(operations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -48,15 +46,41 @@ def execute_batch_operations(operations: List[Dict[str, Any]]) -> List[Dict[str,
             result = module.execute(operation_name, params)
             results.append({"success": True, "result": result})
         except Exception as e:
-            results.append({"success": False, "error": str(e)})
+            logger.debug(
+                "Batch operation failed",
+                exc_info=True,
+                extra={
+                    "module_name": "optimization_helpers",
+                    "target_module": str(module_name),
+                    "target_operation": str(operation_name),
+                    "error_type": type(e).__name__,
+                },
+            )
+            results.append(
+                {
+                    "success": False,
+                    "error": "Batch operation failed",
+                    "module": module_name,
+                    "operation": operation_name,
+                }
+            )
 
     return results
 
 
 def get_module_load_status() -> Dict[str, bool]:
     """Get status of which modules are loaded"""
-    # This would require tracking in ModuleRegistry
-    # For now, return empty dict
+    # Best-effort: "loaded" means instantiated in the registry cache.
+    try:
+        instances = getattr(ModuleRegistry, "_instances", {})
+        if isinstance(instances, dict):
+            return {name: True for name in instances.keys()}
+    except Exception as e:
+        logger.debug(
+            "Failed to read ModuleRegistry instance cache",
+            exc_info=True,
+            extra={"module_name": "optimization_helpers", "error_type": type(e).__name__},
+        )
     return {}
 
 
@@ -76,7 +100,16 @@ def preload_modules(module_names: List[str]) -> Dict[str, bool]:
         try:
             module = ModuleRegistry.get_module(module_name)
             results[module_name] = module is not None
-        except:
+        except Exception as e:
+            logger.debug(
+                "Module preload failed",
+                exc_info=True,
+                extra={
+                    "module_name": "optimization_helpers",
+                    "target_module": str(module_name),
+                    "error_type": type(e).__name__,
+                },
+            )
             results[module_name] = False
 
     return results

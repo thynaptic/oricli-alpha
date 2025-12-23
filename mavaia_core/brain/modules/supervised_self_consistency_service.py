@@ -5,14 +5,13 @@ Converted from Swift SupervisedSelfConsistencyService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
+from dataclasses import dataclass
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
 
 # Optional imports - models package may not be available
 try:
@@ -29,11 +28,125 @@ except ImportError:
     SupervisionScore = None
     ComplexityScore = None
 
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _FallbackComplexityScore:
+    overall: float
+    factors: Dict[str, float]
+    reasoning: bool
+    threshold: float
+
+    @property
+    def should_trigger(self) -> bool:
+        return bool(self.reasoning) and float(self.overall) >= float(self.threshold)
+
+
+@dataclass(frozen=True)
+class _FallbackCandidateResponse:
+    id: str
+    text: str
+    metadata: Dict[str, Any]
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "_FallbackCandidateResponse":
+        if not isinstance(data, dict):
+            data = {}
+        candidate_id = data.get("id")
+        candidate_text = data.get("text")
+        if not isinstance(candidate_id, str) or not candidate_id:
+            candidate_id = "unknown"
+        if not isinstance(candidate_text, str):
+            candidate_text = ""
+        metadata = data.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return cls(id=candidate_id, text=candidate_text, metadata=metadata)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"id": self.id, "text": self.text, "metadata": dict(self.metadata)}
+
+
+@dataclass(frozen=True)
+class _FallbackSupervisionScore:
+    candidate_id: str
+    overall: float
+    correctness: float
+    reasoning_quality: float
+    consistency: float
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "_FallbackSupervisionScore":
+        if not isinstance(data, dict):
+            data = {}
+        candidate_id = data.get("candidate_id") or data.get("id") or ""
+        if not isinstance(candidate_id, str):
+            candidate_id = str(candidate_id)
+
+        overall = data.get("combined_score", data.get("overall", data.get("model_score", 0.5)))
+        correctness = data.get("correctness_score", data.get("correctness", 0.5))
+        reasoning_quality = data.get("reasoning_quality_score", data.get("reasoning_quality", 0.5))
+        consistency = data.get("consistency_score", data.get("consistency", 0.5))
+
+        def clamp01(v: Any, default: float) -> float:
+            try:
+                f = float(v)
+            except (TypeError, ValueError):
+                return default
+            if f < 0.0:
+                return 0.0
+            if f > 1.0:
+                return 1.0
+            return f
+
+        return cls(
+            candidate_id=candidate_id,
+            overall=clamp01(overall, 0.5),
+            correctness=clamp01(correctness, 0.5),
+            reasoning_quality=clamp01(reasoning_quality, 0.5),
+            consistency=clamp01(consistency, 0.5),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "candidate_id": self.candidate_id,
+            "overall": self.overall,
+            "correctness": self.correctness,
+            "reasoning_quality": self.reasoning_quality,
+            "consistency": self.consistency,
+        }
+
+
+@dataclass(frozen=True)
+class _FallbackSupervisedResponse:
+    response: str
+    selected_candidate: _FallbackCandidateResponse
+    structures_generated: int
+    responses_per_structure: int
+    total_candidates: int
+    supervision_scores: List[_FallbackSupervisionScore]
+    selection_metadata: Dict[str, Any]
+    execution_time: float
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "response": self.response,
+            "selected_candidate": self.selected_candidate.to_dict(),
+            "structures_generated": self.structures_generated,
+            "responses_per_structure": self.responses_per_structure,
+            "total_candidates": self.total_candidates,
+            "supervision_scores": [s.to_dict() for s in self.supervision_scores],
+            "selection_metadata": dict(self.selection_metadata),
+            "execution_time": self.execution_time,
+        }
+
 
 class SupervisedSelfConsistencyServiceModule(BaseBrainModule):
     """Main orchestrator for supervised self-consistency pipeline"""
 
     def __init__(self):
+        super().__init__()
         self.complexity_analyzer = None
         self.multi_structure_discovery = None
         self.multi_response_generator = None
@@ -66,31 +179,45 @@ class SupervisedSelfConsistencyServiceModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             # Load dependent modules
-            self.complexity_analyzer = ModuleRegistry.get_module("query_complexity_analyzer")
-            self.multi_structure_discovery = ModuleRegistry.get_module("multi_structure_discovery_service")
-            self.multi_response_generator = ModuleRegistry.get_module("multi_response_generator_service")
+            self.complexity_analyzer = (
+                ModuleRegistry.get_module("query_complexity_analyzer")
+                or ModuleRegistry.get_module("query_complexity")
+            )
+            self.multi_structure_discovery = ModuleRegistry.get_module(
+                "multi_structure_discovery_service"
+            )
+            self.multi_response_generator = ModuleRegistry.get_module(
+                "multi_response_generator_service"
+            )
             self.supervision_service = ModuleRegistry.get_module("supervision_service")
             self.response_selection = ModuleRegistry.get_module("response_selection_service")
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Error loading modules for supervised_self_consistency_service",
+                exc_info=True,
+                extra={"module_name": "supervised_self_consistency_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
         self._ensure_modules_loaded()
 
-        if operation == "execute_supervised_self_consistency":
-            return self._execute_supervised_self_consistency(params)
-        elif operation == "supervise_candidates":
-            return self._supervise_candidates(params)
-        elif operation == "select_best_response":
-            return self._select_best_response(params)
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
+        match operation:
+            case "execute_supervised_self_consistency":
+                return self._execute_supervised_self_consistency(params)
+            case "supervise_candidates":
+                return self._supervise_candidates(params)
+            case "select_best_response":
+                return self._select_best_response(params)
+            case _:
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for supervised_self_consistency_service",
+                )
 
     def _execute_supervised_self_consistency(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute supervised self-consistency pipeline"""
@@ -99,33 +226,73 @@ class SupervisedSelfConsistencyServiceModule(BaseBrainModule):
         conversation_history = params.get("conversation_history")
         self_chaining_metadata = params.get("self_chaining_metadata")
 
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError("query", str(query), "query must be a non-empty string")
+        if context is not None and not isinstance(context, str):
+            raise InvalidParameterError(
+                "context",
+                str(type(context).__name__),
+                "context must be a string when provided",
+            )
+        if conversation_history is not None and not isinstance(conversation_history, list):
+            raise InvalidParameterError(
+                "conversation_history",
+                str(type(conversation_history).__name__),
+                "conversation_history must be a list when provided",
+            )
+        if self_chaining_metadata is not None and not isinstance(self_chaining_metadata, dict):
+            raise InvalidParameterError(
+                "self_chaining_metadata",
+                str(type(self_chaining_metadata).__name__),
+                "self_chaining_metadata must be a dict when provided",
+            )
+
         start_time = time.time()
 
         # Step 1: Check complexity
         if not self.complexity_analyzer:
-            raise ValueError("Complexity analyzer not available")
+            return {"success": False, "error": "Complexity analyzer not available"}
 
-        complexity_result = self.complexity_analyzer.execute(
-            "analyze_complexity",
-            {
-                "query": query,
-                "context": context,
-                "self_chaining_metadata": self_chaining_metadata,
-            }
-        )
+        try:
+            complexity_result = self.complexity_analyzer.execute(
+                "analyze_complexity",
+                {
+                    "query": query,
+                    "context": context,
+                    "self_chaining_metadata": self_chaining_metadata,
+                },
+            )
+        except Exception as e:
+            logger.debug(
+                "Complexity analysis failed",
+                exc_info=True,
+                extra={"module_name": "supervised_self_consistency_service", "error_type": type(e).__name__},
+            )
+            return {"success": False, "error": "Complexity analysis failed"}
 
-        complexity_score = ComplexityScore(
-            overall=complexity_result.get("overall", 0.0),
-            factors=complexity_result.get("factors", {}),
-            reasoning=complexity_result.get("reasoning", False),
-            threshold=complexity_result.get("threshold", 0.6),
-        )
+        score_cls = ComplexityScore or _FallbackComplexityScore
+        try:
+            complexity_score = score_cls(
+                overall=float(complexity_result.get("overall", 0.0)),
+                factors=complexity_result.get("factors", {}) if isinstance(complexity_result.get("factors", {}), dict) else {},
+                reasoning=bool(complexity_result.get("reasoning", False)),
+                threshold=float(complexity_result.get("threshold", 0.6)),
+            )
+        except Exception:
+            complexity_score = _FallbackComplexityScore(overall=0.0, factors={}, reasoning=False, threshold=0.6)
 
         if not complexity_score.should_trigger:
-            raise ValueError(
-                f"Query complexity ({complexity_score.overall:.2f}) does not meet threshold (0.6) "
-                "for supervised self-consistency"
-            )
+            return {
+                "success": False,
+                "error": "Query complexity does not meet threshold for supervised self-consistency",
+                "should_trigger": False,
+                "complexity": {
+                    "overall": complexity_score.overall,
+                    "threshold": complexity_score.threshold,
+                    "reasoning": complexity_score.reasoning,
+                    "factors": complexity_score.factors,
+                },
+            }
 
         # Step 2: Determine structure count
         structure_count = self.multi_structure_discovery.execute(
@@ -135,22 +302,33 @@ class SupervisedSelfConsistencyServiceModule(BaseBrainModule):
 
         # Step 3: Discover multiple structures
         if not self.multi_structure_discovery:
-            raise ValueError("Multi-structure discovery service not available")
+            return {"success": False, "error": "Multi-structure discovery service not available"}
 
-        structures_result = self.multi_structure_discovery.execute(
-            "discover_multiple_structures",
-            {
-                "query": query,
-                "context": context,
-                "count": structure_count,
-            }
-        )
+        try:
+            structures_result = self.multi_structure_discovery.execute(
+                "discover_multiple_structures",
+                {
+                    "query": query,
+                    "context": context,
+                    "count": structure_count,
+                },
+            )
+        except Exception as e:
+            logger.debug(
+                "Structure discovery failed",
+                exc_info=True,
+                extra={"module_name": "supervised_self_consistency_service", "error_type": type(e).__name__},
+            )
+            return {"success": False, "error": "Failed to discover reasoning structures"}
 
         structures = structures_result.get("structures", [])
         if not structures:
-            raise ValueError("Failed to discover any reasoning structures")
+            return {"success": False, "error": "Failed to discover any reasoning structures"}
 
         # Step 4: Generate multiple responses per structure
+        if not self.multi_response_generator:
+            return {"success": False, "error": "Multi-response generator service not available"}
+
         all_candidates = []
 
         for structure in structures:
@@ -175,11 +353,11 @@ class SupervisedSelfConsistencyServiceModule(BaseBrainModule):
             all_candidates.extend(candidates)
 
         if not all_candidates:
-            raise ValueError("Failed to generate any candidate responses")
+            return {"success": False, "error": "Failed to generate any candidate responses"}
 
         # Step 5: Supervise all candidates
         if not self.supervision_service:
-            raise ValueError("Supervision service not available")
+            return {"success": False, "error": "Supervision service not available"}
 
         supervision_result = self.supervision_service.execute(
             "supervise_candidates",
@@ -193,40 +371,95 @@ class SupervisedSelfConsistencyServiceModule(BaseBrainModule):
         supervision_scores = supervision_result.get("scores", [])
 
         # Step 6: Select best response
-        if not self.response_selection:
-            raise ValueError("Response selection service not available")
+        selected_result: Dict[str, Any] = {}
+        selected_candidate_id = None
+        if self.response_selection:
+            try:
+                selected_result = self.response_selection.execute(
+                    "select_best_response",
+                    {
+                        "candidates": all_candidates,
+                        "scores": supervision_scores,
+                    },
+                )
+                selected_candidate_id = selected_result.get("selected_candidate_id")
+            except Exception as e:
+                logger.debug(
+                    "Response selection service failed; falling back to local selection",
+                    exc_info=True,
+                    extra={"module_name": "supervised_self_consistency_service", "error_type": type(e).__name__},
+                )
 
-        selected_result = self.response_selection.execute(
-            "select_best_response",
-            {
-                "candidates": all_candidates,
-                "scores": supervision_scores,
+        if not selected_candidate_id:
+            score_map: Dict[str, float] = {}
+            if isinstance(supervision_scores, list):
+                for s in supervision_scores:
+                    if not isinstance(s, dict):
+                        continue
+                    cid = s.get("candidate_id") or s.get("id")
+                    if not isinstance(cid, str) or not cid:
+                        continue
+                    try:
+                        score_map[cid] = float(
+                            s.get("combined_score", s.get("overall", s.get("model_score", 0.0)))
+                        )
+                    except (TypeError, ValueError):
+                        score_map[cid] = 0.0
+
+            best_id = None
+            best_score = float("-inf")
+            for c in all_candidates:
+                if not isinstance(c, dict):
+                    continue
+                cid = c.get("id")
+                if not isinstance(cid, str) or not cid:
+                    continue
+                sc = score_map.get(cid, 0.0)
+                if sc > best_score:
+                    best_score = sc
+                    best_id = cid
+
+            selected_candidate_id = best_id
+            if not selected_candidate_id and all_candidates and isinstance(all_candidates[0], dict):
+                selected_candidate_id = all_candidates[0].get("id")
+
+            selected_result = {
+                "selected_candidate_id": selected_candidate_id,
+                "response": next(
+                    (
+                        c.get("text", "")
+                        for c in all_candidates
+                        if isinstance(c, dict) and c.get("id") == selected_candidate_id
+                    ),
+                    "",
+                ),
+                "metadata": {"selection_method": "local_score_fallback"},
             }
-        )
-
-        selected_candidate_id = selected_result.get("selected_candidate_id")
         selected_candidate = next(
             (c for c in all_candidates if c.get("id") == selected_candidate_id),
             None
         )
 
         if not selected_candidate:
-            raise ValueError(f"Selected candidate {selected_candidate_id} not found")
+            return {"success": False, "error": "Selected candidate not found"}
 
         execution_time = time.time() - start_time
 
         # Build response
-        supervised_response = SupervisedResponse(
+        resp_cls = SupervisedResponse or _FallbackSupervisedResponse
+        cand_cls = CandidateResponse or _FallbackCandidateResponse
+        score_cls2 = SupervisionScore or _FallbackSupervisionScore
+        supervised_response = resp_cls(
             response=selected_result.get("response", ""),
-            selected_candidate=CandidateResponse.from_dict(selected_candidate),
+            selected_candidate=cand_cls.from_dict(selected_candidate),
             structures_generated=len(structures),
             responses_per_structure=len(all_candidates) // len(structures) if structures else 0,
             total_candidates=len(all_candidates),
             supervision_scores=[
-                SupervisionScore.from_dict(s) for s in supervision_scores
+                score_cls2.from_dict(s) for s in supervision_scores if isinstance(s, dict)
             ],
-            selection_metadata=selected_result.get("metadata", {}),
-            execution_time=execution_time,
+            selection_metadata=selected_result.get("metadata", {}) if isinstance(selected_result.get("metadata", {}), dict) else {},
+            execution_time=float(execution_time),
         )
 
         return {
@@ -237,14 +470,14 @@ class SupervisedSelfConsistencyServiceModule(BaseBrainModule):
     def _supervise_candidates(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Supervise candidates (delegates to supervision service)"""
         if not self.supervision_service:
-            raise ValueError("Supervision service not available")
+            return {"success": False, "error": "Supervision service not available"}
 
         return self.supervision_service.execute("supervise_candidates", params)
 
     def _select_best_response(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Select best response (delegates to response selection service)"""
         if not self.response_selection:
-            raise ValueError("Response selection service not available")
+            return {"success": False, "error": "Response selection service not available"}
 
         return self.response_selection.execute("select_best_response", params)
 

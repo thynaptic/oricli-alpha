@@ -5,14 +5,17 @@ Converted from Swift SelfChainingExecutor.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import (
+    InvalidParameterError,
+    ModuleOperationError,
+)
+
+logger = logging.getLogger(__name__)
 
 # Optional imports - models package may not be available
 try:
@@ -40,6 +43,7 @@ class SelfChainingExecutorModule(BaseBrainModule):
     """Service for executing discovered reasoning structures"""
 
     def __init__(self):
+        super().__init__()
         self.python_brain_service = None
         self.module_registry = None
         self._modules_loaded = False
@@ -69,14 +73,16 @@ class SelfChainingExecutorModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self.python_brain_service = ModuleRegistry.get_module("python_brain_service")
             self.module_registry = ModuleRegistry.get_module("self_chaining_module_registry")
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Failed to load self_chaining_executor dependencies",
+                exc_info=True,
+                extra={"module_name": "self_chaining_executor", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -89,12 +95,31 @@ class SelfChainingExecutorModule(BaseBrainModule):
         elif operation == "validate_chain_step":
             return self._validate_chain_step(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for self_chaining_executor",
+            )
 
     def _execute_structure(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a discovered reasoning structure"""
+        if ExecutionContext is None or ReasoningStructure is None or ReasoningResult is None:
+            raise ModuleOperationError(
+                module_name="self_chaining_executor",
+                operation="execute_structure",
+                reason="Required reasoning_models types are not available (models package missing)",
+            )
+
         structure_data = params.get("structure", {})
         context_data = params.get("context", {})
+        if structure_data is None:
+            structure_data = {}
+        if context_data is None:
+            context_data = {}
+        if not isinstance(structure_data, dict):
+            raise InvalidParameterError("structure", str(type(structure_data).__name__), "structure must be a dict")
+        if not isinstance(context_data, dict):
+            raise InvalidParameterError("context", str(type(context_data).__name__), "context must be a dict")
 
         # Reconstruct structure
         structure = self._reconstruct_structure(structure_data)

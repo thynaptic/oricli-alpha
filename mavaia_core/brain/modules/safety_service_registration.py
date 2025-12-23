@@ -5,19 +5,20 @@ Converted from Swift SafetyServiceRegistration.swift
 """
 
 from typing import Any, Dict
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class SafetyServiceRegistrationModule(BaseBrainModule):
     """Auto-registration service for all safety services"""
 
     def __init__(self):
+        super().__init__()
         self.safety_framework = None
         self.is_registered = False
         self._modules_loaded = False
@@ -48,13 +49,15 @@ class SafetyServiceRegistrationModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self.safety_framework = ModuleRegistry.get_module("safety_framework")
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Failed to load safety_framework for safety_service_registration",
+                exc_info=True,
+                extra={"module_name": "safety_service_registration", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -69,7 +72,11 @@ class SafetyServiceRegistrationModule(BaseBrainModule):
         elif operation == "reset":
             return self._reset()
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for safety_service_registration",
+            )
 
     def _register_all_safety_services(self) -> Dict[str, Any]:
         """Register all built-in safety services"""
@@ -91,21 +98,33 @@ class SafetyServiceRegistrationModule(BaseBrainModule):
             "professional_advice_safety",
             "advanced_threat_safety",
             "self_harm_safety",
-            "mental_health_safety",
-            "default_deny_safety",  # Always runs last (fail-safe)
+            "mental_health_safety_service",
+            "step_safety_filter",  # Always runs last (fail-safe)
         ]
 
         registered_count = 0
+        failed_services = []
         for service_name in services_to_register:
             try:
                 result = self.safety_framework.execute(
                     "register_service",
-                    {"service_name": service_name}
+                    {"service_name": service_name},
                 )
                 if result.get("success"):
                     registered_count += 1
+                else:
+                    failed_services.append(service_name)
             except Exception as e:
-                print(f"Error registering {service_name}: {e}")
+                failed_services.append(service_name)
+                logger.debug(
+                    "Error registering safety service",
+                    exc_info=True,
+                    extra={
+                        "module_name": "safety_service_registration",
+                        "service_name": service_name,
+                        "error_type": type(e).__name__,
+                    },
+                )
 
         self.is_registered = True
 
@@ -120,6 +139,7 @@ class SafetyServiceRegistrationModule(BaseBrainModule):
             "result": {
                 "registered_count": registered_count,
                 "services": services_to_register,
+                "failed_services": failed_services,
             },
         }
 

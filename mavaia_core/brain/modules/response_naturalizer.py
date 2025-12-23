@@ -7,19 +7,20 @@ from typing import Dict, Any, List, Optional
 import json
 import re
 import random
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ResponseNaturalizerModule(BaseBrainModule):
     """Post-processing layer to add human-like naturalization"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.contraction_rules = {}
         self.pronoun_patterns = {}
@@ -75,9 +76,10 @@ class ResponseNaturalizerModule(BaseBrainModule):
                     "natural_references": True,
                 }
         except Exception as e:
-            print(
-                f"[ResponseNaturalizerModule] Failed to load config: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load response_naturalizer config; using defaults",
+                exc_info=True,
+                extra={"module_name": "response_naturalizer", "error_type": type(e).__name__},
             )
             self.contraction_rules = {}
             self.pronoun_patterns = {}
@@ -123,7 +125,11 @@ class ResponseNaturalizerModule(BaseBrainModule):
             text = params.get("text", "")
             return self.add_conversational_repair(text)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for response_naturalizer",
+            )
 
     def naturalize_response(
         self, response: str, formality: str = "neutral", context: Dict[str, Any] = None

@@ -5,17 +5,20 @@ Automatic complexity detection for Chain-of-Thought activation.
 Ported from Swift CoTComplexityDetector.swift
 """
 
-import sys
 import re
-from pathlib import Path
 from typing import Any
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from cot_models import CoTConfiguration, CoTComplexityScore, ComplexityFactor
-from tot_models import ToTComplexityScore
+from mavaia_core.brain.modules.cot_models import (
+    CoTConfiguration,
+    CoTComplexityScore,
+    ComplexityFactor,
+)
+from mavaia_core.brain.modules.tot_models import ToTComplexityScore
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class CoTComplexityDetector(BaseBrainModule):
@@ -26,7 +29,7 @@ class CoTComplexityDetector(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
-        pass
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -68,7 +71,11 @@ class CoTComplexityDetector(BaseBrainModule):
         elif operation == "should_use_tot":
             return self._should_use_tot(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for cot_complexity_detector",
+            )
 
     def _analyze_complexity(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -84,11 +91,29 @@ class CoTComplexityDetector(BaseBrainModule):
             CoTComplexityScore as dictionary
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
+        if context is not None and not isinstance(context, str):
+            raise InvalidParameterError(
+                parameter="context",
+                value=str(type(context).__name__),
+                reason="context must be a string when provided",
+            )
+        if config_dict is None:
+            config_dict = {}
+        if not isinstance(config_dict, dict):
+            raise InvalidParameterError(
+                parameter="configuration",
+                value=str(type(config_dict).__name__),
+                reason="configuration must be a dict when provided",
+            )
 
         config = (
             CoTConfiguration.from_dict(config_dict)
@@ -277,8 +302,12 @@ class CoTComplexityDetector(BaseBrainModule):
     def _should_activate_cot(self, params: dict[str, Any]) -> dict[str, Any]:
         """Quick check if CoT should be activated (without full analysis)"""
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         config_dict = params.get("configuration", {})
         config = (
@@ -305,12 +334,16 @@ class CoTComplexityDetector(BaseBrainModule):
             ToTComplexityScore as dictionary
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
 
-        from tot_models import ComplexityFactor as ToTComplexityFactor
+        from mavaia_core.brain.modules.tot_models import ComplexityFactor as ToTComplexityFactor
 
         factors: list[ToTComplexityFactor] = []
         total_score: float = 0.0
@@ -532,8 +565,12 @@ class CoTComplexityDetector(BaseBrainModule):
     def _should_use_tot(self, params: dict[str, Any]) -> dict[str, Any]:
         """Quick check if ToT should be used (without full analysis)"""
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
 

@@ -5,6 +5,11 @@ Provides interface to Prolog for logic programming problems
 
 from typing import Dict, Any, Optional, List
 import time
+import logging
+
+from mavaia_core.exceptions import ModuleInitializationError, ModuleOperationError, InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional import - will fail gracefully if PySwip not available
 try:
@@ -53,7 +58,12 @@ class PrologBridge:
             Solution dictionary
         """
         if not self.is_available():
-            raise RuntimeError(self._error_message or "Prolog not available")
+            raise ModuleInitializationError(
+                module_name="symbolic_solver",
+                reason=self._error_message or "Prolog not available",
+            )
+        if not isinstance(problem, dict):
+            raise InvalidParameterError("problem", str(type(problem).__name__), "problem must be a dict")
 
         start_time = time.time()
 
@@ -109,8 +119,16 @@ class PrologBridge:
             }
 
         except Exception as e:
-            execution_time = time.time() - start_time
-            raise RuntimeError(f"Prolog solver error: {str(e)}")
+            logger.debug(
+                "Prolog solver failed",
+                exc_info=True,
+                extra={"solver": "prolog", "error_type": type(e).__name__},
+            )
+            raise ModuleOperationError(
+                module_name="symbolic_solver",
+                operation="solve",
+                reason="Prolog solver error",
+            ) from e
 
     def check_satisfiability(self, problem: Dict[str, Any]) -> Optional[bool]:
         """Check satisfiability"""

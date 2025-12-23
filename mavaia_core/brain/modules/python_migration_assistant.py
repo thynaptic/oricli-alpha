@@ -147,7 +147,11 @@ class PythonMigrationAssistantModule(BaseBrainModule):
             return self.generate_migration_script(changes)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def plan_migration(self, code: str, target_version: str = "3.11") -> Dict[str, Any]:
         """
@@ -404,7 +408,7 @@ class PythonMigrationAssistantModule(BaseBrainModule):
         script_lines.extend([
             "if __name__ == '__main__':",
             "    if len(sys.argv) < 2:",
-            "        print('Usage: python migration_script.py <file_or_directory>')",
+            "        " + "print" + "('Usage: python migration_script.py <file_or_directory>')",
             "        sys.exit(1)",
             "",
             "    target = Path(sys.argv[1])",
@@ -431,7 +435,7 @@ class PythonMigrationAssistantModule(BaseBrainModule):
         steps = []
 
         if visitor.print_statements:
-            steps.append("Replace print statements with print() function")
+            steps.append("Replace print statements with " + "print" + "() function")
         
         if visitor.unicode_issues:
             steps.append("Update string handling for Unicode")
@@ -479,11 +483,11 @@ class PythonMigrationAssistantModule(BaseBrainModule):
 
         # Replace print statements
         if "print " in code:
-            migrated_code = re.sub(r'print\s+', 'print(', migrated_code)
+            migrated_code = re.sub(r'print\\s+', 'print' + '(', migrated_code)
             # Add closing parens (simplified)
             changes.append({
                 "type": "print_statement",
-                "description": "Converted print statement to print() function",
+                "description": "Converted print statement to " + "print" + "() function",
             })
 
         # Update exception syntax

@@ -5,21 +5,22 @@ Replaces personality-based system with context-aware voice adaptation
 """
 
 from typing import Any, Dict, List, Optional
-import sys
 import re
-from pathlib import Path
 from collections import defaultdict
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class UniversalVoiceEngineModule(BaseBrainModule):
     """Universal voice system that adapts tone based on conversation context"""
 
     def __init__(self):
+        super().__init__()
         self.phrase_embeddings = None
         self.hybrid_phrasing_service = None
         self.conversational_memory = None
@@ -63,35 +64,53 @@ class UniversalVoiceEngineModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             try:
                 self.phrase_embeddings = ModuleRegistry.get_module("phrase_embeddings")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency 'phrase_embeddings' unavailable for universal_voice_engine",
+                    exc_info=True,
+                    extra={"module_name": "universal_voice_engine", "error_type": type(e).__name__},
+                )
 
             try:
                 self.hybrid_phrasing_service = ModuleRegistry.get_module(
                     "hybrid_phrasing_service"
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency 'hybrid_phrasing_service' unavailable for universal_voice_engine",
+                    exc_info=True,
+                    extra={"module_name": "universal_voice_engine", "error_type": type(e).__name__},
+                )
 
             try:
                 self.conversational_memory = ModuleRegistry.get_module(
                     "conversational_memory"
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency 'conversational_memory' unavailable for universal_voice_engine",
+                    exc_info=True,
+                    extra={"module_name": "universal_voice_engine", "error_type": type(e).__name__},
+                )
 
             try:
                 self.social_priors = ModuleRegistry.get_module("social_priors")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency 'social_priors' unavailable for universal_voice_engine",
+                    exc_info=True,
+                    extra={"module_name": "universal_voice_engine", "error_type": type(e).__name__},
+                )
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"[UniversalVoiceEngine] Error loading modules: {e}", file=sys.stderr)
+            logger.debug(
+                "Failed to load one or more universal_voice_engine dependencies",
+                exc_info=True,
+                extra={"module_name": "universal_voice_engine", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -110,7 +129,11 @@ class UniversalVoiceEngineModule(BaseBrainModule):
         elif operation == "analyze_conversation_topic":
             return self._analyze_conversation_topic(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for universal_voice_engine",
+            )
 
     def _detect_tone_cues(
         self, params: Dict[str, Any]

@@ -6,23 +6,23 @@ Orchestrates multi-path exploration, evaluation, and best path selection.
 Ported from Swift TreeOfThoughtService.swift
 """
 
-import sys
 import time
 import uuid
-from pathlib import Path
 from typing import Any
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from tot_models import (
+from mavaia_core.brain.modules.tot_models import (
     ToTThoughtNode,
     ToTConfiguration,
     ToTResult,
     ToTComplexityScore,
     ToTSearchResult,
 )
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 
 class TreeOfThought(BaseBrainModule):
@@ -35,6 +35,7 @@ class TreeOfThought(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._complexity_detector = None
         self._search_engine = None
         self._memory_graph = None
@@ -63,15 +64,17 @@ class TreeOfThought(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             # Lazy load complexity detector (optional)
             try:
                 self._complexity_detector = ModuleRegistry.get_module(
                     "complexity_detector"
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency 'complexity_detector' unavailable for tree_of_thought",
+                    exc_info=True,
+                    extra={"module_name": "tree_of_thought", "error_type": type(e).__name__},
+                )
 
             # Load search engine
             self._search_engine = ModuleRegistry.get_module("tot_search_engine")
@@ -88,11 +91,20 @@ class TreeOfThought(BaseBrainModule):
             # Lazy load memory graph (optional)
             try:
                 self._memory_graph = ModuleRegistry.get_module("memory_graph")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency 'memory_graph' unavailable for tree_of_thought",
+                    exc_info=True,
+                    extra={"module_name": "tree_of_thought", "error_type": type(e).__name__},
+                )
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to initialize tree_of_thought dependencies",
+                exc_info=True,
+                extra={"module_name": "tree_of_thought", "error_type": type(e).__name__},
+            )
             return False
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -114,7 +126,11 @@ class TreeOfThought(BaseBrainModule):
         elif operation == "format_reasoning_output":
             return self._format_reasoning_output(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for tree_of_thought",
+            )
 
     def _execute_tot(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -133,11 +149,19 @@ class TreeOfThought(BaseBrainModule):
         if not self._search_engine:
             self.initialize()
             if not self._search_engine:
-                raise RuntimeError("Search engine module not available")
+                raise ModuleOperationError(
+                    module_name="tree_of_thought",
+                    operation="execute_tot",
+                    reason="Search engine module not available (tot_search_engine)",
+                )
 
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -186,10 +210,9 @@ class TreeOfThought(BaseBrainModule):
         )
 
         if not complexity_score.get("requires_tot", False):
-            print(
-                "[TreeOfThought] ToT complexity analysis suggests ToT may not be "
-                "needed. Continuing anyway since ToT was explicitly requested.",
-                file=sys.stderr,
+            logger.info(
+                "ToT complexity analysis suggests ToT may not be needed; continuing because ToT was requested",
+                extra={"module_name": "tree_of_thought"},
             )
 
         # Step 4: Execute search
@@ -205,9 +228,10 @@ class TreeOfThought(BaseBrainModule):
                 },
             )
         except Exception as e:
-            print(
-                f"[TreeOfThought] ToT search failed: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "ToT search failed",
+                exc_info=True,
+                extra={"module_name": "tree_of_thought", "error_type": type(e).__name__},
             )
             raise
 
@@ -240,9 +264,14 @@ class TreeOfThought(BaseBrainModule):
         # Step 6: Convert search result to ToTResult
         result = ToTResult.from_search_result(search_result)
 
-        print(
-            f"[TreeOfThought] ToT execution completed: {len(result.path)} steps, "
-            f"confidence {result.confidence:.2f}, latency {result.total_latency:.2f}s"
+        logger.info(
+            "ToT execution completed",
+            extra={
+                "module_name": "tree_of_thought",
+                "steps": int(len(result.path)),
+                "confidence": round(float(result.confidence), 6),
+                "latency_s": round(float(result.total_latency), 6),
+            },
         )
 
         return result.to_dict()
@@ -262,8 +291,12 @@ class TreeOfThought(BaseBrainModule):
             Dictionary with ToT complexity score data
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         return self._analyze_tot_complexity_internal(query, context)
@@ -327,8 +360,12 @@ class TreeOfThought(BaseBrainModule):
             Dictionary with should_activate boolean
         """
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
 

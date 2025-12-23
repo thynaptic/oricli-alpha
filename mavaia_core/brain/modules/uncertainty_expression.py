@@ -6,19 +6,20 @@ Handles expressing uncertainty appropriately, using hedging language, natural co
 from typing import Dict, Any, List, Optional
 import json
 import random
-import sys
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class UncertaintyExpressionModule(BaseBrainModule):
     """Natural uncertainty expression and hedging"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.hedging_phrases = {}
         self.uncertainty_markers = {}
@@ -83,9 +84,10 @@ class UncertaintyExpressionModule(BaseBrainModule):
                     "strong": ["I'm not sure", "uncertain", "unclear", "hard to say"],
                 }
         except Exception as e:
-            print(
-                f"[UncertaintyExpressionModule] Failed to load config: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load uncertainty_expression config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "uncertainty_expression", "error_type": type(e).__name__},
             )
             self.hedging_phrases = {}
             self.uncertainty_markers = {}
@@ -96,25 +98,77 @@ class UncertaintyExpressionModule(BaseBrainModule):
         if operation == "add_hedging":
             text = params.get("text", "")
             confidence_level = params.get("confidence_level", "medium")
+            if text is None:
+                text = ""
+            if confidence_level is None:
+                confidence_level = "medium"
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(confidence_level, str):
+                raise InvalidParameterError(
+                    "confidence_level", str(type(confidence_level).__name__), "confidence_level must be a string"
+                )
             return self.add_hedging(text, confidence_level)
         elif operation == "express_uncertainty":
             text = params.get("text", "")
             uncertainty_level = params.get("uncertainty_level", "moderate")
+            if text is None:
+                text = ""
+            if uncertainty_level is None:
+                uncertainty_level = "moderate"
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(uncertainty_level, str):
+                raise InvalidParameterError(
+                    "uncertainty_level", str(type(uncertainty_level).__name__), "uncertainty_level must be a string"
+                )
             return self.express_uncertainty(text, uncertainty_level)
         elif operation == "natural_correction":
             original_text = params.get("original_text", "")
             corrected_text = params.get("corrected_text", "")
+            if original_text is None:
+                original_text = ""
+            if corrected_text is None:
+                corrected_text = ""
+            if not isinstance(original_text, str):
+                raise InvalidParameterError(
+                    "original_text", str(type(original_text).__name__), "original_text must be a string"
+                )
+            if not isinstance(corrected_text, str):
+                raise InvalidParameterError(
+                    "corrected_text", str(type(corrected_text).__name__), "corrected_text must be a string"
+                )
             return self.natural_correction(original_text, corrected_text)
         elif operation == "modulate_confidence":
             text = params.get("text", "")
             confidence = params.get("confidence", 0.5)
+            if text is None:
+                text = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            try:
+                float(confidence)
+            except (TypeError, ValueError):
+                raise InvalidParameterError("confidence", str(confidence), "confidence must be a number")
             return self.modulate_confidence(text, confidence)
         elif operation == "add_qualifiers":
             text = params.get("text", "")
             formality = params.get("formality", "neutral")
+            if text is None:
+                text = ""
+            if formality is None:
+                formality = "neutral"
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(formality, str):
+                raise InvalidParameterError("formality", str(type(formality).__name__), "formality must be a string")
             return self.add_qualifiers(text, formality)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for uncertainty_expression",
+            )
 
     def add_hedging(
         self, text: str, confidence_level: str = "medium"

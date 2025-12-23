@@ -8,21 +8,29 @@ Supports automatic URL detection, two-step retrieval (cache + live fetch), and m
 import re
 import hashlib
 import time
+import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 from datetime import datetime, timedelta
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mavaia_core.exceptions import ModuleOperationError, InvalidParameterError
+from mavaia_core.exceptions import (
+    InvalidParameterError,
+    ModuleInitializationError,
+    ModuleOperationError,
+)
 
 # Lazy imports to avoid timeout during module discovery
 DatabaseStorage = None
 StorageConfig = None
 WebFetchService = None
+_URL_CONTEXT_IMPORT_FAILURE_LOGGED = False
+
+logger = logging.getLogger(__name__)
 
 def _lazy_import_url_services():
     """Lazy import URL context services only when needed"""
-    global DatabaseStorage, StorageConfig, WebFetchService
+    global DatabaseStorage, StorageConfig, WebFetchService, _URL_CONTEXT_IMPORT_FAILURE_LOGGED
     if DatabaseStorage is None:
         try:
             from mavaia_core.brain.state_storage.db_storage import DatabaseStorage as DS
@@ -32,7 +40,13 @@ def _lazy_import_url_services():
             StorageConfig = SC
             WebFetchService = WFS
         except ImportError:
-            pass
+            if not _URL_CONTEXT_IMPORT_FAILURE_LOGGED:
+                _URL_CONTEXT_IMPORT_FAILURE_LOGGED = True
+                logger.debug(
+                    "URL context dependencies not available",
+                    exc_info=True,
+                    extra={"module_name": "url_context"},
+                )
 
 
 class URLContextModule(BaseBrainModule):
@@ -81,7 +95,10 @@ class URLContextModule(BaseBrainModule):
         """Ensure storage and web fetch service are initialized"""
         _lazy_import_url_services()
         if DatabaseStorage is None or StorageConfig is None or WebFetchService is None:
-            raise RuntimeError("URL context services not available")
+            raise ModuleInitializationError(
+                module_name=self.metadata.name,
+                reason="URL context services not available",
+            )
         
         if self._storage is None or self._web_fetch_service is None:
             try:
@@ -92,15 +109,27 @@ class URLContextModule(BaseBrainModule):
                 )
                 self._storage = DatabaseStorage(config)
                 if not self._storage.initialize():
-                    raise RuntimeError("Failed to initialize database storage")
+                    raise ModuleInitializationError(
+                        module_name=self.metadata.name,
+                        reason="Failed to initialize database storage",
+                    )
                 
                 # Initialize web fetch service
                 self._web_fetch_service = WebFetchService(
                     max_content_tokens=self.MAX_URL_SIZE_BYTES // 4,  # Approximate tokens
                 )
             except Exception as e:
-                print(f"[URLContext] Initialization failed: {e}")
-                raise
+                logger.debug(
+                    "URLContext initialization failed",
+                    exc_info=True,
+                    extra={"module_name": "url_context", "error_type": type(e).__name__},
+                )
+                if isinstance(e, ModuleInitializationError):
+                    raise
+                raise ModuleInitializationError(
+                    module_name=self.metadata.name,
+                    reason="Initialization failed",
+                ) from e
     
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a URL context operation."""
@@ -108,26 +137,30 @@ class URLContextModule(BaseBrainModule):
         self._ensure_initialized()
         
         try:
-            if operation == "extract_urls":
-                return self._extract_urls(params)
-            elif operation == "fetch_url_context":
-                return self._fetch_url_context(params)
-            elif operation == "get_url_context":
-                return self._get_url_context(params)
-            else:
-                raise ValueError(f"Unknown operation: {operation}")
-        except (InvalidParameterError, ValueError) as e:
-            raise ModuleOperationError(
-                self.metadata.name,
-                operation,
-                str(e),
-            )
+            match operation:
+                case "extract_urls":
+                    return self._extract_urls(params)
+                case "fetch_url_context":
+                    return self._fetch_url_context(params)
+                case "get_url_context":
+                    return self._get_url_context(params)
+                case _:
+                    raise InvalidParameterError(
+                        "operation", str(operation), "Unknown operation for url_context"
+                    )
+        except (InvalidParameterError, ModuleInitializationError, ModuleOperationError):
+            raise
         except Exception as e:
+            logger.debug(
+                "url_context operation failed",
+                exc_info=True,
+                extra={"module_name": "url_context", "operation": str(operation), "error_type": type(e).__name__},
+            )
             raise ModuleOperationError(
                 self.metadata.name,
-                operation,
-                f"Unexpected error: {str(e)}",
-            )
+                str(operation),
+                "Unexpected error during url_context operation",
+            ) from e
     
     def _normalize_url(self, url: str) -> str:
         """
@@ -180,17 +213,21 @@ class URLContextModule(BaseBrainModule):
         """
         text = params.get("text")
         if text is None:
-            raise InvalidParameterError("text", None, "text parameter is required")
+            raise InvalidParameterError("text", "None", "text parameter is required")
         
         # Allow empty string (will return 0 URLs)
         if not isinstance(text, str):
-            raise InvalidParameterError("text", text, "text must be a string")
+            raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
         
         max_urls = params.get("max_urls", self.MAX_URLS_PER_REQUEST)
-        if max_urls < 1:
-            raise InvalidParameterError("max_urls", max_urls, "max_urls must be >= 1")
-        if max_urls > self.MAX_URLS_PER_REQUEST:
-            max_urls = self.MAX_URLS_PER_REQUEST
+        try:
+            max_urls_int = int(max_urls)
+        except (TypeError, ValueError):
+            raise InvalidParameterError("max_urls", str(max_urls), "max_urls must be an integer")
+        if max_urls_int < 1:
+            raise InvalidParameterError("max_urls", str(max_urls_int), "max_urls must be >= 1")
+        if max_urls_int > self.MAX_URLS_PER_REQUEST:
+            max_urls_int = self.MAX_URLS_PER_REQUEST
         
         # URL regex pattern - matches http://, https://, and www. URLs
         url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+|www\.[^\s<>"{}|\\^`\[\]]+'
@@ -223,7 +260,7 @@ class URLContextModule(BaseBrainModule):
                 seen.add(normalized)
                 urls.append(normalized)
                 
-                if len(urls) >= max_urls:
+                if len(urls) >= max_urls_int:
                     break
             except Exception:
                 continue
@@ -310,19 +347,23 @@ class URLContextModule(BaseBrainModule):
         """
         urls = params.get("urls")
         if not urls:
-            raise InvalidParameterError("urls", None, "urls parameter is required")
+            raise InvalidParameterError("urls", "None", "urls parameter is required")
         
         if not isinstance(urls, list):
-            raise InvalidParameterError("urls", urls, "urls must be a list")
+            raise InvalidParameterError("urls", str(type(urls).__name__), "urls must be a list")
+        if not all(isinstance(u, str) and u for u in urls):
+            raise InvalidParameterError("urls", "non-string", "All urls must be non-empty strings")
         
         if len(urls) > self.MAX_URLS_PER_REQUEST:
             raise InvalidParameterError(
                 "urls",
-                len(urls),
+                str(len(urls)),
                 f"Maximum {self.MAX_URLS_PER_REQUEST} URLs allowed per request"
             )
         
         use_cache = params.get("use_cache", True)
+        if not isinstance(use_cache, bool):
+            raise InvalidParameterError("use_cache", str(use_cache), "use_cache must be a boolean")
         
         results = []
         metadata_list = []

@@ -3,6 +3,11 @@ Solver Router - Automatically selects appropriate solver based on problem type
 """
 
 from typing import Dict, Any, Optional, List
+import logging
+
+from mavaia_core.exceptions import InvalidParameterError, ModuleInitializationError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 # Try relative imports first (when imported as part of package), fallback to absolute
 try:
@@ -34,32 +39,48 @@ class SolverRouter:
             z3_solver = Z3Solver()
             if z3_solver.is_available():
                 self._manager.register_solver("z3", z3_solver)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "Failed to initialize z3 solver",
+                exc_info=True,
+                extra={"solver": "z3", "error_type": type(e).__name__},
+            )
 
         # Register PySAT
         try:
             pysat_solver = PySATSolver()
             if pysat_solver.is_available():
                 self._manager.register_solver("pysat", pysat_solver)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "Failed to initialize pysat solver",
+                exc_info=True,
+                extra={"solver": "pysat", "error_type": type(e).__name__},
+            )
 
         # Register SymPy
         try:
             sympy_solver = SymPySolver()
             if sympy_solver.is_available():
                 self._manager.register_solver("sympy", sympy_solver)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "Failed to initialize sympy solver",
+                exc_info=True,
+                extra={"solver": "sympy", "error_type": type(e).__name__},
+            )
 
         # Register Prolog
         try:
             prolog_solver = PrologBridge()
             if prolog_solver.is_available():
                 self._manager.register_solver("prolog", prolog_solver)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "Failed to initialize prolog solver",
+                exc_info=True,
+                extra={"solver": "prolog", "error_type": type(e).__name__},
+            )
 
     def select_solver(self, problem: Dict[str, Any]) -> Optional[str]:
         """
@@ -71,7 +92,11 @@ class SolverRouter:
         Returns:
             Solver name or None if no suitable solver
         """
+        if not isinstance(problem, dict):
+            raise InvalidParameterError("problem", str(type(problem).__name__), "problem must be a dict")
         problem_type = problem.get("problem_type", "unknown")
+        if not isinstance(problem_type, str):
+            problem_type = str(problem_type)
 
         # Map problem types to preferred solvers
         solver_preferences = {
@@ -110,16 +135,33 @@ class SolverRouter:
         """
         solver_name = self.select_solver(problem)
         if not solver_name:
-            raise RuntimeError(
-                "No available solver for problem type: "
-                + problem.get("problem_type", "unknown")
+            raise ModuleInitializationError(
+                module_name="symbolic_solver",
+                reason=f"No available solver for problem_type={problem.get('problem_type', 'unknown')}",
             )
 
         solver = self._manager.get_solver(solver_name)
         if not solver:
-            raise RuntimeError(f"Solver {solver_name} not found")
+            raise ModuleInitializationError(
+                module_name="symbolic_solver",
+                reason=f"Solver '{solver_name}' not found",
+            )
 
-        return solver.solve(problem)
+        try:
+            return solver.solve(problem)
+        except (InvalidParameterError, ModuleInitializationError, ModuleOperationError):
+            raise
+        except Exception as e:
+            logger.debug(
+                "Solver execution failed",
+                exc_info=True,
+                extra={"solver": solver_name, "error_type": type(e).__name__},
+            )
+            raise ModuleOperationError(
+                module_name="symbolic_solver",
+                operation="solve",
+                reason=f"Solver '{solver_name}' failed",
+            ) from e
 
     def get_available_solvers(self) -> List[str]:
         """Get list of available solver names"""

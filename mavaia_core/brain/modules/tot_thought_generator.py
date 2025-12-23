@@ -5,16 +5,16 @@ Service for generating multiple candidate thoughts per step in Tree-of-Thought.
 Ported from Swift ToTThoughtGenerator.swift
 """
 
-import sys
 import time
-from pathlib import Path
 from typing import Any
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from tot_models import ToTThoughtNode, ToTConfiguration
+from mavaia_core.brain.modules.tot_models import ToTThoughtNode, ToTConfiguration
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 
 class ToTThoughtGenerator(BaseBrainModule):
@@ -24,6 +24,7 @@ class ToTThoughtGenerator(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._cognitive_generator = None
 
     @property
@@ -43,11 +44,14 @@ class ToTThoughtGenerator(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self._cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to initialize tot_thought_generator dependencies",
+                exc_info=True,
+                extra={"module_name": "tot_thought_generator", "error_type": type(e).__name__},
+            )
             return False
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -60,7 +64,11 @@ class ToTThoughtGenerator(BaseBrainModule):
         if operation == "generate_thoughts":
             return self._generate_thoughts(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for tot_thought_generator",
+            )
 
     def _generate_thoughts(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -80,11 +88,19 @@ class ToTThoughtGenerator(BaseBrainModule):
         if not self._cognitive_generator:
             self.initialize()
             if not self._cognitive_generator:
-                raise RuntimeError("Cognitive generator module not available")
+                raise ModuleOperationError(
+                    module_name="tot_thought_generator",
+                    operation="generate_thoughts",
+                    reason="Required module not available: cognitive_generator",
+                )
 
         current_state_dict = params.get("current_state")
-        if not current_state_dict:
-            raise ValueError("current_state parameter is required")
+        if not isinstance(current_state_dict, dict) or not current_state_dict:
+            raise InvalidParameterError(
+                parameter="current_state",
+                value=str(type(current_state_dict).__name__),
+                reason="current_state parameter is required and must be a non-empty dict",
+            )
 
         current_state = ToTThoughtNode.from_dict(current_state_dict)
         query = params.get("query", "")
@@ -124,9 +140,14 @@ class ToTThoughtGenerator(BaseBrainModule):
                 )
                 generated_thoughts.append(thought)
             except Exception as e:
-                print(
-                    f"[ToTThoughtGenerator] Failed to generate thought {i}: {e}",
-                    file=sys.stderr,
+                logger.debug(
+                    "Failed to generate thought; continuing",
+                    exc_info=True,
+                    extra={
+                        "module_name": "tot_thought_generator",
+                        "thought_index": int(i),
+                        "error_type": type(e).__name__,
+                    },
                 )
                 # Continue with remaining thoughts
 

@@ -5,32 +5,22 @@ Extends base embeddings.py with concept hierarchies, semantic relationships, and
 
 from typing import Dict, Any, List, Optional, Set, Tuple
 import json
-import sys
 from pathlib import Path
 from collections import defaultdict
-
-# Removed sys.path manipulation - use proper package imports
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
-# Lazy import dependencies - don't import at module level
-NUMPY_AVAILABLE = None
-np = None
-cosine_similarity = None
+logger = logging.getLogger(__name__)
 
-def _lazy_import_numpy_sklearn():
-    """Lazy import numpy and sklearn"""
-    global NUMPY_AVAILABLE, np, cosine_similarity
-    if NUMPY_AVAILABLE is None:
-        try:
-            import numpy as np_module
-            from sklearn.metrics.pairwise import cosine_similarity as cs
-            np = np_module
-            cosine_similarity = cs
-            NUMPY_AVAILABLE = True
-        except ImportError:
-            NUMPY_AVAILABLE = False
-    return NUMPY_AVAILABLE
+# Check for basic dependencies first
+try:
+    import numpy as np
+    from sklearn.metrics.pairwise import cosine_similarity
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
 
 # Lazy import base embeddings module - don't import at module level
 EMBEDDINGS_MODULE_AVAILABLE = None
@@ -41,7 +31,7 @@ def _lazy_import_embeddings():
     global EMBEDDINGS_MODULE_AVAILABLE, EmbeddingsModule
     if EMBEDDINGS_MODULE_AVAILABLE is None:
         try:
-            from embeddings import EmbeddingsModule as EM
+            from mavaia_core.brain.modules.embeddings import EmbeddingsModule as EM
             EmbeddingsModule = EM
             EMBEDDINGS_MODULE_AVAILABLE = True
         except ImportError:
@@ -49,21 +39,15 @@ def _lazy_import_embeddings():
             EmbeddingsModule = None
     return EMBEDDINGS_MODULE_AVAILABLE
 
-# EMBEDDINGS_AVAILABLE will be checked lazily
-EMBEDDINGS_AVAILABLE = None
-
-def _check_embeddings_available():
-    """Check if embeddings dependencies are available"""
-    global EMBEDDINGS_AVAILABLE
-    if EMBEDDINGS_AVAILABLE is None:
-        EMBEDDINGS_AVAILABLE = _lazy_import_numpy_sklearn()
-    return EMBEDDINGS_AVAILABLE
+# EMBEDDINGS_AVAILABLE should be True if basic deps are available
+EMBEDDINGS_AVAILABLE = NUMPY_AVAILABLE
 
 
 class ConceptEmbeddingsModule(BaseBrainModule):
     """Extended concept embeddings with hierarchies and relationships"""
 
     def __init__(self):
+        super().__init__()
         self.config = None
         self.base_embeddings = None
         self.concept_hierarchies = {}
@@ -133,8 +117,10 @@ class ConceptEmbeddingsModule(BaseBrainModule):
                     ],
                 }
         except Exception as e:
-            print(
-                f"[ConceptEmbeddingsModule] Failed to load config: {e}", file=sys.stderr
+            logger.warning(
+                "Failed to load concept_embeddings config; using empty defaults",
+                exc_info=True,
+                extra={"module_name": "concept_embeddings", "error_type": type(e).__name__},
             )
             self.config = {}
 
@@ -149,9 +135,10 @@ class ConceptEmbeddingsModule(BaseBrainModule):
             init_result = self.base_embeddings.initialize()
             return init_result
         except Exception as e:
-            print(
-                f"[ConceptEmbeddingsModule] Failed to initialize base embeddings: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Failed to initialize base embeddings for concept_embeddings",
+                exc_info=True,
+                extra={"module_name": "concept_embeddings", "error_type": type(e).__name__},
             )
         return False
 
@@ -185,7 +172,11 @@ class ConceptEmbeddingsModule(BaseBrainModule):
             concept = params.get("concept", "")
             return self.find_hypernyms(concept)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for concept_embeddings",
+            )
 
     def embed_concept(self, concept: str, domain: str = "general") -> Dict[str, Any]:
         """Generate embedding for a concept"""
@@ -287,7 +278,7 @@ class ConceptEmbeddingsModule(BaseBrainModule):
         hierarchy = {}
         roots = []
 
-        if _lazy_import_numpy_sklearn() and embeddings_map:
+        if NUMPY_AVAILABLE and embeddings_map:
             # Find most general concepts (furthest from average)
             if len(embeddings_map) > 1:
                 # Simple approach: mark concepts that are similar as siblings
@@ -331,7 +322,7 @@ class ConceptEmbeddingsModule(BaseBrainModule):
 
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """Calculate cosine similarity between two vectors"""
-        if not _lazy_import_numpy_sklearn():
+        if not NUMPY_AVAILABLE:
             # Simple dot product implementation
             if len(vec1) != len(vec2):
                 return 0.0

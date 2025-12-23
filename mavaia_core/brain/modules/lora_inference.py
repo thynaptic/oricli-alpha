@@ -4,17 +4,16 @@ DISABLED: PEFT library is PyTorch-only. This module is disabled in the JAX migra
 """
 
 from typing import Dict, Any, Optional, List
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError, ModuleInitializationError
+
+logger = logging.getLogger(__name__)
 
 # Import loader module - handle import error gracefully
 try:
-    from lora_loader import LoRALoaderModule
+    from mavaia_core.brain.modules.lora_loader import LoRALoaderModule
 
     LOADER_AVAILABLE = True
 except ImportError:
@@ -29,6 +28,7 @@ class LoRAInferenceModule(BaseBrainModule):
     """Perform inference using loaded LoRA adapters"""
 
     def __init__(self, loader_module: Optional[Any] = None):
+        super().__init__()
         # Don't instantiate LoRALoaderModule here - it's heavy, will load lazily
         self.loader = loader_module
         self.generation_pipelines: Dict[str, Any] = {}
@@ -61,11 +61,21 @@ class LoRAInferenceModule(BaseBrainModule):
 
     def initialize(self) -> bool:
         """Initialize the module"""
-        print("[LoRAInferenceModule] DISABLED: PEFT is PyTorch-only, not available in JAX/Flax", file=sys.stderr)
+        logger.info(
+            "LoRAInferenceModule is disabled (PEFT is PyTorch-only; not available in JAX/Flax)",
+            extra={"module_name": "lora_inference"},
+        )
         return False
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an inference operation"""
+        # Module is disabled in this codebase; keep behavior explicit and safe.
+        return {
+            "success": False,
+            "error": "LoRAInferenceModule is disabled. PEFT/PyTorch LoRA inference is not available in JAX/Flax.",
+        }
+
+        # Unreachable legacy implementation retained for historical reference.
         if operation == "generate":
             return self._generate(
                 prompt=params.get("prompt", ""),
@@ -95,7 +105,11 @@ class LoRAInferenceModule(BaseBrainModule):
                 temperature=params.get("temperature", 0.8),
             )
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for lora_inference",
+            )
 
     def _get_or_create_pipeline(self, personality: str):
         """Get or create a generation pipeline for a personality"""
@@ -104,12 +118,19 @@ class LoRAInferenceModule(BaseBrainModule):
 
         self._ensure_loader()
         if not self.loader:
-            raise ValueError("LoRA loader not available")
+            raise ModuleInitializationError(
+                module_name=self.metadata.name,
+                reason="LoRA loader not available",
+            )
 
         # Get loaded adapter
         adapter_dict = self.loader.get_loaded_adapter(personality)
         if not adapter_dict:
-            raise ValueError(f"Adapter not loaded for personality: {personality}")
+            raise InvalidParameterError(
+                parameter="personality",
+                value=str(personality),
+                reason="Adapter not loaded for personality",
+            )
 
         adapter_model = adapter_dict["adapter_model"]
         tokenizer = adapter_dict["tokenizer"]
@@ -275,7 +296,11 @@ class LoRAInferenceModule(BaseBrainModule):
                 if result.get("success") and result.get("transformed_text"):
                     return result["transformed_text"]
         except Exception as e:
-            print(f"[LoRAInferenceModule] Style transfer failed: {e}", file=sys.stderr)
+            logger.debug(
+                "Style transfer failed; returning original text",
+                exc_info=True,
+                extra={"module_name": "lora_inference", "error_type": type(e).__name__},
+            )
 
         # Return original text if style transfer fails
         return text

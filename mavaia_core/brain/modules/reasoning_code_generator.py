@@ -130,7 +130,11 @@ class ReasoningCodeGeneratorModule(BaseBrainModule):
             return self.generate_with_context(context, requirements)
         
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def generate_code_reasoning(
         self,

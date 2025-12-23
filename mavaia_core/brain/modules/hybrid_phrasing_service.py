@@ -5,13 +5,13 @@ Converted from Swift HybridPhrasingService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class PhraseCandidate:
@@ -36,6 +36,7 @@ class HybridPhrasingServiceModule(BaseBrainModule):
     """Service for hybrid phrase generation combining Markov chains and embeddings"""
 
     def __init__(self):
+        super().__init__()
         self.markov_builder = None
         self.python_brain_service = None
         self.embedding_cache = None
@@ -67,20 +68,26 @@ class HybridPhrasingServiceModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self.markov_builder = ModuleRegistry.get_module("markov_chain_builder")
             self.python_brain_service = ModuleRegistry.get_module("python_brain_service")
             self.embedding_cache = ModuleRegistry.get_module("phrase_embedding_cache_service")
             
             try:
                 self.universal_voice_engine = ModuleRegistry.get_module("universal_voice_engine")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "universal_voice_engine not available for hybrid_phrasing_service",
+                    exc_info=True,
+                    extra={"module_name": "hybrid_phrasing_service", "error_type": type(e).__name__},
+                )
 
             self._modules_loaded = True
         except Exception as e:
-            print(f"Error loading modules: {e}")
+            logger.debug(
+                "Failed to load hybrid_phrasing_service dependencies",
+                exc_info=True,
+                extra={"module_name": "hybrid_phrasing_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -93,7 +100,11 @@ class HybridPhrasingServiceModule(BaseBrainModule):
         elif operation == "score_candidates":
             return self._score_candidates(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for hybrid_phrasing_service",
+            )
 
     def _generate_hybrid_phrase(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Generate hybrid phrase blending Markov chains and phrase embeddings"""

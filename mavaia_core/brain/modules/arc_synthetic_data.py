@@ -13,12 +13,15 @@ Method:
 
 import copy
 import random
-import sys
+import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from mavaia_core.brain.modules.arc_data_augmentation import ARCTask
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class ARCSyntheticDataGenerator:
@@ -103,9 +106,10 @@ class ARCSyntheticDataGenerator:
             
         except Exception as e:
             # Execution failed
-            print(
-                f"[ARCSyntheticDataGenerator] Program execution failed: {e}",
-                file=sys.stderr
+            logger.debug(
+                "Program execution failed during synthetic data generation",
+                exc_info=True,
+                extra={"module_name": "arc_synthetic_data", "error_type": type(e).__name__},
             )
             return None
     
@@ -385,7 +389,11 @@ class ARCSyntheticDataGenerator:
             ARCTask
         """
         if not examples:
-            raise ValueError("Cannot create task from empty examples list")
+            raise InvalidParameterError(
+                parameter="examples",
+                value="[]",
+                reason="Cannot create task from empty examples list",
+            )
         
         train_inputs = [inp for inp, _ in examples]
         train_outputs = [out for _, out in examples]

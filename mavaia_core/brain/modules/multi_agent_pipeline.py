@@ -6,13 +6,16 @@ Reranker Agent, Synthesis Agent, and Verifier Agent.
 Part of the Perplexity Multi-Agent Pipeline implementation.
 """
 
-from typing import Any, Dict, List, Optional
-from pathlib import Path
-import sys
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, Optional
 import time
-from datetime import datetime
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class MultiAgentPipeline(BaseBrainModule):
@@ -29,6 +32,7 @@ class MultiAgentPipeline(BaseBrainModule):
 
     def __init__(self):
         """Initialize the Multi-Agent Pipeline"""
+        super().__init__()
         self._query_agent = None
         self._retriever_agent = None
         self._reranker_agent = None
@@ -64,31 +68,56 @@ class MultiAgentPipeline(BaseBrainModule):
             # Load all agent modules
             try:
                 self._query_agent = ModuleRegistry.get_module("query_agent")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load query_agent",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_pipeline", "dependency": "query_agent", "error_type": type(e).__name__},
+                )
 
             try:
                 self._retriever_agent = ModuleRegistry.get_module("retriever_agent")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load retriever_agent",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_pipeline", "dependency": "retriever_agent", "error_type": type(e).__name__},
+                )
 
             try:
                 self._reranker_agent = ModuleRegistry.get_module("reranker_agent")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load reranker_agent",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_pipeline", "dependency": "reranker_agent", "error_type": type(e).__name__},
+                )
 
             try:
                 self._synthesis_agent = ModuleRegistry.get_module("synthesis_agent")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load synthesis_agent",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_pipeline", "dependency": "synthesis_agent", "error_type": type(e).__name__},
+                )
 
             try:
                 self._verifier_agent = ModuleRegistry.get_module("verifier_agent")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load verifier_agent",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_pipeline", "dependency": "verifier_agent", "error_type": type(e).__name__},
+                )
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "ModuleRegistry not available; multi_agent_pipeline will run with partial availability",
+                exc_info=True,
+                extra={"module_name": "multi_agent_pipeline", "error_type": type(e).__name__},
+            )
             return True  # Can work with partial agent availability
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -118,7 +147,11 @@ class MultiAgentPipeline(BaseBrainModule):
                 config = params.get("config", {})
                 return self.optimize_pipeline(config)
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for multi_agent_pipeline",
+                )
 
     def process_query(
         self, query: str, config: Optional[Dict[str, Any]] = None
@@ -184,7 +217,12 @@ class MultiAgentPipeline(BaseBrainModule):
                     "result": query_result,
                 }
             except Exception as e:
-                error_msg = f"Query Agent error: {str(e)}"
+                logger.debug(
+                    "Query agent stage failed; continuing with original query",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_pipeline", "stage": "query_processing", "dependency": "query_agent", "error_type": type(e).__name__},
+                )
+                error_msg = "Query Agent error"
                 errors.append(error_msg)
                 pipeline_stages["query_processing"] = {
                     "success": False,
@@ -227,7 +265,12 @@ class MultiAgentPipeline(BaseBrainModule):
                     "result": retrieval_result,
                 }
             except Exception as e:
-                error_msg = f"Retriever Agent error: {str(e)}"
+                logger.debug(
+                    "Retriever agent stage failed; continuing with empty documents",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_pipeline", "stage": "retrieval", "dependency": "retriever_agent", "error_type": type(e).__name__},
+                )
+                error_msg = "Retriever Agent error"
                 errors.append(error_msg)
                 pipeline_stages["retrieval"] = {
                     "success": False,
@@ -261,7 +304,12 @@ class MultiAgentPipeline(BaseBrainModule):
                     "result": rerank_result,
                 }
             except Exception as e:
-                error_msg = f"Reranker Agent error: {str(e)}"
+                logger.debug(
+                    "Reranker agent stage failed; continuing with unreranked documents",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_pipeline", "stage": "reranking", "dependency": "reranker_agent", "error_type": type(e).__name__},
+                )
+                error_msg = "Reranker Agent error"
                 errors.append(error_msg)
                 pipeline_stages["reranking"] = {
                     "success": False,
@@ -283,7 +331,7 @@ class MultiAgentPipeline(BaseBrainModule):
         if self._synthesis_agent and ranked_documents:
             try:
                 synthesis_result = self._synthesis_agent.execute(
-                    "process_synthesis",
+                    "synthesize",
                     {
                         "documents": ranked_documents,
                         "query": normalized_query,
@@ -294,7 +342,12 @@ class MultiAgentPipeline(BaseBrainModule):
                     "result": synthesis_result,
                 }
             except Exception as e:
-                error_msg = f"Synthesis Agent error: {str(e)}"
+                logger.debug(
+                    "Synthesis agent stage failed; continuing with fallback answer",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_pipeline", "stage": "synthesis", "dependency": "synthesis_agent", "error_type": type(e).__name__},
+                )
+                error_msg = "Synthesis Agent error"
                 errors.append(error_msg)
                 pipeline_stages["synthesis"] = {
                     "success": False,
@@ -335,7 +388,12 @@ class MultiAgentPipeline(BaseBrainModule):
                     "result": verification_result,
                 }
             except Exception as e:
-                error_msg = f"Verifier Agent error: {str(e)}"
+                logger.debug(
+                    "Verifier agent stage failed; continuing with default confidence",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_pipeline", "stage": "verification", "dependency": "verifier_agent", "error_type": type(e).__name__},
+                )
+                error_msg = "Verifier Agent error"
                 errors.append(error_msg)
                 pipeline_stages["verification"] = {
                     "success": False,

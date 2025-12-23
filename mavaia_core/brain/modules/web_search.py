@@ -8,6 +8,7 @@ and encrypted content references for citations.
 
 import hashlib
 import time
+import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -74,18 +75,24 @@ class WebSearchModule(BaseBrainModule):
             if operation == "search_web":
                 return self._search_web(params)
             else:
-                raise ValueError(f"Unknown operation: {operation}")
-        except (InvalidParameterError, ValueError) as e:
+                raise InvalidParameterError("operation", str(operation), "Unknown operation for web_search")
+        except InvalidParameterError as e:
             raise ModuleOperationError(
                 self.metadata.name,
                 operation,
                 str(e),
             )
         except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.debug(
+                "web_search operation failed",
+                exc_info=True,
+                extra={"module_name": "web_search", "operation": str(operation), "error_type": type(e).__name__},
+            )
             raise ModuleOperationError(
                 self.metadata.name,
                 operation,
-                f"Unexpected error: {str(e)}",
+                "Unexpected error during web search",
             )
     
     def _rate_limit(self) -> None:
@@ -238,16 +245,34 @@ class WebSearchModule(BaseBrainModule):
         query = params.get("query")
         if not query:
             raise InvalidParameterError("query", None, "query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError("query", str(query), "query must be a non-empty string")
         
         max_results = params.get("max_results", 10)
-        if max_results < 1:
-            raise InvalidParameterError("max_results", max_results, "max_results must be >= 1")
-        if max_results > 50:
-            max_results = 50  # Cap at 50 for safety
+        try:
+            max_results_int = int(max_results)
+        except (TypeError, ValueError):
+            raise InvalidParameterError("max_results", str(max_results), "max_results must be an integer")
+        if max_results_int < 1:
+            raise InvalidParameterError("max_results", str(max_results_int), "max_results must be >= 1")
+        if max_results_int > 50:
+            max_results_int = 50  # Cap at 50 for safety
         
         allowed_domains = params.get("allowed_domains")
         blocked_domains = params.get("blocked_domains")
         user_location = params.get("user_location")
+        if allowed_domains is not None and not isinstance(allowed_domains, list):
+            raise InvalidParameterError(
+                "allowed_domains", str(type(allowed_domains).__name__), "allowed_domains must be a list when provided"
+            )
+        if blocked_domains is not None and not isinstance(blocked_domains, list):
+            raise InvalidParameterError(
+                "blocked_domains", str(type(blocked_domains).__name__), "blocked_domains must be a list when provided"
+            )
+        if user_location is not None and not isinstance(user_location, str):
+            raise InvalidParameterError(
+                "user_location", str(type(user_location).__name__), "user_location must be a string when provided"
+            )
         
         # Check session limit
         if self._search_count >= self._max_searches_per_session:
@@ -276,18 +301,24 @@ class WebSearchModule(BaseBrainModule):
                 try:
                     results = list(ddgs.text(
                         query,
-                        max_results=max_results * 2,  # Get more results for filtering
+                        max_results=max_results_int * 2,  # Get more results for filtering
                         **search_params
                     ))
                 except Exception as e:
                     # If search fails, try without extra parameters
                     try:
-                        results = list(ddgs.text(query, max_results=max_results * 2))
+                        results = list(ddgs.text(query, max_results=max_results_int * 2))
                     except Exception:
                         # If still fails, return empty results with error info
+                        logger = logging.getLogger(__name__)
+                        logger.debug(
+                            "DuckDuckGo search failed",
+                            exc_info=True,
+                            extra={"module_name": "web_search", "error_type": type(e).__name__},
+                        )
                         return {
                             "success": False,
-                            "error": f"search_failed: {str(e)}",
+                            "error": "search_failed",
                             "error_code": "search_failed",
                             "results": [],
                             "count": 0,
@@ -325,7 +356,7 @@ class WebSearchModule(BaseBrainModule):
                 )
             
             # Limit to requested number of results
-            formatted_results = formatted_results[:max_results]
+            formatted_results = formatted_results[:max_results_int]
             
             # Increment search count
             self._search_count += 1
@@ -340,9 +371,15 @@ class WebSearchModule(BaseBrainModule):
             }
         
         except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.debug(
+                "Web search failed",
+                exc_info=True,
+                extra={"module_name": "web_search", "error_type": type(e).__name__},
+            )
             return {
                 "success": False,
-                "error": f"search_failed: {str(e)}",
+                "error": "search_failed",
                 "error_code": "search_failed",
             }
     

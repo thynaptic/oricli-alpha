@@ -5,14 +5,11 @@ Converted from Swift CoreResponseService.swift
 """
 
 from typing import Any, Dict, List, Optional
-import sys
+import logging
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 # Lazy import models - don't import at module level
 ConversationMessage = None
@@ -21,6 +18,8 @@ ConfidenceSnapshot = None
 ConfidenceLevel = None
 WebSearchItem = None
 Message = None
+
+logger = logging.getLogger(__name__)
 
 def _lazy_import_models():
     """Lazy import models only when needed"""
@@ -49,6 +48,7 @@ class CoreResponseServiceModule(BaseBrainModule):
     """Main orchestrator for response generation"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self.tool_registration = None
         self.safety_framework = None
@@ -99,8 +99,12 @@ class CoreResponseServiceModule(BaseBrainModule):
             # Load universal voice engine for tone detection
             try:
                 self.universal_voice_engine = ModuleRegistry.get_module("universal_voice_engine")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load optional universal_voice_engine",
+                    exc_info=True,
+                    extra={"module_name": "core_response_service", "error_type": type(e).__name__},
+                )
             
             # Load tool registration
             self.tool_registration = ModuleRegistry.get_module("tool_registration_service")
@@ -121,12 +125,20 @@ class CoreResponseServiceModule(BaseBrainModule):
                 try:
                     self.tool_registration.execute("register_all_tools", {})
                     self._tools_registered = True
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        "Tool registration failed; continuing without pre-registration",
+                        exc_info=True,
+                        extra={"module_name": "core_response_service", "error_type": type(e).__name__},
+                    )
 
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.warning(
+                "Failed to load dependent modules for core_response_service",
+                exc_info=True,
+                extra={"module_name": "core_response_service", "error_type": type(e).__name__},
+            )
 
     def _ensure_safety_services_registered(self):
         """Ensure safety services are registered (lazy initialization)"""
@@ -138,8 +150,12 @@ class CoreResponseServiceModule(BaseBrainModule):
                 # Register safety services on first use
                 self.safety_framework.execute("register_all_safety_services", {})
                 self._safety_services_registered = True
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Safety service registration failed; continuing without registration",
+                    exc_info=True,
+                    extra={"module_name": "core_response_service", "error_type": type(e).__name__},
+                )
 
     def _build_combined_context(
         self,
@@ -265,7 +281,11 @@ class CoreResponseServiceModule(BaseBrainModule):
         elif operation == "generate_hybrid_phrase_for_completion":
             return self._generate_hybrid_phrase_for_completion(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for core_response_service",
+            )
 
     def _generate_response(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Generate a simple response"""
@@ -346,7 +366,11 @@ class CoreResponseServiceModule(BaseBrainModule):
                 }
             except Exception as e:
                 # Fall back to cognitive generator
-                pass
+                logger.debug(
+                    "Conversational orchestrator failed; falling back to cognitive_generator",
+                    exc_info=True,
+                    extra={"module_name": "core_response_service", "error_type": type(e).__name__},
+                )
 
         # Fall back to cognitive generator
         return self._generate_response({
@@ -554,8 +578,12 @@ class CoreResponseServiceModule(BaseBrainModule):
                     "success": True,
                     "phrase": result.get("phrase"),
                 }
-        except:
-            pass
+        except Exception as e:
+            logger.debug(
+                "Hybrid phrasing failed; using simple completion",
+                exc_info=True,
+                extra={"module_name": "core_response_service", "error_type": type(e).__name__},
+            )
 
         # Fall back to simple completion
         return {

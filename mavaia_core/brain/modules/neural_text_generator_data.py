@@ -5,72 +5,51 @@ Supports multiple data sources: Gutenberg, Wikipedia, LibriVox, OpenLibrary
 """
 
 import re
-import sys
 import time
 import html
 import os
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional, Union
 import json
-import importlib.util
 
-# Lazy imports - don't import heavy libraries at module level
-REQUESTS_AVAILABLE = None
-requests = None
+from mavaia_core.exceptions import InvalidParameterError
 
-WIKIPEDIA_AVAILABLE = None
-wikipedia = None
+logger = logging.getLogger(__name__)
 
-INTERNETARCHIVE_AVAILABLE = None
-search_items = None
-get_item = None
-download = None
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
 
-def _lazy_import_requests():
-    """Lazy import requests"""
-    global REQUESTS_AVAILABLE, requests
-    if REQUESTS_AVAILABLE is None:
-        try:
-            import requests as req
-            requests = req
-            REQUESTS_AVAILABLE = True
-        except ImportError:
-            REQUESTS_AVAILABLE = False
-    return REQUESTS_AVAILABLE
+# Try to import Wikipedia library
+try:
+    import wikipedia
+    WIKIPEDIA_AVAILABLE = True
+except ImportError:
+    WIKIPEDIA_AVAILABLE = False
 
-def _lazy_import_wikipedia():
-    """Lazy import wikipedia"""
-    global WIKIPEDIA_AVAILABLE, wikipedia
-    if WIKIPEDIA_AVAILABLE is None:
-        try:
-            import wikipedia as wiki
-            wikipedia = wiki
-            WIKIPEDIA_AVAILABLE = True
-        except ImportError:
-            WIKIPEDIA_AVAILABLE = False
-    return WIKIPEDIA_AVAILABLE
+# Try to import Internet Archive library
+try:
+    from internetarchive import search_items, get_item, download
+    INTERNETARCHIVE_AVAILABLE = True
+except ImportError:
+    INTERNETARCHIVE_AVAILABLE = False
 
-def _lazy_import_internetarchive():
-    """Lazy import internetarchive"""
-    global INTERNETARCHIVE_AVAILABLE, search_items, get_item, download
-    if INTERNETARCHIVE_AVAILABLE is None:
-        try:
-            from internetarchive import search_items as si, get_item as gi, download as dl
-            search_items = si
-            get_item = gi
-            download = dl
-            INTERNETARCHIVE_AVAILABLE = True
-        except ImportError:
-            INTERNETARCHIVE_AVAILABLE = False
-    return INTERNETARCHIVE_AVAILABLE
-
-# HuggingFace datasets and hub can be very heavy to import and may pull in
-# additional ML frameworks. To avoid hangs when this module is imported
-# (e.g. for `--list-sources`), we only check for their presence here and
-# import them lazily inside the HuggingFace-specific methods.
-HUGGINGFACE_AVAILABLE = importlib.util.find_spec("datasets") is not None
-HF_API_AVAILABLE = importlib.util.find_spec("huggingface_hub") is not None
+# Try to import HuggingFace datasets library
+try:
+    from datasets import load_dataset, list_datasets
+    try:
+        from huggingface_hub import HfApi
+        HF_API_AVAILABLE = True
+    except ImportError:
+        HF_API_AVAILABLE = False
+    HUGGINGFACE_AVAILABLE = True
+except ImportError:
+    HUGGINGFACE_AVAILABLE = False
+    HF_API_AVAILABLE = False
 
 
 class BaseDataSource(ABC):
@@ -203,9 +182,9 @@ class GutenbergSource(BaseDataSource):
                         converted_ids.append(int(bid))
                     except (ValueError, TypeError):
                         # Skip invalid IDs
-                        print(
-                            f"[GutenbergSource] Invalid book ID: {bid}, skipping",
-                            file=sys.stderr,
+                        logger.debug(
+                            "Invalid Gutenberg book ID; skipping",
+                            extra={"source": "gutenberg", "book_id": str(bid)},
                         )
                 # Merge with existing book_ids
                 book_ids = list(set(converted_ids + category_book_ids))
@@ -217,9 +196,9 @@ class GutenbergSource(BaseDataSource):
                 try:
                     converted_ids.append(int(bid))
                 except (ValueError, TypeError):
-                    print(
-                        f"[GutenbergSource] Invalid book ID: {bid}, skipping",
-                        file=sys.stderr,
+                    logger.debug(
+                        "Invalid Gutenberg book ID; skipping",
+                        extra={"source": "gutenberg", "book_id": str(bid)},
                     )
             book_ids = converted_ids if converted_ids else None
         
@@ -264,14 +243,15 @@ class GutenbergSource(BaseDataSource):
                                 f.write(text)
                             all_text.append(text)
                 except Exception as e:
-                    print(
-                        f"[GutenbergSource] Failed to download book {book_id}: {e}",
-                        file=sys.stderr,
+                    logger.warning(
+                        "Failed to download Gutenberg book",
+                        exc_info=True,
+                        extra={"source": "gutenberg", "book_id": int(book_id), "error_type": type(e).__name__},
                     )
             else:
-                print(
-                    f"[GutenbergSource] requests not available, cannot download book {book_id}",
-                    file=sys.stderr,
+                logger.warning(
+                    "requests not available; cannot download Gutenberg book",
+                    extra={"source": "gutenberg", "book_id": int(book_id)},
                 )
         
         if not all_text:
@@ -412,14 +392,16 @@ class WikipediaSource(BaseDataSource):
                         all_text.append(text)
                         time.sleep(0.5)
                     except Exception as e2:
-                        print(
-                            f"[WikipediaSource] Failed to load article '{article_title}': {e2}",
-                            file=sys.stderr,
+                        logger.warning(
+                            "Failed to load Wikipedia article after disambiguation",
+                            exc_info=True,
+                            extra={"source": "wikipedia", "article_title": str(article_title), "error_type": type(e2).__name__},
                         )
                 except Exception as e:
-                    print(
-                        f"[WikipediaSource] Failed to load article '{article_title}': {e}",
-                        file=sys.stderr,
+                    logger.warning(
+                        "Failed to load Wikipedia article",
+                        exc_info=True,
+                        extra={"source": "wikipedia", "article_title": str(article_title), "error_type": type(e).__name__},
                     )
             elif REQUESTS_AVAILABLE:
                 # Fallback to direct API call
@@ -444,14 +426,15 @@ class WikipediaSource(BaseDataSource):
                                 all_text.append(text)
                     time.sleep(0.5)
                 except Exception as e:
-                    print(
-                        f"[WikipediaSource] Failed to load article '{article_title}': {e}",
-                        file=sys.stderr,
+                    logger.warning(
+                        "Failed to load Wikipedia article via REST fallback",
+                        exc_info=True,
+                        extra={"source": "wikipedia", "article_title": str(article_title), "error_type": type(e).__name__},
                     )
             else:
-                print(
-                    f"[WikipediaSource] Wikipedia library and requests not available, cannot download article '{article_title}'",
-                    file=sys.stderr,
+                logger.warning(
+                    "Wikipedia library and requests not available; cannot download article",
+                    extra={"source": "wikipedia", "article_title": str(article_title)},
                 )
         
         if not all_text:
@@ -539,15 +522,15 @@ class LibriVoxSource(BaseDataSource):
                 if response.status_code == 200:
                     # Note: This is a simplified approach
                     # Full implementation would parse results and download text transcripts
-                    print(
-                        "[LibriVoxSource] LibriVox integration requires Internet Archive API access. "
-                        "Using fallback text.",
-                        file=sys.stderr,
+                    logger.info(
+                        "LibriVox integration not fully implemented; using fallback text",
+                        extra={"source": "librivox"},
                     )
             except Exception as e:
-                print(
-                    f"[LibriVoxSource] Error accessing LibriVox catalog: {e}",
-                    file=sys.stderr,
+                logger.warning(
+                    "Error accessing LibriVox catalog; using fallback text",
+                    exc_info=True,
+                    extra={"source": "librivox", "error_type": type(e).__name__},
                 )
             
             if not all_text:
@@ -684,9 +667,10 @@ class OpenLibrarySource(BaseDataSource):
                         all_text.append(text)
                         time.sleep(0.5)
                 except Exception as e:
-                    print(
-                        f"[OpenLibrarySource] Failed to load work {work_id}: {e}",
-                        file=sys.stderr,
+                    logger.warning(
+                        "Failed to load OpenLibrary work",
+                        exc_info=True,
+                        extra={"source": "openlibrary", "work_id": str(work_id), "error_type": type(e).__name__},
                     )
         
         if not all_text:
@@ -849,16 +833,18 @@ class InternetArchiveSource(BaseDataSource):
                     return text
             except Exception as download_error:
                 # If download fails, try to get text via API
-                print(
-                    f"[InternetArchiveSource] Download failed for {item.identifier}, trying API: {download_error}",
-                    file=sys.stderr,
+                logger.debug(
+                    "Internet Archive download failed; falling back to metadata",
+                    exc_info=True,
+                    extra={"source": "internetarchive", "item_id": str(getattr(item, "identifier", "")), "error_type": type(download_error).__name__},
                 )
                 # Fall through to metadata fallback
             
         except Exception as e:
-            print(
-                f"[InternetArchiveSource] Error extracting text from {item.identifier}: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Error extracting text from Internet Archive item",
+                exc_info=True,
+                extra={"source": "internetarchive", "item_id": str(getattr(item, "identifier", "")), "error_type": type(e).__name__},
             )
         
         return None
@@ -908,9 +894,10 @@ class InternetArchiveSource(BaseDataSource):
                         all_text.append(text)
                     time.sleep(0.5)  # Rate limiting
                 except Exception as e:
-                    print(
-                        f"[InternetArchiveSource] Failed to load item {item_id}: {e}",
-                        file=sys.stderr,
+                    logger.warning(
+                        "Failed to load Internet Archive item",
+                        exc_info=True,
+                        extra={"source": "internetarchive", "item_id": str(item_id), "error_type": type(e).__name__},
                     )
         else:
             # Search for items based on categories
@@ -955,15 +942,17 @@ class InternetArchiveSource(BaseDataSource):
                             item_count += 1
                         time.sleep(0.5)  # Rate limiting
                     except Exception as e:
-                        print(
-                            f"[InternetArchiveSource] Failed to load item {item_id}: {e}",
-                            file=sys.stderr,
+                        logger.warning(
+                            "Failed to load Internet Archive item",
+                            exc_info=True,
+                            extra={"source": "internetarchive", "item_id": str(item_id), "error_type": type(e).__name__},
                         )
                         continue
             except Exception as e:
-                print(
-                    f"[InternetArchiveSource] Search failed: {e}",
-                    file=sys.stderr,
+                logger.warning(
+                    "Internet Archive search failed",
+                    exc_info=True,
+                    extra={"source": "internetarchive", "error_type": type(e).__name__},
                 )
         
         if not all_text:
@@ -1004,9 +993,10 @@ class DataSourceRegistry:
         try:
             self.register(HuggingFaceSource())
         except Exception as e:
-            print(
-                f"[DataSourceRegistry] Warning: Could not register HuggingFace source: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Could not register HuggingFace source",
+                exc_info=True,
+                extra={"source": "registry", "error_type": type(e).__name__},
             )
     
     def register(self, source: BaseDataSource):
@@ -1055,18 +1045,12 @@ class DataSourceRegistry:
         for source_name in source_names:
             source = self.get_source(source_name)
             if source is None:
-                print(
-                    f"[DataSourceRegistry] Unknown source: {source_name}, skipping",
-                    file=sys.stderr,
+                logger.warning(
+                    "Unknown data source; skipping",
+                    extra={"source": "registry", "source_name": str(source_name)},
                 )
                 continue
             
-            # Progress logging so long-running downloads don't look like a hang
-            print(
-                f"[DataSourceRegistry] Loading data from source '{source_name}'...",
-                file=sys.stderr,
-            )
-            start_time = time.time()
             try:
                 text = source.load_data(
                     book_ids=book_ids,
@@ -1076,19 +1060,13 @@ class DataSourceRegistry:
                     data_dir=data_dir,
                     search=search,
                 )
-                duration = time.time() - start_time
-                print(
-                    f"[DataSourceRegistry] Finished source '{source_name}' in {duration:.1f}s "
-                    f"({len(text) if text else 0:,} chars)",
-                    file=sys.stderr,
-                )
                 if text:
                     all_texts.append(text)
             except Exception as e:
-                duration = time.time() - start_time
-                print(
-                    f"[DataSourceRegistry] Error loading from {source_name} after {duration:.1f}s: {e}",
-                    file=sys.stderr,
+                logger.warning(
+                    "Error loading from data source",
+                    exc_info=True,
+                    extra={"source": "registry", "source_name": str(source_name), "error_type": type(e).__name__},
                 )
         
         if not all_texts:
@@ -1121,9 +1099,10 @@ def _load_api_keys() -> Dict[str, Any]:
             with open(config_path, "r", encoding="utf-8") as f:
                 api_keys = json.load(f)
         except Exception as e:
-            print(
-                f"[NeuralTextGeneratorData] Warning: Could not load API keys from config: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Could not load API keys from config file",
+                exc_info=True,
+                extra={"source": "neural_text_generator_data", "error_type": type(e).__name__},
             )
     
     # Override with environment variables (environment takes precedence)
@@ -1235,9 +1214,10 @@ class HuggingFaceSource(BaseDataSource):
             datasets = api.list_datasets(search=query, limit=max_results)
             return [ds.id for ds in datasets]
         except Exception as e:
-            print(
-                f"[HuggingFaceSource] Dataset search failed: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "HuggingFace dataset search failed",
+                exc_info=True,
+                extra={"source": "huggingface", "error_type": type(e).__name__},
             )
             return []
     
@@ -1260,16 +1240,6 @@ class HuggingFaceSource(BaseDataSource):
             return None
         
         try:
-            # Lazily import HuggingFace datasets only when actually needed
-            try:
-                from datasets import load_dataset  # type: ignore[import]
-            except Exception as e:
-                print(
-                    f"[HuggingFaceSource] Failed to import datasets library: {e}",
-                    file=sys.stderr,
-                )
-                return None
-            
             # Try to load dataset - handle different formats
             # Some datasets require config names, others don't
             dataset = None
@@ -1290,18 +1260,22 @@ class HuggingFaceSource(BaseDataSource):
                         # Use first available split
                         first_split = list(dataset_dict.keys())[0]
                         dataset = dataset_dict[first_split]
-                        print(
-                            f"[HuggingFaceSource] Using split '{first_split}' for dataset {dataset_name}",
-                            file=sys.stderr,
+                        logger.info(
+                            "Using first available dataset split",
+                            extra={"source": "huggingface", "dataset_name": str(dataset_name), "split": str(first_split)},
                         )
                     else:
-                        raise ValueError(f"No splits available in dataset {dataset_name}")
-                except Exception:
+                        raise InvalidParameterError(
+                            parameter="dataset_name",
+                            value=str(dataset_name),
+                            reason="No splits available in dataset",
+                        )
+                except Exception as e2:
                     # If that also fails, try with default config
                     try:
                         dataset_dict = load_dataset(dataset_name, split="train", streaming=False)
                         dataset = dataset_dict
-                    except Exception:
+                    except Exception as e3:
                         # Last attempt: try loading with trust_remote_code for custom datasets
                         try:
                             dataset = load_dataset(
@@ -1310,14 +1284,15 @@ class HuggingFaceSource(BaseDataSource):
                                 streaming=False,
                                 trust_remote_code=True,
                             )
-                        except Exception:
-                            print(
-                                f"[HuggingFaceSource] Failed to load dataset {dataset_name}: {error_msg}",
-                                file=sys.stderr,
+                        except Exception as e4:
+                            logger.warning(
+                                "Failed to load HuggingFace dataset after multiple attempts",
+                                extra={"source": "huggingface", "dataset_name": str(dataset_name)},
                             )
-                            print(
-                                "[HuggingFaceSource] Attempted: default split, all splits, and trust_remote_code=True",
-                                file=sys.stderr,
+                            logger.debug(
+                                "Dataset load attempts exhausted",
+                                exc_info=True,
+                                extra={"source": "huggingface", "dataset_name": str(dataset_name), "error_type": type(e4).__name__},
                             )
                             return None
             
@@ -1382,16 +1357,15 @@ class HuggingFaceSource(BaseDataSource):
                             break
             
             if not text_column:
-                print(
-                    f"[HuggingFaceSource] Could not find text column in dataset {dataset_name}. "
-                    f"Available columns: {dataset.column_names}",
-                    file=sys.stderr,
+                logger.warning(
+                    "Could not find text column in dataset",
+                    extra={"source": "huggingface", "dataset_name": str(dataset_name), "columns": list(dataset.column_names)},
                 )
                 return None
             
-            print(
-                f"[HuggingFaceSource] Using column '{text_column}' for dataset {dataset_name}",
-                file=sys.stderr,
+            logger.info(
+                "Using dataset text column",
+                extra={"source": "huggingface", "dataset_name": str(dataset_name), "text_column": str(text_column)},
             )
             
             # Extract text from dataset
@@ -1428,9 +1402,10 @@ class HuggingFaceSource(BaseDataSource):
                 except Exception as e:
                     # Skip problematic examples but continue
                     if idx < 5:  # Only log first few errors to avoid spam
-                        print(
-                            f"[HuggingFaceSource] Warning: Skipping example {idx} in {dataset_name}: {e}",
-                            file=sys.stderr,
+                        logger.debug(
+                            "Skipping problematic dataset example",
+                            exc_info=True,
+                            extra={"source": "huggingface", "dataset_name": str(dataset_name), "index": int(idx), "error_type": type(e).__name__},
                         )
                     continue
                 
@@ -1441,9 +1416,9 @@ class HuggingFaceSource(BaseDataSource):
                         break
             
             if not all_text:
-                print(
-                    f"[HuggingFaceSource] No text extracted from dataset {dataset_name}",
-                    file=sys.stderr,
+                logger.warning(
+                    "No text extracted from dataset",
+                    extra={"source": "huggingface", "dataset_name": str(dataset_name)},
                 )
                 return None
             
@@ -1454,30 +1429,34 @@ class HuggingFaceSource(BaseDataSource):
                 with open(cache_file, "w", encoding="utf-8") as f:
                     f.write(combined_text)
             except Exception as e:
-                print(
-                    f"[HuggingFaceSource] Warning: Could not save cache for {dataset_name}: {e}",
-                    file=sys.stderr,
+                logger.debug(
+                    "Could not save dataset cache",
+                    exc_info=True,
+                    extra={"source": "huggingface", "dataset_name": str(dataset_name), "error_type": type(e).__name__},
                 )
             
-            print(
-                f"[HuggingFaceSource] Loaded {len(all_text)} examples ({len(combined_text):,} characters) from {dataset_name}",
-                file=sys.stderr,
+            logger.info(
+                "Loaded dataset text",
+                extra={
+                    "source": "huggingface",
+                    "dataset_name": str(dataset_name),
+                    "examples": int(len(all_text)),
+                    "characters": int(len(combined_text)),
+                },
             )
             
             return combined_text
             
         except Exception as e:
-            print(
-                f"[HuggingFaceSource] Failed to load dataset {dataset_name}: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "Failed to load HuggingFace dataset",
+                exc_info=True,
+                extra={"source": "huggingface", "dataset_name": str(dataset_name), "error_type": type(e).__name__},
             )
-            import traceback
             if "not found" in str(e).lower() or "does not exist" in str(e).lower():
-                print(
-                    f"[HuggingFaceSource] Hint: Make sure the dataset name is correct. "
-                    f"For datasets with organization (e.g., 'Anthropic/AnthropicInterviewer'), "
-                    f"use the full path: 'organization/dataset_name'",
-                    file=sys.stderr,
+                logger.info(
+                    "HuggingFace dataset not found; verify full path (org/dataset)",
+                    extra={"source": "huggingface", "dataset_name": str(dataset_name)},
                 )
             return None
     
@@ -1496,7 +1475,10 @@ class HuggingFaceSource(BaseDataSource):
                 "HuggingFace datasets library not available. "
                 "Install with: pip install datasets huggingface_hub"
             )
-            print(f"[HuggingFaceSource] {error_msg}", file=sys.stderr)
+            logger.warning(
+                "HuggingFace datasets library not available",
+                extra={"source": "huggingface"},
+            )
             fallback_text = error_msg * 10
             if max_text_size:
                 return fallback_text[:max_text_size]
@@ -1510,9 +1492,9 @@ class HuggingFaceSource(BaseDataSource):
         
         # If specific dataset names provided, use those (takes precedence over search)
         if book_ids:
-            print(
-                f"[HuggingFaceSource] Loading {len(book_ids[:max_books])} specified dataset(s)...",
-                file=sys.stderr,
+            logger.info(
+                "Loading specified HuggingFace datasets",
+                extra={"source": "huggingface", "dataset_count": int(len(book_ids[:max_books]))},
             )
             for dataset_name in book_ids[:max_books]:
                 # Clean dataset name - preserve full paths like "Anthropic/AnthropicInterviewer"
@@ -1522,9 +1504,9 @@ class HuggingFaceSource(BaseDataSource):
                 safe_filename = dataset_id.replace('/', '_').replace('\\', '_')
                 cache_file = cache_dir / f"{safe_filename}.txt"
                 
-                print(
-                    f"[HuggingFaceSource] Loading dataset: {dataset_id}",
-                    file=sys.stderr,
+                logger.info(
+                    "Loading HuggingFace dataset",
+                    extra={"source": "huggingface", "dataset_name": str(dataset_id)},
                 )
                 
                 # Try cache first
@@ -1534,9 +1516,9 @@ class HuggingFaceSource(BaseDataSource):
                             text = f.read()
                             if text:
                                 all_text.append(text)
-                                print(
-                                    f"[HuggingFaceSource] ✓ Loaded {dataset_id} from cache ({len(text):,} characters)",
-                                    file=sys.stderr,
+                                logger.debug(
+                                    "Loaded dataset from cache",
+                                    extra={"source": "huggingface", "dataset_name": str(dataset_id), "characters": int(len(text))},
                                 )
                                 continue
                     except Exception:
@@ -1547,9 +1529,9 @@ class HuggingFaceSource(BaseDataSource):
                 if text:
                     all_text.append(text)
                 else:
-                    print(
-                        f"[HuggingFaceSource] ✗ Failed to load dataset {dataset_id}",
-                        file=sys.stderr,
+                    logger.warning(
+                        "Failed to load dataset",
+                        extra={"source": "huggingface", "dataset_name": str(dataset_id)},
                     )
         else:
             # Search for datasets
@@ -1557,9 +1539,9 @@ class HuggingFaceSource(BaseDataSource):
             
             # If search term provided, use it
             if search:
-                print(
-                    f"[HuggingFaceSource] Searching for datasets: '{search}'",
-                    file=sys.stderr,
+                logger.info(
+                    "Searching for HuggingFace datasets",
+                    extra={"source": "huggingface", "query": str(search)},
                 )
                 search_results = self._search_datasets(search, max_results=max_books * 2)
                 dataset_names.extend(search_results)

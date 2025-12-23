@@ -146,7 +146,11 @@ class AdvancedNLP(BaseBrainModule):
             return self.calculate_similarity(text1, text2)
 
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation",
+            )
 
     def analyze_sentiment(self, text: str) -> Dict[str, Any]:
         """Analyze sentiment of text"""

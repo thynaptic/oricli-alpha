@@ -4,19 +4,20 @@ Replaces Ollama API calls with local Python service that uses cognitive generato
 """
 
 from typing import List, Dict, Any, Optional
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class LocalModelService(BaseBrainModule):
     """Local model service that replaces Ollama API calls"""
 
     def __init__(self):
+        super().__init__()
         self.cognitive_generator = None
         self._modules_loaded = False
 
@@ -47,20 +48,26 @@ class LocalModelService(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             # Load cognitive generator for text generation
             try:
                 self.cognitive_generator = ModuleRegistry.get_module(
                     "cognitive_generator"
                 )
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load cognitive_generator dependency",
+                    exc_info=True,
+                    extra={"module_name": "local_model_service", "error_type": type(e).__name__},
+                )
 
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to initialize local_model_service dependencies",
+                exc_info=True,
+                extra={"module_name": "local_model_service", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a local model service operation"""
@@ -83,7 +90,11 @@ class LocalModelService(BaseBrainModule):
                 context=params.get("context", ""),
             )
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for local_model_service",
+            )
 
     def list_available_models(self) -> Dict[str, Any]:
         """List all locally available models"""

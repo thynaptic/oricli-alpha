@@ -8,15 +8,15 @@ The personality-based system has been replaced with a universal voice that adapt
 """
 
 from typing import Any, Dict, Optional
-import sys
 import json
 import time
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Optional imports - models package may not be available
 try:
@@ -31,6 +31,7 @@ class PersonalityConfigurationLoaderModule(BaseBrainModule):
     """Loads personality configurations from JSON files"""
 
     def __init__(self):
+        super().__init__()
         self.cached_configurations: Optional[Dict[str, Any]] = None
         self.last_load_time: float = 0.0
         self.cache_ttl = 300.0  # 5 minutes
@@ -69,7 +70,11 @@ class PersonalityConfigurationLoaderModule(BaseBrainModule):
         elif operation == "validate_configuration":
             return self._validate_configuration(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for personality_configuration_loader",
+            )
 
     def _load_configurations(self) -> Dict[str, Any]:
         """Load personality configurations from JSON file"""
@@ -113,8 +118,12 @@ class PersonalityConfigurationLoaderModule(BaseBrainModule):
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     return data
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load enhanced personality config from app support",
+                    exc_info=True,
+                    extra={"module_name": "personality_configuration_loader", "error_type": type(e).__name__},
+                )
 
         # Try in current directory
         local_config = Path("personality_config_enhanced.json")
@@ -123,8 +132,12 @@ class PersonalityConfigurationLoaderModule(BaseBrainModule):
                 with open(local_config, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     return data
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to load enhanced personality config from local path",
+                    exc_info=True,
+                    extra={"module_name": "personality_configuration_loader", "error_type": type(e).__name__},
+                )
 
         return None
 

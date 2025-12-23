@@ -5,14 +5,14 @@ Converted from Swift EmotionalDistressDetector.swift
 
 from typing import Any, Dict, List, Optional
 from enum import Enum
-import sys
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class DistressSeverity(str, Enum):
@@ -27,6 +27,7 @@ class EmotionalDistressDetectorModule(BaseBrainModule):
     """Personality-agnostic emotional distress detector"""
 
     def __init__(self):
+        super().__init__()
         self.emotional_inference = None
         self._modules_loaded = False
         self._conversation_history: List[str] = []
@@ -58,14 +59,16 @@ class EmotionalDistressDetectorModule(BaseBrainModule):
             return
 
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self.emotional_inference = ModuleRegistry.get_module("emotional_inference")
 
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load emotional_inference dependency for emotional_distress_detector",
+                exc_info=True,
+                extra={"module_name": "emotional_distress_detector", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -80,12 +83,25 @@ class EmotionalDistressDetectorModule(BaseBrainModule):
         elif operation == "calculate_mood_curve":
             return self._calculate_mood_curve(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for emotional_distress_detector",
+            )
 
     def _detect_distress(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Detect emotional distress signals in user message"""
-        message = params.get("message", "").strip()
+        message_raw = params.get("message", "")
+        message = str(message_raw).strip()
         conversation_context = params.get("conversation_context", [])
+        if conversation_context is None:
+            conversation_context = []
+        if not isinstance(conversation_context, list):
+            raise InvalidParameterError(
+                parameter="conversation_context",
+                value=str(type(conversation_context).__name__),
+                reason="conversation_context must be a list",
+            )
 
         if not message:
             return {
@@ -187,6 +203,18 @@ class EmotionalDistressDetectorModule(BaseBrainModule):
         user_id = params.get("user_id", "")
         text = params.get("text", "")
         context = params.get("context", "")
+        if user_id is None:
+            user_id = ""
+        if text is None:
+            text = ""
+        if context is None:
+            context = ""
+        if not isinstance(user_id, str):
+            raise InvalidParameterError("user_id", str(type(user_id).__name__), "user_id must be a string")
+        if not isinstance(text, str):
+            raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+        if not isinstance(context, str):
+            raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
 
         if self.emotional_inference:
             try:
@@ -195,8 +223,12 @@ class EmotionalDistressDetectorModule(BaseBrainModule):
                     "text": text,
                     "context": context,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "emotional_inference track_affective_state failed; using detect_distress fallback",
+                    exc_info=True,
+                    extra={"module_name": "emotional_distress_detector", "error_type": type(e).__name__},
+                )
 
         # Fallback: use detect_distress
         return self._detect_distress({
@@ -208,15 +240,29 @@ class EmotionalDistressDetectorModule(BaseBrainModule):
         """Calculate mood curve"""
         user_id = params.get("user_id", "")
         time_window = params.get("time_window", 24)
+        if user_id is None:
+            user_id = ""
+        if not isinstance(user_id, str):
+            raise InvalidParameterError("user_id", str(type(user_id).__name__), "user_id must be a string")
+        try:
+            time_window_int = int(time_window)
+        except (TypeError, ValueError):
+            raise InvalidParameterError("time_window", str(time_window), "time_window must be an integer")
+        if time_window_int < 1:
+            raise InvalidParameterError("time_window", str(time_window_int), "time_window must be >= 1")
 
         if self.emotional_inference:
             try:
                 return self.emotional_inference.execute("calculate_mood_curve", {
                     "user_id": user_id,
-                    "time_window": time_window,
+                    "time_window": time_window_int,
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "emotional_inference calculate_mood_curve failed; using empty curve fallback",
+                    exc_info=True,
+                    extra={"module_name": "emotional_distress_detector", "error_type": type(e).__name__},
+                )
 
         # Fallback: return empty curve
         return {

@@ -6,20 +6,17 @@ No LLM dependencies - uses Python AST and pattern matching
 
 import ast
 import re
-from pathlib import Path
 from typing import Any, Dict, List
-import sys
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 
 class CodeAnalysisModule(BaseBrainModule):
     """Analyze code using AST parsing and pattern recognition"""
 
     def __init__(self):
+        super().__init__()
         self.code_patterns = {
             "function_definition": r"def\s+\w+\s*\(",
             "class_definition": r"class\s+\w+",
@@ -62,32 +59,78 @@ class CodeAnalysisModule(BaseBrainModule):
         match operation:
             case "parse_code":
                 code = params.get("code", "")
+                if code is None:
+                    code = ""
+                if not isinstance(code, str):
+                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
                 return self.parse_code(code)
             case "analyze_code":
                 code = params.get("code", "")
+                if code is None:
+                    code = ""
+                if not isinstance(code, str):
+                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
                 return self.analyze_code(code)
             case "explain_code":
                 code = params.get("code", "")
                 detail_level = params.get("detail_level", "medium")
+                if code is None:
+                    code = ""
+                if detail_level is None:
+                    detail_level = "medium"
+                if not isinstance(code, str):
+                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
+                if not isinstance(detail_level, str):
+                    raise InvalidParameterError(
+                        "detail_level", str(type(detail_level).__name__), "detail_level must be a string"
+                    )
                 return self.explain_code(code, detail_level)
             case "identify_patterns":
                 code = params.get("code", "")
+                if code is None:
+                    code = ""
+                if not isinstance(code, str):
+                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
                 return self.identify_patterns(code)
             case "extract_functions":
                 code = params.get("code", "")
+                if code is None:
+                    code = ""
+                if not isinstance(code, str):
+                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
                 return self.extract_functions(code)
             case "extract_classes":
                 code = params.get("code", "")
+                if code is None:
+                    code = ""
+                if not isinstance(code, str):
+                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
                 return self.extract_classes(code)
             case "find_issues":
                 code = params.get("code", "")
+                if code is None:
+                    code = ""
+                if not isinstance(code, str):
+                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
                 return self.find_issues(code)
             case "generate_explanation":
                 code = params.get("code", "")
                 focus = params.get("focus", "general")
+                if code is None:
+                    code = ""
+                if focus is None:
+                    focus = "general"
+                if not isinstance(code, str):
+                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
+                if not isinstance(focus, str):
+                    raise InvalidParameterError("focus", str(type(focus).__name__), "focus must be a string")
                 return self.generate_explanation(code, focus)
             case _:
-                raise ValueError(f"Unknown operation: {operation}")
+                raise InvalidParameterError(
+                    parameter="operation",
+                    value=operation,
+                    reason="Unknown operation for code_analysis",
+                )
 
     def parse_code(self, code: str) -> Dict[str, Any]:
         """Parse code using Python AST"""

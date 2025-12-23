@@ -6,18 +6,14 @@ simulation (rollout), and backpropagation phases.
 Ported from Swift MCTSSearchEngine.swift
 """
 
-import sys
 import time
 import math
 import uuid
-from pathlib import Path
 from typing import Any
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mcts_models import (
+from mavaia_core.brain.modules.mcts_models import (
     MCTSNode,
     MCTSTreeState,
     MCTSConfiguration,
@@ -25,7 +21,11 @@ from mcts_models import (
     SearchStatistics,
     RolloutStatistics,
 )
-from tot_models import ToTThoughtNode, ToTConfiguration
+from mavaia_core.brain.modules.tot_models import ToTThoughtNode, ToTConfiguration
+from mavaia_core.brain.registry import ModuleRegistry
+from mavaia_core.exceptions import InvalidParameterError, ModuleOperationError
+
+logger = logging.getLogger(__name__)
 
 
 class MCTSSearchEngine(BaseBrainModule):
@@ -36,6 +36,7 @@ class MCTSSearchEngine(BaseBrainModule):
 
     def __init__(self) -> None:
         """Initialize the module"""
+        super().__init__()
         self._thought_generator = None
         self._rollout_service = None
         self._cognitive_generator = None
@@ -59,8 +60,6 @@ class MCTSSearchEngine(BaseBrainModule):
     def initialize(self) -> bool:
         """Initialize dependent modules"""
         try:
-            from mavaia_core.brain.registry import ModuleRegistry
-
             self._thought_generator = ModuleRegistry.get_module(
                 "tot_thought_generator"
             )
@@ -71,15 +70,28 @@ class MCTSSearchEngine(BaseBrainModule):
             # Optional dependencies
             try:
                 self._safety_filter = ModuleRegistry.get_module("safety_framework")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency 'safety_framework' unavailable for mcts_search_engine",
+                    exc_info=True,
+                    extra={"module_name": "mcts_search_engine", "error_type": type(e).__name__},
+                )
             try:
                 self._verification_loop = ModuleRegistry.get_module("verification")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Optional dependency 'verification' unavailable for mcts_search_engine",
+                    exc_info=True,
+                    extra={"module_name": "mcts_search_engine", "error_type": type(e).__name__},
+                )
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to initialize mcts_search_engine dependencies",
+                exc_info=True,
+                extra={"module_name": "mcts_search_engine", "error_type": type(e).__name__},
+            )
             return False
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -92,7 +104,11 @@ class MCTSSearchEngine(BaseBrainModule):
         if operation == "search":
             return self._search(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for mcts_search_engine",
+            )
 
     def _search(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -111,13 +127,19 @@ class MCTSSearchEngine(BaseBrainModule):
         if not self._thought_generator or not self._rollout_service:
             self.initialize()
             if not self._thought_generator or not self._rollout_service:
-                raise RuntimeError(
-                    "Required modules not available (thought_generator, rollout_service)"
+                raise ModuleOperationError(
+                    module_name="mcts_search_engine",
+                    operation="search",
+                    reason="Required modules not available (tot_thought_generator, mcts_rollout_service)",
                 )
 
         query = params.get("query", "")
-        if not query:
-            raise ValueError("query parameter is required")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="query parameter is required and must be a non-empty string",
+            )
 
         context = params.get("context")
         config_dict = params.get("configuration", {})
@@ -235,9 +257,10 @@ class MCTSSearchEngine(BaseBrainModule):
                             children_added = True
 
                 except Exception as e:
-                    print(
-                        f"[MCTSSearchEngine] Error expanding node: {e}",
-                        file=sys.stderr,
+                    logger.debug(
+                        "Error expanding MCTS node; continuing search",
+                        exc_info=True,
+                        extra={"module_name": "mcts_search_engine", "error_type": type(e).__name__},
                     )
 
             # Phase 3: Simulation - Perform rollout from selected/expanded node
@@ -315,7 +338,11 @@ class MCTSSearchEngine(BaseBrainModule):
 
         if not best_path:
             termination_reason = "no_valid_path"
-            raise ValueError("No valid path found in MCTS search")
+            raise ModuleOperationError(
+                module_name="mcts_search_engine",
+                operation="search",
+                reason="No valid path found in MCTS search",
+            )
 
         # Generate final answer from best path
         final_answer = self._synthesize_final_answer(best_path, query)
@@ -534,9 +561,10 @@ class MCTSSearchEngine(BaseBrainModule):
                     valid_child_thoughts.append(child)
 
                 except Exception as e:
-                    print(
-                        f"[MCTSSearchEngine] Error verifying MCTS node: {e}",
-                        file=sys.stderr,
+                    logger.debug(
+                        "Error verifying candidate child node; failing open",
+                        exc_info=True,
+                        extra={"module_name": "mcts_search_engine", "error_type": type(e).__name__},
                     )
                     # On error, include the child (fail open)
                     valid_child_thoughts.append(child)
@@ -545,9 +573,10 @@ class MCTSSearchEngine(BaseBrainModule):
             return [MCTSNode.from_tot_node(child) for child in valid_child_thoughts]
 
         except Exception as e:
-            print(
-                f"[MCTSSearchEngine] Error generating child thoughts: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Error generating child thoughts",
+                exc_info=True,
+                extra={"module_name": "mcts_search_engine", "error_type": type(e).__name__},
             )
             return []
 
@@ -698,9 +727,10 @@ Final Answer:
 
             return response_result.get("text", "").strip()
         except Exception as e:
-            print(
-                f"[MCTSSearchEngine] Error synthesizing final answer: {e}",
-                file=sys.stderr,
+            logger.debug(
+                "Error synthesizing final answer; using fallback",
+                exc_info=True,
+                extra={"module_name": "mcts_search_engine", "error_type": type(e).__name__},
             )
             # Fallback: use last node's thought
             return path[-1].tot_node.thought if path else ""

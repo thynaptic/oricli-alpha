@@ -4,14 +4,13 @@ Converted from Swift MultiAgentOrchestrator.swift
 """
 
 from typing import Any, Dict, List, Optional, Set
-import sys
+import logging
 import time
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 # Lazy imports to avoid timeout during module discovery
 AgentType = None
@@ -34,6 +33,7 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
     """Main orchestrator for multi-agent pipeline execution"""
 
     def __init__(self):
+        super().__init__()
         self.search_agent = None
         self.ranking_agent = None
         self.synthesis_agent = None
@@ -80,7 +80,11 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
             self._modules_loaded = True
         except Exception as e:
             # Modules not available - will use fallback methods
-            pass
+            logger.debug(
+                "Failed to load one or more agent modules",
+                exc_info=True,
+                extra={"module_name": "multi_agent_orchestrator", "error_type": type(e).__name__},
+            )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
@@ -93,7 +97,11 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
         elif operation == "execute_pipeline":
             return self._execute_pipeline(params)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for multi_agent_orchestrator",
+            )
 
     def _orchestrate_agents(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Orchestrate agents (alias for execute_pipeline)"""
@@ -152,13 +160,24 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
                     "documents": search_results,
                     "query": query,
                 })
-                ranked_documents = result.get("ranked_documents", search_results)
+                # Accept both snake_case and camelCase keys from shims.
+                ranked_documents = (
+                    result.get("ranked_documents")
+                    or result.get("rankedDocuments")
+                    or result.get("ranked_docs")
+                    or search_results
+                )
                 all_results.append({
                     "agent_type": ranking_value,
                     "success": True,
                     "output": {"ranked_documents": ranked_documents},
                 })
-            except:
+            except Exception as e:
+                logger.debug(
+                    "Ranking agent failed; continuing with unranked documents",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_orchestrator", "error_type": type(e).__name__},
+                )
                 ranked_documents = search_results
 
         # Step 3: Synthesis (depends on ranking)
@@ -170,20 +189,30 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
                     "documents": ranked_documents,
                     "query": query,
                 })
-                synthesis_text = result.get("synthesis", "")
+                synthesis_text = (
+                    result.get("synthesis")
+                    or result.get("answer")
+                    or result.get("text")
+                    or ""
+                )
                 all_results.append({
                     "agent_type": synthesis_value,
                     "success": True,
                     "output": {"synthesis": synthesis_text},
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Synthesis agent failed; continuing with empty synthesis",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_orchestrator", "error_type": type(e).__name__},
+                )
 
         # Step 4: Answer (depends on synthesis)
         final_answer = ""
         answer_value = AgentType.ANSWER.value if AgentType else "answer"
         if answer_value in agent_types and self.answer_agent:
             try:
+                # Prefer standardized operation; accept older alias at module level.
                 result = self.answer_agent.execute("answer", {
                     "query": query,
                     "context": synthesis_text,
@@ -195,8 +224,12 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
                     "success": True,
                     "output": {"answer": final_answer},
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Answer agent failed; continuing with empty final answer",
+                    exc_info=True,
+                    extra={"module_name": "multi_agent_orchestrator", "error_type": type(e).__name__},
+                )
 
         execution_time = time.time() - start_time
         success = all(r.get("success", False) for r in all_results if r.get("agent_type") in agent_types)

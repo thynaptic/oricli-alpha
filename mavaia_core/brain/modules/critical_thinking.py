@@ -4,16 +4,19 @@ Evaluate assumptions, identify biases, and assess evidence quality
 """
 
 from typing import List, Dict, Any
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent))
+import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class CriticalThinkingModule(BaseBrainModule):
     """Critical thinking reasoning module"""
+
+    def __init__(self) -> None:
+        super().__init__()
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -32,8 +35,28 @@ class CriticalThinkingModule(BaseBrainModule):
         context = params.get("context", "")
         conversation_history = params.get("conversationHistory", [])
 
-        if not query:
-            raise ValueError("Missing required parameter: query")
+        if not isinstance(query, str) or not query.strip():
+            raise InvalidParameterError(
+                parameter="query",
+                value=str(query),
+                reason="Missing required parameter: query (must be a non-empty string)",
+            )
+        if context is None:
+            context = ""
+        if not isinstance(context, str):
+            raise InvalidParameterError(
+                parameter="context",
+                value=str(type(context).__name__),
+                reason="context must be a string",
+            )
+        if conversation_history is None:
+            conversation_history = []
+        if not isinstance(conversation_history, list):
+            raise InvalidParameterError(
+                parameter="conversationHistory",
+                value=str(type(conversation_history).__name__),
+                reason="conversationHistory must be a list",
+            )
 
         reasoning = self._critical_thinking_analysis(
             query, context, conversation_history
