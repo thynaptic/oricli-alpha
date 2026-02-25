@@ -79,6 +79,7 @@ class CreativeWritingModule(BaseBrainModule):
                 "create_setting",
                 "build_plot",
                 "write_poem",
+                "tell_joke",
             ],
             dependencies=[],
             model_required=False,
@@ -195,6 +196,13 @@ class CreativeWritingModule(BaseBrainModule):
             if not isinstance(form, str):
                 raise InvalidParameterError("form", str(type(form).__name__), "form must be a string")
             return self.write_poem(theme, form)
+        elif operation == "tell_joke":
+            topic = params.get("topic", "") or params.get("theme", "")
+            if topic is None:
+                topic = ""
+            if not isinstance(topic, str):
+                raise InvalidParameterError("topic", str(type(topic).__name__), "topic must be a string")
+            return self.tell_joke(topic)
         else:
             raise InvalidParameterError("operation", str(operation), "Unknown operation for creative_writing")
 
@@ -382,6 +390,27 @@ class CreativeWritingModule(BaseBrainModule):
             "form": form,
             "lines": len(poem.split("\n")),
         }
+
+    def tell_joke(self, topic: str = "") -> Dict[str, Any]:
+        """Tell a short joke without external dependencies."""
+        topic_lower = (topic or "").lower()
+        if any(k in topic_lower for k in ("db", "database", "sql", "postgres", "mysql", "sqlite")):
+            jokes = [
+                "Why did the database admin leave the party early? Too many uncommitted changes.",
+                "I asked my database for a joke, but it said: 'Error: humor constraint violated.'",
+                "My database and I have trust issues — it keeps rolling back our relationship.",
+                "I tried to make a SQL joke, but it didn't quite JOIN together.",
+            ]
+        else:
+            jokes = [
+                "I told a joke about time travel — but you didn't like it yet.",
+                "I tried to write a joke about perfection… but it was too flawless to deliver.",
+                "I made a joke about a pencil — it was pointless.",
+                "I have a joke about construction, but I'm still working on it.",
+            ]
+
+        joke = random.choice(jokes)
+        return {"joke": joke, "topic": topic}
 
     def _generate_story_part(
         self, stage: str, theme: str, structure: str
@@ -660,12 +689,18 @@ class CreativeWritingModule(BaseBrainModule):
         ]
 
     def _write_haiku(self, theme: str) -> str:
-        """Write a haiku (5-7-5 syllables)"""
-        # Simplified haiku - actual syllable counting would be more complex
+        """Write a haiku (5-7-5 syllables, best-effort)."""
+        import re
+
+        t = re.sub(r"[^A-Za-z0-9\s\-]", "", theme or "").strip()
+        if not t:
+            t = "quiet moments"
+
+        # Best-effort haiku; we prioritize relevance and clarity over perfect syllable counting.
         lines = [
-            f"{theme} in the air",
-            f"Moments pass like gentle breeze",
-            f"Nature's quiet song",
+            f"{t}—steady hands",
+            "Small checks avert big harms",
+            "Rust sleeps, safe and sound",
         ]
         return "\n".join(lines)
 

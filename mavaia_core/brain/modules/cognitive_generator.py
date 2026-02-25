@@ -46,6 +46,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         self.world_knowledge = None
         self.structured_behaviors = None
         self.pattern_library = None
+        self.web_search = None
         # Human-like enhancement modules
         self.natural_language_flow = None
         self.conversational_engagement = None
@@ -99,12 +100,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         if not self.thought_to_text:
             try:
                 from mavaia_core.brain.registry import ModuleRegistry
-
                 self.thought_to_text = ModuleRegistry.get_module("thought_to_text")
-                if not self.thought_to_text:
-                    # Try to discover modules if not found
-                    ModuleRegistry.discover_modules()
-                    self.thought_to_text = ModuleRegistry.get_module("thought_to_text")
             except Exception as e:
                 logger.warning(
                     "Failed to load thought_to_text module",
@@ -233,6 +229,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
             
             try:
                 self.pattern_library = ModuleRegistry.get_module("pattern_library")
+            except Exception:
+                pass
+            
+            try:
+                self.web_search = ModuleRegistry.get_module("web_search")
             except Exception:
                 pass
             
@@ -432,6 +433,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 voice_context=params.get("voice_context", {}),
                 mcts_result=params.get("mcts_result"),
                 reasoning_tree=params.get("reasoning_tree"),
+                state_id=params.get("state_id"),
             )
 
         elif operation == "get_trace_graphs":
@@ -603,7 +605,10 @@ class CognitiveGeneratorModule(BaseBrainModule):
         """
         input_lower = input_text.lower().strip()
         context_lower = context.lower() if context else ""
-        combined = f"{input_lower} {context_lower}".lower()
+        # IMPORTANT: intent detection must be driven by the user's prompt, not by accumulated
+        # memory/web context (which can contain unrelated keywords like "poem"/"python" and
+        # misroute the query).
+        combined = input_lower
         
         intent_info = {
             "intent": "general",
@@ -618,20 +623,65 @@ class CognitiveGeneratorModule(BaseBrainModule):
         }
         
         # Code-related queries
-        code_keywords = ["code", "python", "function", "class", "import", "def ", "programming", 
-                        "script", "algorithm", "syntax", "variable", "debug", "error", "exception",
-                        "compile", "execute", "run code", "write code", "generate code"]
+        code_keywords = [
+            "code", "python", "function", "class", "import", "def ", "programming",
+            "script", "algorithm", "syntax", "variable", "debug", "error", "exception",
+            "compile", "execute", "run code", "write code", "generate code",
+        ]
         if any(keyword in combined for keyword in code_keywords):
             intent_info["intent"] = "code"
             intent_info["query_type"] = "code"
             intent_info["requires_code"] = True
-            # Dynamically discover code-related modules
-            discovered = self._discover_modules_for_intent("code", combined)
-            intent_info["recommended_modules"] = discovered if discovered else [
-                "reasoning_code_generator", "python_code_explanation", "reasoning", "chain_of_thought"
-            ]
+            # Keep code Q&A lightweight and deterministic by default (avoid heavy/unstable ML stacks).
+            intent_info["recommended_modules"] = ["reasoning"]
             intent_info["confidence"] = 0.8
         
+        # "What is" / "What are" definition questions - treat as search-backed definition.
+        # This must run BEFORE creative keyword checks so prompts like "What is a haiku?"
+        # return a definition instead of generating a haiku.
+        if (combined.startswith("what is") or combined.startswith("what are") or combined.startswith("define ")) and intent_info["intent"] == "general":
+            # If it's actually an arithmetic prompt like "What is 15 * 23?", route to math instead.
+            if re.search(r"\d", combined) and re.search(r"[\+\-\*\/×÷\^=]", combined):
+                pass
+            else:
+                intent_info["intent"] = "reasoning"  # Definition questions need synthesis
+                intent_info["query_type"] = "definition"
+                intent_info["requires_reasoning"] = True
+                intent_info["requires_search"] = True  # May need to look up information
+                # Keep definition questions lightweight and predictable to avoid timeouts.
+                intent_info["recommended_modules"] = ["web_search", "reasoning"]
+                intent_info["confidence"] = 0.85
+
+        # Creative writing queries (poems, stories, lyrics, jokes)
+        creative_keywords = [
+            "poem", "haiku", "limerick", "sonnet",
+            "short story", "story", "lyrics", "rap", "verse",
+            "joke", "pun",
+        ]
+        if intent_info["intent"] == "general" and any(kw in combined for kw in creative_keywords):
+            intent_info["intent"] = "creative"
+            intent_info["query_type"] = "creative"
+            intent_info["recommended_modules"] = ["creative_writing", "personality_response"]
+            intent_info["confidence"] = 0.8
+
+        # "Tell me something interesting" / fun-fact prompts should yield an actual fact, not a generic helper prompt.
+        if intent_info["intent"] == "general" and any(
+            kw in combined
+            for kw in [
+                "tell me something interesting",
+                "something interesting",
+                "interesting fact",
+                "interesting facts",
+                "fun fact",
+                "fun facts",
+            ]
+        ):
+            intent_info["intent"] = "reasoning"
+            intent_info["query_type"] = "interesting_fact"
+            intent_info["requires_reasoning"] = True
+            intent_info["recommended_modules"] = ["reasoning"]
+            intent_info["confidence"] = 0.85
+
         # Reasoning queries (analytical, causal, etc.) - CHECK FIRST to prioritize "why" questions
         # This must come before search to catch "why do people find..." as reasoning, not search
         reasoning_keywords = ["why", "how", "analyze", "explain", "reason", "because", "cause",
@@ -641,29 +691,45 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 intent_info["intent"] = "reasoning"
                 intent_info["query_type"] = "analytical"
                 intent_info["requires_reasoning"] = True
-                # Dynamically discover reasoning modules
-                discovered = self._discover_modules_for_intent("reasoning", combined)
-                intent_info["recommended_modules"] = discovered if discovered else [
-                    "reasoning", "chain_of_thought", "advanced_reasoning_solvers"
-                ]
+                # Keep reasoning lightweight/predictable; dynamic discovery often pulls in noisy orchestrators.
+                intent_info["recommended_modules"] = ["reasoning"]
                 intent_info["confidence"] = 0.85  # Higher confidence for "why" questions
         
         # Math/logic queries
-        math_keywords = ["calculate", "solve", "equation", "formula", "math", "number", "sum", 
-                        "multiply", "divide", "add", "subtract", "equals", "=", "logic", 
-                        "puzzle", "grid", "spatial", "reasoning problem"]
-        if any(keyword in combined for keyword in math_keywords):
-            if intent_info["intent"] == "general":
-                intent_info["intent"] = "math_logic"
-                intent_info["query_type"] = "math_logic"
-                intent_info["requires_math"] = True
-                intent_info["requires_reasoning"] = True
-                # Dynamically discover math/logic modules
-                discovered = self._discover_modules_for_intent("math_logic", combined)
-                intent_info["recommended_modules"] = discovered if discovered else [
-                    "advanced_reasoning_solvers", "symbolic_solver", "chain_of_thought", "reasoning"
-                ]
-                intent_info["confidence"] = 0.75
+        # Basic arithmetic should be handled deterministically by internal symbolic evaluation.
+        # Require digit-operator-digit (avoids misclassifying "2-day" as subtraction).
+        looks_like_arithmetic = bool(
+            re.search(r"\d\s*[\+\-\*\/×÷\^=]\s*\d", combined)
+            and not any(kw in combined for kw in ["puzzle", "grid", "zebra", "arc"])
+        )
+        if looks_like_arithmetic and intent_info["intent"] == "general":
+            intent_info["intent"] = "math_logic"
+            intent_info["query_type"] = "arithmetic"
+            intent_info["requires_math"] = True
+            intent_info["requires_reasoning"] = True
+            # Prioritize the internal reasoning module (no external dependencies).
+            intent_info["recommended_modules"] = ["reasoning"]
+            intent_info["confidence"] = 0.9
+
+        math_keywords = [
+            "calculate", "solve", "equation", "formula", "math", "number", "sum",
+            "multiply", "divide", "add", "subtract", "equals", "logic",
+            "puzzle", "grid", "spatial",
+        ]
+        math_phrases = ["reasoning problem"]
+        math_tokens = set(re.findall(r"[a-z0-9]+", combined))
+        if intent_info["intent"] == "general" and (
+            any(k in math_tokens for k in math_keywords)
+            or any(p in combined for p in math_phrases)
+            or "=" in combined
+        ):
+            intent_info["intent"] = "math_logic"
+            intent_info["query_type"] = "math_logic"
+            intent_info["requires_math"] = True
+            intent_info["requires_reasoning"] = True
+            # Keep math routing lightweight/deterministic; avoid puzzle solvers and ML stacks.
+            intent_info["recommended_modules"] = ["reasoning"]
+            intent_info["confidence"] = 0.8
         
         # Search/information queries - CHECK AFTER reasoning to avoid false positives
         # "What is" questions should be treated as definition/reasoning, not just search
@@ -678,68 +744,38 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 intent_info["query_type"] = "information"
                 intent_info["requires_search"] = True
                 intent_info["requires_reasoning"] = True
-                # Prioritize web_search first, then reasoning modules
-                discovered = self._discover_modules_for_intent("search", combined)
-                if "web_search" not in discovered:
-                    discovered.insert(0, "web_search")
-                elif discovered.index("web_search") > 0:
-                    discovered.remove("web_search")
-                    discovered.insert(0, "web_search")
-                # Add reasoning modules
-                reasoning_modules = self._discover_modules_for_intent("reasoning", combined)
-                for mod in reasoning_modules:
-                    if mod not in discovered:
-                        discovered.append(mod)
-                intent_info["recommended_modules"] = discovered
+                # Use a tight, predictable chain to avoid unrelated modules and long hangs.
+                intent_info["recommended_modules"] = ["web_search", "reasoning"]
                 intent_info["confidence"] = 0.85
             # Don't override if already classified as reasoning
             elif intent_info["intent"] == "general":
                 intent_info["intent"] = "search"
                 intent_info["query_type"] = "information"
                 intent_info["requires_search"] = True
-                # Dynamically discover search modules
-                discovered = self._discover_modules_for_intent("search", combined)
-                intent_info["recommended_modules"] = discovered if discovered else [
-                    "web_search", "world_knowledge", "reasoning"
-                ]
+                # Use a tight, predictable chain to avoid unrelated modules and long hangs.
+                intent_info["recommended_modules"] = ["web_search", "reasoning"]
                 intent_info["confidence"] = 0.7
         
-        # "What is" / "What are" definition questions - treat as reasoning with search support
+        # "What is" / "What are" definition questions - treat as search-backed definition
         if (combined.startswith("what is") or combined.startswith("what are")) and intent_info["intent"] == "general":
-            intent_info["intent"] = "reasoning"  # Definition questions need reasoning
+            intent_info["intent"] = "reasoning"  # Definition questions need synthesis
             intent_info["query_type"] = "definition"
             intent_info["requires_reasoning"] = True
             intent_info["requires_search"] = True  # May need to look up information
-            # Prioritize chain_of_thought for definition questions
-            discovered = self._discover_modules_for_intent("reasoning", combined)
-            # Ensure chain_of_thought is first
-            if "chain_of_thought" not in discovered:
-                discovered.insert(0, "chain_of_thought")
-            elif discovered.index("chain_of_thought") > 0:
-                discovered.remove("chain_of_thought")
-                discovered.insert(0, "chain_of_thought")
-            intent_info["recommended_modules"] = discovered if discovered else [
-                "chain_of_thought", "reasoning", "world_knowledge", "web_search"
-            ]
+            # Keep definition questions lightweight and predictable to avoid timeouts.
+            intent_info["recommended_modules"] = ["web_search", "reasoning"]
             intent_info["confidence"] = 0.85
         
         # Question detection
         if "?" in input_text:
             intent_info["requires_reasoning"] = True
             if not intent_info["recommended_modules"]:
-                # Dynamically discover reasoning modules for questions
-                discovered = self._discover_modules_for_intent("reasoning", combined)
-                intent_info["recommended_modules"] = discovered if discovered else [
-                    "reasoning", "chain_of_thought"
-                ]
+                intent_info["recommended_modules"] = ["reasoning"]
         
-        # General conversation fallback - dynamically discover conversational modules
+        # General conversation fallback (keep lightweight/predictable)
         if intent_info["intent"] == "general":
-            discovered = self._discover_modules_for_intent("general", combined)
-            intent_info["recommended_modules"] = discovered if discovered else [
-                "conversational_orchestrator", "personality_response", "reasoning"
-            ]
-            intent_info["confidence"] = 0.6
+            intent_info["recommended_modules"] = ["reasoning"]
+            intent_info["confidence"] = 0.65
         
         return intent_info
     
@@ -760,17 +796,33 @@ class CognitiveGeneratorModule(BaseBrainModule):
         module_operations = []
         recommended = intent_info.get("recommended_modules", [])
         
+        query_type = intent_info.get("query_type")
+        query_lower = (intent_info.get("input", "") or "").lower().strip()
+        if query_type == "definition" or query_lower.startswith(("what is", "what are")):
+            # Definition questions should prioritize web_search early, but still allow synthesis modules.
+            if isinstance(recommended, list) and "web_search" not in recommended:
+                recommended = ["web_search", *recommended]
+
+        
         # Intent-specific operation preferences (fallback if metadata doesn't have good matches)
         intent_operation_preferences = {
             "code": ["generate_code", "generate_code_reasoning", "explain_code", "write_code", "code"],
             "math_logic": ["solve", "calculate", "reason", "analyze"],
             "search": ["search_web", "search", "find", "retrieve", "lookup"],
             "reasoning": ["reason", "analyze", "explain", "think"],
+            "creative": ["write_poem", "generate_story", "create_narrative", "add_creative_elements"],
             "general": ["execute", "process", "handle", "generate_response", "generate"],
         }
         
         intent = intent_info.get("intent", "general")
         preferred_ops = intent_operation_preferences.get(intent, ["execute"])
+        if intent == "creative":
+            if any(k in query_lower for k in ("joke", "pun")):
+                preferred_ops = ["tell_joke", "write_poem", "generate_story", "create_narrative", "add_creative_elements"]
+            elif "story" in query_lower:
+                preferred_ops = ["generate_story", "create_narrative", "write_poem", "add_creative_elements"]
+            elif any(k in query_lower for k in ("poem", "haiku", "limerick", "sonnet")):
+                preferred_ops = ["write_poem", "add_creative_elements", "generate_story", "create_narrative"]
         
         # Add recommended modules with dynamically discovered operations
         for module_name in recommended:
@@ -778,7 +830,20 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 metadata = ModuleRegistry.get_metadata(module_name)
                 if not metadata or not metadata.enabled:
                     continue
-                
+
+                # Avoid recursive orchestration (conversational_orchestrator calls cognitive_generator again).
+                if module_name == "conversational_orchestrator":
+                    continue
+
+                # Skip modules that require heavy/unstable ML stacks by default (can hang/crash on VPS).
+                deps = getattr(metadata, "dependencies", None) or []
+                heavy_deps = {
+                    "sentence-transformers", "transformers", "torch", "huggingface-hub", "huggingface_hub",
+                    "jax", "jaxlib", "flax", "optax", "datasets",
+                }
+                if any(d in heavy_deps for d in deps):
+                    continue
+
                 # Find best matching operation from module's available operations
                 operation = None
                 
@@ -845,32 +910,19 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 module_operations.append((module_name, "execute"))
                 continue
         
-        # For "why" questions, prioritize chain_of_thought
+        # For "why" questions, keep routing lightweight (chain_of_thought can be noisy/slow on VPS).
         query_lower = (intent_info.get("input", "") or "").lower()
-        if "why" in query_lower:
-            # Check if chain_of_thought is already in the list
-            if not any(m[0] == "chain_of_thought" for m in module_operations):
-                try:
-                    cot_metadata = ModuleRegistry.get_metadata("chain_of_thought")
-                    if cot_metadata and cot_metadata.enabled:
-                        # Find "execute_cot" or similar operation
-                        cot_op = "execute_cot" if "execute_cot" in cot_metadata.operations else (
-                            cot_metadata.operations[0] if cot_metadata.operations else "execute"
-                        )
-                        # Insert at the beginning for priority
-                        module_operations.insert(0, ("chain_of_thought", cot_op))
-                except Exception:
-                    # Fallback
-                    module_operations.insert(0, ("chain_of_thought", "execute_cot"))
         
         # For "What is" questions and search queries, add web search if not already present
         # Get query from intent_info input or use query_lower
         query_text = intent_info.get("input", "") or ""
         query_lower_for_web = query_text.lower() if query_text else query_lower
         
-        if (query_lower_for_web.startswith("what is") or query_lower_for_web.startswith("what are") or
+        if (
+            query_lower_for_web.startswith("what is") or query_lower_for_web.startswith("what are") or
             query_lower_for_web.startswith("who is") or query_lower_for_web.startswith("who are") or
-            intent_info.get("intent") == "search" or intent_info.get("requires_search", False)):
+            intent_info.get("intent") == "search" or intent_info.get("requires_search", False)
+        ):
             # Add web_search if not already in chain
             if not any(m[0] == "web_search" for m in module_operations):
                 try:
@@ -880,21 +932,13 @@ class CognitiveGeneratorModule(BaseBrainModule):
                         search_op = "search_web" if "search_web" in web_search_metadata.operations else (
                             web_search_metadata.operations[0] if web_search_metadata.operations else "execute"
                         )
-                        # For "What is", "Who is" questions, insert web_search BEFORE chain_of_thought/reasoning
-                        # so reasoning modules can use the results
+                        # For definition/info questions, prioritize web_search first so we can short-circuit
+                        # before running heavy reasoning/MCTS modules.
                         if (query_lower_for_web.startswith("what is") or query_lower_for_web.startswith("what are") or
                             query_lower_for_web.startswith("who is") or query_lower_for_web.startswith("who are")):
-                            # Find chain_of_thought or reasoning position
-                            reasoning_pos = next((i for i, m in enumerate(module_operations) 
-                                                 if m[0] in ["chain_of_thought", "reasoning"]), -1)
-                            if reasoning_pos >= 0:
-                                # Insert before reasoning modules
-                                module_operations.insert(reasoning_pos, ("web_search", search_op))
-                            else:
-                                # Insert at beginning
-                                module_operations.insert(0, ("web_search", search_op))
+                            module_operations.insert(0, ("web_search", search_op))
                         else:
-                            # For other search queries, insert after reasoning modules
+                            # For other search queries, insert after core reasoning modules
                             insert_pos = len([m for m in module_operations if m[0] in ["chain_of_thought", "reasoning"]])
                             module_operations.insert(insert_pos, ("web_search", search_op))
                 except Exception:
@@ -932,6 +976,9 @@ class CognitiveGeneratorModule(BaseBrainModule):
         accumulated_context = params.get("context", "")
         results = {}
         final_result = None
+        response_text = ""  # Track best-effort text across modules
+        input_lower = str(params.get("input", "") or "").strip().lower()
+        target_intent = str(params.get("intent", "") or "").strip().lower()
         
         for module_name, operation in modules:
             try:
@@ -939,16 +986,37 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 if not module:
                     continue
                 
-                # Prepare module parameters
+                # Prepare module parameters (ensure accumulated_context is not overwritten by **params)
                 module_params = {
+                    **params,
                     "input": params.get("input", ""),
                     "text": params.get("input", ""),
                     "query": params.get("input", ""),
                     "context": accumulated_context,
                     "voice_context": params.get("voice_context", {}),  # Use voice_context instead of persona
-                    **params,
                 }
                 
+                if module_name == "creative_writing":
+                    try:
+                        import re
+                        raw_input = str(params.get("input", "") or "")
+                        m = re.search(r"\babout\s+(.+)$", raw_input, flags=re.IGNORECASE)
+                        theme = (m.group(1).strip() if m else "")
+                        if operation == "write_poem":
+                            form = "free_verse"
+                            if "haiku" in input_lower:
+                                form = "haiku"
+                            elif "limerick" in input_lower:
+                                form = "limerick"
+                            elif "sonnet" in input_lower:
+                                form = "sonnet"
+                            module_params["theme"] = theme or raw_input
+                            module_params["form"] = form
+                        elif operation == "generate_story":
+                            module_params["theme"] = theme or raw_input
+                    except Exception:
+                        pass
+
                 # Execute module
                 result = module.execute(operation, module_params)
                 results[module_name] = result
@@ -1010,19 +1078,33 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 # Extract response text - handle nested structures (chain_of_thought format)
                 # Special handling for web_search which returns results array
                 if module_name == "web_search" and "results" in result:
-                    # Combine snippets from search results
+                    # Add structured, capped web results to context for downstream synthesis.
                     search_results = result.get("results", [])
                     if search_results:
-                        snippets = [res.get("snippet", "") for res in search_results[:5] if res.get("snippet")]
-                        response_text = " ".join(snippets)
-                        # Also store in result for consistency
-                        if "text" not in result:
-                            result["text"] = response_text
-                        if "response" not in result:
-                            result["response"] = response_text
-                        # Add web search results to accumulated context for subsequent modules
-                        # Format it clearly so chain_of_thought can recognize it
-                        accumulated_context += f"\n[Web search results]: {response_text[:500]}"
+                        formatted_lines = []
+                        for res in search_results[:3]:
+                            title = str(res.get("title", "") or "").strip()
+                            url = str(res.get("url", "") or "").strip()
+                            snippet = str(res.get("snippet", "") or "").strip()
+                            snippet = re.sub(r"\s+", " ", snippet)
+                            if len(snippet) > 220:
+                                snippet = snippet[:220].rstrip() + "…"
+                            line = "- "
+                            if title:
+                                line += f"{title}: "
+                            line += snippet or "(no snippet)"
+                            if url:
+                                line += f" ({url})"
+                            formatted_lines.append(line)
+
+                        web_context = "[Web search results]\n" + "\n".join(formatted_lines)
+                        response_text = web_context
+
+                        # Store in result for consistency
+                        result.setdefault("text", response_text)
+                        result.setdefault("response", response_text)
+
+                        accumulated_context += "\n" + web_context
                     else:
                         response_text = ""
                 else:
@@ -1064,6 +1146,16 @@ class CognitiveGeneratorModule(BaseBrainModule):
                                     nested.get("reasoning", "")
                                 )
                 
+                # Treat echoes as invalid output so we keep searching for a real answer.
+                if response_text and module_name != "web_search" and input_lower:
+                    candidate_lower = str(response_text).strip().lower()
+                    if (
+                        candidate_lower == input_lower
+                        or (len(input_lower) > 10 and input_lower in candidate_lower)
+                        or (len(candidate_lower) > 10 and candidate_lower in input_lower)
+                    ):
+                        response_text = ""
+
                 # Validate response - reject "1" or single digits
                 if response_text and self._validate_response(response_text):
                     # Accumulate context from successful results
@@ -1076,8 +1168,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
                         # Check if this is a reasoning module with final_answer (highest priority)
                         is_reasoning_result = module_name in [
                             "chain_of_thought", "reasoning", "custom_reasoning",
-                            "cognitive_reasoning_orchestrator", "mcts_service",
-                            "tree_of_thought", "analogical_reasoning"
+                            "cognitive_reasoning_orchestrator",
+                            "tree_of_thought"
                         ]
                         # Check if this is web content (prefer over meta-reasoning)
                         is_web_content = module_name in ["web_search", "web_fetch", "web_scraper"]
@@ -1088,7 +1180,9 @@ class CognitiveGeneratorModule(BaseBrainModule):
                             "causal inference:", "causal analysis:", "identify variables:",
                             "establish correlation:", "infer causality:", "validate causal chain:",
                             "temporal precedence", "necessary and sufficient conditions",
-                            "step 1:", "step 2:", "step 3:", "step 4:"
+                            "step 1:", "step 2:", "step 3:", "step 4:",
+                            "identify source domain", "map relationships", "transfer knowledge", "validate analogy",
+                            "analogical analysis",
                         ]) or response_text.strip().startswith("Causal Inference:")
                         
                         # Priority order: reasoning results with final_answer > web content > other results
@@ -1118,8 +1212,13 @@ class CognitiveGeneratorModule(BaseBrainModule):
                                 result["response"] = response_text
                             if not final_result:  # Only set if we don't have a better one
                                 final_result = result
-                            # Don't break - continue to get more context, but mark this as primary
-                            if not is_meta_reasoning and not is_reasoning_result:
+                            # Don't break early for web content or reasoning-heavy intents.
+                            if (
+                                not is_meta_reasoning
+                                and not is_reasoning_result
+                                and not is_web_content
+                                and target_intent in ("general", "creative")
+                            ):
                                 break
                 
             except Exception as e:
@@ -1127,49 +1226,62 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 results[module_name] = {"error": str(e)}
                 continue
         
-        # Return best result or combined results
-        # PRIORITIZE web_search results over other results
-        if final_result:
-            # Check if we have web_search results that should be prioritized
-            web_search_result = results.get("web_search")
-            if web_search_result and isinstance(web_search_result, dict):
-                web_text = web_search_result.get("text", "") or web_search_result.get("response", "")
-                if web_text and self._validate_response(web_text):
-                    # Check if current final_result is meta-reasoning
-                    current_text = final_result.get("text", "") or final_result.get("response", "")
-                    is_meta_reasoning = any(pattern in current_text.lower() for pattern in [
-                        "analyzing the query", "breaking down the key components",
-                        "considering different perspectives", "evaluating potential solutions",
-                        "synthesizing the analysis"
-                    ])
-                    # Use web_search result if current is meta-reasoning
-                    if is_meta_reasoning:
-                        return web_search_result
-            return final_result
-        elif results:
-            # Prioritize web_search results
+        # Return a consistent structure so downstream synthesis/regeneration can use module results.
+        chosen = final_result
+        if not chosen and results:
+            # Prefer web_search, otherwise first valid non-meta result.
+            ordered_names = []
             if "web_search" in results:
-                web_result = results["web_search"]
-                if isinstance(web_result, dict):
-                    web_text = web_result.get("text", "") or web_result.get("response", "")
-                    if web_text and self._validate_response(web_text):
-                        return web_result
-            
-            # Return first successful result (excluding meta-reasoning)
-            for module_name, result in results.items():
+                ordered_names.append("web_search")
+            ordered_names.extend([k for k in results.keys() if k != "web_search"])
+            for module_name in ordered_names:
+                result = results.get(module_name)
                 if isinstance(result, dict):
                     response_text = result.get("text", "") or result.get("response", "")
                     if response_text and self._validate_response(response_text):
-                        # Skip meta-reasoning
-                        is_meta_reasoning = any(pattern in response_text.lower() for pattern in [
+                        is_meta = any(pattern in response_text.lower() for pattern in [
                             "analyzing the query", "breaking down the key components",
-                            "considering different perspectives", "evaluating potential solutions"
+                            "considering different perspectives", "evaluating potential solutions",
+                            "synthesizing the analysis",
                         ])
-                        if not is_meta_reasoning:
-                            return result
-        
+                        if not is_meta:
+                            chosen = result
+                            break
+
+        # If the chosen answer is an echo or meta-reasoning, prefer a valid web_search snippet.
+        web_search_result = results.get("web_search")
+        if chosen and isinstance(chosen, dict) and web_search_result and isinstance(web_search_result, dict):
+            current_text = chosen.get("text", "") or chosen.get("response", "")
+            current_lower = str(current_text or "").strip().lower()
+            is_meta_reasoning = any(pattern in current_lower for pattern in [
+                "analyzing the query", "breaking down the key components",
+                "considering different perspectives", "evaluating potential solutions",
+                "synthesizing the analysis",
+            ])
+            is_echo = bool(
+                input_lower
+                and (
+                    current_lower == input_lower
+                    or (len(input_lower) > 10 and input_lower in current_lower)
+                    or (len(current_lower) > 10 and current_lower in input_lower)
+                )
+            )
+            web_text = web_search_result.get("text", "") or web_search_result.get("response", "")
+            if (is_meta_reasoning or is_echo) and web_text and self._validate_response(web_text):
+                chosen = web_search_result
+
+        if chosen or results:
+            payload = {"success": True, "results": results, "final_result": chosen}
+            if isinstance(chosen, dict):
+                response_text = chosen.get("text", "") or chosen.get("response", "")
+                if response_text:
+                    payload["text"] = response_text
+                    payload["response"] = response_text
+            return payload
+
         return {"success": False, "error": "All modules failed", "results": results}
     
+
     def _validate_response(self, response: str) -> bool:
         """
         Validate that a response is acceptable (not "1" or invalid).
@@ -1203,7 +1315,25 @@ class CognitiveGeneratorModule(BaseBrainModule):
             "question:",
             "step by step",
         ]
+
+        # Reject boilerplate "completion" messages that are not actual answers.
+        boilerplate_patterns = [
+            "analogical reasoning complete",
+            "reasoning complete",
+            "complete with insights transferred",
+            "that's an interesting question",
+            "let me think about that",
+            "i understand. let me help you with that",
+            "i understand, let me help you with that",
+            "i understand. let me help",
+            "i can help you with that",
+            "how can i help you",
+        ]
         response_lower = response_stripped.lower()
+
+        if any(pattern in response_lower for pattern in boilerplate_patterns) and len(response_stripped) < 160:
+            return False
+
         if any(pattern in response_lower for pattern in prompt_patterns):
             # Check if it's mostly prompt text (more than 50% of the response)
             # This is a heuristic - if the response contains multiple prompt patterns,
@@ -1263,8 +1393,20 @@ class CognitiveGeneratorModule(BaseBrainModule):
         
         # Check 2: Relevance to query
         if query:
-            query_words = set(word.lower() for word in query.split() if len(word) > 3)
-            content_words = set(word.lower() for word in content.split() if len(word) > 3)
+            import re
+            stopwords = {
+                "what", "why", "how", "does", "do", "did", "is", "are", "was", "were",
+                "the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "with",
+                "who", "when", "where", "which", "that", "this",
+            }
+            query_words = {
+                w for w in re.findall(r"[a-zA-Z0-9]+", query_lower)
+                if len(w) > 2 and w not in stopwords
+            }
+            content_words = {
+                w for w in re.findall(r"[a-zA-Z0-9]+", content_lower)
+                if len(w) > 2 and w not in stopwords
+            }
             relevant_words = query_words.intersection(content_words)
             relevance = len(relevant_words) / len(query_words) if query_words else 0.0
             quality_checks["relevance"] = relevance
@@ -1388,24 +1530,37 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 issues.append("Code intent but no code structure in response")
             confidence_factors.append(1.0 if has_code else 0.3)
         elif intent == "math_logic":
-            # Math responses should have numbers, equations, or logical terms
-            has_math = any(char in output for char in ["=", "+", "-", "*", "/", "(", ")"]) or \
-                      any(word in output_lower for word in ["calculate", "solve", "equals", "result"])
+            # Math responses should have numbers, equations, or logical terms.
+            has_math = (
+                any(char in output for char in ["=", "+", "-", "*", "/", "(", ")"]) or
+                any(ch.isdigit() for ch in output) or
+                any(word in output_lower for word in ["calculate", "solve", "equals", "result"])
+            )
             structural_checks["has_math_structure"] = has_math
-            if not has_math and output_length < 10:
+            if not has_math:
                 issues.append("Math intent but no mathematical structure")
-            confidence_factors.append(1.0 if has_math else 0.4)
+            confidence_factors.append(1.0 if has_math else 0.2)
         elif intent == "search":
-            # Search responses should have information or facts
-            has_info = output_length > 20 or any(word in output_lower for word in ["information", "found", "according", "source"])
+            # Search responses should have information or facts.
+            # Many legitimate factual answers are short (e.g., a date or a name), so accept those.
+            looks_factual = bool(re.search(r"\b(18|19|20)\d{2}\b", output)) or \
+                bool(re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b", output_lower)) or \
+                bool(re.search(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b", output)) or \
+                any(ch.isdigit() for ch in output)
+            has_info = output_length > 20 or looks_factual or any(word in output_lower for word in ["information", "according", "source"])
             structural_checks["has_information"] = has_info
             if not has_info:
                 issues.append("Search intent but response lacks information")
             confidence_factors.append(1.0 if has_info else 0.5)
         elif intent == "reasoning":
-            # Reasoning responses should have explanations or analysis
-            has_reasoning = any(word in output_lower for word in ["because", "therefore", "since", "reason", "explain", "analysis"]) or \
-                           output_length > 15
+            # Reasoning responses should have explanations or analysis.
+            # Allow short factual answers for definition-style prompts (e.g., "What is the capital of Australia?").
+            looks_factual_short = bool(re.search(r"\bis\b", output_lower)) and output_length <= 12
+            has_reasoning = (
+                any(word in output_lower for word in ["because", "therefore", "since", "reason", "explain", "analysis"])
+                or output_length > 15
+                or looks_factual_short
+            )
             structural_checks["has_reasoning_structure"] = has_reasoning
             if not has_reasoning:
                 issues.append("Reasoning intent but no reasoning structure")
@@ -1416,21 +1571,58 @@ class CognitiveGeneratorModule(BaseBrainModule):
             confidence_factors.append(1.0 if output_length > 5 else 0.3)
         
         # Structural Check 2: Query term coverage
-        query_words = set(word.lower() for word in input_text.split() if len(word) > 3)
-        output_words = set(word.lower() for word in output.split() if len(word) > 3)
-        relevant_words = query_words.intersection(output_words)
-        coverage = len(relevant_words) / len(query_words) if query_words else 0.0
-        structural_checks["query_coverage"] = coverage
-        if coverage < 0.2 and len(query_words) > 2:
-            issues.append(f"Low query term coverage: {coverage:.2f}")
-        confidence_factors.append(min(coverage * 2, 1.0))  # Scale coverage to 0-1
+        if intent == "creative":
+            # Creative outputs (poems/jokes/stories) may intentionally paraphrase; don't penalize low overlap.
+            structural_checks["query_coverage"] = 1.0
+            confidence_factors.append(1.0)
+        elif intent == "math_logic":
+            # Math answers are often short (e.g., "15 * 23 = 345") and may not repeat prompt words like "calculate".
+            structural_checks["query_coverage"] = 1.0
+            confidence_factors.append(1.0)
+        else:
+            # Clarification replies (common for ambiguous/nonsense prompts) shouldn’t be penalized
+            # for low term overlap.
+            is_clarification = bool(
+                re.search(
+                    r"\b(rephrase|clarify|more context|add (?:a bit|some) context|what do you mean|can you explain what you mean)\b",
+                    output_lower,
+                )
+            )
+
+            if intent == "general" and is_clarification:
+                structural_checks["query_coverage"] = 1.0
+                confidence_factors.append(1.0)
+            else:
+                query_words = {
+                    w.lower()
+                    for w in re.findall(r"[A-Za-z0-9]+", input_text)
+                    if (len(w) > 3) or (w.isupper() and len(w) >= 2)
+                }
+                output_words = {
+                    w.lower()
+                    for w in re.findall(r"[A-Za-z0-9]+", output)
+                    if (len(w) > 3) or (w.isupper() and len(w) >= 2)
+                }
+                relevant_words = query_words.intersection(output_words)
+                coverage = len(relevant_words) / len(query_words) if query_words else 1.0
+                structural_checks["query_coverage"] = coverage
+                if coverage < 0.2 and len(query_words) > 2:
+                    issues.append(f"Low query term coverage: {coverage:.2f}")
+                confidence_factors.append(min(coverage * 2, 1.0))  # Scale coverage to 0-1
         
         # Structural Check 3: Answer completeness
-        is_question = "?" in input_text
+        is_question = (
+            "?" in input_text
+            or query_lower.startswith((
+                "what ", "why ", "how ", "when ", "where ", "who ",
+                "explain ", "describe ", "summarize ", "tell me ", "give me ",
+            ))
+        )
         if is_question:
             # Questions should have answers, not just echo or meta-reasoning
-            is_echo = output_lower.strip() == query_lower.strip() or \
-                     (len(query_lower) > 10 and query_lower in output_lower)
+            query_norm = re.sub(r"[^a-z0-9]+", " ", query_lower).strip()
+            output_norm = re.sub(r"[^a-z0-9]+", " ", output_lower).strip()
+            is_echo = (output_norm == query_norm) or (len(query_norm) > 10 and query_norm in output_norm)
             
             # Detect meta-reasoning patterns (describing the process instead of answering)
             meta_reasoning_patterns = [
@@ -1444,15 +1636,19 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 "exploring the question",
                 "examining this systematically",
                 "thinking through",
+                "here’s a clear way to think about",
+                "here's a clear way to think about",
+                "if you share any constraints",
             ]
+            # Meta-reasoning templates are low-signal even when long; treat as wrong up to a generous threshold.
             is_meta_reasoning = any(pattern in output_lower for pattern in meta_reasoning_patterns) and \
-                               len(output_lower.split()) < 30  # Short meta-reasoning is definitely wrong
+                               len(output_lower.split()) < 80
             
             structural_checks["is_not_echo"] = not (is_echo or is_meta_reasoning)
             if is_echo:
                 issues.append("Response echoes input instead of answering")
             if is_meta_reasoning:
-                issues.append("Response echoes input instead of answering")
+                issues.append("Response is meta-reasoning instead of an answer")
             confidence_factors.append(0.0 if (is_echo or is_meta_reasoning) else 1.0)
         
         # Structural Check 4: Coherence (basic check)
@@ -1591,22 +1787,22 @@ class CognitiveGeneratorModule(BaseBrainModule):
             alternative_modules = self._discover_modules_for_intent("general", input_text)
             alternative_modules = [m for m in alternative_modules if m not in tried_modules]
         
-        # Always include reasoning/chain_of_thought for "why" and "what is" questions
-        if "why" in input_lower or (input_lower.startswith("what is") or input_lower.startswith("what are")):
-            # For "what is" questions, prioritize web_search first, then chain_of_thought
-            if input_lower.startswith("what is") or input_lower.startswith("what are"):
-                # Add web_search first for definition questions
-                if "web_search" not in tried_modules and "web_search" not in alternative_modules:
-                    try:
-                        from mavaia_core.brain.registry import ModuleRegistry
-                        web_search_metadata = ModuleRegistry.get_metadata("web_search")
-                        if web_search_metadata and web_search_metadata.enabled:
-                            alternative_modules.insert(0, "web_search")
-                    except Exception:
-                        pass
-            
-            # Then add reasoning modules
+        # Always include robust reasoning for "why" questions; for definition, keep it lightweight.
+        if "why" in input_lower:
             for reasoning_module in ["chain_of_thought", "reasoning"]:
+                if reasoning_module not in tried_modules and reasoning_module not in alternative_modules:
+                    alternative_modules.insert(0, reasoning_module)  # Prioritize
+        elif input_lower.startswith("what is") or input_lower.startswith("what are"):
+            # For definition questions, prioritize web_search and avoid chain_of_thought by default.
+            if "web_search" not in tried_modules and "web_search" not in alternative_modules:
+                try:
+                    from mavaia_core.brain.registry import ModuleRegistry
+                    web_search_metadata = ModuleRegistry.get_metadata("web_search")
+                    if web_search_metadata and web_search_metadata.enabled:
+                        alternative_modules.insert(0, "web_search")
+                except Exception:
+                    pass
+            for reasoning_module in ["reasoning", "world_knowledge"]:
                 if reasoning_module not in tried_modules and reasoning_module not in alternative_modules:
                     alternative_modules.insert(0, reasoning_module)  # Prioritize
         
@@ -2219,7 +2415,46 @@ class CognitiveGeneratorModule(BaseBrainModule):
             # CRITICAL: Load all modules upfront to ensure main path works
             self._ensure_modules_loaded()
 
-            # Step 0: Learned Router - Detect intent and determine module routing
+            # Step 0: Long-horizon memory refresh
+            memory_context = ""
+            try:
+                # Mock state for memory refresh
+                from mavaia_core.types.cognitive import CognitiveState
+                temp_state = CognitiveState(state_id=str(uuid.uuid4()))
+                memory_context = self._refresh_context_from_memory(input_text, temp_state)
+                if memory_context:
+                    context = f"{context}\n\n[Memory]: {memory_context}"
+            except Exception:
+                pass
+
+            input_lower = input_text.lower().strip()
+
+
+            # Step 0.5: Web search prefetch (very gated).
+            # IMPORTANT: Do not pre-inject raw web snippets into context for normal Q&A.
+            # It tends to pollute downstream symbolic modules (they echo snippets instead of answering).
+            # Web search should be invoked explicitly by the module chain when needed.
+            explicit_web_search = any(k in input_lower for k in (
+                "search the web",
+                "web search",
+                "look up",
+                "find sources",
+                "sources for",
+            ))
+            if self.web_search and explicit_web_search:
+                try:
+                    search_res = self.web_search.execute("search_web", {"query": input_text, "max_results": 3})
+                    if search_res.get("success") and search_res.get("results"):
+                        results = search_res["results"]
+                        web_search_results = "\n".join([f"- {r.get('title')}: {r.get('snippet')}" for r in results if r.get('snippet')])
+                        if web_search_results:
+                            web_ver = self._verify_web_content(web_search_results, None, input_text)
+                            if web_ver.get("verified", False) and web_ver.get("confidence", 0.0) >= 0.55:
+                                context = f"{context}\n\n[Web search results]:\n{web_search_results}"
+                except Exception as e:
+                    logger.debug(f"Web search failed in generator: {e}")
+
+            # Step 1: Learned Router - Detect intent and determine module routing
             # NOTE: This uses dynamic module discovery - any new modules added to
             # mavaia_core/brain/modules/ are automatically included in routing
             # Router evolves: symbolic → hybrid → ML based on learning history
@@ -2235,12 +2470,17 @@ class CognitiveGeneratorModule(BaseBrainModule):
             execution_results = {}
             trace_graph = None
             
-            # Try intent-based module routing first (if confidence is high enough)
-            if intent_info.get("confidence", 0) >= 0.7 and module_chain:
+            # Try intent-based module routing first.
+            # On a live VPS, prefer the lightweight module chain (usually just `reasoning`) over
+            # text-generation fallbacks; many valid prompts are imperatives without a '?' (e.g.
+            # "Translate...", "Summarize...") and should still route.
+            should_route = bool(module_chain)
+            if should_route and module_chain:
                 try:
                     module_result = self._execute_module_chain(module_chain, {
                         "input": input_text,
                         "context": context,
+                        "intent": intent_info.get("intent", "general"),
                         "voice_context": voice_context,
                         "conversation_history": conversation_history,
                         "temperature": temperature,
@@ -2250,6 +2490,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     # Store execution results for trace graph
                     # module_result from _execute_module_chain contains "results" dict with module_name -> result mappings
                     execution_results = module_result.get("results", {})
+                    if not isinstance(execution_results, dict):
+                        execution_results = {}
                     
                     # Ensure we have the actual module results, not empty dicts
                     # If results dict is empty but module_result has direct fields, extract them
@@ -2263,33 +2505,66 @@ class CognitiveGeneratorModule(BaseBrainModule):
                                 break
                     
                     # Validate and use result if successful
-                    # Improved extraction: check multiple possible answer fields in nested structures
-                    # First try to extract from the module_result itself
-                    response_text = self._extract_answer_from_result(module_result)
-                    
-                    # Also check execution_results for individual module results
+                    # Prefer the module chain's chosen final_result (usually `reasoning`) to avoid
+                    # returning raw web snippets when a clean synthesized answer exists.
+                    response_text = ""
+                    final_result = module_result.get("final_result")
+                    if isinstance(final_result, dict):
+                        extracted_final = self._extract_answer_from_result(final_result)
+                        if extracted_final and self._validate_response(extracted_final):
+                            response_text = extracted_final
+                            module_result["text"] = extracted_final
+                            module_result["response"] = extracted_final
+
+                    # Fallback: extract from the overall module_result payload.
                     if not response_text or not self._validate_response(response_text):
-                        # Check each module's result in execution_results
+                        response_text = self._extract_answer_from_result(module_result)
+
+                    # If we still have a web-snippet-y answer, prefer reasoning-style module outputs.
+                    preferred_modules = (
+                        "reasoning",
+                        "chain_of_thought",
+                        "tree_of_thought",
+                        "custom_reasoning",
+                        "cognitive_reasoning_orchestrator",
+                    )
+                    for pref in preferred_modules:
+                        mod_result = execution_results.get(pref)
+                        if isinstance(mod_result, dict):
+                            extracted = self._extract_answer_from_result(mod_result)
+                            if extracted and self._validate_response(extracted):
+                                response_text = extracted
+                                module_result["text"] = extracted
+                                module_result["response"] = extracted
+                                break
+
+                    # Also check remaining module results if we still don't have a valid answer.
+                    if not response_text or not self._validate_response(response_text):
                         for mod_name, mod_result in execution_results.items():
                             if isinstance(mod_result, dict):
                                 extracted = self._extract_answer_from_result(mod_result)
                                 if extracted and self._validate_response(extracted) and len(extracted.strip()) > 20:
                                     response_text = extracted
-                                    # Update module_result with the extracted text
                                     module_result["text"] = extracted
                                     module_result["response"] = extracted
                                     break
                     
-                    if not response_text:
-                        # Fallback to simple extraction
+                    if True:
+                        # Fallback to simple extraction (only if we still don't have a valid answer)
                         if module_result.get("success") or module_result.get("text") or module_result.get("response"):
-                            response_text = (
+                            fallback_text = (
                                 module_result.get("final_answer", "") or
                                 module_result.get("answer", "") or
                                 module_result.get("text", "") or 
                                 module_result.get("response", "") or
                                 module_result.get("conclusion", "")
                             )
+                            if (
+                                (not response_text or not self._validate_response(response_text))
+                                and fallback_text
+                                and self._validate_response(fallback_text)
+                            ):
+                                response_text = fallback_text
                         
                         if response_text and self._validate_response(response_text):
                             # Verification Layer: Check if output matches intent
@@ -2351,6 +2626,61 @@ class CognitiveGeneratorModule(BaseBrainModule):
                                             # Update module chain for trace graph
                                             module_chain = reroute_result.get("module_chain", module_chain)
                             
+                            # If the pipeline output is low quality (echo/invalid/off-intent),
+                            # regenerate using internal cognition (thought_to_text/text_generation_engine).
+                            issues_lower = [str(i).lower() for i in verification_result.get("issues", [])]
+                            import re
+                            input_norm = re.sub(r"[^a-z0-9]+", " ", (input_text or "").lower()).strip()
+                            resp_norm = re.sub(r"[^a-z0-9]+", " ", (response_text or "").lower()).strip()
+                            echo_issue = (
+                                any("echoes input" in i for i in issues_lower)
+                                or (input_norm and resp_norm == input_norm)
+                                or (len(input_norm) > 10 and input_norm in resp_norm)
+                            )
+                            needs_regeneration = (
+                                echo_issue
+                                or (not self._validate_response(response_text))
+                                or (not verification_result.get("matches_intent", False))
+                                or (verification_result.get("confidence", 1.0) < 0.55)
+                            )
+                            if needs_regeneration:
+                                try:
+                                    regen_thoughts: list[str] = []
+                                    for mod_result in execution_results.values():
+                                        if not isinstance(mod_result, dict):
+                                            continue
+                                        for k in ("final_answer", "answer", "conclusion", "reasoning", "text", "response"):
+                                            v = mod_result.get(k)
+                                            if isinstance(v, str) and v.strip() and len(v.strip()) > 20:
+                                                regen_thoughts.append(v.strip())
+                                                break
+
+                                    if not regen_thoughts and response_text:
+                                        regen_thoughts = [response_text]
+
+                                    regenerated = self._generate_conversational_response(
+                                        input_text=input_text,
+                                        voice_context=voice_context or {},
+                                        context=context,
+                                        conversation_history=conversation_history,
+                                        selected_thoughts=regen_thoughts[:6],
+                                        max_tokens=max_tokens,
+                                    )
+                                    if regenerated and self._validate_response(regenerated):
+                                        response_text = regenerated
+                                        verification_result = self._verify_output_matches_intent(
+                                            response_text, intent_info, input_text
+                                        )
+                                        structural_confidence = self._calculate_structural_confidence(
+                                            response_text, intent_info, verification_result, module_chain
+                                        )
+                                        diagnostic_info["regenerated"] = True
+                                        diagnostic_info["regeneration_reason"] = (
+                                            "echo" if echo_issue else "verification_or_validation_failed"
+                                        )
+                                except Exception:
+                                    pass
+
                             # FINAL WEB CONTENT VERIFICATION: Check if response contains web-sourced content
                             # Extract any URLs or web sources from module results
                             web_sources = []
@@ -5142,6 +5472,18 @@ class CognitiveGeneratorModule(BaseBrainModule):
         """
         if not result or not isinstance(result, dict):
             return ""
+
+        # If both reasoning and conclusion exist, prefer the fuller reasoning when the conclusion is a short tail.
+        try:
+            rv = result.get("reasoning")
+            cv = result.get("conclusion")
+            if isinstance(rv, str) and rv.strip() and isinstance(cv, str) and cv.strip():
+                r_clean = self._clean_reasoning_text(rv)
+                c_clean = self._clean_reasoning_text(cv)
+                if r_clean and c_clean and len(r_clean) > len(c_clean) + 80:
+                    return r_clean
+        except Exception:
+            pass
         
         # Priority order for answer fields
         answer_fields = [
@@ -5150,6 +5492,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
             "conclusion",
             "text",
             "response",
+            "poem",
+            "story",
+            "narrative",
+            "joke",
+            "enhanced_text",
             "total_reasoning",
             "reasoning",
         ]
@@ -5159,8 +5506,12 @@ class CognitiveGeneratorModule(BaseBrainModule):
             value = result.get(field)
             if value and isinstance(value, str) and value.strip():
                 cleaned = self._clean_reasoning_text(value)
-                if cleaned and len(cleaned) > 10:  # Must be meaningful
-                    return cleaned
+                if cleaned:
+                    min_len = 5 if field in ("poem", "story", "narrative", "enhanced_text") else 10
+                    if re.search(r"\d", cleaned) and any(op in cleaned for op in ["=", "+", "-", "*", "/"]):
+                        min_len = 3
+                    if len(cleaned) > min_len:  # Must be meaningful
+                        return cleaned
         
         # Check nested result.result structure (common in reasoning modules)
         if "result" in result:
@@ -5170,8 +5521,12 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     value = nested.get(field)
                     if value and isinstance(value, str) and value.strip():
                         cleaned = self._clean_reasoning_text(value)
-                        if cleaned and len(cleaned) > 10:
-                            return cleaned
+                        if cleaned:
+                            min_len = 5 if field in ("poem", "story", "narrative", "enhanced_text") else 10
+                            if re.search(r"\d", cleaned) and any(op in cleaned for op in ["=", "+", "-", "*", "/"]):
+                                min_len = 3
+                            if len(cleaned) > min_len:
+                                return cleaned
                 
                 # Check deeper nesting: result.result.result
                 if "result" in nested:
@@ -5181,7 +5536,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
                             value = deeper.get(field)
                             if value and isinstance(value, str) and value.strip():
                                 cleaned = self._clean_reasoning_text(value)
-                                if cleaned and len(cleaned) > 10:
+                                if cleaned and len(cleaned) > (5 if field in ("poem", "story", "narrative", "enhanced_text") else 10):
                                     return cleaned
         
         # Check for steps with final_answer (chain_of_thought format)
@@ -5267,6 +5622,12 @@ class CognitiveGeneratorModule(BaseBrainModule):
         
         # Remove lines that are just markers or empty
         lines = text.split("\n")
+        preserve_linebreaks = (
+            text.count("\n") >= 2
+            and len(lines) <= 12
+            and all(0 < len(ln.strip()) <= 90 for ln in lines if ln.strip())
+        )
+
         cleaned_lines = []
         for line in lines:
             line = line.strip()
@@ -5288,12 +5649,15 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 # Also skip lines that are mostly metadata brackets
                 if not re.match(r"^\[.*\]\s*$", line):
                     cleaned_lines.append(line)
-        
+
         # Rejoin and clean up
-        text = " ".join(cleaned_lines) if cleaned_lines else text
-        
-        # Remove excessive whitespace
-        text = re.sub(r"\s+", " ", text)
+        text = ("\n".join(cleaned_lines) if preserve_linebreaks else " ".join(cleaned_lines)) if cleaned_lines else text
+
+        # Remove excessive whitespace (but keep line breaks for poem-like outputs)
+        if preserve_linebreaks:
+            text = "\n".join(re.sub(r"\s+", " ", ln).strip() for ln in text.split("\n"))
+        else:
+            text = re.sub(r"\s+", " ", text)
         
         # Remove instruction-like phrases that shouldn't appear in responses
         instruction_patterns = [
@@ -5308,7 +5672,10 @@ class CognitiveGeneratorModule(BaseBrainModule):
             text = re.sub(pattern, "", text, flags=re.IGNORECASE)
         
         # Remove excessive whitespace again after pattern removal
-        text = re.sub(r"\s+", " ", text)
+        if preserve_linebreaks:
+            text = "\n".join(re.sub(r"\s+", " ", ln).strip() for ln in text.split("\n"))
+        else:
+            text = re.sub(r"\s+", " ", text)
         
         # Remove leading/trailing punctuation artifacts
         text = text.strip(" .-")
@@ -5564,92 +5931,171 @@ class CognitiveGeneratorModule(BaseBrainModule):
         self,
         input_text: str,
         context: str = "",
-        persona: str = "mavaia",
+        voice_context: dict[str, Any] | None = None,
         mcts_result: dict[str, Any] | None = None,
         reasoning_tree: dict[str, Any] | str | None = None,
+        state_id: str | None = None,
     ) -> dict[str, Any]:
-        """Generate streaming response with partial yields during reasoning"""
+        """Synchronous wrapper for generate_response_streaming_iter for backward compatibility"""
         chunks = []
+        final_text = ""
+        last_state = None
+        
+        for state in self.generate_response_streaming_iter(
+            input_text=input_text,
+            context=context,
+            voice_context=voice_context,
+            mcts_result=mcts_result,
+            reasoning_tree=reasoning_tree,
+            state_id=state_id
+        ):
+            last_state = state
+            # In a real generator we'd yield here, but this is the sync version
+            if state.thought_trace:
+                latest_thought = state.thought_trace[-1]
+                chunks.append(f"[{latest_thought.module}] {latest_thought.content}")
+        
+        if last_state and last_state.metadata.get("final_text"):
+            final_text = last_state.metadata["final_text"]
+            
+        return {
+            "success": True,
+            "chunks": chunks,
+            "text": final_text,
+            "cognitive_state": last_state.model_dump(mode="json") if last_state else None
+        }
+
+    def _refresh_context_from_memory(self, input_text: str, state: CognitiveState) -> str:
+        """Dynamically fetch relevant context from long-term memory"""
+        try:
+            from mavaia_core.brain.registry import ModuleRegistry
+            memory_service = ModuleRegistry.get_module("memory_bridge_service")
+            if not memory_service:
+                return ""
+            
+            # Search for related episodic memories
+            # In a full implementation, we'd use vector search if enabled
+            # For now, we'll look for recent logs or semantic entries
+            state.add_thought("memory_bridge", "Querying long-term memory for relevant context")
+            
+            # Simple retrieval strategy: look for semantic entries related to keywords in input
+            keywords = [w for w in input_text.lower().split() if len(w) > 4]
+            found_context = []
+            
+            for word in keywords[:3]:
+                res = memory_service.execute("get", {"category": "semantic", "id": f"topic_{word}"})
+                if res.get("success") and res.get("result"):
+                    found_context.append(str(res["result"].get("data", "")))
+            
+            if found_context:
+                enriched = "\n".join(found_context)
+                state.context.retrieved_snippets.append({"source": "memory_bridge", "content": enriched})
+                return enriched
+                
+        except Exception as e:
+            logger.debug(f"Memory refresh failed: {e}")
+        return ""
+
+    def generate_response_streaming_iter(
+        self,
+        input_text: str,
+        context: str = "",
+        voice_context: dict[str, Any] | None = None,
+        mcts_result: dict[str, Any] | None = None,
+        reasoning_tree: dict[str, Any] | str | None = None,
+        state_id: str | None = None,
+    ):
+        """
+        True generator that yields CognitiveState objects at each stage of generation.
+        This allows for multi-module streaming sync.
+        """
+        # Ensure dependencies are loaded
+        self._ensure_modules_loaded()
+        
+        from mavaia_core.types.cognitive import CognitiveState, ThoughtStep, ContextWindow
+        import uuid
+
+        if not state_id:
+            state_id = str(uuid.uuid4())
+            
+        state = CognitiveState(state_id=state_id)
+        state.context = ContextWindow(active_tokens=len(input_text) // 4) # Rough estimate
         
         try:
-            # Step 1: Build thought graph (can yield intermediate chunks)
+            # Stage 1: Reasoning
+            state.current_stage = "reasoning"
+            state.add_thought("cognitive_generator", f"Starting reasoning for: {input_text[:50]}...")
+            yield state
+
+            # Step 0: Long-horizon memory refresh
+            memory_context = self._refresh_context_from_memory(input_text, state)
+            if memory_context:
+                context = f"{context}\n\n[Memory]: {memory_context}"
+                yield state
+
+            # Step 0.5: Web search if needed
+            web_search_results = ""
+            if self.web_search and ("?" in input_text or len(input_text.split()) > 3):
+                state.add_thought("web_search", f"Searching web for: {input_text[:50]}...")
+                yield state
+                try:
+                    search_res = self.web_search.execute("search_web", {"query": input_text, "max_results": 3})
+                    if search_res.get("success") and search_res.get("results"):
+                        results = search_res["results"]
+                        web_search_results = "\n".join([f"- {r.get('title')}: {r.get('snippet')}" for r in results])
+                        state.add_thought("web_search", f"Found {len(results)} search results")
+                        context = f"{context}\n\n[Web search results]:\n{web_search_results}"
+                        yield state
+                except Exception as e:
+                    logger.debug(f"Web search failed in generator: {e}")
+
+            # Step 1: Enriched context
             enriched_context = self._enrich_context(input_text, context)
-            chunks.append(f"Thinking about: {input_text[:50]}...")
             
             # Step 2: Extract or build thoughts
             if mcts_result:
+                state.add_thought("mcts_search_engine", "Extracting insights from MCTS result")
+                yield state
                 thought_graph = self._extract_thoughts_from_mcts(mcts_result)
             elif reasoning_tree:
+                state.add_thought("reasoning_orchestrator", "Parsing reasoning tree structure")
+                yield state
                 thought_graph = self._extract_thoughts_from_tree(reasoning_tree)
             else:
-                # Build thought graph - yield steps as they're generated
-                thought_graph_result = self.build_thought_graph(
-                    input_text, enriched_context
-                )
+                state.add_thought("thought_builder", "Building thought graph dynamically")
+                yield state
+                thought_graph_result = self.build_thought_graph(input_text, enriched_context)
                 thought_graph = thought_graph_result.get("thought_graph", {})
-                if thought_graph.get("thoughts"):
-                    thought_count = len(thought_graph["thoughts"])
-                    chunks.append(f"Generated {thought_count} reasoning steps...")
             
-            # Step 3: Select best thoughts (yield selection)
+            # Stage 2: Synthesis
+            state.current_stage = "synthesis"
             selection_result = self.select_best_thoughts(thought_graph, max_thoughts=5)
             selected_thoughts = selection_result.get("selected_thoughts", [])
             
-            if selected_thoughts:
-                chunks.append(f"Selected {len(selected_thoughts)} key insights...")
-                
-                # Yield thought summaries as chunks
-                for i, thought in enumerate(selected_thoughts[:3], 1):
-                    thought_preview = (
-                        thought[:100] + "..." if len(thought) > 100 else thought
-                    )
+            state.add_thought("thought_selector", f"Selected {len(selected_thoughts)} key insights for synthesis")
+            yield state
+
+            # Stage 3: Rendering
+            state.current_stage = "rendering"
+            state.add_thought("thought_to_text", "Converting synthesized thoughts to natural language")
+            yield state
             
-            # Step 4: Convert thoughts to text (yield final result)
             text_result = self.convert_to_text(
                 selected_thoughts if selected_thoughts else [input_text],
-                persona,
+                voice_context or {},
                 enriched_context,
             )
             generated_text = text_result.get("text", "")
             
-            # Clean the generated text to remove any internal markers
-            generated_text = self._clean_reasoning_text(generated_text)
-            
-            if generated_text:
-                # Split final text into sentence chunks
-                sentences = generated_text.split(". ")
-                for sentence in sentences:
-                    cleaned_sentence = self._clean_reasoning_text(sentence.strip())
-                    if cleaned_sentence:
-                        chunks.append(cleaned_sentence + ".")
-            
-            # Safety check (quick, no chunk needed)
-            if self.safety:
-                try:
-                    safety_result = self.safety.execute(
-                        "check", {"text": generated_text, "context": enriched_context}
-                    )
-                    if safety_result and not safety_result.get("safe", True):
-                        # Replace with sanitized response
-                        generated_text = self._sanitize_response(generated_text)
-                        chunks = [generated_text]
-                except Exception:
-                    pass
-            
-            return {
-                "success": True,
-                "chunks": chunks,
-                "text": generated_text,
-                "thought_count": len(selected_thoughts) if selected_thoughts else 0,
-            }
+            # Final output
+            state.metadata["final_text"] = generated_text
+            state.add_thought("output_renderer", "Final response rendered and ready")
+            yield state
             
         except Exception as e:
-            return {
-                "success": False,
-                "chunks": [f"Error: {str(e)}"],
-                "text": "",
-                "error": str(e),
-            }
+            state.metadata["error"] = str(e)
+            state.add_thought("error_handler", f"Generation failed: {str(e)}")
+            yield state
     
     def validate_params(self, operation: str, params: dict[str, Any]) -> bool:
         """Validate parameters for operations"""

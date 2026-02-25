@@ -2378,10 +2378,13 @@ class MavaiaClient:
         response_text = (
             result.get("response", "") or
             result.get("text", "") or
-            result.get("generated_text", "") or
-            result.get("result", {}).get("text", "") if isinstance(result.get("result"), dict) else "" or
-            result.get("result", {}).get("response", "") if isinstance(result.get("result"), dict) else ""
+            result.get("generated_text", "")
         )
+        if (not response_text or not str(response_text).strip()) and isinstance(result.get("result"), dict):
+            response_text = (
+                result["result"].get("text", "") or
+                result["result"].get("response", "")
+            )
         
         if not response_text or not str(response_text).strip():
             # Empty response detected - try fallback if we haven't already
@@ -2434,10 +2437,13 @@ class MavaiaClient:
                             response_text = (
                                 fallback_result.get("text", "") or
                                 fallback_result.get("generated_text", "") or
-                                fallback_result.get("response", "") or
-                                fallback_result.get("result", {}).get("text", "") if isinstance(fallback_result.get("result"), dict) else "" or
-                                fallback_result.get("result", {}).get("response", "") if isinstance(fallback_result.get("result"), dict) else ""
+                                fallback_result.get("response", "")
                             )
+                            if (not response_text or not str(response_text).strip()) and isinstance(fallback_result.get("result"), dict):
+                                response_text = (
+                                    fallback_result["result"].get("text", "") or
+                                    fallback_result["result"].get("response", "")
+                                )
                             
                             if response_text and str(response_text).strip():
                                 # Fallback succeeded!

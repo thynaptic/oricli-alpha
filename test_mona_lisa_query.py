@@ -565,51 +565,8 @@ def main():
                 
             except Exception as e2:
                 print(f"✗ chain_of_thought also failed: {e2}\n")
-                print("Falling back to chat completion...\n")
-                
-                # Fallback 2: chat completion
-                try:
-                    response = client.chat.completions.create(
-                        model="mavaia-cognitive",
-                        messages=[{"role": "user", "content": query}]
-                    )
-                    
-                    print("✓ Successfully executed chat completion\n")
-                    
-                    print("=" * 80)
-                    print("LAYER 1: RAW INTERNAL REASONING TRACE")
-                    print("=" * 80)
-                    if hasattr(response, 'reasoning_steps') and response.reasoning_steps:
-                        print("Reasoning Steps:")
-                        print(json.dumps(response.reasoning_steps, indent=2, default=str))
-                    else:
-                        print("No reasoning steps available in response")
-                    print("\n")
-                    
-                    print("=" * 80)
-                    print("LAYER 2: FINAL SYNTHESIZED ANSWER")
-                    print("=" * 80)
-                    if response.choices and len(response.choices) > 0:
-                        print(response.choices[0].message.content)
-                    print("\n")
-                    
-                    print("=" * 80)
-                    print("LAYER 3: BREAKDOWN - WHAT WORKED AND WHAT DIDN'T")
-                    print("=" * 80)
-                    print("What Worked:")
-                    print("  ✓ Chat completion executed successfully")
-                    if hasattr(response, 'confidence') and response.confidence:
-                        print(f"  ✓ Confidence: {response.confidence}")
-                    print("\nWhat Didn't Work:")
-                    if not (hasattr(response, 'reasoning_steps') and response.reasoning_steps):
-                        print("  ✗ No detailed reasoning steps available")
-                    print("\n")
-                    
-                except Exception as e3:
-                    print(f"✗ All methods failed. Last error: {e3}\n")
-                    import traceback
-                    traceback.print_exc()
-                    return 1
+                print("No external LLM/chat-completion fallback is permitted in this environment.\n")
+                return 1
         
     except Exception as e:
         print(f"Error initializing client: {e}")

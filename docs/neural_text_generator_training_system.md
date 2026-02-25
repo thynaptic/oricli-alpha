@@ -103,6 +103,24 @@ Text generation supports configurable sampling parameters:
 
 The system provides comprehensive sample generation capabilities, including sentence-level samples, paragraph generation, and multi-prompt evaluation with different temperature settings.
 
+### Evaluation Metrics (Recommended Gates)
+
+For a run to be considered healthy and reproducible, capture at least:
+
+- **final_loss** / **final_val_loss** from Keras training
+- **perplexity** (approx.): `exp(final_loss)` (use as a trend metric)
+- **epochs_completed** and **training_time_seconds**
+- Sample generations at fixed prompts/temperatures (qualitative regression)
+
+The training script writes `run_config.json`, `data_request.json`, and `training_result.json` into a per-run output directory so you can compare runs reliably. You can control the output location via `--run-dir` or use the built-in `scripts/training_profiles/smoke.yaml` profile for quick validation.
+
+For multi-GPU transformer training, you can use the lightweight launcher:
+
+```bash
+./.venv/bin/python scripts/launch_distributed_train.py --nproc-per-node 2 -- --profile transformer_gpt2 --model-type transformer
+```
+
+
 ### Training Flexibility
 
 Training can proceed via multiple modes:

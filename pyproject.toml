@@ -50,9 +50,6 @@ dev = [
     "cryptography>=41.0.0",
     "lmdb>=1.4.1",
 ]
-search = [
-    "duckduckgo-search>=4.0.0",
-]
 sandbox = [
     "docker>=6.0.0",
 ]
@@ -64,6 +61,16 @@ data = [
     "numpy>=1.23.0",
     "pandas>=1.5.0",
     "scikit-learn>=1.2.0",
+]
+train_neural = [
+    # Training dependencies for NeuralTextGenerator (TF/Keras + data sources)
+    "numpy>=1.23.0",
+    "rich>=13.7.1",
+    "tensorflow>=2.13.0",
+    "wikipedia>=1.4.0",
+    "datasets>=2.14.0",
+    "huggingface-hub>=0.16.0",
+    "internetarchive>=3.5.0",
 ]
 ml = [
     # ML stack (kept optional to avoid heavyweight/compiled deps for base installs)

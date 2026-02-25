@@ -66,7 +66,6 @@ pip install \
     psutil>=5.9.0 \
     beautifulsoup4>=4.12.0 \
     PyPDF2>=3.0.0 \
-    duckduckgo-search>=4.0.0 \
     transformers>=4.30.0 \
     huggingface-hub>=0.16.0
 

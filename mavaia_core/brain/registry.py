@@ -30,6 +30,7 @@ class ModuleRegistry:
     _discovered: bool = False  # Track if discovery has run
     _discovering: bool = False  # Track if discovery is in progress
     _discovery_lock: threading.Lock = threading.Lock()
+    _discovering_thread_id: Optional[int] = None  # Thread currently performing discovery
     _modules_dir: Optional[Path] = None  # Cached modules directory
     
     @staticmethod
@@ -127,10 +128,12 @@ class ModuleRegistry:
             def discover_in_background():
                 with cls._discovery_lock:
                     cls._discovering = True
+                    cls._discovering_thread_id = threading.get_ident()
                     try:
                         cls._discover_modules_internal(modules_dir, verbose)
                     finally:
                         cls._discovering = False
+                        cls._discovering_thread_id = None
             
             thread = threading.Thread(target=discover_in_background, daemon=True)
             thread.start()
@@ -139,10 +142,12 @@ class ModuleRegistry:
         # Synchronous discovery
         with cls._discovery_lock:
             cls._discovering = True
+            cls._discovering_thread_id = threading.get_ident()
             try:
                 return cls._discover_modules_internal(modules_dir, verbose)
             finally:
                 cls._discovering = False
+                cls._discovering_thread_id = None
     
     @classmethod
     def _discover_modules_internal(
@@ -217,6 +222,48 @@ class ModuleRegistry:
                     # For subdirectory modules, include parent directory in name
                     rel_path = module_file.relative_to(modules_dir)
                     module_name = str(rel_path.with_suffix("")).replace("/", "_")
+
+                # Proactively skip modules that will try to pull large HF models at import-time.
+                # This avoids long hangs/timeouts on live servers and keeps core cognition responsive.
+                try:
+                    text = module_file.read_text(encoding="utf-8", errors="ignore")
+
+                    if any(
+                        m in text
+                        for m in (
+                            "from_pretrained(",
+                            "hf_hub_download(",
+                            "snapshot_download(",
+                            "SentenceTransformer(",
+                            "sentence_transformers",
+                        )
+                    ):
+                        continue
+
+                    # On live servers, default to skipping modules that import heavy ML stacks at
+                    # module import-time (TensorFlow/torch/transformers/JAX). These are optional
+                    # for core cognition, and can cause latency/noise/hangs.
+                    import os
+                    enable_heavy = os.getenv("MAVAIA_ENABLE_HEAVY_MODULES", "false").lower() in (
+                        "true",
+                        "1",
+                        "yes",
+                    )
+                    if not enable_heavy and any(
+                        m in text
+                        for m in (
+                            "import tensorflow",
+                            "tensorflow_hub",
+                            "import torch",
+                            "import transformers",
+                            "import jax",
+                            "from transformers import",
+                        )
+                    ):
+                        continue
+                except Exception:
+                    pass
+
                 spec = importlib.util.spec_from_file_location(module_name, module_file)
                 if spec is None or spec.loader is None:
                     continue
@@ -340,13 +387,24 @@ class ModuleRegistry:
 
     @classmethod
     def get_module(
-        cls, name: str, auto_discover: bool = True, wait_timeout: float = 10.0
+        cls, name: str, auto_discover: bool = True, wait_timeout: float = 30.0
     ) -> Optional[BaseBrainModule]:
         """Get an instance of a module by name"""
         if auto_discover and not cls._modules and not cls._discovered:
             # Start discovery in background (non-blocking)
             cls.discover_modules(background=True, verbose=False)
         
+        # If a module tries to resolve dependencies during discovery, never block waiting for
+        # discovery to finish (this can deadlock). Only short-circuit when we're *inside* the
+        # discovery thread; other threads may safely wait.
+        if (
+            cls._discovering
+            and cls._discovering_thread_id is not None
+            and threading.get_ident() == cls._discovering_thread_id
+            and name not in cls._modules
+        ):
+            return None
+
         # Wait briefly for the specific module to be discovered
         if auto_discover and name not in cls._modules:
             start_time = time.time()
@@ -395,7 +453,7 @@ class ModuleRegistry:
         name: str,
         operation: Optional[str] = None,
         auto_discover: bool = True,
-        wait_timeout: float = 10.0
+        wait_timeout: float = 30.0
     ) -> tuple[Optional[BaseBrainModule], Optional[str], bool, Optional[str]]:
         """
         Get module instance or automatic fallback

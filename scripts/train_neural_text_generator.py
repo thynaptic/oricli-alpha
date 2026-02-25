@@ -819,6 +819,8 @@ def print_help_rich(parser, available_profiles):
                 {'name': '--max-books', 'help': 'Maximum number of books to load'},
                 {'name': '--data-percentage', 'help': 'Percentage of data to use (0.0-1.0, default: 1.0)', 'default': '1.0'},
                 {'name': '--continue-training', 'help': 'Continue training from existing model'},
+                {'name': '--run-dir', 'help': 'Output directory for this training run (models, checkpoints, run_config.json)'},
+                {'name': '--seed', 'help': 'Random seed for deterministic-ish training (python/numpy/tensorflow)'},
             ],
             'sampling': [
                 {'name': '--sample', 'help': 'Generate sample outputs from trained models (loads models, no training)'},
@@ -1226,6 +1228,20 @@ def main():
             type=str,
             help=profile_help + " (Note: No profiles found. Install PyYAML and add profile YAML files to scripts/training_profiles/)",
         )
+
+    parser.add_argument(
+        "--run-dir",
+        type=str,
+        default=None,
+        help="Output directory for this training run (models, checkpoints, run_config.json). Defaults to mavaia_core/models/neural_text_generator/runs/<timestamp>.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for deterministic-ish training (python/numpy/tensorflow).",
+    )
+
     parser.add_argument(
         "--model-type",
         choices=["character", "word", "transformer", "both"],
@@ -1798,6 +1814,58 @@ def main():
         if args.search:
             train_params["search"] = args.search
         
+        # Resolve run directory and write run metadata early (for reproducibility)
+        run_dir = None
+        if args.run_dir:
+            run_dir = Path(args.run_dir).expanduser()
+        else:
+            # Default: per-run directory under the module's model folder
+            ts = __import__("datetime").datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            run_dir = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator" / "runs" / ts
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "checkpoints").mkdir(exist_ok=True)
+
+        # Record latest run pointer (useful for deployment tooling)
+        try:
+            latest_ptr = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator" / "latest_run.txt"
+            latest_ptr.write_text(str(run_dir) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+
+        train_params["run_dir"] = str(run_dir)
+        if args.seed is not None:
+            train_params["seed"] = int(args.seed)
+
+        # Save a minimal run config + data request manifest
+        try:
+            import subprocess, platform
+            try:
+                git_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent.parent).decode().strip()
+            except Exception:
+                git_sha = None
+
+            run_config = {
+                "profile": args.profile,
+                "git_sha": git_sha,
+                "python": sys.version,
+                "platform": platform.platform(),
+                "train_params": train_params,
+            }
+            (run_dir / "run_config.json").write_text(json.dumps(run_config, indent=2), encoding="utf-8")
+
+            data_request = {
+                "source": train_params.get("source"),
+                "book_ids": train_params.get("book_ids"),
+                "categories": train_params.get("categories"),
+                "max_books": train_params.get("max_books"),
+                "max_text_size": train_params.get("max_text_size"),
+                "data_percentage": train_params.get("data_percentage"),
+                "search": train_params.get("search"),
+            }
+            (run_dir / "data_request.json").write_text(json.dumps(data_request, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
         # Print training configuration
         # Try to import rich for colored output
         try:
@@ -1935,6 +2003,12 @@ def main():
             console.print("[bold green]✓ Training completed successfully![/bold green]")
         else:
             print("\n✓ Training completed successfully!")
+
+        # Persist training result metrics alongside artifacts
+        try:
+            (run_dir / "training_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+        except Exception:
+            pass
         
         # Save models
         model_type = train_params.get("model_type", "both")
@@ -2021,8 +2095,11 @@ def main():
             if not model_types_to_test:
                 model_types_to_test = ["character"]  # Default fallback
         
+        sample_log_lines = []
         for model_type in model_types_to_test:
-            print(f"\n--- {model_type.upper()} Model Samples ---\n")
+            header = f"\n--- {model_type.upper()} Model Samples ---\n"
+            print(header)
+            sample_log_lines.append(header)
             
             # Sample prompts for different scenarios
             sample_prompts = [

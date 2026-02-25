@@ -1,28 +1,20 @@
 from __future__ import annotations
-"""
-Web Search Module
+"""Web Search Module
 
-Implements web search functionality for Claude Web Search Tool feature.
-Uses DuckDuckGo API for search results with domain filtering, localization,
-and encrypted content references for citations.
+Implements web search functionality for the brain.
+
+This module intentionally avoids DuckDuckGo (DDG) and instead scrapes HTML
+results from Mojeek with strict timeouts.
 """
 
 import hashlib
 import time
 import logging
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import ModuleOperationError, InvalidParameterError
-
-# Optional imports for DuckDuckGo search
-try:
-    from duckduckgo_search import DDGS
-    DDGS_AVAILABLE = True
-except ImportError:
-    DDGS_AVAILABLE = False
-    DDGS = None
 
 try:
     import requests
@@ -31,13 +23,20 @@ except ImportError:
     REQUESTS_AVAILABLE = False
     requests = None
 
+try:
+    from bs4 import BeautifulSoup
+    BS4_AVAILABLE = True
+except ImportError:
+    BS4_AVAILABLE = False
+    BeautifulSoup = None
+
 
 class WebSearchModule(BaseBrainModule):
     """
     Web Search Module for performing web searches.
     
-    Supports DuckDuckGo search with domain filtering, localization,
-    and encrypted content references for citations.
+    Scrapes Mojeek HTML results with domain filtering and encrypted content
+    references for citations.
     """
     
     def __init__(self):
@@ -54,20 +53,17 @@ class WebSearchModule(BaseBrainModule):
         return ModuleMetadata(
             name="web_search",
             version="1.0.0",
-            description="Web search using DuckDuckGo with domain filtering and localization",
+            description="Web search using Mojeek HTML with domain filtering and localization",
             operations=[
                 "search_web",
             ],
-            dependencies=["duckduckgo-search"] if DDGS_AVAILABLE else [],
+            dependencies=[],
             enabled=True,
             model_required=False,
         )
     
     def initialize(self) -> bool:
         """Initialize the module."""
-        if not DDGS_AVAILABLE:
-            # Module can still be initialized but will return errors when used
-            return True
         return True
     
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -236,10 +232,10 @@ class WebSearchModule(BaseBrainModule):
         Returns:
             Dictionary with search results in web_search_tool_result format
         """
-        if not DDGS_AVAILABLE:
+        if not REQUESTS_AVAILABLE or not BS4_AVAILABLE:
             return {
                 "success": False,
-                "error": "duckduckgo-search library is required. Install with: pip install duckduckgo-search",
+                "error": "requests and beautifulsoup4 are required for web search",
                 "error_code": "dependency_missing",
             }
         
@@ -262,6 +258,13 @@ class WebSearchModule(BaseBrainModule):
         allowed_domains = params.get("allowed_domains")
         blocked_domains = params.get("blocked_domains")
         user_location = params.get("user_location")
+
+        # Default to higher-signal sources for direct factual questions.
+        # This makes snippets less noisy (e.g., avoids random book citations) and improves coherence.
+        if allowed_domains is None:
+            ql = query.strip().lower()
+            if ql.startswith(("what ", "who ", "when ", "where ", "define ", "definition of")):
+                allowed_domains = ["wikipedia.org"]
         if allowed_domains is not None and not isinstance(allowed_domains, list):
             raise InvalidParameterError(
                 "allowed_domains", str(type(allowed_domains).__name__), "allowed_domains must be a list when provided"
@@ -287,66 +290,74 @@ class WebSearchModule(BaseBrainModule):
         self._rate_limit()
         
         try:
-            # Perform search using DuckDuckGo
-            # Note: DuckDuckGo doesn't have official API, so we use the library
-            # which scrapes results. Region parameter may not be fully supported.
-            search_params = {}
-            if user_location:
-                # DuckDuckGo uses region codes, but library may not support it directly
-                # We'll try to pass it if the library supports it
-                search_params["region"] = user_location.lower()
-            
-            with DDGS() as ddgs:
-                # Perform text search
-                # Try with different parameters if first attempt fails
-                try:
-                    results = list(ddgs.text(
-                        query,
-                        max_results=max_results_int * 2,  # Get more results for filtering
-                        **search_params
-                    ))
-                except Exception as e:
-                    # If search fails, try without extra parameters
-                    try:
-                        results = list(ddgs.text(query, max_results=max_results_int * 2))
-                    except Exception:
-                        # If still fails, return empty results with error info
-                        logger = logging.getLogger(__name__)
-                        logger.debug(
-                            "DuckDuckGo search failed",
-                            exc_info=True,
-                            extra={"module_name": "web_search", "error_type": type(e).__name__},
-                        )
-                        return {
-                            "success": False,
-                            "error": "search_failed",
-                            "error_code": "search_failed",
-                            "results": [],
-                            "count": 0,
+            headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                ),
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Connection": "keep-alive",
+            }
+            resp = requests.get(
+                "https://www.mojeek.com/search",
+                params={"q": query},
+                headers=headers,
+                timeout=(5, 12),
+            )
+
+            formatted_results: list[dict[str, Any]] = []
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, "html.parser")
+
+                ul = soup.find("ul", class_="results-standard")
+                if ul:
+                    items = ul.find_all("li", recursive=False)
+                else:
+                    items = []
+
+                for idx, li in enumerate(items):
+                    if len(formatted_results) >= max_results_int:
+                        break
+
+                    h2 = li.find("h2")
+                    a = h2.find("a", class_="title") if h2 else None
+                    if not a:
+                        continue
+
+                    url = (a.get("href") or "").strip()
+                    title = a.get_text(" ", strip=True)
+                    snippet_p = li.find("p", class_="s")
+                    snippet = snippet_p.get_text(" ", strip=True) if snippet_p else ""
+
+                    if not url:
+                        continue
+
+                    encrypted_content = self._generate_encrypted_content(snippet or title)
+                    encrypted_index = self._generate_encrypted_index(url, idx)
+
+                    formatted_results.append(
+                        {
+                            "title": title,
+                            "url": url,
+                            "snippet": snippet,
+                            "encrypted_content": encrypted_content,
+                            "encrypted_index": encrypted_index,
                         }
-            
-            # Format results
-            formatted_results = []
-            for idx, result in enumerate(results):
-                title = result.get("title", "")
-                url = result.get("href", "")
-                snippet = result.get("body", "")
-                
-                if not url:
-                    continue
-                
-                # Generate encrypted references
-                # For encrypted_content, we hash the snippet (or could hash full content if fetched)
-                encrypted_content = self._generate_encrypted_content(snippet)
-                encrypted_index = self._generate_encrypted_index(url, idx)
-                
-                formatted_results.append({
-                    "title": title,
-                    "url": url,
-                    "snippet": snippet,
-                    "encrypted_content": encrypted_content,
-                    "encrypted_index": encrypted_index,
-                })
+                    )
+
+            # If Mojeek is blocked (e.g., HTTP 403) or returns no results, fall back to Wikipedia search.
+            if not formatted_results:
+                formatted_results = self._search_wikipedia(query, max_results_int, headers)
+
+            if not formatted_results and resp.status_code != 200:
+                return {
+                    "success": False,
+                    "error": f"search_http_{resp.status_code}",
+                    "error_code": "search_failed",
+                    "results": [],
+                    "count": 0,
+                }
             
             # Apply domain filtering
             if allowed_domains or blocked_domains:
@@ -355,6 +366,34 @@ class WebSearchModule(BaseBrainModule):
                     allowed_domains=allowed_domains,
                     blocked_domains=blocked_domains,
                 )
+
+            # Filter out obviously irrelevant results (no keyword overlap with query)
+            # This helps avoid returning portal/search landing pages as "answers".
+            try:
+                import re
+                query_lower = query.lower()
+                stopwords = {
+                    "what", "why", "how", "does", "do", "did", "is", "are", "was", "were",
+                    "the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "with",
+                    "who", "when", "where", "which", "that", "this",
+                }
+                query_terms = {
+                    w for w in re.findall(r"[a-zA-Z0-9]+", query_lower)
+                    if len(w) > 2 and w not in stopwords
+                }
+                if query_terms:
+                    filtered_by_relevance = []
+                    for r in formatted_results:
+                        blob = f"{r.get('title','')} {r.get('snippet','')}".lower()
+                        terms = {
+                            w for w in re.findall(r"[a-zA-Z0-9]+", blob)
+                            if len(w) > 2 and w not in stopwords
+                        }
+                        if query_terms.intersection(terms):
+                            filtered_by_relevance.append(r)
+                    formatted_results = filtered_by_relevance
+            except Exception:
+                pass
             
             # Limit to requested number of results
             formatted_results = formatted_results[:max_results_int]
@@ -384,6 +423,67 @@ class WebSearchModule(BaseBrainModule):
                 "error_code": "search_failed",
             }
     
+    def _search_wikipedia(
+        self, query: str, max_results: int, headers: Dict[str, str] | None = None
+    ) -> List[Dict[str, Any]]:
+        """Fallback web search using Wikipedia's public API."""
+        if not REQUESTS_AVAILABLE:
+            return []
+
+        try:
+            wiki_headers = dict(headers or {})
+            wiki_headers["Accept"] = "application/json"
+
+            resp = requests.get(
+                "https://en.wikipedia.org/w/api.php",
+                params={
+                    "action": "query",
+                    "list": "search",
+                    "srsearch": query,
+                    "format": "json",
+                    "utf8": 1,
+                    "srlimit": max_results,
+                },
+                headers=wiki_headers,
+                timeout=(5, 12),
+            )
+            if resp.status_code != 200:
+                return []
+
+            data = resp.json() if resp.content else {}
+            hits = (
+                data.get("query", {}).get("search", [])
+                if isinstance(data, dict)
+                else []
+            )
+
+            import re
+            out: list[dict[str, Any]] = []
+            for idx, item in enumerate(hits[:max_results]):
+                title = (item.get("title") or "").strip()
+                snippet = (item.get("snippet") or "").strip()
+                if snippet:
+                    snippet = re.sub(r"<[^>]+>", "", snippet)
+                if not title:
+                    continue
+                url = f"https://en.wikipedia.org/wiki/{quote(title.replace(' ', '_'))}"
+
+                encrypted_content = self._generate_encrypted_content(snippet or title)
+                encrypted_index = self._generate_encrypted_index(url, idx)
+
+                out.append(
+                    {
+                        "title": title,
+                        "url": url,
+                        "snippet": snippet,
+                        "encrypted_content": encrypted_content,
+                        "encrypted_index": encrypted_index,
+                    }
+                )
+            return out
+        except Exception:
+            return []
+
     def reset_session(self) -> None:
         """Reset search count for new session."""
         self._search_count = 0

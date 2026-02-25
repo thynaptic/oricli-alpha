@@ -14,6 +14,7 @@ import time
 import warnings
 import logging
 import os
+import math
 from pathlib import Path
 from contextlib import contextmanager
 from io import StringIO
@@ -126,6 +127,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
     def __init__(self):
         super().__init__()
         self.char_model = None
+        self._policy_dir = None  # Keep adaptive policies in a stable location even when using per-run output dirs
         self.word_model = None
         self.transformer_model = None
         self.transformer_tokenizer = None
@@ -221,10 +223,15 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             )
             self.model_dir.mkdir(parents=True, exist_ok=True)
             (self.model_dir / "checkpoints").mkdir(exist_ok=True)
+
+        # Keep adaptive policies in a stable directory (default model_dir) even when using per-run output dirs.
+        if self._policy_dir is None and self.model_dir is not None:
+            self._policy_dir = self.model_dir
     
     def _get_policy_file(self) -> Path:
         """Get path to adaptive training policies file"""
-        return self.model_dir / "adaptive_policies.json"
+        base = self._policy_dir or self.model_dir
+        return base / "adaptive_policies.json"
     
     def _load_adaptive_policies(self) -> Dict[str, Any]:
         """
@@ -526,6 +533,29 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 "success": False,
                 "error": "Data pipeline not available",
             }
+
+        # Optional: per-run output directory (keeps training runs reproducible and avoids overwriting prior artifacts).
+        run_dir = params.get("run_dir") or params.get("output_dir")
+        if run_dir:
+            try:
+                p = Path(str(run_dir)).expanduser().resolve()
+                p.mkdir(parents=True, exist_ok=True)
+                (p / "checkpoints").mkdir(exist_ok=True)
+                self.model_dir = p
+            except Exception as e:
+                return {"success": False, "error": f"Failed to initialize run_dir '{run_dir}': {e}"}
+
+        # Optional: deterministic seeding
+        seed = params.get("seed")
+        if seed is not None:
+            try:
+                seed_i = int(seed)
+                random.seed(seed_i)
+                if NUMPY_AVAILABLE:
+                    np.random.seed(seed_i)
+                tf.random.set_seed(seed_i)
+            except Exception:
+                pass
 
         model_type = params.get("model_type", self.config.get("model_type", "both"))
         source = params.get("source", "gutenberg")  # Default to gutenberg for backward compatibility
@@ -1021,6 +1051,22 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     # Also save as latest model (for easy loading after interruption)
                     latest_path = self.model_dir / f"{self.model_type}_model_latest.keras"
                     self.model.save(latest_path)
+
+                    # Append per-epoch metrics for quick checkpoint evaluation/regression
+                    try:
+                        metrics_path = self.model_dir / "checkpoints" / f"{self.model_type}_metrics.jsonl"
+                        with open(metrics_path, "a", encoding="utf-8") as f:
+                            json.dump(
+                                {
+                                    "epoch": int(epoch + 1),
+                                    "timestamp": float(time.time()),
+                                    "logs": logs or {},
+                                },
+                                f,
+                            )
+                            f.write("\n")
+                    except Exception:
+                        pass
                     
                     logger.info(
                         "Keras checkpoint saved",
@@ -1034,7 +1080,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     )
 
         callbacks = []
-        callbacks.append(TrainingCallback(time_limit_seconds, start_time, self.model_dir, "character"))
+        callbacks.append(TrainingCallback(time_limit_seconds, start_time, self.model_dir, "char"))
         
         # Adjust epochs if time limit is very short
         effective_epochs = epochs
@@ -1064,13 +1110,18 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
         elapsed_time = time.time() - start_time
 
+        final_loss = float(history.history["loss"][-1])
+        final_val_loss = float(history.history["val_loss"][-1])
+        perplexity = float(math.exp(min(50.0, max(0.0, final_loss))))  # guard against overflow
+
         return {
             "success": True,
             "vocab_size": vocab_size,
             "sequences": len(sequences),
             "epochs_completed": len(history.history["loss"]),
-            "final_loss": float(history.history["loss"][-1]),
-            "final_val_loss": float(history.history["val_loss"][-1]),
+            "final_loss": final_loss,
+            "final_val_loss": final_val_loss,
+            "perplexity": perplexity,
             "training_time_seconds": elapsed_time,
             "time_limit_reached": time_limit_seconds is not None and elapsed_time >= time_limit_seconds,
         }
@@ -1186,6 +1237,22 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     # Also save as latest model (for easy loading after interruption)
                     latest_path = self.model_dir / f"{self.model_type}_model_latest.keras"
                     self.model.save(latest_path)
+
+                    # Append per-epoch metrics for quick checkpoint evaluation/regression
+                    try:
+                        metrics_path = self.model_dir / "checkpoints" / f"{self.model_type}_metrics.jsonl"
+                        with open(metrics_path, "a", encoding="utf-8") as f:
+                            json.dump(
+                                {
+                                    "epoch": int(epoch + 1),
+                                    "timestamp": float(time.time()),
+                                    "logs": logs or {},
+                                },
+                                f,
+                            )
+                            f.write("\n")
+                    except Exception:
+                        pass
                     
                     logger.info(
                         "Keras checkpoint saved",
@@ -1229,13 +1296,18 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
         elapsed_time = time.time() - start_time
 
+        final_loss = float(history.history["loss"][-1])
+        final_val_loss = float(history.history["val_loss"][-1])
+        perplexity = float(math.exp(min(50.0, max(0.0, final_loss))))  # guard against overflow
+
         return {
             "success": True,
             "vocab_size": vocab_size,
             "sequences": len(sequences),
             "epochs_completed": len(history.history["loss"]),
-            "final_loss": float(history.history["loss"][-1]),
-            "final_val_loss": float(history.history["val_loss"][-1]),
+            "final_loss": final_loss,
+            "final_val_loss": final_val_loss,
+            "perplexity": perplexity,
             "training_time_seconds": elapsed_time,
             "time_limit_reached": time_limit_seconds is not None and elapsed_time >= time_limit_seconds,
         }
