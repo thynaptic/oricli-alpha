@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Conversation Archive
 Manages conversation digestion and cross-conversation memory
@@ -112,21 +113,20 @@ class ConversationArchiveModule(BaseBrainModule):
         """Execute an operation"""
         self._ensure_modules_loaded()
 
-        match operation:
-            case "digest_conversation":
-                return self._digest_conversation(params)
-            case "archive_conversation":
-                return self._archive_conversation(params)
-            case "retrieve_archive":
-                return self._retrieve_archive(params)
-            case "get_recent_digests":
-                return self._get_recent_digests(params)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for conversation_archive",
-                )
+        if operation == "digest_conversation":
+            return self._digest_conversation(params)
+        elif operation == "archive_conversation":
+            return self._archive_conversation(params)
+        elif operation == "retrieve_archive":
+            return self._retrieve_archive(params)
+        elif operation == "get_recent_digests":
+            return self._get_recent_digests(params)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for conversation_archive",
+            )
 
     def _digest_conversation(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Generate AI summary for a specific conversation"""

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Vision Analysis Module - Phase V1: TensorFlow-based feature extraction and classification
 Converts image features to structured thoughts for cognitive generator

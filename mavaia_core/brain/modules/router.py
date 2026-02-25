@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Routes Requests To Appropriate Cognitive Modules Based On Intent Module
 Routes requests to appropriate cognitive modules based on intent

@@ -120,34 +120,33 @@ class RerankerAgent(BaseBrainModule):
         - diversify_results: Ensure result diversity
         - process_reranking: Full reranking pipeline
         """
-        match operation:
-            case "rerank_documents":
-                documents = params.get("documents", [])
-                query = params.get("query", "")
-                return self.rerank_documents(documents, query)
-            case "calculate_relevance":
-                document = params.get("document", {})
-                query = params.get("query", "")
-                return self.calculate_relevance(document, query)
-            case "select_top_k":
-                documents = params.get("documents", [])
-                k = params.get("k", 10)
-                return self.select_top_k(documents, k)
-            case "diversify_results":
-                documents = params.get("documents", [])
-                max_similar = params.get("max_similar", 0.8)
-                return self.diversify_results(documents, max_similar)
-            case "process_reranking":
-                documents = params.get("documents", [])
-                query = params.get("query", "")
-                top_k = params.get("top_k", 10)
-                return self.process_reranking(documents, query, top_k)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for reranker_agent",
-                )
+        if operation == "rerank_documents":
+            documents = params.get("documents", [])
+            query = params.get("query", "")
+            return self.rerank_documents(documents, query)
+        elif operation == "calculate_relevance":
+            document = params.get("document", {})
+            query = params.get("query", "")
+            return self.calculate_relevance(document, query)
+        elif operation == "select_top_k":
+            documents = params.get("documents", [])
+            k = params.get("k", 10)
+            return self.select_top_k(documents, k)
+        elif operation == "diversify_results":
+            documents = params.get("documents", [])
+            max_similar = params.get("max_similar", 0.8)
+            return self.diversify_results(documents, max_similar)
+        elif operation == "process_reranking":
+            documents = params.get("documents", [])
+            query = params.get("query", "")
+            top_k = params.get("top_k", 10)
+            return self.process_reranking(documents, query, top_k)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for reranker_agent",
+            )
 
     def rerank_documents(
         self, documents: List[Dict[str, Any]], query: str
@@ -510,15 +509,14 @@ class RerankerAgent(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "rerank_documents" | "process_reranking":
-                return "documents" in params and "query" in params
-            case "calculate_relevance":
-                return "document" in params and "query" in params
-            case "select_top_k":
-                return "documents" in params
-            case "diversify_results":
-                return "documents" in params
-            case _:
-                return True
+        if operation == 'rerank_documents' or operation == 'process_reranking':
+            return "documents" in params and "query" in params
+        elif operation == "calculate_relevance":
+            return "document" in params and "query" in params
+        elif operation == "select_top_k":
+            return "documents" in params
+        elif operation == "diversify_results":
+            return "documents" in params
+        else:
+            return True
 

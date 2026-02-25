@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Research Reasoning Agent - Orchestrates multi-step reasoning for research mode
 Converted from Swift ResearchReasoningAgent.swift

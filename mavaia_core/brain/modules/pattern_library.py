@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Pattern Library Module - Response templates and conversation patterns
 Handles pattern matching, template generation, variations, and flow patterns

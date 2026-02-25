@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Self-Harm Safety Service - Comprehensive self-harm and suicidal ideation detection
 Provides tiered severity assessment and escalation protocols

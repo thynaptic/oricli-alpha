@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Gradient-Based Plan Optimization
 Differentiable planning using gradient descent to optimize plan parameters
@@ -268,21 +269,20 @@ class GradientPlanOptimizerModule(BaseBrainModule):
             return {"success": False, "error": "JAX not available"}
 
         try:
-            match operation:
-                case "generate_plan":
-                    return self._generate_plan(params)
-                case "optimize_plan":
-                    return self._optimize_plan(params)
-                case "refine_plan":
-                    return self._refine_plan(params)
-                case "train_planner":
-                    return self._train_planner(params)
-                case "load_model":
-                    return self._load_model(params)
-                case "save_model":
-                    return self._save_model(params)
-                case _:
-                    raise InvalidParameterError("operation", str(operation), "Unknown operation for gradient_plan_optimizer")
+            if operation == "generate_plan":
+                return self._generate_plan(params)
+            elif operation == "optimize_plan":
+                return self._optimize_plan(params)
+            elif operation == "refine_plan":
+                return self._refine_plan(params)
+            elif operation == "train_planner":
+                return self._train_planner(params)
+            elif operation == "load_model":
+                return self._load_model(params)
+            elif operation == "save_model":
+                return self._save_model(params)
+            else:
+                raise InvalidParameterError("operation", str(operation), "Unknown operation for gradient_plan_optimizer")
         except Exception as e:
             if isinstance(e, InvalidParameterError):
                 return {"success": False, "error": str(e)}

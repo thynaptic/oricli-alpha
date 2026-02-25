@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Model Manager - Abstraction layer for HuggingFace models
 Allows easy switching of transformers/embeddings/models without code changes

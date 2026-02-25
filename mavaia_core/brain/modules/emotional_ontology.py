@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Emotional Ontology Module - Complex emotion taxonomy with transitions and relationships
 Handles emotion detection, emotion-appropriate responses, and emotion state transitions

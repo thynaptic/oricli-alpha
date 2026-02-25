@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Mavaia Core Types - OpenAI-compatible request/response models
 """

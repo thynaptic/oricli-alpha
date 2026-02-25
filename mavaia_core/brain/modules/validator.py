@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Validates Response Quality And Correctness Module
 Validates response quality and correctness

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Core Response Service - Abstraction layer for AI response generation
 Routes to CognitiveGeneratorService (local Python) or HybridBridgeService

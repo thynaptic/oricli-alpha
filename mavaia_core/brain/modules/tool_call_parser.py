@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Tool Call Parser - Parser for extracting tool calls from model responses
 Mirrors Swift ToolCallParser.swift functionality

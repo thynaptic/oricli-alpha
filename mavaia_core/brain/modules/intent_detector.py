@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Intent Detector Module
 Detects user intent from input text for cognitive routing

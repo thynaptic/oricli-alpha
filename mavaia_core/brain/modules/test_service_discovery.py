@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Test Service Discovery
 Verifies all converted services are discoverable and accessible

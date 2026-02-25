@@ -1,6 +1,7 @@
+from __future__ import annotations
 """
 Vision Pipeline Service
-Vision pipeline using ONLY Python vision_analysis module (NO Ollama)
+Vision pipeline using ONLY Python vision_analysis module
 Converted from Swift VisionPipelineService.swift
 """
 
@@ -82,7 +83,7 @@ class VisionPipelineServiceModule(BaseBrainModule):
         return ModuleMetadata(
             name="vision_pipeline_service",
             version="1.0.0",
-            description="Vision pipeline using ONLY Python vision_analysis module (NO Ollama)",
+            description="Vision pipeline using ONLY Python vision_analysis module",
             operations=[
                 "process_image",
                 "analyze_image",

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Language Variety Module - Natural language variation
 Handles avoiding repetition, natural synonym usage, varied expression patterns, and natural fillers

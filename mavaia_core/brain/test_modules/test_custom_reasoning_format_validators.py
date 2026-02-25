@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Unit tests for custom_reasoning module format validators
 

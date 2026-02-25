@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 COGS Graph Module - Context Object Graph System operations
 Handles entity graph queries, relationship traversal, temporal context, and graph analytics

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Embeddings Module - Generate embeddings using HuggingFace Sentence Transformers
 Plug-and-play module that can be easily extended or replaced

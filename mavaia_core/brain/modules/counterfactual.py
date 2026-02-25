@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Counterfactual Reasoning Module - DeepMind-style reasoning
 Consider alternative scenarios and what-if analysis

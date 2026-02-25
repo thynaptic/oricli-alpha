@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Model Warmup Service - Service to warm up all AI models before Mavaia becomes available
 Converted from Swift ModelWarmupService.swift

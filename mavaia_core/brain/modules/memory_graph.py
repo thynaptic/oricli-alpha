@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Memory Graph Module - Neo4j-based graph operations
 Handles entity linking, relationship mapping, multi-hop reasoning, and memory traversal

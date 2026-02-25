@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 ARC Solver Module
 Specialized solver for ARC (Abstraction and Reasoning Corpus) problems

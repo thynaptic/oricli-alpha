@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Python Code Memory Module
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Plan Optimizer Module
 Neural network for optimizing execution plans

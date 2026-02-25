@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Adaptation Tracker Module - Analyze communication patterns and calculate adaptation factors
 Tracks user communication style over time and suggests personality adjustments

@@ -129,43 +129,42 @@ class RetrieverAgent(BaseBrainModule):
         - filter_candidates: Initial filtering of retrieved documents
         - process_retrieval: Full retrieval pipeline
         """
-        match operation:
-            case "retrieve_documents":
-                query = params.get("query", "")
-                try:
-                    limit = int(params.get("limit", 20) or 20)
-                except (TypeError, ValueError):
-                    limit = 20
-                return self.retrieve_documents(query, limit)
-            case "retrieve_from_sources":
-                query = params.get("query", "")
-                sources = params.get("sources", ["knowledge_base", "memory"])
-                try:
-                    limit = int(params.get("limit", 20) or 20)
-                except (TypeError, ValueError):
-                    limit = 20
-                return self.retrieve_from_sources(query, sources, limit)
-            case "expand_query":
-                query = params.get("query", "")
-                return self.expand_query(query)
-            case "filter_candidates":
-                documents = params.get("documents", [])
-                query = params.get("query", "")
-                min_relevance = params.get("min_relevance", 0.3)
-                return self.filter_candidates(documents, query, min_relevance)
-            case "process_retrieval":
-                query = params.get("query", "")
-                try:
-                    limit = int(params.get("limit", 20) or 20)
-                except (TypeError, ValueError):
-                    limit = 20
-                return self.process_retrieval(query, limit)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for retriever_agent",
-                )
+        if operation == "retrieve_documents":
+            query = params.get("query", "")
+            try:
+                limit = int(params.get("limit", 20) or 20)
+            except (TypeError, ValueError):
+                limit = 20
+            return self.retrieve_documents(query, limit)
+        elif operation == "retrieve_from_sources":
+            query = params.get("query", "")
+            sources = params.get("sources", ["knowledge_base", "memory"])
+            try:
+                limit = int(params.get("limit", 20) or 20)
+            except (TypeError, ValueError):
+                limit = 20
+            return self.retrieve_from_sources(query, sources, limit)
+        elif operation == "expand_query":
+            query = params.get("query", "")
+            return self.expand_query(query)
+        elif operation == "filter_candidates":
+            documents = params.get("documents", [])
+            query = params.get("query", "")
+            min_relevance = params.get("min_relevance", 0.3)
+            return self.filter_candidates(documents, query, min_relevance)
+        elif operation == "process_retrieval":
+            query = params.get("query", "")
+            try:
+                limit = int(params.get("limit", 20) or 20)
+            except (TypeError, ValueError):
+                limit = 20
+            return self.process_retrieval(query, limit)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for retriever_agent",
+            )
 
     def retrieve_documents(
         self, query: str, limit: int = 20
@@ -594,15 +593,14 @@ class RetrieverAgent(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "retrieve_documents" | "process_retrieval":
-                return "query" in params
-            case "retrieve_from_sources":
-                return "query" in params and "sources" in params
-            case "expand_query":
-                return "query" in params
-            case "filter_candidates":
-                return "documents" in params and "query" in params
-            case _:
-                return True
+        if operation == 'retrieve_documents' or operation == 'process_retrieval':
+            return "query" in params
+        elif operation == "retrieve_from_sources":
+            return "query" in params and "sources" in params
+        elif operation == "expand_query":
+            return "query" in params
+        elif operation == "filter_candidates":
+            return "documents" in params and "query" in params
+        else:
+            return True
 

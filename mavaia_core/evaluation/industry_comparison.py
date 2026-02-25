@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Industry Comparison Tool for All Test Categories
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Spatial Reasoning Solver Module
 Specialized solver for spatial reasoning problems

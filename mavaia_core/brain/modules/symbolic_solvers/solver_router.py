@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Solver Router - Automatically selects appropriate solver based on problem type
 """

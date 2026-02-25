@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 SymPy Solver Integration
 Provides interface to SymPy for symbolic mathematics

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Web of Lies Solver Module
 Specialized solver for web of lies puzzles

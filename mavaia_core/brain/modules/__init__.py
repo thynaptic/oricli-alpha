@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Brain Modules Package - Plug-and-play intelligence modules
 

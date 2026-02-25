@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Response Naturalizer Module - Post-processing layer for human-like touches
 Handles sentence structure randomization, natural pronoun usage, contraction application, and overall naturalization

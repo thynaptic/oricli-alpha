@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Evidence Evaluation Module - DeepMind-style reasoning
 Assess the quality, relevance, and reliability of evidence

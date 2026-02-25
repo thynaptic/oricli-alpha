@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Self-Chaining Executor Service
 Service for executing discovered reasoning structures

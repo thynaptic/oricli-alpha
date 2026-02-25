@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Builds And Manages Thought Graphs For Cognitive Processing Module
 Builds and manages thought graphs for cognitive processing

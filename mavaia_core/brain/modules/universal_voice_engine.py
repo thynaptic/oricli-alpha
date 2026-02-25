@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Universal Voice Engine Module
 Single adaptive voice system that modulates tone based on context

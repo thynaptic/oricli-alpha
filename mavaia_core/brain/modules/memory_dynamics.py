@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Memory Dynamics Module - Advanced memory management
 Memory importance scoring, forgetting curves, knowledge integration,
@@ -49,79 +50,78 @@ class MemoryDynamicsModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a memory dynamics operation"""
-        match operation:
-            case "score_importance":
-                memory = params.get("memory", {})
-                context = params.get("context", {})
-                if memory is None:
-                    memory = {}
-                if context is None:
-                    context = {}
-                if not isinstance(memory, dict):
-                    raise InvalidParameterError("memory", str(type(memory).__name__), "memory must be a dict")
-                if not isinstance(context, dict):
-                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a dict")
-                return self.score_importance(memory, context)
+        if operation == "score_importance":
+            memory = params.get("memory", {})
+            context = params.get("context", {})
+            if memory is None:
+                memory = {}
+            if context is None:
+                context = {}
+            if not isinstance(memory, dict):
+                raise InvalidParameterError("memory", str(type(memory).__name__), "memory must be a dict")
+            if not isinstance(context, dict):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a dict")
+            return self.score_importance(memory, context)
 
-            case "apply_forgetting_curve":
-                memory = params.get("memory", {})
-                time_elapsed = params.get("time_elapsed", 0.0)
-                if memory is None:
-                    memory = {}
-                if not isinstance(memory, dict):
-                    raise InvalidParameterError("memory", str(type(memory).__name__), "memory must be a dict")
-                try:
-                    time_elapsed_float = float(time_elapsed)
-                except (TypeError, ValueError):
-                    raise InvalidParameterError("time_elapsed", str(time_elapsed), "time_elapsed must be a number")
-                return self.apply_forgetting_curve(memory, time_elapsed)
+        elif operation == "apply_forgetting_curve":
+            memory = params.get("memory", {})
+            time_elapsed = params.get("time_elapsed", 0.0)
+            if memory is None:
+                memory = {}
+            if not isinstance(memory, dict):
+                raise InvalidParameterError("memory", str(type(memory).__name__), "memory must be a dict")
+            try:
+                time_elapsed_float = float(time_elapsed)
+            except (TypeError, ValueError):
+                raise InvalidParameterError("time_elapsed", str(time_elapsed), "time_elapsed must be a number")
+            return self.apply_forgetting_curve(memory, time_elapsed)
 
-            case "integrate_knowledge":
-                new_memory = params.get("new_memory", {})
-                existing_memories = params.get("existing_memories", [])
-                if new_memory is None:
-                    new_memory = {}
-                if existing_memories is None:
-                    existing_memories = []
-                if not isinstance(new_memory, dict):
-                    raise InvalidParameterError(
-                        "new_memory", str(type(new_memory).__name__), "new_memory must be a dict"
-                    )
-                if not isinstance(existing_memories, list):
-                    raise InvalidParameterError(
-                        "existing_memories", str(type(existing_memories).__name__), "existing_memories must be a list"
-                    )
-                return self.integrate_knowledge(new_memory, existing_memories)
-
-            case "weight_by_freshness":
-                memories = params.get("memories", [])
-                if memories is None:
-                    memories = []
-                if not isinstance(memories, list):
-                    raise InvalidParameterError("memories", str(type(memories).__name__), "memories must be a list")
-                return self.weight_by_freshness(memories)
-
-            case "replay_memories":
-                memories = params.get("memories", [])
-                count = params.get("count", 5)
-                if memories is None:
-                    memories = []
-                if not isinstance(memories, list):
-                    raise InvalidParameterError("memories", str(type(memories).__name__), "memories must be a list")
-                try:
-                    count_int = int(count)
-                except (TypeError, ValueError):
-                    raise InvalidParameterError("count", str(count), "count must be an integer")
-                if count_int < 1:
-                    raise InvalidParameterError("count", str(count_int), "count must be >= 1")
-                return self.replay_memories(memories, count)
-
-            case _:
+        elif operation == "integrate_knowledge":
+            new_memory = params.get("new_memory", {})
+            existing_memories = params.get("existing_memories", [])
+            if new_memory is None:
+                new_memory = {}
+            if existing_memories is None:
+                existing_memories = []
+            if not isinstance(new_memory, dict):
                 raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for memory_dynamics",
+                    "new_memory", str(type(new_memory).__name__), "new_memory must be a dict"
                 )
+            if not isinstance(existing_memories, list):
+                raise InvalidParameterError(
+                    "existing_memories", str(type(existing_memories).__name__), "existing_memories must be a list"
+                )
+            return self.integrate_knowledge(new_memory, existing_memories)
+
+        elif operation == "weight_by_freshness":
+            memories = params.get("memories", [])
+            if memories is None:
+                memories = []
+            if not isinstance(memories, list):
+                raise InvalidParameterError("memories", str(type(memories).__name__), "memories must be a list")
+            return self.weight_by_freshness(memories)
+
+        elif operation == "replay_memories":
+            memories = params.get("memories", [])
+            count = params.get("count", 5)
+            if memories is None:
+                memories = []
+            if not isinstance(memories, list):
+                raise InvalidParameterError("memories", str(type(memories).__name__), "memories must be a list")
+            try:
+                count_int = int(count)
+            except (TypeError, ValueError):
+                raise InvalidParameterError("count", str(count), "count must be an integer")
+            if count_int < 1:
+                raise InvalidParameterError("count", str(count_int), "count must be >= 1")
+            return self.replay_memories(memories, count)
+
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for memory_dynamics",
+            )
 
     def score_importance(
         self, memory: Dict[str, Any], context: Dict[str, Any] = None
@@ -441,19 +441,18 @@ class MemoryDynamicsModule(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "score_importance":
-                return "memory" in params
-            case "apply_forgetting_curve":
-                return "memory" in params and "time_elapsed" in params
-            case "integrate_knowledge":
-                return "new_memory" in params and "existing_memories" in params
-            case "weight_by_freshness":
-                return "memories" in params
-            case "replay_memories":
-                return "memories" in params
-            case _:
-                return True
+        if operation == "score_importance":
+            return "memory" in params
+        elif operation == "apply_forgetting_curve":
+            return "memory" in params and "time_elapsed" in params
+        elif operation == "integrate_knowledge":
+            return "new_memory" in params and "existing_memories" in params
+        elif operation == "weight_by_freshness":
+            return "memories" in params
+        elif operation == "replay_memories":
+            return "memories" in params
+        else:
+            return True
 
 
 # Module export

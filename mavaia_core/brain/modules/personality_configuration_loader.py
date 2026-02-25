@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Personality Configuration Loader
 Loads personality configurations from JSON files for extensible personality system

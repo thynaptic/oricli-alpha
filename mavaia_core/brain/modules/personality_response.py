@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Personality Response Module - Generate personality-specific responses using example-based selection
 Plug-and-play module that generates responses in each Mavaia personality's voice
@@ -75,31 +76,30 @@ class PersonalityResponseModule(BaseBrainModule):
         if not self.config:
             self._load_config()
 
-        match operation:
-            case "generate":
-                return self._generate_response(
-                    intent=params.get("intent", ""),
-                    personality=params.get("personality", ""),
-                    context=params.get("context", ""),
-                    emotional_tone=params.get("emotional_tone"),
-                    user_message=params.get("user_message", ""),
-                    num_variations=params.get("num_variations", 3),
-                    adapted_personality_config=params.get("adapted_personality_config"),
-                )
-            case "generate_variations":
-                return self._generate_variations(
-                    intent=params.get("intent", ""),
-                    personality=params.get("personality", ""),
-                    count=params.get("count", 3),
-                    context=params.get("context", ""),
-                    emotional_tone=params.get("emotional_tone"),
-                )
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for personality_response",
-                )
+        if operation == "generate":
+            return self._generate_response(
+                intent=params.get("intent", ""),
+                personality=params.get("personality", ""),
+                context=params.get("context", ""),
+                emotional_tone=params.get("emotional_tone"),
+                user_message=params.get("user_message", ""),
+                num_variations=params.get("num_variations", 3),
+                adapted_personality_config=params.get("adapted_personality_config"),
+            )
+        elif operation == "generate_variations":
+            return self._generate_variations(
+                intent=params.get("intent", ""),
+                personality=params.get("personality", ""),
+                count=params.get("count", 3),
+                context=params.get("context", ""),
+                emotional_tone=params.get("emotional_tone"),
+            )
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for personality_response",
+            )
 
     def _generate_response(
         self,
@@ -345,15 +345,14 @@ class PersonalityResponseModule(BaseBrainModule):
         # If all responses were filtered, generate a safe fallback
         if not filtered_responses:
             # Generate a simple, actual response based on intent
-            match intent_category:
-                case "greeting":
-                    filtered_responses = ["Hey! What's up?"]
-                case "asking_for_help":
-                    filtered_responses = ["I'm here to help! What do you need?"]
-                case "sharing_news":
-                    filtered_responses = ["That's interesting! Tell me more."]
-                case _:
-                    filtered_responses = ["Got it! What else is on your mind?"]
+            if intent_category == "greeting":
+                filtered_responses = ["Hey! What's up?"]
+            elif intent_category == "asking_for_help":
+                filtered_responses = ["I'm here to help! What do you need?"]
+            elif intent_category == "sharing_news":
+                filtered_responses = ["That's interesting! Tell me more."]
+            else:
+                filtered_responses = ["Got it! What else is on your mind?"]
 
         # Return first response (Swift can request variations separately)
         return {
@@ -689,8 +688,7 @@ class PersonalityResponseModule(BaseBrainModule):
 
     def validate_params(self, operation: str, params: dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "generate" | "generate_variations":
-                return "intent" in params and "personality" in params
-            case _:
-                return True
+        if operation == 'generate' or operation == 'generate_variations':
+            return "intent" in params and "personality" in params
+        else:
+            return True

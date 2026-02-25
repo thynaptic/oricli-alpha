@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Reasoning Module - Symbolic and structured reasoning engine
 Plug-and-play module for analytical, creative, strategic, diagnostic, and comparative reasoning
@@ -56,111 +57,110 @@ class ReasoningModule(BaseBrainModule):
     
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a reasoning operation"""
-        match operation:
-            case "reason" | "analyze":
-                query = params.get("query", "")
-                context = params.get("context", [])
-                reasoning_type = params.get("reasoning_type", "analytical")
-                
-                if not isinstance(query, str) or not query.strip():
-                    raise InvalidParameterError("query", str(query), "Missing required parameter: query")
+        if operation == 'reason' or operation == 'analyze':
+            query = params.get("query", "")
+            context = params.get("context", [])
+            reasoning_type = params.get("reasoning_type", "analytical")
 
-                context_list = self._normalize_context(context)
-                # Use structured reasoning patterns
-                reasoning_text = self._structured_reasoning(
-                    query, context_list, str(reasoning_type or "analytical")
-                )
-                
-                return {
-                    "success": True,
-                    "reasoning": reasoning_text,
-                    "conclusion": self._extract_conclusion(reasoning_text),
-                    "confidence": self._estimate_confidence(reasoning_text),
-                    "reasoning_steps": self._extract_steps(reasoning_text),
-                    "reasoning_type": str(reasoning_type or "analytical"),
-                    "method": "structured_reasoning",
-                }
-        
-            case "compare":
-                item1 = params.get("item1", "")
-                item2 = params.get("item2", "")
-                context = params.get("context", [])
-                
-                if not isinstance(item1, str) or not item1.strip():
-                    raise InvalidParameterError("item1", str(item1), "Missing required parameter: item1")
-                if not isinstance(item2, str) or not item2.strip():
-                    raise InvalidParameterError("item2", str(item2), "Missing required parameter: item2")
-                
-                query = f"Compare: {item1} vs {item2}"
-                return self.execute(
-                    "reason",
-                    {
-                        "query": query,
-                        "context": context,
-                        "reasoning_type": "comparative",
-                    },
-                )
+            if not isinstance(query, str) or not query.strip():
+                raise InvalidParameterError("query", str(query), "Missing required parameter: query")
 
-            case "multi_step_solve":
-                problem = params.get("problem", "")
-                steps = params.get("steps", 5)
-                context = params.get("context", [])
-                return self.multi_step_solve(problem, steps, context)
+            context_list = self._normalize_context(context)
+            # Use structured reasoning patterns
+            reasoning_text = self._structured_reasoning(
+                query, context_list, str(reasoning_type or "analytical")
+            )
 
-            case "causal_reasoning":
-                event = params.get("event", "")
-                context = params.get("context", [])
-                return self.causal_reasoning(event, context)
+            return {
+                "success": True,
+                "reasoning": reasoning_text,
+                "conclusion": self._extract_conclusion(reasoning_text),
+                "confidence": self._estimate_confidence(reasoning_text),
+                "reasoning_steps": self._extract_steps(reasoning_text),
+                "reasoning_type": str(reasoning_type or "analytical"),
+                "method": "structured_reasoning",
+            }
 
-            case "analogical_reasoning":
-                source = params.get("source", "")
-                target = params.get("target", "")
-                context = params.get("context", [])
-                return self.analogical_reasoning(source, target, context)
+        elif operation == "compare":
+            item1 = params.get("item1", "")
+            item2 = params.get("item2", "")
+            context = params.get("context", [])
 
-            case "deep_analysis":
-                query = params.get("query", "")
-                depth = params.get("depth", 3)
-                context = params.get("context", [])
-                return self.deep_analysis(query, depth, context)
+            if not isinstance(item1, str) or not item1.strip():
+                raise InvalidParameterError("item1", str(item1), "Missing required parameter: item1")
+            if not isinstance(item2, str) or not item2.strip():
+                raise InvalidParameterError("item2", str(item2), "Missing required parameter: item2")
 
-            case "create_reasoning_graph":
-                query = params.get("query", "")
-                context = params.get("context", [])
-                return self.create_reasoning_graph(query, context)
+            query = f"Compare: {item1} vs {item2}"
+            return self.execute(
+                "reason",
+                {
+                    "query": query,
+                    "context": context,
+                    "reasoning_type": "comparative",
+                },
+            )
 
-            case "branch_reasoning":
-                query = params.get("query", "")
-                branches = params.get("branches", 3)
-                context = params.get("context", [])
-                return self.branch_reasoning(query, branches, context)
+        elif operation == "multi_step_solve":
+            problem = params.get("problem", "")
+            steps = params.get("steps", 5)
+            context = params.get("context", [])
+            return self.multi_step_solve(problem, steps, context)
 
-            case "select_strategy":
-                problem = params.get("problem", "")
-                problem_type = params.get("problem_type")
-                context = params.get("context", [])
-                return self.select_strategy(problem, problem_type, context)
+        elif operation == "causal_reasoning":
+            event = params.get("event", "")
+            context = params.get("context", [])
+            return self.causal_reasoning(event, context)
 
-            case "evaluate_reasoning":
-                reasoning = params.get("reasoning", "")
-                reasoning_steps = params.get("reasoning_steps", [])
-                return self.evaluate_reasoning(reasoning, reasoning_steps)
+        elif operation == "analogical_reasoning":
+            source = params.get("source", "")
+            target = params.get("target", "")
+            context = params.get("context", [])
+            return self.analogical_reasoning(source, target, context)
 
-            case "detect_contradictions":
-                reasoning_steps = params.get("reasoning_steps", [])
-                return self.detect_contradictions(reasoning_steps)
+        elif operation == "deep_analysis":
+            query = params.get("query", "")
+            depth = params.get("depth", 3)
+            context = params.get("context", [])
+            return self.deep_analysis(query, depth, context)
 
-            case "resolve_contradictions":
-                contradictions = params.get("contradictions", [])
-                reasoning_steps = params.get("reasoning_steps", [])
-                return self.resolve_contradictions(contradictions, reasoning_steps)
+        elif operation == "create_reasoning_graph":
+            query = params.get("query", "")
+            context = params.get("context", [])
+            return self.create_reasoning_graph(query, context)
 
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for reasoning",
-                )
+        elif operation == "branch_reasoning":
+            query = params.get("query", "")
+            branches = params.get("branches", 3)
+            context = params.get("context", [])
+            return self.branch_reasoning(query, branches, context)
+
+        elif operation == "select_strategy":
+            problem = params.get("problem", "")
+            problem_type = params.get("problem_type")
+            context = params.get("context", [])
+            return self.select_strategy(problem, problem_type, context)
+
+        elif operation == "evaluate_reasoning":
+            reasoning = params.get("reasoning", "")
+            reasoning_steps = params.get("reasoning_steps", [])
+            return self.evaluate_reasoning(reasoning, reasoning_steps)
+
+        elif operation == "detect_contradictions":
+            reasoning_steps = params.get("reasoning_steps", [])
+            return self.detect_contradictions(reasoning_steps)
+
+        elif operation == "resolve_contradictions":
+            contradictions = params.get("contradictions", [])
+            reasoning_steps = params.get("reasoning_steps", [])
+            return self.resolve_contradictions(contradictions, reasoning_steps)
+
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for reasoning",
+            )
 
     def _normalize_context(self, context: Any) -> List[str]:
         """Normalize context to a list[str] for internal reasoning utilities."""
@@ -649,22 +649,21 @@ class ReasoningModule(BaseBrainModule):
         self, query: str, layer_num: int, context: List[str]
     ) -> str:
         """Analyze a single layer of depth"""
-        match layer_num:
-            case 1:
-                # Surface level analysis
-                return self._structured_reasoning(query, context, "analytical")
-            case 2:
-                # Deeper analysis
-                return (
-                    f"Deeper analysis of: {query}. "
-                    "Examining underlying patterns and relationships."
-                )
-            case _:
-                # Deepest analysis
-                return (
-                    f"Deepest analysis of: {query}. "
-                    "Exploring fundamental principles and root causes."
-                )
+        if layer_num == 1:
+            # Surface level analysis
+            return self._structured_reasoning(query, context, "analytical")
+        elif layer_num == 2:
+            # Deeper analysis
+            return (
+                f"Deeper analysis of: {query}. "
+                "Examining underlying patterns and relationships."
+            )
+        else:
+            # Deepest analysis
+            return (
+                f"Deepest analysis of: {query}. "
+                "Exploring fundamental principles and root causes."
+            )
 
     def _extract_insights(self, analysis: str) -> List[str]:
         """Extract insights from analysis text"""
@@ -1049,18 +1048,17 @@ class ReasoningModule(BaseBrainModule):
     
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "reason" | "analyze":
-                return "query" in params
-            case "compare":
-                return "item1" in params and "item2" in params
-            case "multi_step_solve":
-                return "problem" in params
-            case "causal_reasoning":
-                return "event" in params
-            case "analogical_reasoning":
-                return "source" in params and "target" in params
-            case "deep_analysis":
-                return "query" in params
-            case _:
-                return True
+        if operation == 'reason' or operation == 'analyze':
+            return "query" in params
+        elif operation == "compare":
+            return "item1" in params and "item2" in params
+        elif operation == "multi_step_solve":
+            return "problem" in params
+        elif operation == "causal_reasoning":
+            return "event" in params
+        elif operation == "analogical_reasoning":
+            return "source" in params and "target" in params
+        elif operation == "deep_analysis":
+            return "query" in params
+        else:
+            return True

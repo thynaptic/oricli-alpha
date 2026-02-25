@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Optimization Helpers - Batch execution and performance utilities
 Provides batch execution support for multiple module operations

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Memory Pipeline Service - Orchestrates three-layer memory pipeline
 Converted from Swift MemoryPipelineService.swift

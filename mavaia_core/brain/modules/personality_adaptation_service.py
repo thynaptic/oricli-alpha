@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Personality Adaptation Service - Service for tracking and adapting personality based on user communication patterns
 Converted from Swift PersonalityAdaptationService.swift

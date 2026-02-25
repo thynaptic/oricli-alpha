@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Manages Neural Text Model Loading, Saving, And Lifecycle Module
 Manages neural text model loading, saving, and lifecycle

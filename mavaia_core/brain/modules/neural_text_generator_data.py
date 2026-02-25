@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Neural Text Generator Data Pipeline
 Handles data loading, preprocessing, and sequence creation for training

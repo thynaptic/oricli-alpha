@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Neural Architecture Search (NAS)
 Automatically discover optimal architectures for specific tasks

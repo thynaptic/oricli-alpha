@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Response Cadence Module - Prosody and rhythm control for natural speech-like flow
 Handles sentence length variation, rhythm control, natural micro-pauses, and breathiness markers
@@ -91,30 +92,29 @@ class ResponseCadenceModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a cadence operation"""
-        match operation:
-            case "calculate_sentence_rhythm":
-                text = params.get("text", "")
-                return self.calculate_sentence_rhythm(text)
-            case "insert_natural_pauses":
-                text = params.get("text", "")
-                return self.insert_natural_pauses(text)
-            case "apply_breathiness":
-                text = params.get("text", "")
-                return self.apply_breathiness(text)
-            case "control_pacing":
-                text = params.get("text", "")
-                content_type = params.get("content_type", "general")
-                return self.control_pacing(text, content_type)
-            case "apply_cadence":
-                text = params.get("text", "")
-                personality = params.get("personality", "mavaia")
-                return self.apply_cadence(text, personality)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for response_cadence",
-                )
+        if operation == "calculate_sentence_rhythm":
+            text = params.get("text", "")
+            return self.calculate_sentence_rhythm(text)
+        elif operation == "insert_natural_pauses":
+            text = params.get("text", "")
+            return self.insert_natural_pauses(text)
+        elif operation == "apply_breathiness":
+            text = params.get("text", "")
+            return self.apply_breathiness(text)
+        elif operation == "control_pacing":
+            text = params.get("text", "")
+            content_type = params.get("content_type", "general")
+            return self.control_pacing(text, content_type)
+        elif operation == "apply_cadence":
+            text = params.get("text", "")
+            personality = params.get("personality", "mavaia")
+            return self.apply_cadence(text, personality)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for response_cadence",
+            )
 
     def calculate_sentence_rhythm(self, text: str) -> Dict[str, Any]:
         """Calculate and analyze sentence rhythm"""
@@ -143,15 +143,14 @@ class ResponseCadenceModule(BaseBrainModule):
             rhythm_score = 0.0
 
         # Determine rhythm pattern
-        match rhythm_score:
-            case s if s < 0.2:
-                pattern = "monotone"
-            case s if s < 0.4:
-                pattern = "slight_variation"
-            case s if s < 0.6:
-                pattern = "moderate_variation"
-            case _:
-                pattern = "high_variation"
+        if rhythm_score < 0.2:
+            pattern = "monotone"
+        elif rhythm_score < 0.4:
+            pattern = "slight_variation"
+        elif rhythm_score < 0.6:
+            pattern = "moderate_variation"
+        else:
+            pattern = "high_variation"
 
         # Classify sentence lengths
         length_distribution = {
@@ -436,18 +435,17 @@ class ResponseCadenceModule(BaseBrainModule):
         self, operation: str, params: Dict[str, Any]
     ) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case (
-                "calculate_sentence_rhythm"
-                | "insert_natural_pauses"
-                | "apply_breathiness"
-                | "apply_cadence"
-            ):
-                return "text" in params
-            case "control_pacing":
-                return "text" in params and "content_type" in params
-            case _:
-                return True
+        if operation in [
+            "calculate_sentence_rhythm",
+            "insert_natural_pauses",
+            "apply_breathiness",
+            "apply_cadence",
+        ]:
+            return "text" in params
+        elif operation == "control_pacing":
+            return "text" in params and "content_type" in params
+        else:
+            return True
 
 
 # Module export

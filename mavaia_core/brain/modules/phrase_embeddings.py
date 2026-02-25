@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Phrase Embeddings Module - Multi-level phrase embeddings for hybrid phrasing
 Generates word-level, phrase-level, and sentence-level embeddings

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Concept Embeddings Module - Extended concept embedding system with hierarchies and relationships
 Extends base embeddings.py with concept hierarchies, semantic relationships, and domain-specific embeddings

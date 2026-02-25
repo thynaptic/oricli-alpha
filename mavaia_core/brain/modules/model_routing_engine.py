@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Model Routing Engine
 Routing logic engine with confidence weighting, casual detection, and per-model cooldown/stickiness

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Trains Neural Text Generation Models (Character, Word, Transformer) Module
 Trains neural text generation models (character, word, transformer)

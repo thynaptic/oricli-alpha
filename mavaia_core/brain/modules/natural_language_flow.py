@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Natural Language Flow Module - Natural sentence variation, flow, and structure
 Handles sentence length variation, natural structure patterns, flow transitions, and rhythm

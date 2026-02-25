@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Intent Categorizer - Intent categorization system for personality response generation
 Converted from Swift IntentCategorizer.swift

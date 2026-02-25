@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Zebra Puzzle Solver Module
 Specialized solver for zebra puzzles (constraint satisfaction problems)

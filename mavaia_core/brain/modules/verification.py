@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Verification Module - DeepMind-style reasoning
 Verify conclusions and validate reasoning steps

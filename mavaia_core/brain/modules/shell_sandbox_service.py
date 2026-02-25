@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Shell Sandbox Service
 Safe shell command execution service with strict allowlist and validation
@@ -109,17 +110,16 @@ class ShellSandboxServiceModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
-        match operation:
-            case "list_folder":
-                return self._list_folder(params)
-            case "list_running_processes":
-                return self._list_running_processes(params)
-            case "read_file_metadata":
-                return self._read_file_metadata(params)
-            case "execute_safe_command":
-                return self._execute_safe_command(params)
-            case _:
-                raise InvalidParameterError("operation", str(operation), "Unknown operation for shell_sandbox_service")
+        if operation == "list_folder":
+            return self._list_folder(params)
+        elif operation == "list_running_processes":
+            return self._list_running_processes(params)
+        elif operation == "read_file_metadata":
+            return self._read_file_metadata(params)
+        elif operation == "execute_safe_command":
+            return self._execute_safe_command(params)
+        else:
+            raise InvalidParameterError("operation", str(operation), "Unknown operation for shell_sandbox_service")
 
     def _list_folder(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """List folder contents"""

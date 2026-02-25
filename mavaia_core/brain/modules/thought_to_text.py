@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Thought to Text Module - Convert thought graphs (MCTS nodes or reasoning trees) to natural language
 This is the key module that replaces autoregressive LLM text generation with a rewrite engine

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Conversation Compression Service - Summarizes long conversations to manage context limits
 Converted from Swift ConversationCompressionService.swift

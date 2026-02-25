@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Emotional Inference Module - Detect emotional intent, modulate warmth, and tune empathy
 Claude-level emotional understanding: sensing tone, detecting emotional intent,
@@ -151,168 +152,167 @@ class EmotionalInferenceModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an emotional inference operation"""
-        match operation:
-            case "score_emotional_intent":
-                text = params.get("text", "")
-                context = params.get("context", "")
-                if text is None:
-                    text = ""
-                if context is None:
-                    context = ""
-                if not isinstance(text, str):
-                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
-                if not isinstance(context, str):
-                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
-                return self.score_emotional_intent(text, context)
-            case "calculate_warmth_level":
-                emotion_score = params.get("emotion_score", {})
-                if emotion_score is None:
-                    emotion_score = {}
-                if not isinstance(emotion_score, dict):
-                    raise InvalidParameterError(
-                        "emotion_score", str(type(emotion_score).__name__), "emotion_score must be a dict"
-                    )
-                return self.calculate_warmth_level(emotion_score)
-            case "tune_empathy":
-                text = params.get("text", "")
-                emotion_score = params.get("emotion_score", {})
-                if text is None:
-                    text = ""
-                if emotion_score is None:
-                    emotion_score = {}
-                if not isinstance(text, str):
-                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
-                if not isinstance(emotion_score, dict):
-                    raise InvalidParameterError(
-                        "emotion_score", str(type(emotion_score).__name__), "emotion_score must be a dict"
-                    )
-                return self.tune_empathy(text, emotion_score)
-            case "infer_emotion":
-                text = params.get("text", "")
-                context = params.get("context", "")
-                if text is None:
-                    text = ""
-                if context is None:
-                    context = ""
-                if not isinstance(text, str):
-                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
-                if not isinstance(context, str):
-                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
-                return self.infer_emotion(text, context)
-            case "modulate_response_warmth":
-                response = params.get("response", "")
-                emotion_score = params.get("emotion_score", {})
-                if response is None:
-                    response = ""
-                if emotion_score is None:
-                    emotion_score = {}
-                if not isinstance(response, str):
-                    raise InvalidParameterError("response", str(type(response).__name__), "response must be a string")
-                if not isinstance(emotion_score, dict):
-                    raise InvalidParameterError(
-                        "emotion_score", str(type(emotion_score).__name__), "emotion_score must be a dict"
-                    )
-                return self.modulate_response_warmth(response, emotion_score)
-            case "track_affective_state":
-                user_id = params.get("user_id", "default")
-                text = params.get("text", "")
-                context = params.get("context", "")
-                if user_id is None:
-                    user_id = "default"
-                if text is None:
-                    text = ""
-                if context is None:
-                    context = ""
-                if not isinstance(user_id, str):
-                    raise InvalidParameterError("user_id", str(type(user_id).__name__), "user_id must be a string")
-                if not isinstance(text, str):
-                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
-                if not isinstance(context, str):
-                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
-                return self.track_affective_state(user_id, text, context)
-            case "calculate_mood_curve":
-                user_id = params.get("user_id", "default")
-                time_window = params.get("time_window", 24)
-                if user_id is None:
-                    user_id = "default"
-                if not isinstance(user_id, str):
-                    raise InvalidParameterError("user_id", str(type(user_id).__name__), "user_id must be a string")
-                try:
-                    time_window_int = int(time_window)
-                except (TypeError, ValueError):
-                    raise InvalidParameterError("time_window", str(time_window), "time_window must be an integer")
-                if time_window_int < 1:
-                    raise InvalidParameterError("time_window", str(time_window_int), "time_window must be >= 1")
-                return self.calculate_mood_curve(user_id, time_window)
-            case "apply_sentiment_carryover":
-                current_sentiment = params.get("current_sentiment", 0.0)
-                previous_sentiment = params.get("previous_sentiment", 0.0)
-                carryover_factor = params.get("carryover_factor", 0.3)
-                try:
-                    float(current_sentiment)
-                    float(previous_sentiment)
-                    float(carryover_factor)
-                except (TypeError, ValueError):
-                    raise InvalidParameterError(
-                        "carryover_factor",
-                        str(carryover_factor),
-                        "current_sentiment, previous_sentiment, and carryover_factor must be numbers",
-                    )
-                return self.apply_sentiment_carryover(
-                    current_sentiment, previous_sentiment, carryover_factor
-                )
-            case "apply_emotional_decay":
-                user_id = params.get("user_id", "default")
-                time_elapsed = params.get("time_elapsed", 1.0)
-                decay_rate = params.get("decay_rate", 0.1)
-                if user_id is None:
-                    user_id = "default"
-                if not isinstance(user_id, str):
-                    raise InvalidParameterError("user_id", str(type(user_id).__name__), "user_id must be a string")
-                try:
-                    float(time_elapsed)
-                    float(decay_rate)
-                except (TypeError, ValueError):
-                    raise InvalidParameterError(
-                        "time_elapsed",
-                        str(time_elapsed),
-                        "time_elapsed and decay_rate must be numbers",
-                    )
-                return self.apply_emotional_decay(user_id, time_elapsed, decay_rate)
-            case "compensate_tone":
-                text = params.get("text", "")
-                detected_emotion = params.get("detected_emotion", {})
-                if text is None:
-                    text = ""
-                if detected_emotion is None:
-                    detected_emotion = {}
-                if not isinstance(text, str):
-                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
-                if not isinstance(detected_emotion, dict):
-                    raise InvalidParameterError(
-                        "detected_emotion", str(type(detected_emotion).__name__), "detected_emotion must be a dict"
-                    )
-                return self.compensate_tone(text, detected_emotion)
-            case "navigate_emotional_graph":
-                current_state = params.get("current_state", "neutral")
-                target_state = params.get("target_state")
-                if current_state is None:
-                    current_state = "neutral"
-                if not isinstance(current_state, str):
-                    raise InvalidParameterError(
-                        "current_state", str(type(current_state).__name__), "current_state must be a string"
-                    )
-                if target_state is not None and not isinstance(target_state, str):
-                    raise InvalidParameterError(
-                        "target_state", str(type(target_state).__name__), "target_state must be a string when provided"
-                    )
-                return self.navigate_emotional_graph(current_state, target_state)
-            case _:
+        if operation == "score_emotional_intent":
+            text = params.get("text", "")
+            context = params.get("context", "")
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            return self.score_emotional_intent(text, context)
+        elif operation == "calculate_warmth_level":
+            emotion_score = params.get("emotion_score", {})
+            if emotion_score is None:
+                emotion_score = {}
+            if not isinstance(emotion_score, dict):
                 raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for emotional_inference",
+                    "emotion_score", str(type(emotion_score).__name__), "emotion_score must be a dict"
                 )
+            return self.calculate_warmth_level(emotion_score)
+        elif operation == "tune_empathy":
+            text = params.get("text", "")
+            emotion_score = params.get("emotion_score", {})
+            if text is None:
+                text = ""
+            if emotion_score is None:
+                emotion_score = {}
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(emotion_score, dict):
+                raise InvalidParameterError(
+                    "emotion_score", str(type(emotion_score).__name__), "emotion_score must be a dict"
+                )
+            return self.tune_empathy(text, emotion_score)
+        elif operation == "infer_emotion":
+            text = params.get("text", "")
+            context = params.get("context", "")
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            return self.infer_emotion(text, context)
+        elif operation == "modulate_response_warmth":
+            response = params.get("response", "")
+            emotion_score = params.get("emotion_score", {})
+            if response is None:
+                response = ""
+            if emotion_score is None:
+                emotion_score = {}
+            if not isinstance(response, str):
+                raise InvalidParameterError("response", str(type(response).__name__), "response must be a string")
+            if not isinstance(emotion_score, dict):
+                raise InvalidParameterError(
+                    "emotion_score", str(type(emotion_score).__name__), "emotion_score must be a dict"
+                )
+            return self.modulate_response_warmth(response, emotion_score)
+        elif operation == "track_affective_state":
+            user_id = params.get("user_id", "default")
+            text = params.get("text", "")
+            context = params.get("context", "")
+            if user_id is None:
+                user_id = "default"
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(user_id, str):
+                raise InvalidParameterError("user_id", str(type(user_id).__name__), "user_id must be a string")
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            return self.track_affective_state(user_id, text, context)
+        elif operation == "calculate_mood_curve":
+            user_id = params.get("user_id", "default")
+            time_window = params.get("time_window", 24)
+            if user_id is None:
+                user_id = "default"
+            if not isinstance(user_id, str):
+                raise InvalidParameterError("user_id", str(type(user_id).__name__), "user_id must be a string")
+            try:
+                time_window_int = int(time_window)
+            except (TypeError, ValueError):
+                raise InvalidParameterError("time_window", str(time_window), "time_window must be an integer")
+            if time_window_int < 1:
+                raise InvalidParameterError("time_window", str(time_window_int), "time_window must be >= 1")
+            return self.calculate_mood_curve(user_id, time_window)
+        elif operation == "apply_sentiment_carryover":
+            current_sentiment = params.get("current_sentiment", 0.0)
+            previous_sentiment = params.get("previous_sentiment", 0.0)
+            carryover_factor = params.get("carryover_factor", 0.3)
+            try:
+                float(current_sentiment)
+                float(previous_sentiment)
+                float(carryover_factor)
+            except (TypeError, ValueError):
+                raise InvalidParameterError(
+                    "carryover_factor",
+                    str(carryover_factor),
+                    "current_sentiment, previous_sentiment, and carryover_factor must be numbers",
+                )
+            return self.apply_sentiment_carryover(
+                current_sentiment, previous_sentiment, carryover_factor
+            )
+        elif operation == "apply_emotional_decay":
+            user_id = params.get("user_id", "default")
+            time_elapsed = params.get("time_elapsed", 1.0)
+            decay_rate = params.get("decay_rate", 0.1)
+            if user_id is None:
+                user_id = "default"
+            if not isinstance(user_id, str):
+                raise InvalidParameterError("user_id", str(type(user_id).__name__), "user_id must be a string")
+            try:
+                float(time_elapsed)
+                float(decay_rate)
+            except (TypeError, ValueError):
+                raise InvalidParameterError(
+                    "time_elapsed",
+                    str(time_elapsed),
+                    "time_elapsed and decay_rate must be numbers",
+                )
+            return self.apply_emotional_decay(user_id, time_elapsed, decay_rate)
+        elif operation == "compensate_tone":
+            text = params.get("text", "")
+            detected_emotion = params.get("detected_emotion", {})
+            if text is None:
+                text = ""
+            if detected_emotion is None:
+                detected_emotion = {}
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(detected_emotion, dict):
+                raise InvalidParameterError(
+                    "detected_emotion", str(type(detected_emotion).__name__), "detected_emotion must be a dict"
+                )
+            return self.compensate_tone(text, detected_emotion)
+        elif operation == "navigate_emotional_graph":
+            current_state = params.get("current_state", "neutral")
+            target_state = params.get("target_state")
+            if current_state is None:
+                current_state = "neutral"
+            if not isinstance(current_state, str):
+                raise InvalidParameterError(
+                    "current_state", str(type(current_state).__name__), "current_state must be a string"
+                )
+            if target_state is not None and not isinstance(target_state, str):
+                raise InvalidParameterError(
+                    "target_state", str(type(target_state).__name__), "target_state must be a string when provided"
+                )
+            return self.navigate_emotional_graph(current_state, target_state)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for emotional_inference",
+            )
 
     def score_emotional_intent(self, text: str, context: str = "") -> Dict[str, Any]:
         """Score emotional intent from user input (detect tone, sentiment, emotional state)"""
@@ -384,22 +384,22 @@ class EmotionalInferenceModule(BaseBrainModule):
         intensity = scores[primary_emotion]
 
         # Determine tone
-        match (
+        excited, questioning, emphatic, casual = (
             tone_indicators["excited"],
             tone_indicators["questioning"],
             tone_indicators["emphatic"],
             tone_indicators["casual"],
-        ):
-            case (True, _, _, _):
-                tone = "excited"
-            case (_, True, _, _):
-                tone = "questioning"
-            case (_, _, True, _):
-                tone = "emphatic"
-            case (_, _, _, True):
-                tone = "casual"
-            case _:
-                tone = "neutral"
+        )
+        if excited:
+            tone = "excited"
+        elif questioning:
+            tone = "questioning"
+        elif emphatic:
+            tone = "emphatic"
+        elif casual:
+            tone = "casual"
+        else:
+            tone = "neutral"
 
         # Calculate sentiment (-1.0 to 1.0)
         sentiment = positive_score - negative_score
@@ -427,28 +427,28 @@ class EmotionalInferenceModule(BaseBrainModule):
         sentiment = emotion_score.get("sentiment", 0.0)
 
         # Determine warmth level
-        match (emotion, intensity, sentiment):
-            case ("negative", i, _) if i > 0.5:
-                warmth_level = "high"
-                warmth_score = 0.8
-            case ("seeking_help", i, _) if i > 0.4:
-                warmth_level = "high"
-                warmth_score = 0.75
-            case ("positive", i, _) if i > 0.6:
-                warmth_level = "medium_high"
-                warmth_score = 0.65
-            case (_, _, s) if s < -0.3:
-                warmth_level = "high"
-                warmth_score = 0.7
-            case (_, _, s) if s > 0.5:
-                warmth_level = "medium_high"
-                warmth_score = 0.6
-            case ("sharing", _, _):
-                warmth_level = "medium"
-                warmth_score = 0.5
-            case _:
-                warmth_level = "medium"
-                warmth_score = 0.5
+        if emotion == "negative" and intensity > 0.5:
+            warmth_level = "high"
+            warmth_score = 0.8
+        elif emotion == "seeking_help" and intensity > 0.4:
+            warmth_level = "high"
+            warmth_score = 0.75
+        elif emotion == "positive" and intensity > 0.6:
+            warmth_level = "medium_high"
+            warmth_score = 0.65
+        elif sentiment < -0.3:
+            warmth_level = "high"
+            warmth_score = 0.7
+        elif sentiment > 0.5:
+            warmth_level = "medium_high"
+            warmth_score = 0.6
+        elif emotion == "sharing":
+            warmth_level = "medium"
+            warmth_score = 0.5
+        else:
+            warmth_level = "medium"
+            warmth_score = 0.5
+
 
         return {
             "warmth_level": warmth_level,
@@ -468,17 +468,16 @@ class EmotionalInferenceModule(BaseBrainModule):
         sentiment = emotion_score.get("sentiment", 0.0)
 
         # Determine empathy level needed
-        match (emotion, intensity, sentiment):
-            case ("negative", i, _) if i > 0.5:
-                empathy_level = "high"
-            case ("seeking_help", i, _) if i > 0.4:
-                empathy_level = "high"
-            case (_, _, s) if s < -0.3:
-                empathy_level = "high"
-            case ("positive", i, _) if i > 0.6:
-                empathy_level = "medium"
-            case _:
-                empathy_level = "medium"
+        if emotion == "negative" and intensity > 0.5:
+            empathy_level = "high"
+        elif emotion == "seeking_help" and intensity > 0.4:
+            empathy_level = "high"
+        elif sentiment < -0.3:
+            empathy_level = "high"
+        elif emotion == "positive" and intensity > 0.6:
+            empathy_level = "medium"
+        else:
+            empathy_level = "medium"
 
         # Get empathy phrases
         empathy_phrases = self.empathy_tuners.get(
@@ -565,17 +564,16 @@ class EmotionalInferenceModule(BaseBrainModule):
         intensity = emotion_score.get("intensity", 0.0)
         warmth_level = warmth_result.get("warmth_level", "medium")
 
-        match (emotion, intensity, warmth_level):
-            case ("negative", i, _) if i > 0.6:
-                return "supportive_empathetic"
-            case ("seeking_help", i, _) if i > 0.5:
-                return "helpful_encouraging"
-            case ("positive", i, _) if i > 0.6:
-                return "enthusiastic_matching"
-            case (_, _, "high"):
-                return "warm_supportive"
-            case _:
-                return "balanced_conversational"
+        if emotion == "negative" and intensity > 0.6:
+            return "supportive_empathetic"
+        elif emotion == "seeking_help" and intensity > 0.5:
+            return "helpful_encouraging"
+        elif emotion == "positive" and intensity > 0.6:
+            return "enthusiastic_matching"
+        elif warmth_level == "high":
+            return "warm_supportive"
+        else:
+            return "balanced_conversational"
 
     def _initialize_emotional_graph(self) -> None:
         """Initialize emotional state transition graph"""
@@ -908,23 +906,22 @@ class EmotionalInferenceModule(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "score_emotional_intent" | "infer_emotion":
-                return "text" in params
-            case "calculate_warmth_level" | "tune_empathy" | "modulate_response_warmth":
-                return "emotion_score" in params or "text" in params
-            case "track_affective_state":
-                return "text" in params
-            case "calculate_mood_curve" | "apply_emotional_decay":
-                return "user_id" in params
-            case "apply_sentiment_carryover":
-                return "current_sentiment" in params and "previous_sentiment" in params
-            case "compensate_tone":
-                return "text" in params and "detected_emotion" in params
-            case "navigate_emotional_graph":
-                return "current_state" in params
-            case _:
-                return True
+        if operation == 'score_emotional_intent' or operation == 'infer_emotion':
+            return "text" in params
+        elif operation == 'calculate_warmth_level' or operation == 'tune_empathy' or operation == 'modulate_response_warmth':
+            return "emotion_score" in params or "text" in params
+        elif operation == "track_affective_state":
+            return "text" in params
+        elif operation == 'calculate_mood_curve' or operation == 'apply_emotional_decay':
+            return "user_id" in params
+        elif operation == "apply_sentiment_carryover":
+            return "current_sentiment" in params and "previous_sentiment" in params
+        elif operation == "compensate_tone":
+            return "text" in params and "detected_emotion" in params
+        elif operation == "navigate_emotional_graph":
+            return "current_state" in params
+        else:
+            return True
 
 
 # Module export

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Tool Registry - Central registry for all available tools
 Mirrors Swift ToolRegistry.swift functionality

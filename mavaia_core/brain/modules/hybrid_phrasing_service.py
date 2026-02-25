@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Hybrid Phrasing Service
 Service that blends Markov chain predictions with learned phrase embeddings

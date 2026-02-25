@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Prompt Injection Safety Service - Critical safety service
 Prevents prompt injection, system prompt extraction, jailbreak attempts

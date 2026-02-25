@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Critical Thinking Module - DeepMind-style reasoning
 Evaluate assumptions, identify biases, and assess evidence quality

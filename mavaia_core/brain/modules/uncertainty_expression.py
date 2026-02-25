@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Uncertainty Expression Module - Natural uncertainty handling
 Handles expressing uncertainty appropriately, using hedging language, natural corrections, and confidence modulation

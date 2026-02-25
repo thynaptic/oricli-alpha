@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Mavaia Core Client - Unified interface for all Mavaia capabilities
 """

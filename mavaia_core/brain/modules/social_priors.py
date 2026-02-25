@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Social Priors Module - Social context detection, appropriateness scoring, and tone adaptation
 Handles social norms, cultural sensitivity, relationship dynamics, and context-aware responses

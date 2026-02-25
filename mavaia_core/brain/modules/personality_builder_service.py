@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Personality Builder Service
 Service for converting personality builder data to training configuration

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Document Orchestration Module - Multi-document routing and synthesis
 Routes queries across multiple documents, hierarchical reading, long-form
@@ -50,36 +51,35 @@ class DocumentOrchestrationModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a document orchestration operation"""
-        match operation:
-            case "route_multi_document":
-                query = params.get("query", "")
-                documents = params.get("documents", [])
-                return self.route_multi_document(query, documents)
+        if operation == "route_multi_document":
+            query = params.get("query", "")
+            documents = params.get("documents", [])
+            return self.route_multi_document(query, documents)
 
-            case "hierarchical_read":
-                document = params.get("document", "")
-                return self.hierarchical_read(document)
+        elif operation == "hierarchical_read":
+            document = params.get("document", "")
+            return self.hierarchical_read(document)
 
-            case "reason_across_sections":
-                document = params.get("document", "")
-                query = params.get("query", "")
-                return self.reason_across_sections(document, query)
+        elif operation == "reason_across_sections":
+            document = params.get("document", "")
+            query = params.get("query", "")
+            return self.reason_across_sections(document, query)
 
-            case "link_cross_sections":
-                document = params.get("document", "")
-                return self.link_cross_sections(document)
+        elif operation == "link_cross_sections":
+            document = params.get("document", "")
+            return self.link_cross_sections(document)
 
-            case "synthesize_documents":
-                documents = params.get("documents", [])
-                query = params.get("query", "")
-                return self.synthesize_documents(documents, query)
+        elif operation == "synthesize_documents":
+            documents = params.get("documents", [])
+            query = params.get("query", "")
+            return self.synthesize_documents(documents, query)
 
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for document_orchestration",
-                )
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for document_orchestration",
+            )
 
     def route_multi_document(
         self, query: str, documents: List[Dict[str, Any]]
@@ -450,17 +450,16 @@ class DocumentOrchestrationModule(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "route_multi_document":
-                return "query" in params and "documents" in params
-            case "hierarchical_read" | "link_cross_sections":
-                return "document" in params
-            case "reason_across_sections":
-                return "document" in params and "query" in params
-            case "synthesize_documents":
-                return "documents" in params
-            case _:
-                return True
+        if operation == "route_multi_document":
+            return "query" in params and "documents" in params
+        elif operation == 'hierarchical_read' or operation == 'link_cross_sections':
+            return "document" in params
+        elif operation == "reason_across_sections":
+            return "document" in params and "query" in params
+        elif operation == "synthesize_documents":
+            return "documents" in params
+        else:
+            return True
 
 
 # Module export

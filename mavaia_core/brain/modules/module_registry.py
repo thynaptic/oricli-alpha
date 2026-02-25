@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Module Registry - Discovers and manages plug-and-play brain modules
 Automatically finds all modules in brain_modules directory

@@ -1,3 +1,4 @@
+from __future__ import annotations
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from typing import Any
 

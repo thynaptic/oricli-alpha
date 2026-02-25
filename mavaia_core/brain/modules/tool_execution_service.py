@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Tool Execution Service - Service for executing tools and formatting results
 Mirrors Swift ToolExecutionService.swift functionality

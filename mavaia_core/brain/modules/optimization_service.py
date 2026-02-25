@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Optimization Service - Core optimization service wrapping PythonBrainService
 Converted from Swift OptimizationService.swift

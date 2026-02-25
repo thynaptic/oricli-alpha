@@ -120,33 +120,32 @@ class VerifierAgent(BaseBrainModule):
         - assess_confidence: Calculate confidence scores
         - process_verification: Full verification pipeline
         """
-        match operation:
-            case "verify_facts":
-                answer = params.get("answer", "")
-                documents = params.get("documents", [])
-                return self.verify_facts(answer, documents)
-            case "check_citations":
-                citations = params.get("citations", [])
-                documents = params.get("documents", [])
-                return self.check_citations(citations, documents)
-            case "validate_consistency":
-                answer = params.get("answer", "")
-                information = params.get("information", {})
-                return self.validate_consistency(answer, information)
-            case "assess_confidence":
-                verification_results = params.get("verification_results", {})
-                return self.assess_confidence(verification_results)
-            case "process_verification":
-                answer = params.get("answer", "")
-                documents = params.get("documents", [])
-                information = params.get("information", {})
-                return self.process_verification(answer, documents, information)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for verifier_agent",
-                )
+        if operation == "verify_facts":
+            answer = params.get("answer", "")
+            documents = params.get("documents", [])
+            return self.verify_facts(answer, documents)
+        elif operation == "check_citations":
+            citations = params.get("citations", [])
+            documents = params.get("documents", [])
+            return self.check_citations(citations, documents)
+        elif operation == "validate_consistency":
+            answer = params.get("answer", "")
+            information = params.get("information", {})
+            return self.validate_consistency(answer, information)
+        elif operation == "assess_confidence":
+            verification_results = params.get("verification_results", {})
+            return self.assess_confidence(verification_results)
+        elif operation == "process_verification":
+            answer = params.get("answer", "")
+            documents = params.get("documents", [])
+            information = params.get("information", {})
+            return self.process_verification(answer, documents, information)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for verifier_agent",
+            )
 
     def verify_facts(
         self, answer: str, documents: List[Dict[str, Any]]
@@ -601,17 +600,16 @@ class VerifierAgent(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "verify_facts":
-                return "answer" in params and "documents" in params
-            case "check_citations":
-                return "citations" in params and "documents" in params
-            case "validate_consistency":
-                return "answer" in params and "information" in params
-            case "assess_confidence":
-                return "verification_results" in params
-            case "process_verification":
-                return "answer" in params and "documents" in params and "information" in params
-            case _:
-                return True
+        if operation == "verify_facts":
+            return "answer" in params and "documents" in params
+        elif operation == "check_citations":
+            return "citations" in params and "documents" in params
+        elif operation == "validate_consistency":
+            return "answer" in params and "information" in params
+        elif operation == "assess_confidence":
+            return "verification_results" in params
+        elif operation == "process_verification":
+            return "answer" in params and "documents" in params and "information" in params
+        else:
+            return True
 

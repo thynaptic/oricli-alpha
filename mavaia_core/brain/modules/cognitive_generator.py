@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Cognitive Generator Module - Orchestrates all cognitive modules to generate responses without LLMs
 Replaces autoregressive LLM text generation with a composable cognitive pipeline
@@ -334,122 +335,121 @@ class CognitiveGeneratorModule(BaseBrainModule):
         """Execute a cognitive generation operation"""
         self._ensure_modules_loaded()
         
-        match operation:
-            case "preload_common_modules":
-                self.preload_common_modules()
-                return {"success": True, "message": "Common modules preloaded"}
-        
-            case "generate_response":
-                # Extract input_text from either "input" or "messages" parameter
-                input_text = params.get("input", "")
-                if not input_text and params.get("messages"):
-                    # Extract from messages array (OpenAI-compatible format)
-                    messages = params.get("messages", [])
-                    if isinstance(messages, list) and len(messages) > 0:
-                        # Get the last user message
-                        for msg in reversed(messages):
-                            if isinstance(msg, dict):
-                                content = msg.get("content", "")
-                                if content and msg.get("role") in ("user", "system"):
-                                    input_text = content
-                                    break
-                        # If no user message found, use last message content
-                        if not input_text and messages:
-                            last_msg = messages[-1]
-                            if isinstance(last_msg, dict):
-                                input_text = last_msg.get("content", "")
-                
-                # Extract conversation_history from messages if not provided
-                conversation_history = params.get("conversation_history", [])
-                if not conversation_history and params.get("messages"):
-                    messages = params.get("messages", [])
-                    if isinstance(messages, list):
-                        conversation_history = [
-                            {"role": msg.get("role", "user"), "content": msg.get("content", "")}
-                            for msg in messages
-                            if isinstance(msg, dict) and msg.get("content")
-                        ]
-                
-                # Log warning if input_text is still empty after extraction
-                if not input_text:
-                    import sys
-                    print(
-                        f"[CognitiveGenerator] WARNING: No input_text extracted from params. "
-                        f"Params keys: {list(params.keys())}, "
-                        f"Has messages: {bool(params.get('messages'))}, "
-                        f"Messages type: {type(params.get('messages'))}",
-                        file=sys.stderr,
-                        flush=True
-                    )
-                
-                return self.generate_response(
-                    input_text=input_text,
-                    context=params.get("context", ""),
-                    voice_context=params.get("voice_context", {}),
-                    mcts_result=params.get("mcts_result"),
-                    reasoning_tree=params.get("reasoning_tree"),
-                    conversation_history=conversation_history,
-                    vision_context=params.get("vision_context"),
-                    document_context=params.get("document_context"),
-                    temperature=params.get("temperature", 0.7),
-                    max_tokens=params.get("max_tokens"),
+        if operation == "preload_common_modules":
+            self.preload_common_modules()
+            return {"success": True, "message": "Common modules preloaded"}
+
+        elif operation == "generate_response":
+            # Extract input_text from either "input" or "messages" parameter
+            input_text = params.get("input", "")
+            if not input_text and params.get("messages"):
+                # Extract from messages array (OpenAI-compatible format)
+                messages = params.get("messages", [])
+                if isinstance(messages, list) and len(messages) > 0:
+                    # Get the last user message
+                    for msg in reversed(messages):
+                        if isinstance(msg, dict):
+                            content = msg.get("content", "")
+                            if content and msg.get("role") in ("user", "system"):
+                                input_text = content
+                                break
+                    # If no user message found, use last message content
+                    if not input_text and messages:
+                        last_msg = messages[-1]
+                        if isinstance(last_msg, dict):
+                            input_text = last_msg.get("content", "")
+
+            # Extract conversation_history from messages if not provided
+            conversation_history = params.get("conversation_history", [])
+            if not conversation_history and params.get("messages"):
+                messages = params.get("messages", [])
+                if isinstance(messages, list):
+                    conversation_history = [
+                        {"role": msg.get("role", "user"), "content": msg.get("content", "")}
+                        for msg in messages
+                        if isinstance(msg, dict) and msg.get("content")
+                    ]
+
+            # Log warning if input_text is still empty after extraction
+            if not input_text:
+                import sys
+                print(
+                    f"[CognitiveGenerator] WARNING: No input_text extracted from params. "
+                    f"Params keys: {list(params.keys())}, "
+                    f"Has messages: {bool(params.get('messages'))}, "
+                    f"Messages type: {type(params.get('messages'))}",
+                    file=sys.stderr,
+                    flush=True
                 )
 
-            case "build_thought_graph":
-                return self.build_thought_graph(
-                    input_text=params.get("input", ""),
-                    context=params.get("context", ""),
-                )
+            return self.generate_response(
+                input_text=input_text,
+                context=params.get("context", ""),
+                voice_context=params.get("voice_context", {}),
+                mcts_result=params.get("mcts_result"),
+                reasoning_tree=params.get("reasoning_tree"),
+                conversation_history=conversation_history,
+                vision_context=params.get("vision_context"),
+                document_context=params.get("document_context"),
+                temperature=params.get("temperature", 0.7),
+                max_tokens=params.get("max_tokens"),
+            )
 
-            case "select_best_thoughts":
-                return self.select_best_thoughts(
-                    thought_graph=params.get("thought_graph", {}),
-                    max_thoughts=params.get("max_thoughts", 5),
-                )
+        elif operation == "build_thought_graph":
+            return self.build_thought_graph(
+                input_text=params.get("input", ""),
+                context=params.get("context", ""),
+            )
 
-            case "convert_to_text":
-                return self.convert_to_text(
-                    selected_thoughts=params.get("selected_thoughts", []),
-                    voice_context=params.get("voice_context", {}),
-                    context=params.get("context", ""),
-                    original_input=params.get("input", ""),
-                )
+        elif operation == "select_best_thoughts":
+            return self.select_best_thoughts(
+                thought_graph=params.get("thought_graph", {}),
+                max_thoughts=params.get("max_thoughts", 5),
+            )
 
-            case "generate_response_with_tools":
-                return self.generate_response_with_tools(
-                    input_text=params.get("input", ""),
-                    context=params.get("context", ""),
-                    tools=params.get("tools", []),
-                    conversation_history=params.get("conversation_history", []),
-                    voice_context=params.get("voice_context", {}),
-                )
+        elif operation == "convert_to_text":
+            return self.convert_to_text(
+                selected_thoughts=params.get("selected_thoughts", []),
+                voice_context=params.get("voice_context", {}),
+                context=params.get("context", ""),
+                original_input=params.get("input", ""),
+            )
 
-            case "generate_response_streaming":
-                # Enhanced streaming: yield partial results during reasoning
-                return self.generate_response_streaming(
-                    input_text=params.get("input", ""),
-                    context=params.get("context", ""),
-                    voice_context=params.get("voice_context", {}),
-                    mcts_result=params.get("mcts_result"),
-                    reasoning_tree=params.get("reasoning_tree"),
-                )
+        elif operation == "generate_response_with_tools":
+            return self.generate_response_with_tools(
+                input_text=params.get("input", ""),
+                context=params.get("context", ""),
+                tools=params.get("tools", []),
+                conversation_history=params.get("conversation_history", []),
+                voice_context=params.get("voice_context", {}),
+            )
 
-            case "get_trace_graphs":
-                return self.get_trace_graphs(params.get("limit", 10))
-            
-            case "get_routing_statistics":
-                return self.get_routing_statistics()
-            
-            case "get_router_state":
-                return self.get_router_state()
-            
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=str(operation),
-                    reason="Unknown operation for cognitive_generator",
-                )
-    
+        elif operation == "generate_response_streaming":
+            # Enhanced streaming: yield partial results during reasoning
+            return self.generate_response_streaming(
+                input_text=params.get("input", ""),
+                context=params.get("context", ""),
+                voice_context=params.get("voice_context", {}),
+                mcts_result=params.get("mcts_result"),
+                reasoning_tree=params.get("reasoning_tree"),
+            )
+
+        elif operation == "get_trace_graphs":
+            return self.get_trace_graphs(params.get("limit", 10))
+
+        elif operation == "get_routing_statistics":
+            return self.get_routing_statistics()
+
+        elif operation == "get_router_state":
+            return self.get_router_state()
+
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=str(operation),
+                reason="Unknown operation for cognitive_generator",
+            )
+
     def _refresh_module_discovery(self) -> None:
         """
         Refresh module discovery to pick up newly added modules.
@@ -4948,30 +4948,28 @@ class CognitiveGeneratorModule(BaseBrainModule):
         complexity = min(complexity, 1.0)  # Cap at 1.0
 
         # Determine min/max thoughts and density based on complexity bucket
-        match complexity:
-            case c if c < 0.3:  # Very simple (1-3 words, greetings)
-                min_thoughts, max_thoughts = 2, 4
-                base_density = "low"  # Low detail - keep it simple
-            case c if c < 0.5:  # Simple (short queries)
-                min_thoughts, max_thoughts = 3, 6
-                base_density = "low"  # Low detail - concise thoughts
-            case c if c < 0.7:  # Medium (normal queries)
-                min_thoughts, max_thoughts = 5, 10
-                base_density = "medium"  # Medium detail - balanced
-            case _:  # Complex (long, multi-part queries)
-                min_thoughts, max_thoughts = 8, 15
-                base_density = "high"  # High detail - thorough analysis
+        if complexity < 0.3:
+            min_thoughts, max_thoughts = 2, 4
+            base_density = "low"  # Low detail - keep it simple
+        elif complexity < 0.5:
+            min_thoughts, max_thoughts = 3, 6
+            base_density = "low"  # Low detail - concise thoughts
+        elif complexity < 0.7:
+            min_thoughts, max_thoughts = 5, 10
+            base_density = "medium"  # Medium detail - balanced
+        else:
+            min_thoughts, max_thoughts = 8, 15
+            base_density = "high"  # High detail - thorough analysis
 
         # Adjust density based on latency pressure (high pressure = lower density)
         density_map = {"low": 0, "medium": 1, "high": 2}
         density_level = density_map[base_density]
-        match latency_pressure:
-            case p if p > 0.7:  # Very high latency pressure
-                density_level = 0  # Force to low density
-            case p if p > 0.5:  # High latency pressure
-                density_level = max(0, density_level - 1)  # Reduce density by one level
-            case _:
-                pass  # No adjustment needed
+        if latency_pressure > 0.7:
+            density_level = 0  # Force to low density
+        elif latency_pressure > 0.5:
+            density_level = max(0, density_level - 1)  # Reduce density by one level
+        else:
+            pass  # No adjustment needed
 
         density = ["low", "medium", "high"][density_level]
 
@@ -4983,16 +4981,15 @@ class CognitiveGeneratorModule(BaseBrainModule):
         if word_count <= 3 and not is_question:
             # Very short inputs that are NOT questions - these are likely greetings
             # Generate actual greeting thoughts, not metadata
-            match density:
-                case "low":
-                    thoughts.append("Hello! How can I help you today?")
-                case "medium":
-                    thoughts.append("Hi there! What would you like to know?")
-                    thoughts.append("I'm here to help with any questions you have.")
-                case _:  # high
-                    thoughts.append("Hey! What's on your mind?")
-                    thoughts.append("I'm here to help with whatever you need.")
-                    thoughts.append("Feel free to ask me anything!")
+            if density == "low":
+                thoughts.append("Hello! How can I help you today?")
+            elif density == "medium":
+                thoughts.append("Hi there! What would you like to know?")
+                thoughts.append("I'm here to help with any questions you have.")
+            else:
+                thoughts.append("Hey! What's on your mind?")
+                thoughts.append("I'm here to help with whatever you need.")
+                thoughts.append("Feel free to ask me anything!")
             if context and density != "low":
                 thoughts.append("Building on our previous conversation.")
         elif is_question or word_count > 3:
@@ -5002,58 +4999,55 @@ class CognitiveGeneratorModule(BaseBrainModule):
             if "?" in input_text:
                 question_topic = input_text.split("?")[0].strip()
             
-            match density:
-                case "low":
-                    thoughts.append(f"Answer the question: {question_topic}")
-                case "medium":
-                    thoughts.append(f"Provide information about: {question_topic}")
-                    thoughts.append("Give a clear, helpful explanation")
-                case _:  # high
-                    thoughts.append(f"Explain: {question_topic}")
-                    thoughts.append("Provide detailed information and context")
-                    thoughts.append("Make the explanation clear and engaging")
+            if density == "low":
+                thoughts.append(f"Answer the question: {question_topic}")
+            elif density == "medium":
+                thoughts.append(f"Provide information about: {question_topic}")
+                thoughts.append("Give a clear, helpful explanation")
+            else:
+                thoughts.append(f"Explain: {question_topic}")
+                thoughts.append("Provide detailed information and context")
+                thoughts.append("Make the explanation clear and engaging")
             if context and density != "low":
                 thoughts.append("Use any relevant context from previous conversation")
         else:
             # Longer inputs - generate RESPONSE-FOCUSED thoughts, not input rephrasing
             # CRITICAL: Thoughts should be about what to SAY, not what was ASKED
             # Never include "User wants" or "User is asking" - those get output verbatim!
-            match density:
-                case "low":
-                    thoughts.append("Provide an interesting fact or perspective")
-                    thoughts.append("Respond with something engaging")
-                case "medium":
-                    thoughts.append(
-                        "Provide an interesting fact or perspective about the world"
-                    )
-                    thoughts.append("Respond with something engaging and informative")
-                    thoughts.append("Make it conversational and natural")
-                case _:  # high
-                    thoughts.append(
-                        "Provide an interesting fact or perspective about the world"
-                    )
-                    thoughts.append("Respond with something engaging and informative")
-                    thoughts.append("Make it conversational and natural")
-                    thoughts.append("Consider what would be most interesting to share")
-                    thoughts.append("Connect it to broader themes or insights")
+            if density == "low":
+                thoughts.append("Provide an interesting fact or perspective")
+                thoughts.append("Respond with something engaging")
+            elif density == "medium":
+                thoughts.append(
+                    "Provide an interesting fact or perspective about the world"
+                )
+                thoughts.append("Respond with something engaging and informative")
+                thoughts.append("Make it conversational and natural")
+            else:
+                thoughts.append(
+                    "Provide an interesting fact or perspective about the world"
+                )
+                thoughts.append("Respond with something engaging and informative")
+                thoughts.append("Make it conversational and natural")
+                thoughts.append("Consider what would be most interesting to share")
+                thoughts.append("Connect it to broader themes or insights")
 
             # Add analytical perspectives based on density (response-focused, no input echoing)
             if complexity >= 0.5:
                 # CRITICAL: Generate descriptive thoughts, NOT instructions
-                match density:
-                    case "low":
-                        thoughts.append("User's question identified")
-                        thoughts.append("Helpful information available")
-                    case "medium":
-                        thoughts.append("User's question understood")
-                        thoughts.append("Helpful and relevant information available")
-                        thoughts.append("Engaging and natural approach")
-                    case _:  # high
-                        thoughts.append("User's question understood")
-                        thoughts.append("Helpful and relevant information available")
-                        thoughts.append("This query requires deeper analysis")
-                        thoughts.append("Multiple angles and perspectives available")
-                        thoughts.append("Different approaches and solutions to explore")
+                if density == "low":
+                    thoughts.append("User's question identified")
+                    thoughts.append("Helpful information available")
+                elif density == "medium":
+                    thoughts.append("User's question understood")
+                    thoughts.append("Helpful and relevant information available")
+                    thoughts.append("Engaging and natural approach")
+                else:
+                    thoughts.append("User's question understood")
+                    thoughts.append("Helpful and relevant information available")
+                    thoughts.append("This query requires deeper analysis")
+                    thoughts.append("Multiple angles and perspectives available")
+                    thoughts.append("Different approaches and solutions to explore")
 
                 if complexity >= 0.7 and density == "high":
                     thoughts.append("This is a complex multi-part query")
@@ -5062,17 +5056,16 @@ class CognitiveGeneratorModule(BaseBrainModule):
 
                 if context:
                     # CRITICAL: Descriptive thoughts about context, NOT instructions
-                    match density:
-                        case "low":
-                            thoughts.append("Conversation context available")
-                        case "medium":
-                            thoughts.append("Context can be integrated into response")
-                        case _:  # high
-                            thoughts.append("Context can be integrated into response")
-                            thoughts.append(
-                                "Context provides important constraints or preferences"
-                            )
-                            thoughts.append("Response can be tailored to context")
+                    if density == "low":
+                        thoughts.append("Conversation context available")
+                    elif density == "medium":
+                        thoughts.append("Context can be integrated into response")
+                    else:
+                        thoughts.append("Context can be integrated into response")
+                        thoughts.append(
+                            "Context provides important constraints or preferences"
+                        )
+                        thoughts.append("Response can be tailored to context")
 
         # CRITICAL: Filter out any thoughts that are just echoing the input or contain internal markers
         # Thoughts should be about generating a response, not rephrasing the input

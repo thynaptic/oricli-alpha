@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 OpenAI-Compatible API Implementation
 Provides OpenAI-compatible endpoints for chat completions, embeddings, and models

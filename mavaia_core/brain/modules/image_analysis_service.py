@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Image Analysis Service - Image analysis service using vision models
 Converted from Swift ImageAnalysisService.swift
@@ -61,17 +62,16 @@ class ImageAnalysisServiceModule(BaseBrainModule):
         """Execute an operation"""
         self._ensure_modules_loaded()
 
-        match operation:
-            case "analyze_image":
-                return self._analyze_image(params)
-            case "describe_image":
-                return self._describe_image(params)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for image_analysis_service",
-                )
+        if operation == "analyze_image":
+            return self._analyze_image(params)
+        elif operation == "describe_image":
+            return self._describe_image(params)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for image_analysis_service",
+            )
 
     def _analyze_image(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze an image from file data"""

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Monte-Carlo Thought Search (MCTS) Data Models
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Mavaia Core - Modular AI Core Package
 Provides unified interface for all Mavaia capabilities

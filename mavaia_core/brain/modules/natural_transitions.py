@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Natural Transitions Module - Smooth topic transitions
 Handles natural topic shifting, smooth conversation flow, handling interruptions, and topic bridging

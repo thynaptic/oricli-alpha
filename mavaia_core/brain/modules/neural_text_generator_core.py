@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Neural Text Generator Core Module
 Core text generation functionality using trained neural models

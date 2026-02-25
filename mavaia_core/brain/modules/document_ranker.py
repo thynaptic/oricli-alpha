@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Document Ranker
 Multi-stage document ranking using LLM-based relevance scoring

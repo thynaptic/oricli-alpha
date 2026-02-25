@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Symbolic Solver Service - Service for automatic symbolic solver selection and execution
 Converted from Swift SymbolicSolverService.swift
@@ -80,17 +81,16 @@ class SymbolicSolverServiceModule(BaseBrainModule):
         """Execute an operation"""
         self._ensure_modules_loaded()
 
-        match operation:
-            case "solve_symbolic":
-                return self._solve_symbolic(params)
-            case "select_solver":
-                return self._select_solver(params)
-            case "check_satisfiability":
-                return self._check_satisfiability(params)
-            case "find_model":
-                return self._find_model(params)
-            case _:
-                raise InvalidParameterError("operation", str(operation), "Unknown operation for symbolic_solver_service")
+        if operation == "solve_symbolic":
+            return self._solve_symbolic(params)
+        elif operation == "select_solver":
+            return self._select_solver(params)
+        elif operation == "check_satisfiability":
+            return self._check_satisfiability(params)
+        elif operation == "find_model":
+            return self._find_model(params)
+        else:
+            raise InvalidParameterError("operation", str(operation), "Unknown operation for symbolic_solver_service")
 
     def _solve_symbolic(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Solve a symbolic problem"""

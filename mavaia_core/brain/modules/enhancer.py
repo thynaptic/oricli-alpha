@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Enhances Responses With Human-Like Qualities And Personality Module
 Enhances responses with human-like qualities and personality

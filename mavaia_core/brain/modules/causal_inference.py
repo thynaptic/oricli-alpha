@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Causal Inference Module - DeepMind-style reasoning
 Identify cause-and-effect relationships

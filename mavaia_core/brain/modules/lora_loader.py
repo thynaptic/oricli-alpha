@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 LoRA Adapter Loader Module
 DISABLED: PEFT library is PyTorch-only. This module is disabled in the JAX migration.

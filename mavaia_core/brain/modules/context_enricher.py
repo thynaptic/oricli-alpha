@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Enriches Context With Conversational Components And Consistency Info Module
 Enriches context with conversational components and consistency info

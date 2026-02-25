@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Long Horizon Planner - Long-horizon planning for multi-step goal-based reasoning
 Converted from Swift LongHorizonPlanner.swift

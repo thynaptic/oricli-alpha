@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Base Module Interface - All intelligence modules must inherit from this
 Enables plug-and-play architecture for easy module addition/removal

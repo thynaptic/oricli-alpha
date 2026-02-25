@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Web Fetch Module
 
@@ -123,17 +124,16 @@ class WebFetchModule(BaseBrainModule):
         self._ensure_service()
         
         try:
-            match operation:
-                case "fetch_url":
-                    return self._fetch_url(params)
-                case "fetch_multiple":
-                    return self._fetch_multiple(params)
-                case "validate_url":
-                    return self._validate_url(params)
-                case _:
-                    raise InvalidParameterError(
-                        "operation", str(operation), "Unknown operation for web_fetch"
-                    )
+            if operation == "fetch_url":
+                return self._fetch_url(params)
+            elif operation == "fetch_multiple":
+                return self._fetch_multiple(params)
+            elif operation == "validate_url":
+                return self._validate_url(params)
+            else:
+                raise InvalidParameterError(
+                    "operation", str(operation), "Unknown operation for web_fetch"
+                )
         except (InvalidParameterError, ModuleInitializationError, ModuleOperationError):
             raise
         except Exception as e:

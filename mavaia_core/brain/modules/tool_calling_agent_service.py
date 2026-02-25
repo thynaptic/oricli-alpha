@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Tool Calling Agent Service - Service for multi-turn tool calling (agent loop)
 Converted from Swift ToolCallingAgentService.swift

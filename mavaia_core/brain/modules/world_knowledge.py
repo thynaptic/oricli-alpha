@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 World Knowledge Module - Hybrid knowledge base (graph + vectors)
 Handles knowledge retrieval, validation, fact storage, and semantic search over world knowledge
@@ -162,57 +163,56 @@ class WorldKnowledgeModule(BaseBrainModule):
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a world knowledge operation"""
         self._ensure_initialized()
-        match operation:
-            case "query_knowledge":
-                query = params.get("query", "")
-                query_type = params.get("query_type", "semantic")
-                limit = params.get("limit", 10)
-                return self.query_knowledge(query, query_type, limit)
-            case "add_knowledge":
-                fact = params.get("fact", "")
-                entities = params.get("entities", [])
-                relationships = params.get("relationships", {})
-                return self.add_knowledge(fact, entities, relationships)
-            case "validate_fact":
-                fact = params.get("fact", "")
-                context = params.get("context", "")
-                return self.validate_fact(fact, context)
-            case "semantic_search":
-                query = params.get("query", "")
-                limit = params.get("limit", 10)
-                threshold = params.get("threshold", 0.7)
-                return self.semantic_search(query, limit, threshold)
-            case "get_related_facts":
-                entity = params.get("entity", "")
-                depth = params.get("depth", 2)
-                return self.get_related_facts(entity, depth)
-            case "find_entities":
-                text = params.get("text", "")
-                return self.find_entities(text)
-            case "expand_knowledge_base":
-                facts = params.get("facts", [])
-                domain = params.get("domain", "general")
-                return self.expand_knowledge_base(facts, domain)
-            case "retrieve_by_domain":
-                domain = params.get("domain", "general")
-                query = params.get("query", "")
-                limit = params.get("limit", 10)
-                return self.retrieve_by_domain(domain, query, limit)
-            case "build_knowledge_graph":
-                return self.build_knowledge_graph()
-            case "verify_fact_chain":
-                fact = params.get("fact", "")
-                return self.verify_fact_chain(fact)
-            case "get_knowledge_path":
-                source = params.get("source", "")
-                target = params.get("target", "")
-                return self.get_knowledge_path(source, target)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for world_knowledge",
-                )
+        if operation == "query_knowledge":
+            query = params.get("query", "")
+            query_type = params.get("query_type", "semantic")
+            limit = params.get("limit", 10)
+            return self.query_knowledge(query, query_type, limit)
+        elif operation == "add_knowledge":
+            fact = params.get("fact", "")
+            entities = params.get("entities", [])
+            relationships = params.get("relationships", {})
+            return self.add_knowledge(fact, entities, relationships)
+        elif operation == "validate_fact":
+            fact = params.get("fact", "")
+            context = params.get("context", "")
+            return self.validate_fact(fact, context)
+        elif operation == "semantic_search":
+            query = params.get("query", "")
+            limit = params.get("limit", 10)
+            threshold = params.get("threshold", 0.7)
+            return self.semantic_search(query, limit, threshold)
+        elif operation == "get_related_facts":
+            entity = params.get("entity", "")
+            depth = params.get("depth", 2)
+            return self.get_related_facts(entity, depth)
+        elif operation == "find_entities":
+            text = params.get("text", "")
+            return self.find_entities(text)
+        elif operation == "expand_knowledge_base":
+            facts = params.get("facts", [])
+            domain = params.get("domain", "general")
+            return self.expand_knowledge_base(facts, domain)
+        elif operation == "retrieve_by_domain":
+            domain = params.get("domain", "general")
+            query = params.get("query", "")
+            limit = params.get("limit", 10)
+            return self.retrieve_by_domain(domain, query, limit)
+        elif operation == "build_knowledge_graph":
+            return self.build_knowledge_graph()
+        elif operation == "verify_fact_chain":
+            fact = params.get("fact", "")
+            return self.verify_fact_chain(fact)
+        elif operation == "get_knowledge_path":
+            source = params.get("source", "")
+            target = params.get("target", "")
+            return self.get_knowledge_path(source, target)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for world_knowledge",
+            )
 
     def query_knowledge(
         self, query: str, query_type: str = "semantic", limit: int = 10
@@ -960,24 +960,23 @@ class WorldKnowledgeModule(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "query_knowledge" | "semantic_search":
-                return "query" in params
-            case "add_knowledge":
-                return "fact" in params
-            case "validate_fact" | "verify_fact_chain":
-                return "fact" in params
-            case "get_related_facts":
-                return "entity" in params
-            case "find_entities":
-                return "text" in params
-            case "expand_knowledge_base":
-                return "facts" in params
-            case "retrieve_by_domain":
-                return "domain" in params
-            case "get_knowledge_path":
-                return "source" in params and "target" in params
-            case "build_knowledge_graph":
-                return True
-            case _:
-                return True
+        if operation == 'query_knowledge' or operation == 'semantic_search':
+            return "query" in params
+        elif operation == "add_knowledge":
+            return "fact" in params
+        elif operation == 'validate_fact' or operation == 'verify_fact_chain':
+            return "fact" in params
+        elif operation == "get_related_facts":
+            return "entity" in params
+        elif operation == "find_entities":
+            return "text" in params
+        elif operation == "expand_knowledge_base":
+            return "facts" in params
+        elif operation == "retrieve_by_domain":
+            return "domain" in params
+        elif operation == "get_knowledge_path":
+            return "source" in params and "target" in params
+        elif operation == "build_knowledge_graph":
+            return True
+        else:
+            return True

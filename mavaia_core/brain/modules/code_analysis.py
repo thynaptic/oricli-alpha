@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Code Analysis Module - Code parsing, analysis, and explanation generation
 Handles code parsing using AST, pattern recognition, and natural language explanations
@@ -56,81 +57,80 @@ class CodeAnalysisModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a code analysis operation"""
-        match operation:
-            case "parse_code":
-                code = params.get("code", "")
-                if code is None:
-                    code = ""
-                if not isinstance(code, str):
-                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
-                return self.parse_code(code)
-            case "analyze_code":
-                code = params.get("code", "")
-                if code is None:
-                    code = ""
-                if not isinstance(code, str):
-                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
-                return self.analyze_code(code)
-            case "explain_code":
-                code = params.get("code", "")
-                detail_level = params.get("detail_level", "medium")
-                if code is None:
-                    code = ""
-                if detail_level is None:
-                    detail_level = "medium"
-                if not isinstance(code, str):
-                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
-                if not isinstance(detail_level, str):
-                    raise InvalidParameterError(
-                        "detail_level", str(type(detail_level).__name__), "detail_level must be a string"
-                    )
-                return self.explain_code(code, detail_level)
-            case "identify_patterns":
-                code = params.get("code", "")
-                if code is None:
-                    code = ""
-                if not isinstance(code, str):
-                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
-                return self.identify_patterns(code)
-            case "extract_functions":
-                code = params.get("code", "")
-                if code is None:
-                    code = ""
-                if not isinstance(code, str):
-                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
-                return self.extract_functions(code)
-            case "extract_classes":
-                code = params.get("code", "")
-                if code is None:
-                    code = ""
-                if not isinstance(code, str):
-                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
-                return self.extract_classes(code)
-            case "find_issues":
-                code = params.get("code", "")
-                if code is None:
-                    code = ""
-                if not isinstance(code, str):
-                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
-                return self.find_issues(code)
-            case "generate_explanation":
-                code = params.get("code", "")
-                focus = params.get("focus", "general")
-                if code is None:
-                    code = ""
-                if focus is None:
-                    focus = "general"
-                if not isinstance(code, str):
-                    raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
-                if not isinstance(focus, str):
-                    raise InvalidParameterError("focus", str(type(focus).__name__), "focus must be a string")
-                return self.generate_explanation(code, focus)
-            case _:
+        if operation == "parse_code":
+            code = params.get("code", "")
+            if code is None:
+                code = ""
+            if not isinstance(code, str):
+                raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
+            return self.parse_code(code)
+        elif operation == "analyze_code":
+            code = params.get("code", "")
+            if code is None:
+                code = ""
+            if not isinstance(code, str):
+                raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
+            return self.analyze_code(code)
+        elif operation == "explain_code":
+            code = params.get("code", "")
+            detail_level = params.get("detail_level", "medium")
+            if code is None:
+                code = ""
+            if detail_level is None:
+                detail_level = "medium"
+            if not isinstance(code, str):
+                raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
+            if not isinstance(detail_level, str):
                 raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for code_analysis",
+                    "detail_level", str(type(detail_level).__name__), "detail_level must be a string"
                 )
+            return self.explain_code(code, detail_level)
+        elif operation == "identify_patterns":
+            code = params.get("code", "")
+            if code is None:
+                code = ""
+            if not isinstance(code, str):
+                raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
+            return self.identify_patterns(code)
+        elif operation == "extract_functions":
+            code = params.get("code", "")
+            if code is None:
+                code = ""
+            if not isinstance(code, str):
+                raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
+            return self.extract_functions(code)
+        elif operation == "extract_classes":
+            code = params.get("code", "")
+            if code is None:
+                code = ""
+            if not isinstance(code, str):
+                raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
+            return self.extract_classes(code)
+        elif operation == "find_issues":
+            code = params.get("code", "")
+            if code is None:
+                code = ""
+            if not isinstance(code, str):
+                raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
+            return self.find_issues(code)
+        elif operation == "generate_explanation":
+            code = params.get("code", "")
+            focus = params.get("focus", "general")
+            if code is None:
+                code = ""
+            if focus is None:
+                focus = "general"
+            if not isinstance(code, str):
+                raise InvalidParameterError("code", str(type(code).__name__), "code must be a string")
+            if not isinstance(focus, str):
+                raise InvalidParameterError("focus", str(type(focus).__name__), "focus must be a string")
+            return self.generate_explanation(code, focus)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for code_analysis",
+            )
 
     def parse_code(self, code: str) -> Dict[str, Any]:
         """Parse code using Python AST"""
@@ -204,19 +204,18 @@ class CodeAnalysisModule(BaseBrainModule):
         # Generate explanation based on detail level
         explanation_parts = []
 
-        match detail_level:
-            case "simple":
-                explanation_parts.append(
-                    self._generate_simple_explanation(code, structure)
-                )
-            case "detailed":
-                explanation_parts.append(
-                    self._generate_detailed_explanation(code, structure)
-                )
-            case _:  # medium
-                explanation_parts.append(
-                    self._generate_medium_explanation(code, structure)
-                )
+        if detail_level == "simple":
+            explanation_parts.append(
+                self._generate_simple_explanation(code, structure)
+            )
+        elif detail_level == "detailed":
+            explanation_parts.append(
+                self._generate_detailed_explanation(code, structure)
+            )
+        else:
+            explanation_parts.append(
+                self._generate_medium_explanation(code, structure)
+            )
 
         explanation = " ".join(explanation_parts)
 
@@ -349,21 +348,20 @@ class CodeAnalysisModule(BaseBrainModule):
         if not code:
             return {"explanation": "", "error": "No code provided"}
 
-        match focus:
-            case "functions":
-                functions = self.extract_functions(code)
-                return self._explain_functions(functions)
-            case "classes":
-                classes = self.extract_classes(code)
-                return self._explain_classes(classes)
-            case "patterns":
-                patterns = self.identify_patterns(code)
-                return self._explain_patterns(patterns)
-            case "structure":
-                analysis = self.analyze_code(code)
-                return self._explain_structure(analysis)
-            case _:  # general
-                return self.explain_code(code, "medium")
+        if focus == "functions":
+            functions = self.extract_functions(code)
+            return self._explain_functions(functions)
+        elif focus == "classes":
+            classes = self.extract_classes(code)
+            return self._explain_classes(classes)
+        elif focus == "patterns":
+            patterns = self.identify_patterns(code)
+            return self._explain_patterns(patterns)
+        elif focus == "structure":
+            analysis = self.analyze_code(code)
+            return self._explain_structure(analysis)
+        else:
+            return self.explain_code(code, "medium")
 
     def _count_pattern(self, code: str, pattern_name: str) -> int:
         """Count occurrences of a pattern in code"""
@@ -612,18 +610,17 @@ class CodeAnalysisModule(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case (
-                "parse_code"
-                | "analyze_code"
-                | "explain_code"
-                | "identify_patterns"
-                | "extract_functions"
-                | "extract_classes"
-                | "find_issues"
-                | "generate_explanation"
-            ):
-                return "code" in params
-            case _:
-                return True
+        if operation in [
+            "parse_code",
+            "analyze_code",
+            "explain_code",
+            "identify_patterns",
+            "extract_functions",
+            "extract_classes",
+            "find_issues",
+            "generate_explanation",
+        ]:
+            return "code" in params
+        else:
+            return True
 

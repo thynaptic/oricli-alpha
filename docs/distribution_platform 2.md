@@ -2,15 +2,15 @@
 
 ## Abstract
 
-We introduce Thynaptic Registry, a distribution platform for cognitive modules and pre-configured cognitive frameworks within the Mavaia ecosystem. This system enables discovery, installation, and management of cognitive capabilities through a centralized registry service, similar to how Ollama distributes machine learning models. The registry supports both individual brain modules and complete cognitive framework configurations, providing developers with an Ollama-like experience for cognitive systems components. This document describes the architecture, capabilities, security mechanisms, and technical roadmap for the Thynaptic Registry platform.
+We introduce Thynaptic Registry, a distribution platform for cognitive modules and pre-configured cognitive frameworks within the Mavaia ecosystem. This system enables discovery, installation, and management of cognitive capabilities through a centralized registry service. The registry supports both individual brain modules and complete cognitive framework configurations, providing developers with a streamlined experience for cognitive systems components. This document describes the architecture, capabilities, security mechanisms, and technical roadmap for the Thynaptic Registry platform.
 
 ## Introduction
 
 Mavaia's current architecture relies on filesystem-based module discovery, where brain modules are automatically discovered from local directories. While this approach enables plug-and-play module integration, it requires manual installation and distribution of modules. Developers must clone repositories, copy module files, or install packages through traditional Python package managers to access new cognitive capabilities.
 
-We designed Thynaptic Registry to address these limitations by providing a centralized distribution mechanism for cognitive modules and frameworks. The platform enables developers to discover, install, and manage cognitive capabilities through a unified interface, similar to how Ollama simplifies model distribution. This approach reduces friction in extending Mavaia's capabilities and enables community-driven module sharing.
+We designed Thynaptic Registry to address these limitations by providing a centralized distribution mechanism for cognitive modules and frameworks. The platform enables developers to discover, install, and manage cognitive capabilities through a unified interface. This approach reduces friction in extending Mavaia's capabilities and enables community-driven module sharing.
 
-A cognitive framework, in this context, refers to a pre-configured combination of brain modules with specific settings, dependencies, and orchestration patterns. Frameworks represent complete cognitive system configurations optimized for particular use cases—such as research assistance, code analysis, or conversational AI—rather than individual modules. Developers can install entire frameworks with a single command, similar to pulling a complete model family in Ollama.
+A cognitive framework, in this context, refers to a pre-configured combination of brain modules with specific settings, dependencies, and orchestration patterns. Frameworks represent complete cognitive system configurations optimized for particular use cases—such as research assistance, code analysis, or conversational AI—rather than individual modules. Developers can install entire frameworks with a single command.
 
 The registry architecture supports both public and private registries, enabling open community contributions while maintaining enterprise-grade control for organizations requiring private module distribution. This dual approach accommodates diverse deployment scenarios, from open-source research to proprietary cognitive systems.
 

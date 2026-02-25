@@ -130,28 +130,27 @@ class MultiAgentPipeline(BaseBrainModule):
         - handle_feedback: Process verification feedback and iterate
         - optimize_pipeline: Dynamic pipeline optimization
         """
-        match operation:
-            case "process_query":
-                query = params.get("query", "")
-                config = params.get("config", {})
-                return self.process_query(query, config)
-            case "execute_pipeline":
-                query = params.get("query", "")
-                config = params.get("config", {})
-                return self.execute_pipeline(query, config)
-            case "handle_feedback":
-                pipeline_result = params.get("pipeline_result", {})
-                feedback = params.get("feedback", {})
-                return self.handle_feedback(pipeline_result, feedback)
-            case "optimize_pipeline":
-                config = params.get("config", {})
-                return self.optimize_pipeline(config)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for multi_agent_pipeline",
-                )
+        if operation == "process_query":
+            query = params.get("query", "")
+            config = params.get("config", {})
+            return self.process_query(query, config)
+        elif operation == "execute_pipeline":
+            query = params.get("query", "")
+            config = params.get("config", {})
+            return self.execute_pipeline(query, config)
+        elif operation == "handle_feedback":
+            pipeline_result = params.get("pipeline_result", {})
+            feedback = params.get("feedback", {})
+            return self.handle_feedback(pipeline_result, feedback)
+        elif operation == "optimize_pipeline":
+            config = params.get("config", {})
+            return self.optimize_pipeline(config)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for multi_agent_pipeline",
+            )
 
     def process_query(
         self, query: str, config: Optional[Dict[str, Any]] = None
@@ -559,13 +558,12 @@ class MultiAgentPipeline(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "process_query" | "execute_pipeline":
-                return "query" in params
-            case "handle_feedback":
-                return "pipeline_result" in params and "feedback" in params
-            case "optimize_pipeline":
-                return True  # Config is optional
-            case _:
-                return True
+        if operation == 'process_query' or operation == 'execute_pipeline':
+            return "query" in params
+        elif operation == "handle_feedback":
+            return "pipeline_result" in params and "feedback" in params
+        elif operation == "optimize_pipeline":
+            return True  # Config is optional
+        else:
+            return True
 

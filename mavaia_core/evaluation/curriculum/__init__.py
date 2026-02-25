@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Cognitive Curriculum Testing Framework for Mavaia
 

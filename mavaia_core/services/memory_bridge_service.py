@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 MemoryBridgeService (memory.mavaia)
 
@@ -17,7 +18,7 @@ Memory categories supported:
 - vector_index (optional, local)
 """
 
-from __future__ import annotations
+
 
 import base64
 import json

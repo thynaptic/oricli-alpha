@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Fallback Heuristics Module - Intelligent fallback chain selection
 Handles confidence-based fallback triggers, context-aware fallback strategies, and fallback chain management

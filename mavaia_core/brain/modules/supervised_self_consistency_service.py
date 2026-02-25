@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Supervised Self-Consistency Service
 Main orchestrator for supervised self-consistency pipeline
@@ -205,19 +206,18 @@ class SupervisedSelfConsistencyServiceModule(BaseBrainModule):
         """Execute an operation"""
         self._ensure_modules_loaded()
 
-        match operation:
-            case "execute_supervised_self_consistency":
-                return self._execute_supervised_self_consistency(params)
-            case "supervise_candidates":
-                return self._supervise_candidates(params)
-            case "select_best_response":
-                return self._select_best_response(params)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for supervised_self_consistency_service",
-                )
+        if operation == "execute_supervised_self_consistency":
+            return self._execute_supervised_self_consistency(params)
+        elif operation == "supervise_candidates":
+            return self._supervise_candidates(params)
+        elif operation == "select_best_response":
+            return self._select_best_response(params)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for supervised_self_consistency_service",
+            )
 
     def _execute_supervised_self_consistency(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute supervised self-consistency pipeline"""

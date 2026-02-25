@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 COGS Relationship Extractor
 Relationship extraction service for COGS - extracts relationships from text/conversations
@@ -195,19 +196,18 @@ class COGSRelationshipExtractorModule(BaseBrainModule):
         """Execute an operation"""
         self._ensure_modules_loaded()
 
-        match operation:
-            case "extract_relationships":
-                return self._extract_relationships(params)
-            case "extract_from_text":
-                return self._extract_from_text(params)
-            case "extract_from_message":
-                return self._extract_from_message(params)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for cogs_relationship_extractor",
-                )
+        if operation == "extract_relationships":
+            return self._extract_relationships(params)
+        elif operation == "extract_from_text":
+            return self._extract_from_text(params)
+        elif operation == "extract_from_message":
+            return self._extract_from_message(params)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for cogs_relationship_extractor",
+            )
 
     def _extract_relationships(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Extract relationships from text given entities"""

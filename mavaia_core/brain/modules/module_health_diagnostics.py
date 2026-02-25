@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Module Health Diagnostics
 
@@ -13,7 +14,7 @@ Notes:
 - It avoids leaking sensitive data by truncating error messages and not including stack traces by default.
 """
 
-from __future__ import annotations
+
 
 import importlib.util
 import inspect

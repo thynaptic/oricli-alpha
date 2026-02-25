@@ -1,3 +1,4 @@
+
 """
 Neural Text Generator Module
 Local RNN/LSTM text generation with character-level and word-level models
@@ -5,6 +6,7 @@ Supports multiple data sources: Project Gutenberg, Wikipedia, LibriVox, OpenLibr
 """
 
 from typing import Any, Dict, List, Optional, Tuple
+import re
 import sys
 import json
 import random

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Logic-LM Bridge - Python bridge for Logic-LM symbolic reasoning
 Handles complex symbolic transformations and processing

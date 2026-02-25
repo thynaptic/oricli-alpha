@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Style Transfer Module - Transform text to match target style metrics
 Explicit style transfer models for personality switching

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Mavaia Core Embedded HTTP Server
 FastAPI-based server that can run standalone

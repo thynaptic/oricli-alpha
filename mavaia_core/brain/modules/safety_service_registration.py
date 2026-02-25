@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Safety Service Registration
 Auto-registration service for all safety services

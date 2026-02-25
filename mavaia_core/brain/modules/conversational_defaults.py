@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Conversational Defaults Module - Default responses and behaviors for common scenarios
 Handles context-appropriate defaults, personality-aware defaults, and fallback responses

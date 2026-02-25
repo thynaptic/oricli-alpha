@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Chain-of-Thought Reasoning Module
 

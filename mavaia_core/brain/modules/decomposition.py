@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Decomposition Module - DeepMind-style reasoning
 Break complex problems into smaller sub-problems

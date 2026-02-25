@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Model Health Service - Service to verify models are actually online and communicating
 Converted from Swift ModelHealthService.swift

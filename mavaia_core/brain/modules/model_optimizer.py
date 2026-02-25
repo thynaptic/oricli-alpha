@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Model Optimizer Module
 DISABLED: This module requires PyTorch-specific optimizations.

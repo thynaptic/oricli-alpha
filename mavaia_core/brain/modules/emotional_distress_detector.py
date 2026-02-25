@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Emotional Distress Detector - Personality-agnostic emotional distress detection service
 Converted from Swift EmotionalDistressDetector.swift

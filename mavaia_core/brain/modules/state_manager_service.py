@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 State Manager Service - State tracking and management service
 Converted from Swift StateManagerService.swift

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Personality Quirks Service - Manages Mavaia's personality quirks, signature phrases, and response style
 Converted from Swift PersonalityQuirksService.swift

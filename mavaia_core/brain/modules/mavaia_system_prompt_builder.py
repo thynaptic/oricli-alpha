@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Mavaia System Prompt Builder
 Centralized system prompt builder for standalone Mavaia
@@ -289,7 +290,7 @@ Follow safety guidelines when handling sensitive or potentially harmful requests
 6. MODEL ROUTING
 - Intelligent model selection based on task complexity
 - Automatic model switching for different capabilities
-- Local-first processing with Ollama
+- Local-first processing with internal cognitive modules
 - Optional cloud routing for enhanced capabilities"""
 
     def _build_behavioral_guidelines_section(self) -> str:

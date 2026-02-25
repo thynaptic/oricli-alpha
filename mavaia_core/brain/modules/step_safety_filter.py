@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Step Safety Filter
 Safety-aware step filtering that evaluates each reasoning step for safety issues

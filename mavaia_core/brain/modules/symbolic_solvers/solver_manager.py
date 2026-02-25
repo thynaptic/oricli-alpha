@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Solver Manager - Manages lifecycle of symbolic solvers
 """

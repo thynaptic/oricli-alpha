@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Creative Writing Module - Narrative structures, creative patterns, and storytelling
 Handles creative writing generation, narrative structures, creative language patterns
@@ -89,114 +90,113 @@ class CreativeWritingModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a creative writing operation"""
-        match operation:
-            case "generate_story":
-                theme = params.get("theme", "")
-                structure = params.get("structure", "three_act")
-                length = params.get("length", "short")
-                if theme is None:
-                    theme = ""
-                if structure is None:
-                    structure = "three_act"
-                if length is None:
-                    length = "short"
-                if not isinstance(theme, str):
-                    raise InvalidParameterError("theme", str(type(theme).__name__), "theme must be a string")
-                if not isinstance(structure, str):
-                    raise InvalidParameterError("structure", str(type(structure).__name__), "structure must be a string")
-                if not isinstance(length, str):
-                    raise InvalidParameterError("length", str(type(length).__name__), "length must be a string")
-                return self.generate_story(theme, structure, length)
-            case "create_narrative":
-                elements = params.get("elements", {})
-                style = params.get("style", "descriptive")
-                if elements is None:
-                    elements = {}
-                if style is None:
-                    style = "descriptive"
-                if not isinstance(elements, dict):
-                    raise InvalidParameterError("elements", str(type(elements).__name__), "elements must be a dict")
-                if not isinstance(style, str):
-                    raise InvalidParameterError("style", str(type(style).__name__), "style must be a string")
-                return self.create_narrative(elements, style)
-            case "apply_structure":
-                content = params.get("content", "")
-                structure_type = params.get("structure_type", "three_act")
-                if content is None:
-                    content = ""
-                if structure_type is None:
-                    structure_type = "three_act"
-                if not isinstance(content, str):
-                    raise InvalidParameterError("content", str(type(content).__name__), "content must be a string")
-                if not isinstance(structure_type, str):
-                    raise InvalidParameterError(
-                        "structure_type", str(type(structure_type).__name__), "structure_type must be a string"
-                    )
-                return self.apply_structure(content, structure_type)
-            case "add_creative_elements":
-                text = params.get("text", "")
-                elements = params.get("elements", ["metaphor", "imagery"])
-                if text is None:
-                    text = ""
-                if elements is None:
-                    elements = ["metaphor", "imagery"]
-                if not isinstance(text, str):
-                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
-                if not isinstance(elements, list) or not all(isinstance(e, str) for e in elements):
-                    raise InvalidParameterError("elements", str(type(elements).__name__), "elements must be a list[str]")
-                return self.add_creative_elements(text, elements)
-            case "generate_character":
-                traits = params.get("traits", [])
-                role = params.get("role", "protagonist")
-                if traits is None:
-                    traits = []
-                if role is None:
-                    role = "protagonist"
-                if not isinstance(traits, list) or not all(isinstance(t, str) for t in traits):
-                    raise InvalidParameterError("traits", str(type(traits).__name__), "traits must be a list[str]")
-                if not isinstance(role, str):
-                    raise InvalidParameterError("role", str(type(role).__name__), "role must be a string")
-                return self.generate_character(traits, role)
-            case "create_setting":
-                location = params.get("location", "")
-                mood = params.get("mood", "neutral")
-                if location is None:
-                    location = ""
-                if mood is None:
-                    mood = "neutral"
-                if not isinstance(location, str):
-                    raise InvalidParameterError("location", str(type(location).__name__), "location must be a string")
-                if not isinstance(mood, str):
-                    raise InvalidParameterError("mood", str(type(mood).__name__), "mood must be a string")
-                return self.create_setting(location, mood)
-            case "build_plot":
-                conflict = params.get("conflict", "")
-                resolution = params.get("resolution", "")
-                if conflict is None:
-                    conflict = ""
-                if resolution is None:
-                    resolution = ""
-                if not isinstance(conflict, str):
-                    raise InvalidParameterError("conflict", str(type(conflict).__name__), "conflict must be a string")
-                if not isinstance(resolution, str):
-                    raise InvalidParameterError(
-                        "resolution", str(type(resolution).__name__), "resolution must be a string"
-                    )
-                return self.build_plot(conflict, resolution)
-            case "write_poem":
-                theme = params.get("theme", "")
-                form = params.get("form", "free_verse")
-                if theme is None:
-                    theme = ""
-                if form is None:
-                    form = "free_verse"
-                if not isinstance(theme, str):
-                    raise InvalidParameterError("theme", str(type(theme).__name__), "theme must be a string")
-                if not isinstance(form, str):
-                    raise InvalidParameterError("form", str(type(form).__name__), "form must be a string")
-                return self.write_poem(theme, form)
-            case _:
-                raise InvalidParameterError("operation", str(operation), "Unknown operation for creative_writing")
+        if operation == "generate_story":
+            theme = params.get("theme", "")
+            structure = params.get("structure", "three_act")
+            length = params.get("length", "short")
+            if theme is None:
+                theme = ""
+            if structure is None:
+                structure = "three_act"
+            if length is None:
+                length = "short"
+            if not isinstance(theme, str):
+                raise InvalidParameterError("theme", str(type(theme).__name__), "theme must be a string")
+            if not isinstance(structure, str):
+                raise InvalidParameterError("structure", str(type(structure).__name__), "structure must be a string")
+            if not isinstance(length, str):
+                raise InvalidParameterError("length", str(type(length).__name__), "length must be a string")
+            return self.generate_story(theme, structure, length)
+        elif operation == "create_narrative":
+            elements = params.get("elements", {})
+            style = params.get("style", "descriptive")
+            if elements is None:
+                elements = {}
+            if style is None:
+                style = "descriptive"
+            if not isinstance(elements, dict):
+                raise InvalidParameterError("elements", str(type(elements).__name__), "elements must be a dict")
+            if not isinstance(style, str):
+                raise InvalidParameterError("style", str(type(style).__name__), "style must be a string")
+            return self.create_narrative(elements, style)
+        elif operation == "apply_structure":
+            content = params.get("content", "")
+            structure_type = params.get("structure_type", "three_act")
+            if content is None:
+                content = ""
+            if structure_type is None:
+                structure_type = "three_act"
+            if not isinstance(content, str):
+                raise InvalidParameterError("content", str(type(content).__name__), "content must be a string")
+            if not isinstance(structure_type, str):
+                raise InvalidParameterError(
+                    "structure_type", str(type(structure_type).__name__), "structure_type must be a string"
+                )
+            return self.apply_structure(content, structure_type)
+        elif operation == "add_creative_elements":
+            text = params.get("text", "")
+            elements = params.get("elements", ["metaphor", "imagery"])
+            if text is None:
+                text = ""
+            if elements is None:
+                elements = ["metaphor", "imagery"]
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(elements, list) or not all(isinstance(e, str) for e in elements):
+                raise InvalidParameterError("elements", str(type(elements).__name__), "elements must be a list[str]")
+            return self.add_creative_elements(text, elements)
+        elif operation == "generate_character":
+            traits = params.get("traits", [])
+            role = params.get("role", "protagonist")
+            if traits is None:
+                traits = []
+            if role is None:
+                role = "protagonist"
+            if not isinstance(traits, list) or not all(isinstance(t, str) for t in traits):
+                raise InvalidParameterError("traits", str(type(traits).__name__), "traits must be a list[str]")
+            if not isinstance(role, str):
+                raise InvalidParameterError("role", str(type(role).__name__), "role must be a string")
+            return self.generate_character(traits, role)
+        elif operation == "create_setting":
+            location = params.get("location", "")
+            mood = params.get("mood", "neutral")
+            if location is None:
+                location = ""
+            if mood is None:
+                mood = "neutral"
+            if not isinstance(location, str):
+                raise InvalidParameterError("location", str(type(location).__name__), "location must be a string")
+            if not isinstance(mood, str):
+                raise InvalidParameterError("mood", str(type(mood).__name__), "mood must be a string")
+            return self.create_setting(location, mood)
+        elif operation == "build_plot":
+            conflict = params.get("conflict", "")
+            resolution = params.get("resolution", "")
+            if conflict is None:
+                conflict = ""
+            if resolution is None:
+                resolution = ""
+            if not isinstance(conflict, str):
+                raise InvalidParameterError("conflict", str(type(conflict).__name__), "conflict must be a string")
+            if not isinstance(resolution, str):
+                raise InvalidParameterError(
+                    "resolution", str(type(resolution).__name__), "resolution must be a string"
+                )
+            return self.build_plot(conflict, resolution)
+        elif operation == "write_poem":
+            theme = params.get("theme", "")
+            form = params.get("form", "free_verse")
+            if theme is None:
+                theme = ""
+            if form is None:
+                form = "free_verse"
+            if not isinstance(theme, str):
+                raise InvalidParameterError("theme", str(type(theme).__name__), "theme must be a string")
+            if not isinstance(form, str):
+                raise InvalidParameterError("form", str(type(form).__name__), "form must be a string")
+            return self.write_poem(theme, form)
+        else:
+            raise InvalidParameterError("operation", str(operation), "Unknown operation for creative_writing")
 
     def generate_story(
         self, theme: str, structure: str = "three_act", length: str = "short"
@@ -367,15 +367,14 @@ class CreativeWritingModule(BaseBrainModule):
         if not theme:
             theme = "nature"
 
-        match form:
-            case "haiku":
-                poem = self._write_haiku(theme)
-            case "limerick":
-                poem = self._write_limerick(theme)
-            case "sonnet":
-                poem = self._write_sonnet(theme)
-            case _:  # free_verse
-                poem = self._write_free_verse(theme)
+        if form == "haiku":
+            poem = self._write_haiku(theme)
+        elif form == "limerick":
+            poem = self._write_limerick(theme)
+        elif form == "sonnet":
+            poem = self._write_sonnet(theme)
+        else:
+            poem = self._write_free_verse(theme)
 
         return {
             "poem": poem,
@@ -415,15 +414,14 @@ class CreativeWritingModule(BaseBrainModule):
         story = " ".join(story_lines)
 
         # Adjust length
-        match length:
-            case "short":
-                # Keep first 3 parts
-                story_lines = story_lines[:3]
-            case "long":
-                # Expand each part
-                story_lines = [line + " " + self._expand_line(line) for line in story_lines]
-            case _:  # medium
-                pass
+        if length == "short":
+            # Keep first 3 parts
+            story_lines = story_lines[:3]
+        elif length == "long":
+            # Expand each part
+            story_lines = [line + " " + self._expand_line(line) for line in story_lines]
+        else:
+            pass
 
         return " ".join(story_lines)
 
@@ -726,17 +724,16 @@ class CreativeWritingModule(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "generate_story" | "write_poem":
-                return True  # Optional theme
-            case "create_narrative":
-                return "elements" in params
-            case "apply_structure":
-                return "content" in params
-            case "add_creative_elements":
-                return "text" in params
-            case "generate_character" | "create_setting" | "build_plot":
-                return True  # All parameters optional
-            case _:
-                return True
+        if operation == 'generate_story' or operation == 'write_poem':
+            return True  # Optional theme
+        elif operation == "create_narrative":
+            return "elements" in params
+        elif operation == "apply_structure":
+            return "content" in params
+        elif operation == "add_creative_elements":
+            return "text" in params
+        elif operation == 'generate_character' or operation == 'create_setting' or operation == 'build_plot':
+            return True  # All parameters optional
+        else:
+            return True
 

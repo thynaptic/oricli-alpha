@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Advanced Threat Safety Service - Advanced threat detection
 Detects prompt injection, routing hijacks, API leakage, safety blind spots, etc.

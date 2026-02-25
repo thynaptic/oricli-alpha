@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Conversational Memory Module - Multi-turn context and references
 Handles remembering previous conversation points, natural references, building on previous exchanges
@@ -85,145 +86,144 @@ class ConversationalMemoryModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a conversational memory operation"""
-        match operation:
-            case "remember_context":
-                turn = params.get("turn", {})
-                if turn is None:
-                    turn = {}
-                if not isinstance(turn, dict):
-                    raise InvalidParameterError("turn", str(type(turn).__name__), "turn must be a dict")
-                return self.remember_context(turn)
-            case "get_reference":
-                current_text = params.get("current_text", "")
-                history = params.get("history", [])
-                if current_text is None:
-                    current_text = ""
-                if history is None:
-                    history = []
-                if not isinstance(current_text, str):
-                    raise InvalidParameterError(
-                        "current_text", str(type(current_text).__name__), "current_text must be a string"
-                    )
-                if not isinstance(history, list):
-                    raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
-                return self.get_reference(current_text, history)
-            case "build_on_previous":
-                current_input = params.get("current_input", "")
-                history = params.get("history", [])
-                if current_input is None:
-                    current_input = ""
-                if history is None:
-                    history = []
-                if not isinstance(current_input, str):
-                    raise InvalidParameterError(
-                        "current_input", str(type(current_input).__name__), "current_input must be a string"
-                    )
-                if not isinstance(history, list):
-                    raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
-                return self.build_on_previous(current_input, history)
-            case "track_topic_continuity":
-                current_text = params.get("current_text", "")
-                previous_texts = params.get("previous_texts", [])
-                if current_text is None:
-                    current_text = ""
-                if previous_texts is None:
-                    previous_texts = []
-                if not isinstance(current_text, str):
-                    raise InvalidParameterError(
-                        "current_text", str(type(current_text).__name__), "current_text must be a string"
-                    )
-                if not isinstance(previous_texts, list):
-                    raise InvalidParameterError(
-                        "previous_texts", str(type(previous_texts).__name__), "previous_texts must be a list"
-                    )
-                return self.track_topic_continuity(current_text, previous_texts)
-            case "natural_reference":
-                entity = params.get("entity", "")
-                history = params.get("history", [])
-                if entity is None:
-                    entity = ""
-                if history is None:
-                    history = []
-                if not isinstance(entity, str):
-                    raise InvalidParameterError("entity", str(type(entity).__name__), "entity must be a string")
-                if not isinstance(history, list):
-                    raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
-                return self.natural_reference(entity, history)
-            case "summarize_conversation":
-                history = params.get("history", [])
-                max_length = params.get("max_length", 200)
-                if history is None:
-                    history = []
-                if not isinstance(history, list):
-                    raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
-                try:
-                    max_length_int = int(max_length)
-                except (TypeError, ValueError):
-                    raise InvalidParameterError("max_length", str(max_length), "max_length must be an integer")
-                if max_length_int < 1:
-                    raise InvalidParameterError("max_length", str(max_length_int), "max_length must be >= 1")
-                return self.summarize_conversation(history, max_length_int)
-            case "extract_key_points":
-                history = params.get("history", [])
-                count = params.get("count", 5)
-                if history is None:
-                    history = []
-                if not isinstance(history, list):
-                    raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
-                try:
-                    count_int = int(count)
-                except (TypeError, ValueError):
-                    raise InvalidParameterError("count", str(count), "count must be an integer")
-                if count_int < 1:
-                    raise InvalidParameterError("count", str(count_int), "count must be >= 1")
-                return self.extract_key_points(history, count_int)
-            case "compress_context":
-                history = params.get("history", [])
-                target_ratio = params.get("target_ratio", 0.3)
-                if history is None:
-                    history = []
-                if not isinstance(history, list):
-                    raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
-                try:
-                    target_ratio_float = float(target_ratio)
-                except (TypeError, ValueError):
-                    raise InvalidParameterError("target_ratio", str(target_ratio), "target_ratio must be a number")
-                return self.compress_context(history, target_ratio_float)
-            case "track_thread":
-                thread_id = params.get("thread_id", "default")
-                turn = params.get("turn", {})
-                if thread_id is None:
-                    thread_id = "default"
-                if turn is None:
-                    turn = {}
-                if not isinstance(thread_id, str):
-                    raise InvalidParameterError("thread_id", str(type(thread_id).__name__), "thread_id must be a string")
-                if not isinstance(turn, dict):
-                    raise InvalidParameterError("turn", str(type(turn).__name__), "turn must be a dict")
-                return self.track_thread(thread_id, turn)
-            case "get_thread_context":
-                thread_id = params.get("thread_id", "default")
-                max_turns = params.get("max_turns", params.get("limit", 10))  # Accept both max_turns and limit
-                history = params.get("history")  # Optional history for testing
-                if thread_id is None:
-                    thread_id = "default"
-                if not isinstance(thread_id, str):
-                    raise InvalidParameterError("thread_id", str(type(thread_id).__name__), "thread_id must be a string")
-                try:
-                    max_turns_int = int(max_turns)
-                except (TypeError, ValueError):
-                    raise InvalidParameterError("max_turns", str(max_turns), "max_turns must be an integer")
-                if max_turns_int < 1:
-                    raise InvalidParameterError("max_turns", str(max_turns_int), "max_turns must be >= 1")
-                if history is not None and not isinstance(history, list):
-                    raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
-                return self.get_thread_context(thread_id, max_turns_int, history)
-            case _:
+        if operation == "remember_context":
+            turn = params.get("turn", {})
+            if turn is None:
+                turn = {}
+            if not isinstance(turn, dict):
+                raise InvalidParameterError("turn", str(type(turn).__name__), "turn must be a dict")
+            return self.remember_context(turn)
+        elif operation == "get_reference":
+            current_text = params.get("current_text", "")
+            history = params.get("history", [])
+            if current_text is None:
+                current_text = ""
+            if history is None:
+                history = []
+            if not isinstance(current_text, str):
                 raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for conversational_memory",
+                    "current_text", str(type(current_text).__name__), "current_text must be a string"
                 )
+            if not isinstance(history, list):
+                raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
+            return self.get_reference(current_text, history)
+        elif operation == "build_on_previous":
+            current_input = params.get("current_input", "")
+            history = params.get("history", [])
+            if current_input is None:
+                current_input = ""
+            if history is None:
+                history = []
+            if not isinstance(current_input, str):
+                raise InvalidParameterError(
+                    "current_input", str(type(current_input).__name__), "current_input must be a string"
+                )
+            if not isinstance(history, list):
+                raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
+            return self.build_on_previous(current_input, history)
+        elif operation == "track_topic_continuity":
+            current_text = params.get("current_text", "")
+            previous_texts = params.get("previous_texts", [])
+            if current_text is None:
+                current_text = ""
+            if previous_texts is None:
+                previous_texts = []
+            if not isinstance(current_text, str):
+                raise InvalidParameterError(
+                    "current_text", str(type(current_text).__name__), "current_text must be a string"
+                )
+            if not isinstance(previous_texts, list):
+                raise InvalidParameterError(
+                    "previous_texts", str(type(previous_texts).__name__), "previous_texts must be a list"
+                )
+            return self.track_topic_continuity(current_text, previous_texts)
+        elif operation == "natural_reference":
+            entity = params.get("entity", "")
+            history = params.get("history", [])
+            if entity is None:
+                entity = ""
+            if history is None:
+                history = []
+            if not isinstance(entity, str):
+                raise InvalidParameterError("entity", str(type(entity).__name__), "entity must be a string")
+            if not isinstance(history, list):
+                raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
+            return self.natural_reference(entity, history)
+        elif operation == "summarize_conversation":
+            history = params.get("history", [])
+            max_length = params.get("max_length", 200)
+            if history is None:
+                history = []
+            if not isinstance(history, list):
+                raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
+            try:
+                max_length_int = int(max_length)
+            except (TypeError, ValueError):
+                raise InvalidParameterError("max_length", str(max_length), "max_length must be an integer")
+            if max_length_int < 1:
+                raise InvalidParameterError("max_length", str(max_length_int), "max_length must be >= 1")
+            return self.summarize_conversation(history, max_length_int)
+        elif operation == "extract_key_points":
+            history = params.get("history", [])
+            count = params.get("count", 5)
+            if history is None:
+                history = []
+            if not isinstance(history, list):
+                raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
+            try:
+                count_int = int(count)
+            except (TypeError, ValueError):
+                raise InvalidParameterError("count", str(count), "count must be an integer")
+            if count_int < 1:
+                raise InvalidParameterError("count", str(count_int), "count must be >= 1")
+            return self.extract_key_points(history, count_int)
+        elif operation == "compress_context":
+            history = params.get("history", [])
+            target_ratio = params.get("target_ratio", 0.3)
+            if history is None:
+                history = []
+            if not isinstance(history, list):
+                raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
+            try:
+                target_ratio_float = float(target_ratio)
+            except (TypeError, ValueError):
+                raise InvalidParameterError("target_ratio", str(target_ratio), "target_ratio must be a number")
+            return self.compress_context(history, target_ratio_float)
+        elif operation == "track_thread":
+            thread_id = params.get("thread_id", "default")
+            turn = params.get("turn", {})
+            if thread_id is None:
+                thread_id = "default"
+            if turn is None:
+                turn = {}
+            if not isinstance(thread_id, str):
+                raise InvalidParameterError("thread_id", str(type(thread_id).__name__), "thread_id must be a string")
+            if not isinstance(turn, dict):
+                raise InvalidParameterError("turn", str(type(turn).__name__), "turn must be a dict")
+            return self.track_thread(thread_id, turn)
+        elif operation == "get_thread_context":
+            thread_id = params.get("thread_id", "default")
+            max_turns = params.get("max_turns", params.get("limit", 10))  # Accept both max_turns and limit
+            history = params.get("history")  # Optional history for testing
+            if thread_id is None:
+                thread_id = "default"
+            if not isinstance(thread_id, str):
+                raise InvalidParameterError("thread_id", str(type(thread_id).__name__), "thread_id must be a string")
+            try:
+                max_turns_int = int(max_turns)
+            except (TypeError, ValueError):
+                raise InvalidParameterError("max_turns", str(max_turns), "max_turns must be an integer")
+            if max_turns_int < 1:
+                raise InvalidParameterError("max_turns", str(max_turns_int), "max_turns must be >= 1")
+            if history is not None and not isinstance(history, list):
+                raise InvalidParameterError("history", str(type(history).__name__), "history must be a list")
+            return self.get_thread_context(thread_id, max_turns_int, history)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for conversational_memory",
+            )
 
     def remember_context(self, turn: Dict[str, Any]) -> Dict[str, Any]:
         """Remember a conversation turn"""
@@ -449,22 +449,21 @@ class ConversationalMemoryModule(BaseBrainModule):
         last_mention = found_turns[-1]
         turns_since = len(history) - 1 - last_mention
 
-        match turns_since:
-            case 0:
-                # Just mentioned - use pronoun or "that"
-                reference = "that"
-            case 1:
-                # Recently mentioned - use "that" or entity name
-                reference_options = [entity, "that", "it"]
-                reference = random.choice(reference_options)
-            case _:
-                # Further back - use entity name with optional reference
-                reference_options = [
-                    entity,
-                    f"that {entity.lower()}",
-                    f"the {entity.lower()} we discussed",
-                ]
-                reference = random.choice(reference_options)
+        if turns_since == 0:
+            # Just mentioned - use pronoun or "that"
+            reference = "that"
+        elif turns_since == 1:
+            # Recently mentioned - use "that" or entity name
+            reference_options = [entity, "that", "it"]
+            reference = random.choice(reference_options)
+        else:
+            # Further back - use entity name with optional reference
+            reference_options = [
+                entity,
+                f"that {entity.lower()}",
+                f"the {entity.lower()} we discussed",
+            ]
+            reference = random.choice(reference_options)
 
         return {
             "reference": reference,
@@ -800,20 +799,19 @@ class ConversationalMemoryModule(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "remember_context":
-                return "turn" in params
-            case "get_reference" | "track_topic_continuity":
-                return "current_text" in params
-            case "build_on_previous":
-                return "current_input" in params
-            case "natural_reference":
-                return "entity" in params
-            case "summarize_conversation" | "extract_key_points" | "compress_context":
-                return "history" in params
-            case "track_thread":
-                return "thread_id" in params and "turn" in params
-            case "get_thread_context":
-                return "thread_id" in params
-            case _:
-                return True
+        if operation == "remember_context":
+            return "turn" in params
+        elif operation == 'get_reference' or operation == 'track_topic_continuity':
+            return "current_text" in params
+        elif operation == "build_on_previous":
+            return "current_input" in params
+        elif operation == "natural_reference":
+            return "entity" in params
+        elif operation == 'summarize_conversation' or operation == 'extract_key_points' or operation == 'compress_context':
+            return "history" in params
+        elif operation == "track_thread":
+            return "thread_id" in params and "turn" in params
+        elif operation == "get_thread_context":
+            return "thread_id" in params
+        else:
+            return True

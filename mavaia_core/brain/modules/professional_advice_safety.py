@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Professional Advice Safety Service - Hard-stop service
 Prevents providing professional advice (legal, medical, financial, etc.)

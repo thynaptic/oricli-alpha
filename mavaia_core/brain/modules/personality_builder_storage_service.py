@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Personality Builder Storage Service
 Storage service for personality builder plugins and templates

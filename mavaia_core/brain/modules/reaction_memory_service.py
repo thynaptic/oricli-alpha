@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Reaction Memory Service
 Service to track user reactions and store them in Mavaia's memory for learning

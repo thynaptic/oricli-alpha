@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Module Registry - Discovers and manages plug-and-play brain modules
 Automatically finds all modules in brain_modules directory
@@ -221,6 +222,9 @@ class ModuleRegistry:
                     continue
 
                 module = importlib.util.module_from_spec(spec)
+                # Add to sys.modules for dataclass/typing compatibility on Python 3.9
+                # when using from __future__ import annotations
+                sys.modules[module_name] = module
 
                 # Ensure base_module resolves to the package definition so issubclass works
                 try:

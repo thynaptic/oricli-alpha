@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Analogical Reasoning Module - DeepMind-style reasoning
 Reason by analogy and identify similar patterns

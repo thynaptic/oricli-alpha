@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 In-Memory Storage Implementation
 

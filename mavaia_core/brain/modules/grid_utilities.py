@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Grid Utilities Module
 Shared utilities for grid parsing, validation, and transformations

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Intent Correction Module - Disambiguate and correct user intent
 Detects unclear intentions, corrects phrasing, maps ambiguity to goals,
@@ -63,85 +64,84 @@ class IntentCorrectionModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an intent correction operation"""
-        match operation:
-            case "detect_unclear_intent":
-                text = params.get("text", "")
-                context = params.get("context", "")
-                if text is None:
-                    text = ""
-                if context is None:
-                    context = ""
-                if not isinstance(text, str):
-                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
-                if not isinstance(context, str):
-                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
-                return self.detect_unclear_intent(text, context)
+        if operation == "detect_unclear_intent":
+            text = params.get("text", "")
+            context = params.get("context", "")
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            return self.detect_unclear_intent(text, context)
 
-            case "correct_phrasing":
-                text = params.get("text", "")
-                context = params.get("context", "")
-                if text is None:
-                    text = ""
-                if context is None:
-                    context = ""
-                if not isinstance(text, str):
-                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
-                if not isinstance(context, str):
-                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
-                return self.correct_phrasing(text, context)
+        elif operation == "correct_phrasing":
+            text = params.get("text", "")
+            context = params.get("context", "")
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            return self.correct_phrasing(text, context)
 
-            case "map_ambiguity":
-                text = params.get("text", "")
-                context = params.get("context", "")
-                possible_goals = params.get("possible_goals", [])
-                if text is None:
-                    text = ""
-                if context is None:
-                    context = ""
-                if possible_goals is None:
-                    possible_goals = []
-                if not isinstance(text, str):
-                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
-                if not isinstance(context, str):
-                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
-                if not isinstance(possible_goals, list):
-                    raise InvalidParameterError(
-                        "possible_goals", str(type(possible_goals).__name__), "possible_goals must be a list"
-                    )
-                return self.map_ambiguity(text, context, possible_goals)
-
-            case "disambiguate_command":
-                text = params.get("text", "")
-                context = params.get("context", "")
-                if text is None:
-                    text = ""
-                if context is None:
-                    context = ""
-                if not isinstance(text, str):
-                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
-                if not isinstance(context, str):
-                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
-                return self.disambiguate_command(text, context)
-
-            case "normalize_intent":
-                text = params.get("text", "")
-                context = params.get("context", "")
-                if text is None:
-                    text = ""
-                if context is None:
-                    context = ""
-                if not isinstance(text, str):
-                    raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
-                if not isinstance(context, str):
-                    raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
-                return self.normalize_intent(text, context)
-
-            case _:
+        elif operation == "map_ambiguity":
+            text = params.get("text", "")
+            context = params.get("context", "")
+            possible_goals = params.get("possible_goals", [])
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if possible_goals is None:
+                possible_goals = []
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            if not isinstance(possible_goals, list):
                 raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for intent_correction",
+                    "possible_goals", str(type(possible_goals).__name__), "possible_goals must be a list"
                 )
+            return self.map_ambiguity(text, context, possible_goals)
+
+        elif operation == "disambiguate_command":
+            text = params.get("text", "")
+            context = params.get("context", "")
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            return self.disambiguate_command(text, context)
+
+        elif operation == "normalize_intent":
+            text = params.get("text", "")
+            context = params.get("context", "")
+            if text is None:
+                text = ""
+            if context is None:
+                context = ""
+            if not isinstance(text, str):
+                raise InvalidParameterError("text", str(type(text).__name__), "text must be a string")
+            if not isinstance(context, str):
+                raise InvalidParameterError("context", str(type(context).__name__), "context must be a string")
+            return self.normalize_intent(text, context)
+
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for intent_correction",
+            )
 
     def detect_unclear_intent(
         self, text: str, context: str = ""
@@ -443,13 +443,12 @@ class IntentCorrectionModule(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "detect_unclear_intent" | "correct_phrasing" | "disambiguate_command" | "normalize_intent":
-                return "text" in params
-            case "map_ambiguity":
-                return "text" in params
-            case _:
-                return True
+        if operation == 'detect_unclear_intent' or operation == 'correct_phrasing' or operation == 'disambiguate_command' or operation == 'normalize_intent':
+            return "text" in params
+        elif operation == "map_ambiguity":
+            return "text" in params
+        else:
+            return True
 
 
 # Module export

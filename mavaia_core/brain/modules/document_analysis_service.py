@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Document Analysis Service - Document analysis service for Aurora
 Converted from Swift DocumentAnalysisService.swift

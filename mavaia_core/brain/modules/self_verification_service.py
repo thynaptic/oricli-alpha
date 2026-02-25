@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Self Verification Service - Self-verification service that cross-checks final answers
 Converted from Swift SelfVerificationService.swift

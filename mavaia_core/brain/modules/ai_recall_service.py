@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 AI Recall Service - Phase 1 recall layer with shared AI config + telemetry
 Converted from Swift AIRecallService.swift

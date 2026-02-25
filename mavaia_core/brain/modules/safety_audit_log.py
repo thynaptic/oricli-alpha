@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Safety Audit Log - Immutable audit log system for all safety decisions
 Provides tamper-proof logging for forensic analysis

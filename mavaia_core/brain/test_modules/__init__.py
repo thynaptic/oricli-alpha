@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Brain Modules - All Mavaia brain modules are located here
 This directory contains all the intelligence modules that power Mavaia.

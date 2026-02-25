@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Text Generation Engine Module
 Generate complete responses from reasoning results with sentence-level control

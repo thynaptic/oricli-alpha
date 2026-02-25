@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Code Execution Module
 
@@ -311,31 +312,30 @@ class CodeExecutionModule(BaseBrainModule):
             )
         
         try:
-            match operation:
-                case "execute_command":
-                    return self._execute_command(params)
-                case "execute_python":
-                    return self._execute_python(params)
-                case "execute_node":
-                    return self._execute_node(params)
-                case "read_file":
-                    return self._read_file(params)
-                case "write_file":
-                    return self._write_file(params)
-                case "list_files":
-                    return self._list_files(params)
-                case "delete_file":
-                    return self._delete_file(params)
-                case "create_session":
-                    return self._create_session(params)
-                case "destroy_session":
-                    return self._destroy_session(params)
-                case _:
-                    raise InvalidParameterError(
-                        "operation",
-                        str(operation),
-                        "Unknown operation for code_execution",
-                    )
+            if operation == "execute_command":
+                return self._execute_command(params)
+            elif operation == "execute_python":
+                return self._execute_python(params)
+            elif operation == "execute_node":
+                return self._execute_node(params)
+            elif operation == "read_file":
+                return self._read_file(params)
+            elif operation == "write_file":
+                return self._write_file(params)
+            elif operation == "list_files":
+                return self._list_files(params)
+            elif operation == "delete_file":
+                return self._delete_file(params)
+            elif operation == "create_session":
+                return self._create_session(params)
+            elif operation == "destroy_session":
+                return self._destroy_session(params)
+            else:
+                raise InvalidParameterError(
+                    "operation",
+                    str(operation),
+                    "Unknown operation for code_execution",
+                )
         except (CommandValidationError, SandboxExecutionError) as e:
             raise ModuleOperationError(
                 self.metadata.name,

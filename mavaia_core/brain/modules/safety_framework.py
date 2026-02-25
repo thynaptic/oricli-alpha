@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Safety Framework - Industry-grade safety framework orchestrator
 Provides unified interface for all safety services with priority-based execution

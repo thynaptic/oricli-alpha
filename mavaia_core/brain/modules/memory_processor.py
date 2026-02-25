@@ -84,54 +84,53 @@ class MemoryProcessor(BaseBrainModule):
                 "error": "Dependencies not available (numpy/pandas/scikit-learn)",
                 "operation": operation,
             }
-        match operation:
-            case "process_memories":
-                memories_json = params.get("memories_json", "[]")
-                return self.process_memories(memories_json)
-            case "clean_and_deduplicate":
-                memories_json = params.get("memories_json", "[]")
-                return self.clean_and_deduplicate(memories_json)
-            case "cluster_memories":
-                memories_json = params.get("memories_json", "[]")
-                method = params.get("method", "kmeans")
-                n_clusters = params.get("n_clusters", 5)
-                return self.cluster_memories(memories_json, method, n_clusters)
-            case "extract_patterns":
-                memories_json = params.get("memories_json", "[]")
-                return self.extract_patterns(memories_json)
-            case "detect_outliers":
-                memories_json = params.get("memories_json", "[]")
-                return self.detect_outliers(memories_json)
-            case "extract_tags":
-                memories_json = params.get("memories_json", "[]")
-                return self.extract_tags(memories_json)
-            case "score_relevance":
-                memories_json = params.get("memories_json", "[]")
-                query = params.get("query", "")
-                return self.score_relevance(memories_json, query)
-            case "export_for_neo4j":
-                memories_json = params.get("memories_json", "[]")
-                return self.export_for_neo4j(memories_json)
-            case "semantic_cluster_memories":
-                memories_json = params.get("memories_json", "[]")
-                return self.semantic_cluster_memories(memories_json)
-            case "calculate_priority_scores":
-                memories_json = params.get("memories_json", "[]")
-                return self.calculate_priority_scores(memories_json)
-            case "apply_forgetting_curve":
-                memories_json = params.get("memories_json", "[]")
-                return self.apply_forgetting_curve(memories_json)
-            case "build_recency_weighted_context":
-                memories_json = params.get("memories_json", "[]")
-                query = params.get("query", "")
-                max_memories = params.get("max_memories", 10)
-                return self.build_recency_weighted_context(memories_json, query, max_memories)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for memory_processor",
-                )
+        if operation == "process_memories":
+            memories_json = params.get("memories_json", "[]")
+            return self.process_memories(memories_json)
+        elif operation == "clean_and_deduplicate":
+            memories_json = params.get("memories_json", "[]")
+            return self.clean_and_deduplicate(memories_json)
+        elif operation == "cluster_memories":
+            memories_json = params.get("memories_json", "[]")
+            method = params.get("method", "kmeans")
+            n_clusters = params.get("n_clusters", 5)
+            return self.cluster_memories(memories_json, method, n_clusters)
+        elif operation == "extract_patterns":
+            memories_json = params.get("memories_json", "[]")
+            return self.extract_patterns(memories_json)
+        elif operation == "detect_outliers":
+            memories_json = params.get("memories_json", "[]")
+            return self.detect_outliers(memories_json)
+        elif operation == "extract_tags":
+            memories_json = params.get("memories_json", "[]")
+            return self.extract_tags(memories_json)
+        elif operation == "score_relevance":
+            memories_json = params.get("memories_json", "[]")
+            query = params.get("query", "")
+            return self.score_relevance(memories_json, query)
+        elif operation == "export_for_neo4j":
+            memories_json = params.get("memories_json", "[]")
+            return self.export_for_neo4j(memories_json)
+        elif operation == "semantic_cluster_memories":
+            memories_json = params.get("memories_json", "[]")
+            return self.semantic_cluster_memories(memories_json)
+        elif operation == "calculate_priority_scores":
+            memories_json = params.get("memories_json", "[]")
+            return self.calculate_priority_scores(memories_json)
+        elif operation == "apply_forgetting_curve":
+            memories_json = params.get("memories_json", "[]")
+            return self.apply_forgetting_curve(memories_json)
+        elif operation == "build_recency_weighted_context":
+            memories_json = params.get("memories_json", "[]")
+            query = params.get("query", "")
+            max_memories = params.get("max_memories", 10)
+            return self.build_recency_weighted_context(memories_json, query, max_memories)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for memory_processor",
+            )
 
     def process_memories(self, memories_json: str) -> Dict[str, Any]:
         """Main processing pipeline: clean, deduplicate, cluster, extract patterns"""

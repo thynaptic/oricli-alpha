@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Arc Reasoning Ensemble With Transformation Detection And Grid Analysis Module
 ARC reasoning ensemble with transformation detection and grid analysis

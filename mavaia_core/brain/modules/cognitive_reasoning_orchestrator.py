@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Cognitive Reasoning Orchestrator
 Orchestrates all cognitive reasoning features into a unified flow

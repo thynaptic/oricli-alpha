@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Tool Registration Service - Service to register all available tools
 Simplified Python version of Swift ToolRegistrationService.swift

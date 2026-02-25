@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Query Complexity Analyzer Module
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Logical Deduction Module - DeepMind-style reasoning
 Apply formal logic and deductive reasoning

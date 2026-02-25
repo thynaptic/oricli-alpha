@@ -1,6 +1,7 @@
+from __future__ import annotations
 """
-Local Model Service - Provides model management and health checks without Ollama
-Replaces Ollama API calls with local Python service that uses cognitive generator
+Local Model Service - Provides local model management and health checks
+Replaces external API calls with local Python service that uses cognitive generator
 """
 
 from typing import List, Dict, Any, Optional
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class LocalModelService(BaseBrainModule):
-    """Local model service that replaces Ollama API calls"""
+    """Local model service that replaces external API calls"""
 
     def __init__(self):
         super().__init__()
@@ -26,7 +27,7 @@ class LocalModelService(BaseBrainModule):
         return ModuleMetadata(
             name="local_model_service",
             version="1.0.0",
-            description="Local model service that provides model listing, health checks, and warmup without Ollama",
+            description="Local model service that provides model listing, health checks, and warmup",
             operations=[
                 "list_available_models",
                 "check_model_health",

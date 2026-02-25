@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Step-by-Step Reasoning Module - DeepMind-style reasoning
 Break down reasoning into explicit sequential steps

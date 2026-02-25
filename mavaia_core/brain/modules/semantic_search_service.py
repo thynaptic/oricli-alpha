@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Semantic Search Service - Semantic/vector-based search service for memory and document corpus
 Converted from Swift SemanticSearchService.swift

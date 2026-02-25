@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Linguistic Priors Module - Syntax, semantics, pragmatics, and discourse patterns
 Handles linguistic structure analysis, implicature detection, and coherent response generation

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Supervision Service - Service to evaluate candidate responses using model-based supervision
 Converted from Swift SupervisionService.swift
@@ -63,15 +64,14 @@ class SupervisionServiceModule(BaseBrainModule):
         """Execute an operation"""
         self._ensure_modules_loaded()
 
-        match operation:
-            case "supervise_reasoning":
-                return self._supervise_reasoning(params)
-            case "validate_output":
-                return self._validate_output(params)
-            case "supervise_candidates":
-                return self._supervise_candidates(params)
-            case _:
-                raise InvalidParameterError("operation", str(operation), "Unknown operation for supervision_service")
+        if operation == "supervise_reasoning":
+            return self._supervise_reasoning(params)
+        elif operation == "validate_output":
+            return self._validate_output(params)
+        elif operation == "supervise_candidates":
+            return self._supervise_candidates(params)
+        else:
+            raise InvalidParameterError("operation", str(operation), "Unknown operation for supervision_service")
 
     def _extract_text(self, result: Any) -> str:
         """Best-effort extraction of text from common generator result shapes."""

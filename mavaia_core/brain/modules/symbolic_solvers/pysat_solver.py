@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 PySAT Solver Integration
 Provides interface to PySAT for Boolean satisfiability problems

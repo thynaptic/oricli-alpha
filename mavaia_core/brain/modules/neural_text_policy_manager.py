@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Manages Adaptive Policies For Neural Text Generation Module
 Manages adaptive policies for neural text generation

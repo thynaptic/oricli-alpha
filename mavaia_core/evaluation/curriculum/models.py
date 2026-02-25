@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Data Models for Cognitive Curriculum Testing Framework
 

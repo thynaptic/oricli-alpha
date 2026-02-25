@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Cognitive Trace Diagnostics Module
 
@@ -9,7 +10,7 @@ Primary goals:
 - Avoid logging or storing sensitive inputs (keys/tokens/PII).
 """
 
-from __future__ import annotations
+
 
 import logging
 import time

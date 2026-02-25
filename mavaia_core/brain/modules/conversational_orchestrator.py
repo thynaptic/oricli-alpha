@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Conversational Orchestrator - Orchestrates all conversational components
 Coordinates linguistic priors, social priors, emotional ontology, world knowledge, etc.

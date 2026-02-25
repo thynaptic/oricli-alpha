@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Web Scraper Module - Web scraping and research capabilities
 Handles URL content extraction, multi-source research, fact-checking, and article summarization

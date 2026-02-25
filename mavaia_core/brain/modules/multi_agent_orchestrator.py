@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Multi Agent Orchestrator - Main orchestrator for multi-agent pipeline execution
 Converted from Swift MultiAgentOrchestrator.swift

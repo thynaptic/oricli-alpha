@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Tool Calling Plan Service - Service for creating, validating, and executing tool calling plans
 Mirrors Swift ToolCallingPlanService.swift functionality

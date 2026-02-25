@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Tool Calling Plan Models - Data structures for plan-based tool calling
 Mirrors Swift ToolCallingPlan.swift functionality

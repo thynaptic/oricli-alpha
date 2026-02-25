@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 ARC Test-Time Training Module
 

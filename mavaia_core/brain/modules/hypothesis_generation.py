@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Hypothesis Generation Module - DeepMind-style reasoning
 Generate and evaluate multiple hypotheses

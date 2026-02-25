@@ -120,29 +120,28 @@ class QueryAgent(BaseBrainModule):
         - analyze_query_intent: Determine query type and complexity
         - process_query: Full query processing pipeline
         """
-        match operation:
-            case "normalize_query":
-                query = params.get("query", "")
-                return self.normalize_query(query)
-            case "extract_keywords":
-                query = params.get("query", "")
-                return self.extract_keywords(query)
-            case "formulate_search_queries":
-                query = params.get("query", "")
-                max_variations = params.get("max_variations", 5)
-                return self.formulate_search_queries(query, max_variations)
-            case "analyze_query_intent":
-                query = params.get("query", "")
-                return self.analyze_query_intent(query)
-            case "process_query":
-                query = params.get("query", "")
-                return self.process_query(query)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for query_agent",
-                )
+        if operation == "normalize_query":
+            query = params.get("query", "")
+            return self.normalize_query(query)
+        elif operation == "extract_keywords":
+            query = params.get("query", "")
+            return self.extract_keywords(query)
+        elif operation == "formulate_search_queries":
+            query = params.get("query", "")
+            max_variations = params.get("max_variations", 5)
+            return self.formulate_search_queries(query, max_variations)
+        elif operation == "analyze_query_intent":
+            query = params.get("query", "")
+            return self.analyze_query_intent(query)
+        elif operation == "process_query":
+            query = params.get("query", "")
+            return self.process_query(query)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for query_agent",
+            )
 
     def normalize_query(self, query: str) -> Dict[str, Any]:
         """
@@ -516,11 +515,10 @@ class QueryAgent(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "normalize_query" | "extract_keywords" | "analyze_query_intent" | "process_query":
-                return "query" in params or isinstance(params.get("query"), str)
-            case "formulate_search_queries":
-                return "query" in params or isinstance(params.get("query"), str)
-            case _:
-                return True
+        if operation == 'normalize_query' or operation == 'extract_keywords' or operation == 'analyze_query_intent' or operation == 'process_query':
+            return "query" in params or isinstance(params.get("query"), str)
+        elif operation == "formulate_search_queries":
+            return "query" in params or isinstance(params.get("query"), str)
+        else:
+            return True
 

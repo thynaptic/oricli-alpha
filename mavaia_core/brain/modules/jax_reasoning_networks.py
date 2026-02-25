@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Jax-Based Reasoning Networks For High-Performance Cognitive Processing Module
 JAX-based reasoning networks for high-performance cognitive processing

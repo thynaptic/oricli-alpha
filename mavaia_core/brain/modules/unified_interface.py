@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Unified Interface Module - Single API layer for all cognitive operations
 Standardized input/output, auto-routing, auto-context merging,
@@ -57,35 +58,34 @@ class UnifiedInterfaceModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a unified interface operation"""
-        match operation:
-            case "process_request":
-                request = params.get("request", {})
-                return self.process_request(request)
+        if operation == "process_request":
+            request = params.get("request", {})
+            return self.process_request(request)
 
-            case "route_request":
-                request = params.get("request", {})
-                return self.route_request(request)
+        elif operation == "route_request":
+            request = params.get("request", {})
+            return self.route_request(request)
 
-            case "merge_context":
-                contexts = params.get("contexts", [])
-                return self.merge_context(contexts)
+        elif operation == "merge_context":
+            contexts = params.get("contexts", [])
+            return self.merge_context(contexts)
 
-            case "orchestrate_modules":
-                request = params.get("request", {})
-                modules = params.get("modules", [])
-                return self.orchestrate_modules(request, modules)
+        elif operation == "orchestrate_modules":
+            request = params.get("request", {})
+            modules = params.get("modules", [])
+            return self.orchestrate_modules(request, modules)
 
-            case "format_output":
-                result = params.get("result", {})
-                metadata = params.get("metadata", {})
-                return self.format_output(result, metadata)
+        elif operation == "format_output":
+            result = params.get("result", {})
+            metadata = params.get("metadata", {})
+            return self.format_output(result, metadata)
 
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for unified_interface",
-                )
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for unified_interface",
+            )
 
     def process_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Process a request through the unified interface"""
@@ -423,15 +423,14 @@ class UnifiedInterfaceModule(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "process_request" | "route_request" | "orchestrate_modules":
-                return "request" in params
-            case "merge_context":
-                return "contexts" in params
-            case "format_output":
-                return "result" in params
-            case _:
-                return True
+        if operation == 'process_request' or operation == 'route_request' or operation == 'orchestrate_modules':
+            return "request" in params
+        elif operation == "merge_context":
+            return "contexts" in params
+        elif operation == "format_output":
+            return "result" in params
+        else:
+            return True
 
 
 # Module export

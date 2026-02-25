@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Advanced NLP Module - Sentiment analysis, topic modeling, text classification, and more
 Handles advanced natural language processing tasks

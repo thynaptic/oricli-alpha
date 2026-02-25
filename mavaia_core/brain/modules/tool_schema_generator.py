@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Tool Schema Generator - Auto-generates tool schemas from services and Python brain modules
 Mirrors Swift ToolSchemaGenerator.swift functionality

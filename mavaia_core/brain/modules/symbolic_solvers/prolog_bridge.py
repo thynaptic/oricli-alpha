@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Prolog Bridge Integration
 Provides interface to Prolog for logic programming problems

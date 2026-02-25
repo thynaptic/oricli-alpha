@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Self-Chaining Discovery Service
 Service for autonomously discovering reasoning structures
@@ -166,21 +167,20 @@ class SelfChainingDiscoveryServiceModule(BaseBrainModule):
         """Execute an operation"""
         self._ensure_modules_loaded()
 
-        match operation:
-            case "discover_reasoning_structure":
-                return self._discover_reasoning_structure(params)
-            case "discover_chains":
-                return self._discover_chains(params)
-            case "build_chain_structure":
-                return self._build_chain_structure(params)
-            case "validate_structure":
-                return self._validate_structure(params)
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for self_chaining_discovery_service",
-                )
+        if operation == "discover_reasoning_structure":
+            return self._discover_reasoning_structure(params)
+        elif operation == "discover_chains":
+            return self._discover_chains(params)
+        elif operation == "build_chain_structure":
+            return self._build_chain_structure(params)
+        elif operation == "validate_structure":
+            return self._validate_structure(params)
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for self_chaining_discovery_service",
+            )
 
     def _discover_reasoning_structure(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Discover reasoning structure for a query"""

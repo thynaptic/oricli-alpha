@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Analyzes Trace Graphs For Cognitive Processing Module
 Analyzes trace graphs for cognitive processing

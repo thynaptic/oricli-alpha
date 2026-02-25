@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 State Manager Module - Comprehensive state tracking and management
 Tracks conversation state, task state, user context state, and session state
@@ -88,57 +89,56 @@ class StateManagerModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a state management operation"""
-        match operation:
-            case "get_state":
-                state_type = params.get("state_type", "conversation")
-                state_id = params.get("state_id")
-                return self.get_state(state_type, state_id)
+        if operation == "get_state":
+            state_type = params.get("state_type", "conversation")
+            state_id = params.get("state_id")
+            return self.get_state(state_type, state_id)
 
-            case "update_state":
-                state_type = params.get("state_type", "conversation")
-                state_id = params.get("state_id")
-                state_data = params.get("state_data", {})
-                return self.update_state(state_type, state_id, state_data)
+        elif operation == "update_state":
+            state_type = params.get("state_type", "conversation")
+            state_id = params.get("state_id")
+            state_data = params.get("state_data", {})
+            return self.update_state(state_type, state_id, state_data)
 
-            case "transition_state":
-                state_type = params.get("state_type", "conversation")
-                state_id = params.get("state_id")
-                from_state = params.get("from_state")
-                to_state = params.get("to_state")
-                reason = params.get("reason", "State transition")
-                metadata = params.get("metadata", {})
-                return self.transition_state(
-                    state_type, state_id, from_state, to_state, reason, metadata
-                )
+        elif operation == "transition_state":
+            state_type = params.get("state_type", "conversation")
+            state_id = params.get("state_id")
+            from_state = params.get("from_state")
+            to_state = params.get("to_state")
+            reason = params.get("reason", "State transition")
+            metadata = params.get("metadata", {})
+            return self.transition_state(
+                state_type, state_id, from_state, to_state, reason, metadata
+            )
 
-            case "merge_states":
-                state_type = params.get("state_type", "conversation")
-                state_ids = params.get("state_ids", [])
-                return self.merge_states(state_type, state_ids)
+        elif operation == "merge_states":
+            state_type = params.get("state_type", "conversation")
+            state_ids = params.get("state_ids", [])
+            return self.merge_states(state_type, state_ids)
 
-            case "get_state_history":
-                state_type = params.get("state_type", "conversation")
-                state_id = params.get("state_id")
-                limit = params.get("limit", 50)
-                return self.get_state_history(state_type, state_id, limit)
+        elif operation == "get_state_history":
+            state_type = params.get("state_type", "conversation")
+            state_id = params.get("state_id")
+            limit = params.get("limit", 50)
+            return self.get_state_history(state_type, state_id, limit)
 
-            case "create_snapshot":
-                state_type = params.get("state_type", "conversation")
-                state_id = params.get("state_id")
-                return self.create_snapshot(state_type, state_id)
+        elif operation == "create_snapshot":
+            state_type = params.get("state_type", "conversation")
+            state_id = params.get("state_id")
+            return self.create_snapshot(state_type, state_id)
 
-            case "restore_snapshot":
-                state_type = params.get("state_type", "conversation")
-                state_id = params.get("state_id")
-                snapshot_id = params.get("snapshot_id")
-                return self.restore_snapshot(state_type, state_id, snapshot_id)
+        elif operation == "restore_snapshot":
+            state_type = params.get("state_type", "conversation")
+            state_id = params.get("state_id")
+            snapshot_id = params.get("snapshot_id")
+            return self.restore_snapshot(state_type, state_id, snapshot_id)
 
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for state_manager",
-                )
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for state_manager",
+            )
 
     def get_state(
         self, state_type: str, state_id: Optional[str] = None
@@ -595,20 +595,19 @@ class StateManagerModule(BaseBrainModule):
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """Validate parameters for operations"""
-        match operation:
-            case "get_state" | "create_snapshot":
-                return "state_type" in params
-            case "update_state" | "transition_state":
-                return "state_type" in params and "state_data" in params or "to_state" in params
-            case "merge_states":
-                return "state_type" in params and "state_ids" in params
-            case "get_state_history" | "restore_snapshot":
-                return (
-                    "state_type" in params
-                    and "state_id" in params
-                )
-            case _:
-                return True
+        if operation == 'get_state' or operation == 'create_snapshot':
+            return "state_type" in params
+        elif operation == 'update_state' or operation == 'transition_state':
+            return "state_type" in params and "state_data" in params or "to_state" in params
+        elif operation == "merge_states":
+            return "state_type" in params and "state_ids" in params
+        elif operation == 'get_state_history' or operation == 'restore_snapshot':
+            return (
+                "state_type" in params
+                and "state_id" in params
+            )
+        else:
+            return True
 
 
 # Module export

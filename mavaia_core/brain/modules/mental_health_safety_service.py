@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Mental Health Safety Service - Comprehensive depression and anxiety detection service
 Converted from Swift MentalHealthSafetyService.swift

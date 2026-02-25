@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Tree-of-Thought Search Engine
 

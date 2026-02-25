@@ -1,10 +1,10 @@
+from __future__ import annotations
 """
 Agent Coordinator
 Agent coordinator for lifecycle management and result aggregation
 Converted from Swift AgentCoordinator.swift
 """
 
-from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
@@ -141,7 +141,7 @@ class AgentCoordinatorModule(BaseBrainModule):
             # Convert enum to string for dictionary key
             agent_type_str = agent_type_enum if isinstance(agent_type_enum, str) else str(agent_type_enum)
             try:
-                agent = ModuleRegistry.get_module(f"{agent_type_str}_agent", auto_discover=True, wait_timeout=1.0)
+                agent = ModuleRegistry.get_module(f"{agent_type_str}_agent", auto_discover=True, wait_timeout=10.0)
                 if agent:
                     # Store with string key to ensure consistency
                     self.agents[str(agent_type_str)] = agent

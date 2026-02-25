@@ -1,5 +1,6 @@
+from __future__ import annotations
 """
-Tool Calling Models - Compatible with Ollama's tool calling format
+Tool Calling Models - Compatible with standard tool calling format
 Mirrors Swift ToolCalling.swift functionality
 """
 
@@ -70,7 +71,7 @@ class ToolFunction:
 
 @dataclass
 class Tool:
-    """Tool definition compatible with Ollama format"""
+    """Tool definition compatible with standard format"""
     type: str = "function"
     function: ToolFunction = field(default=None)
 

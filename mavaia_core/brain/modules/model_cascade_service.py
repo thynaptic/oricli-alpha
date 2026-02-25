@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Model Cascade Service
 Model cascading service for sequential model usage

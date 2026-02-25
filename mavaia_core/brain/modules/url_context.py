@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 URL Context Module
 
@@ -137,17 +138,16 @@ class URLContextModule(BaseBrainModule):
         self._ensure_initialized()
         
         try:
-            match operation:
-                case "extract_urls":
-                    return self._extract_urls(params)
-                case "fetch_url_context":
-                    return self._fetch_url_context(params)
-                case "get_url_context":
-                    return self._get_url_context(params)
-                case _:
-                    raise InvalidParameterError(
-                        "operation", str(operation), "Unknown operation for url_context"
-                    )
+            if operation == "extract_urls":
+                return self._extract_urls(params)
+            elif operation == "fetch_url_context":
+                return self._fetch_url_context(params)
+            elif operation == "get_url_context":
+                return self._get_url_context(params)
+            else:
+                raise InvalidParameterError(
+                    "operation", str(operation), "Unknown operation for url_context"
+                )
         except (InvalidParameterError, ModuleInitializationError, ModuleOperationError):
             raise
         except Exception as e:

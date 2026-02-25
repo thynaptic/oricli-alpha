@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Z3 SMT Solver Integration
 Provides interface to Z3 theorem prover for SMT problems

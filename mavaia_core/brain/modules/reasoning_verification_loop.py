@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Reasoning Verification Loop
 Verification loop that validates reasoning steps before they proceed

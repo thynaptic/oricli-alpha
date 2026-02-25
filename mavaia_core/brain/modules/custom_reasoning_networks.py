@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Custom Reasoning Architectures
 Specialized neural architectures for specific reasoning tasks

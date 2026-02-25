@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Symbolic Solvers Module
 Provides interfaces to various symbolic reasoning solvers

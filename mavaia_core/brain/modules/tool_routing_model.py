@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Tool Routing Model
 Neural network for learned tool selection and routing based on query characteristics

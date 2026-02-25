@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Neural Grammar Module - Rule-based and template-based grammar correction and naturalization
 Grammar correction and naturalization using rule-based methods and templates
@@ -66,36 +67,35 @@ class NeuralGrammarModule(BaseBrainModule):
 
     def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
         """Execute a neural grammar operation"""
-        match operation:
-            case "generate_grammar":
-                return self._generate_grammar(
-                    text=params.get("text", ""),
-                    persona=params.get("persona", "mavaia"),
-                    context=params.get("context", ""),
-                )
-            case "correct_grammar":
-                return self._correct_grammar(
-                    text=params.get("text", ""), persona=params.get("persona", "mavaia")
-                )
-            case "naturalize_response":
-                return self._naturalize_response(
-                    text=params.get("text", ""),
-                    persona=params.get("persona", "mavaia"),
-                    context=params.get("context", ""),
-                )
-            case "generate_variations":
-                return self._generate_variations(
-                    text=params.get("text", ""),
-                    persona=params.get("persona", "mavaia"),
-                    count=params.get("count", 3),
-                    context=params.get("context", ""),
-                )
-            case _:
-                raise InvalidParameterError(
-                    parameter="operation",
-                    value=operation,
-                    reason="Unknown operation for neural_grammar",
-                )
+        if operation == "generate_grammar":
+            return self._generate_grammar(
+                text=params.get("text", ""),
+                persona=params.get("persona", "mavaia"),
+                context=params.get("context", ""),
+            )
+        elif operation == "correct_grammar":
+            return self._correct_grammar(
+                text=params.get("text", ""), persona=params.get("persona", "mavaia")
+            )
+        elif operation == "naturalize_response":
+            return self._naturalize_response(
+                text=params.get("text", ""),
+                persona=params.get("persona", "mavaia"),
+                context=params.get("context", ""),
+            )
+        elif operation == "generate_variations":
+            return self._generate_variations(
+                text=params.get("text", ""),
+                persona=params.get("persona", "mavaia"),
+                count=params.get("count", 3),
+                context=params.get("context", ""),
+            )
+        else:
+            raise InvalidParameterError(
+                parameter="operation",
+                value=operation,
+                reason="Unknown operation for neural_grammar",
+            )
 
     def _generate_grammar(
         self, text: str, persona: str = "mavaia", context: str = ""
@@ -171,17 +171,16 @@ class NeuralGrammarModule(BaseBrainModule):
         persona_normalized = persona.lower().replace(" ", "_")
 
         # Build prompt with persona token (style embedding)
-        match operation:
-            case "generate":
-                prompt = f"[persona={persona_normalized}] Generate a natural response: {text}"
-            case "correct":
-                prompt = f"[persona={persona_normalized}] Correct the grammar: {text}"
-            case "naturalize":
-                prompt = (
-                    f"[persona={persona_normalized}] Convert to natural speech: {text}"
-                )
-            case _:
-                prompt = f"[persona={persona_normalized}] {text}"
+        if operation == "generate":
+            prompt = f"[persona={persona_normalized}] Generate a natural response: {text}"
+        elif operation == "correct":
+            prompt = f"[persona={persona_normalized}] Correct the grammar: {text}"
+        elif operation == "naturalize":
+            prompt = (
+                f"[persona={persona_normalized}] Convert to natural speech: {text}"
+            )
+        else:
+            prompt = f"[persona={persona_normalized}] {text}"
 
         if context:
             prompt = f"{prompt}\nContext: {context}"
