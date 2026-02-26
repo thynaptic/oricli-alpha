@@ -21,7 +21,7 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from fastapi import FastAPI, HTTPException, Request, Header
+    from fastapi import FastAPI, HTTPException, Request, Header, Response
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse
     from fastapi.exceptions import RequestValidationError
@@ -376,7 +376,7 @@ def create_app(
     from contextlib import asynccontextmanager
     
     @asynccontextmanager
-    async def lifespan_context():
+    async def lifespan_context(app):
         """Lifespan context manager for startup/shutdown"""
         # Startup
         try:
@@ -544,10 +544,20 @@ def create_app(
     @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
     async def chat_completions(
         request: ChatCompletionRequest,
-        authorization: Optional[str] = None
+        response: Response,
+        authorization: Optional[str] = None,
     ):
         """OpenAI-compatible chat completions endpoint"""
-        return await app.state.get_api().chat_completions(request, authorization)
+        result = await app.state.get_api().chat_completions(request, authorization)
+        try:
+            trace_id = None
+            if hasattr(result, "metadata") and isinstance(result.metadata, dict):
+                trace_id = result.metadata.get("trace_id")
+            if trace_id:
+                response.headers["X-Mavaia-Trace-Id"] = str(trace_id)
+        except Exception:
+            pass
+        return result
     
     @app.post("/v1/embeddings", response_model=EmbeddingResponse)
     async def embeddings(
@@ -598,6 +608,102 @@ def create_app(
                 status_code=500,
                 detail=f"Error retrieving metrics: {str(e)}"
             )
+
+    def _require_introspection_auth(authorization: Optional[str]) -> None:
+        # Safe-by-default: introspection always requires auth unless explicitly disabled.
+        require_auth = os.getenv("MAVAIA_INTROSPECTION_REQUIRE_AUTH", "true").lower() == "true"
+        if not require_auth:
+            return
+
+        api_key = os.getenv("MAVAIA_API_KEY") or getattr(app.state.get_api(), "api_key", None)
+        if not api_key:
+            raise HTTPException(status_code=503, detail="Introspection auth required but MAVAIA_API_KEY is not configured")
+
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Authorization required")
+
+        provided = authorization[7:].strip()
+        if not provided or provided != api_key:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
+    @app.get("/v1/introspection")
+    async def introspection_root(
+        authorization: Optional[str] = Header(None, alias="Authorization"),
+    ):
+        _require_introspection_auth(authorization)
+        from mavaia_core.brain.introspection import get_trace_store
+
+        return {
+            "capabilities": get_trace_store().capabilities(),
+            "endpoints": [
+                "/v1/introspection/traces",
+                "/v1/introspection/traces/{trace_id}",
+                "/v1/introspection/router",
+                "/v1/introspection/diagnostics/modules",
+            ],
+        }
+
+    @app.get("/v1/introspection/traces")
+    async def introspection_traces(
+        limit: int = 20,
+        authorization: Optional[str] = Header(None, alias="Authorization"),
+    ):
+        _require_introspection_auth(authorization)
+        from mavaia_core.brain.introspection import get_trace_store
+
+        return get_trace_store().list_recent(limit)
+
+    @app.get("/v1/introspection/traces/{trace_id}")
+    async def introspection_trace(
+        trace_id: str,
+        authorization: Optional[str] = Header(None, alias="Authorization"),
+    ):
+        _require_introspection_auth(authorization)
+        from mavaia_core.brain.introspection import get_trace_store
+
+        t = get_trace_store().get(trace_id)
+        if not t:
+            raise HTTPException(status_code=404, detail="Trace not found")
+        return t
+
+    @app.get("/v1/introspection/router")
+    async def introspection_router(
+        authorization: Optional[str] = Header(None, alias="Authorization"),
+    ):
+        _require_introspection_auth(authorization)
+        from mavaia_core.brain.registry import ModuleRegistry
+
+        cg = ModuleRegistry.get_module("cognitive_generator")
+        if not cg:
+            raise HTTPException(status_code=503, detail="cognitive_generator module unavailable")
+
+        return {
+            "routing_statistics": cg.get_routing_statistics(),
+            "router_state": cg.get_router_state(),
+        }
+
+    @app.get("/v1/introspection/diagnostics/modules")
+    async def introspection_module_diagnostics(
+        max_modules: int = 250,
+        import_timeout_s: float = 8.0,
+        authorization: Optional[str] = Header(None, alias="Authorization"),
+    ):
+        _require_introspection_auth(authorization)
+        from mavaia_core.brain.registry import ModuleRegistry
+
+        diag = ModuleRegistry.get_module("module_health_diagnostics")
+        if not diag:
+            raise HTTPException(status_code=503, detail="module_health_diagnostics unavailable")
+
+        return diag.execute(
+            "scan_modules",
+            {
+                "include_subdirs": True,
+                "max_modules": max_modules,
+                "import_timeout_s": import_timeout_s,
+                "include_tracebacks": False,
+            },
+        )
     
     # Health check endpoint (Mavaia-specific)
     @app.get("/v1/health/modules")

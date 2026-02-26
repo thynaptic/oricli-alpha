@@ -12,6 +12,7 @@ import random
 import time
 import traceback
 import logging
+import uuid
 from pathlib import Path
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
@@ -627,6 +628,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
             "code", "python", "function", "class", "import", "def ", "programming",
             "script", "algorithm", "syntax", "variable", "debug", "error", "exception",
             "compile", "execute", "run code", "write code", "generate code",
+            # CLI / shell / command requests are code intent (need concrete commands, not prose).
+            "bash", "shell", "one-liner", "oneliner", "command", "cli", "grep", "awk", "sed",
         ]
         if any(keyword in combined for keyword in code_keywords):
             intent_info["intent"] = "code"
@@ -961,31 +964,22 @@ class CognitiveGeneratorModule(BaseBrainModule):
         return module_operations
     
     def _execute_module_chain(self, modules: list[tuple[str, str]], params: dict[str, Any]) -> dict[str, Any]:
-        """
-        Execute a chain of modules in sequence, using results from previous modules.
-        
-        Args:
-            modules: List of (module_name, operation) tuples
-            params: Initial parameters
-            
-        Returns:
-            Combined result from module chain execution
-        """
+        """Execute a chain of modules in sequence, using results from previous modules."""
         from mavaia_core.brain.registry import ModuleRegistry
-        
+
         accumulated_context = params.get("context", "")
         results = {}
         final_result = None
         response_text = ""  # Track best-effort text across modules
         input_lower = str(params.get("input", "") or "").strip().lower()
         target_intent = str(params.get("intent", "") or "").strip().lower()
-        
+
         for module_name, operation in modules:
             try:
                 module = ModuleRegistry.get_module(module_name)
                 if not module:
                     continue
-                
+
                 # Prepare module parameters (ensure accumulated_context is not overwritten by **params)
                 module_params = {
                     **params,
@@ -1017,8 +1011,12 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     except Exception:
                         pass
 
-                # Execute module
+                # Execute module (capture timing for introspection)
+                _t0 = time.time()
                 result = module.execute(operation, module_params)
+                _dur_ms = int((time.time() - _t0) * 1000)
+                if isinstance(result, dict):
+                    result.setdefault("_duration_ms", _dur_ms)
                 results[module_name] = result
                 
                 # VERIFY WEB CONTENT: If this is a web module, verify the content
@@ -1638,7 +1636,14 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 "thinking through",
                 "here’s a clear way to think about",
                 "here's a clear way to think about",
+                "here’s a concrete way to do that",
+                "here's a concrete way to do that",
+                "restate the goal",
+                "list constraints",
+                "produce a short checklist",
+                "if you share your exact context",
                 "if you share any constraints",
+                "i can tailor it",
             ]
             # Meta-reasoning templates are low-signal even when long; treat as wrong up to a generous threshold.
             is_meta_reasoning = any(pattern in output_lower for pattern in meta_reasoning_patterns) and \
@@ -1743,6 +1748,13 @@ class CognitiveGeneratorModule(BaseBrainModule):
             "considering different perspectives",
             "evaluating potential solutions",
             "synthesizing the analysis",
+            "here’s a concrete way to do that",
+            "here's a concrete way to do that",
+            "restate the goal",
+            "list constraints",
+            "produce a short checklist",
+            "if you share your exact context",
+            "i can tailor it",
         ]
         is_meta_reasoning = any(pattern in output_lower for pattern in meta_reasoning_patterns) and \
                            len(output_lower.split()) < 30  # Short meta-reasoning is definitely wrong
@@ -1886,7 +1898,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
         module_chain: list[tuple[str, str]],
         execution_results: dict[str, Any],
         verification_result: dict[str, Any],
-        final_output: str
+        final_output: str,
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Create a trace graph logging module path dependencies.
@@ -1906,6 +1919,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         from mavaia_core.brain.registry import ModuleRegistry
         
         trace_graph = {
+            "trace_id": trace_id,
             "timestamp": time.time(),
             "input": input_text,
             "intent": intent_info.get("intent", "general"),
@@ -1951,6 +1965,9 @@ class CognitiveGeneratorModule(BaseBrainModule):
                         "name": metadata.name if metadata else module_name,
                         "description": metadata.description if metadata else "",
                         "version": metadata.version if metadata else "unknown",
+                        "duration_ms": (
+                            module_result.get("_duration_ms") if isinstance(module_result, dict) else None
+                        ),
                     },
                     "result": result_summary if result_summary else module_result,
                 }
@@ -2374,6 +2391,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         )
 
         overall_start = time.time()
+        trace_id = uuid.uuid4().hex
         
         # Ensure voice_context exists (default to base Mavaia voice)
         if voice_context is None:
@@ -2390,6 +2408,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
 
         # Initialize diagnostic dictionary for DebugOutputFormatter
         diagnostic_info = {
+            "trace_id": trace_id,
             "thought_to_text_loaded": False,
             "thoughts_count": 0,
             "is_fallback": False,
@@ -2721,7 +2740,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
                                 module_chain,
                                 execution_results,
                                 verification_result,
-                                response_text
+                                response_text,
+                                trace_id=trace_id,
                             )
                             
                             # Update learned router with outcome
@@ -2735,8 +2755,29 @@ class CognitiveGeneratorModule(BaseBrainModule):
                             diagnostic_info["verification"] = verification_result
                             diagnostic_info["structural_confidence"] = structural_confidence
                             
+                            # Store a redacted trace for secure introspection.
+                            try:
+                                from mavaia_core.brain.introspection import get_trace_store
+
+                                get_trace_store().add(
+                                    trace_id,
+                                    {
+                                        "trace_id": trace_id,
+                                        "intent": intent_info,
+                                        "confidence": structural_confidence.get("confidence", 0.7),
+                                        "verification": verification_result,
+                                        "structural_confidence": structural_confidence,
+                                        "web_verification": final_web_verification,
+                                        "trace_graph": trace_graph,
+                                        "diagnostic": diagnostic_info,
+                                    },
+                                )
+                            except Exception:
+                                pass
+
                             return {
                                 "success": True,
+                                "trace_id": trace_id,
                                 "text": response_text,
                                 "response": response_text,
                                 "generated_text": response_text,
@@ -3265,7 +3306,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 module_chain if "module_chain" in locals() else [],
                 execution_results if "execution_results" in locals() else {},
                 final_verification,
-                generated_text
+                generated_text,
+                trace_id=trace_id,
             )
             
             # Update learned router with final outcome
@@ -3276,8 +3318,28 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     final_confidence
                 )
             
+            # Store a redacted trace for secure introspection.
+            try:
+                from mavaia_core.brain.introspection import get_trace_store
+
+                get_trace_store().add(
+                    trace_id,
+                    {
+                        "trace_id": trace_id,
+                        "intent": intent_info,
+                        "confidence": final_confidence,
+                        "verification": final_verification,
+                        "structural_confidence": structural_confidence,
+                        "trace_graph": final_trace_graph,
+                        "diagnostic": diagnostic_info,
+                    },
+                )
+            except Exception:
+                pass
+
             return {
                 "success": True,
+                "trace_id": trace_id,
                 "text": generated_text,  # GUARANTEED to be non-empty string and not "1"
                 "generated_text": generated_text,  # Alias for benchmark compatibility
                 "confidence": final_confidence,
@@ -3432,7 +3494,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     [],
                     {},
                     fallback_verification,
-                    fallback_response
+                    fallback_response,
+                    trace_id=trace_id,
                 )
             except Exception:
                 fallback_trace_graph = None
@@ -3445,8 +3508,29 @@ class CognitiveGeneratorModule(BaseBrainModule):
             )
 
             # GUARANTEE: Always return a dict with non-empty text field
+            # Store a redacted trace for secure introspection.
+            try:
+                from mavaia_core.brain.introspection import get_trace_store
+
+                if fallback_trace_graph is not None:
+                    get_trace_store().add(
+                        trace_id,
+                        {
+                            "trace_id": trace_id,
+                            "intent": fallback_intent_info,
+                            "confidence": fallback_verification.get("confidence", 0.3),
+                            "verification": fallback_verification,
+                            "trace_graph": fallback_trace_graph,
+                            "diagnostic": diagnostic_info,
+                            "error": str(e),
+                        },
+                    )
+            except Exception:
+                pass
+
             return {
                 "success": True,  # Always true since we guarantee text exists
+                "trace_id": trace_id,
                 "text": fallback_response,  # GUARANTEED to be non-empty string
                 "generated_text": fallback_response,  # Alias for benchmark compatibility
                 "confidence": fallback_verification.get("confidence", 0.3),

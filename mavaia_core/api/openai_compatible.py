@@ -200,30 +200,34 @@ class OpenAICompatibleAPI:
     async def _stream_chat_completion(
         self, request: ChatCompletionRequest
     ) -> StreamingResponse:
-        """Stream chat completion response"""
+        """Stream chat completion response."""
+        # Generate once (non-streaming) and simulate streaming.
+        response = self.client.chat.completions.create(
+            model=request.model,
+            messages=[
+                {"role": msg.role, "content": msg.get_text_content()}
+                for msg in request.messages
+            ],
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            stream=False,
+            personality_id=request.personality_id,
+            use_memory=request.use_memory,
+            use_reasoning=request.use_reasoning,
+        )
+
+        trace_id = None
+        try:
+            if response.metadata and isinstance(response.metadata, dict):
+                trace_id = response.metadata.get("trace_id")
+        except Exception:
+            trace_id = None
+
         async def generate():
             try:
-                # For now, generate non-streaming and simulate streaming
-                # In production, implement true streaming from cognitive generator
-                # Extract text content from messages (handles both string and multimodal formats)
-                response = self.client.chat.completions.create(
-                    model=request.model,
-                    messages=[
-                        {"role": msg.role, "content": msg.get_text_content()}
-                        for msg in request.messages
-                    ],
-                    temperature=request.temperature,
-                    max_tokens=request.max_tokens,
-                    stream=False,
-                    personality_id=request.personality_id,
-                    use_memory=request.use_memory,
-                    use_reasoning=request.use_reasoning,
-                )
-                
-                # Simulate streaming by chunking the response
                 content = response.choices[0].message.content
                 chunk_size = 10  # Characters per chunk
-                
+
                 for i in range(0, len(content), chunk_size):
                     chunk = content[i:i + chunk_size]
                     chunk_data = {
@@ -238,8 +242,7 @@ class OpenAICompatibleAPI:
                         }]
                     }
                     yield f"data: {json.dumps(chunk_data)}\n\n"
-                
-                # Send final chunk
+
                 final_chunk = {
                     "id": response.id,
                     "object": "chat.completion.chunk",
@@ -253,7 +256,7 @@ class OpenAICompatibleAPI:
                 }
                 yield f"data: {json.dumps(final_chunk)}\n\n"
                 yield "data: [DONE]\n\n"
-            
+
             except Exception as e:
                 error_data = {
                     "error": {
@@ -263,14 +266,18 @@ class OpenAICompatibleAPI:
                     }
                 }
                 yield f"data: {json.dumps(error_data)}\n\n"
-        
+
+        headers = {
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+        if trace_id:
+            headers["X-Mavaia-Trace-Id"] = str(trace_id)
+
         return StreamingResponse(
             generate(),
             media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-            }
+            headers=headers,
         )
     
     async def embeddings(

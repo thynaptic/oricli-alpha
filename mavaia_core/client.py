@@ -2487,7 +2487,15 @@ class MavaiaClient:
                 )
         reasoning_steps = result.get("reasoning_steps")
         confidence = result.get("confidence")
-        metadata = result.get("metadata", {})
+        metadata = result.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        trace_id = result.get("trace_id")
+        if not trace_id and isinstance(result.get("trace_graph"), dict):
+            trace_id = result["trace_graph"].get("trace_id")
+        if trace_id:
+            metadata.setdefault("trace_id", trace_id)
         
         # Create response
         response_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"

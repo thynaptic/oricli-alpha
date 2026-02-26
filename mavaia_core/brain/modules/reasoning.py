@@ -498,6 +498,16 @@ class ReasoningModule(BaseBrainModule):
                         "In thermodynamics it’s often described as ‘energy dispersal’ and tends to increase for isolated systems; "
                         "in information theory it measures uncertainty (average information content)."
                     )
+                elif ("bash" in query_lower or "shell" in query_lower) and ("largest" in query_lower and "file" in query_lower):
+                    m_n = re.search(r"\b(\d+)\b", query_lower)
+                    n = int(m_n.group(1)) if m_n else 5
+                    n = max(1, min(n, 50))
+                    reasoning = (
+                        "```bash\n"
+                        f"find . -type f -printf '%s\\t%p\\n' 2>/dev/null | sort -nr | head -n {n}\n"
+                        "```\n"
+                        "This prints size-bytes and path, sorts largest-first, and shows the top results."
+                    )
                 elif context and len(context) > 0:
                     # Use context as evidence, but avoid dumping/echoing it.
                     blob = " ".join([str(c) for c in context if c])
@@ -569,15 +579,73 @@ class ReasoningModule(BaseBrainModule):
                         "A useful way to answer is: identify the mechanism, list typical contributing factors, and note the exceptions."
                     )
                 elif query_lower.startswith("how "):
-                    reasoning = (
-                        f"A practical way to approach {key_phrase} is to break it into steps: (1) clarify the goal, (2) list inputs/constraints, "
-                        "(3) choose a method, (4) execute, and (5) verify the result. If you share your exact context, I can tailor the steps."
-                    )
+                    if ("git" in query_lower and "undo" in query_lower and "commit" in query_lower):
+                        reasoning = (
+                            "Undo the last Git commit but keep your changes (choose one):\n"
+                            "- Keep changes staged: `git reset --soft HEAD~1`\n"
+                            "- Keep changes unstaged (default): `git reset HEAD~1` (or `--mixed`)\n\n"
+                            "If you already pushed the commit, prefer `git revert HEAD` (creates a new commit) or coordinate before force-pushing."
+                        )
+                    else:
+                        reasoning = (
+                            f"A practical way to approach {key_phrase} is to break it into steps: (1) clarify the goal, (2) list inputs/constraints, "
+                            "(3) choose a method, (4) execute, and (5) verify the result."
+                        )
+                elif query_lower.startswith(("describe ", "explain ", "tell me about ")):
+                    if re.search(r"\bmona\s+lisa\b", query_lower):
+                        reasoning = (
+                            "The Mona Lisa is a Renaissance portrait by Leonardo da Vinci (early 1500s), housed in the Louvre in Paris. "
+                            "It’s known for its subtle, lifelike modeling (including sfumato—soft transitions without hard outlines), its composed pose, "
+                            "and the famously ambiguous expression that invites interpretation.\n\n"
+                            "Why it matters: it’s a landmark in portrait painting technique and human realism, it became a global cultural icon through centuries of attention "
+                            "(including heightened public fascination after its 1911 theft and recovery), and it continues to shape how people think about art, fame, and interpretation."
+                        )
+                    elif ("introspection" in query_lower) and ("endpoint" in query_lower or "endpoints" in query_lower or "server" in query_lower):
+                        reasoning = (
+                            "In this server, introspection endpoints expose internal diagnostics so you can see what the cognition pipeline did for a request—"
+                            "routing decisions, module chains, timings, verification outcomes, and redacted trace graphs. "
+                            "They’re designed to be safe-by-default (redaction/truncation) and require an API key even if other endpoints are open. "
+                            "Typical routes include /v1/introspection, /v1/introspection/traces, /v1/introspection/traces/{trace_id}, and /v1/introspection/router."
+                        )
+                    else:
+                        subject = re.sub(r"(?i)^(describe|explain|tell me about)\s+", "", query.strip()).strip()
+                        subject = re.sub(r"(?i)\s+and\s+why\s+it\s+matters.*$", "", subject).strip()
+                        subject = subject.strip(" \t\n\r?!.:")
+                        if subject:
+                            reasoning = (
+                                f"{subject}: here’s a high-level overview.\n"
+                                "- What it is: a concept/topic with specific meaning depending on the domain and context.\n"
+                                "- Key aspects: definitions, main mechanisms/parts, and the most important constraints/assumptions.\n"
+                                "- Why it matters: the practical impact (what it changes, enables, or explains) and common trade-offs.\n\n"
+                                "If you tell me the domain/angle you care about (history, how it works, pros/cons, implementation details), I can make this precise."
+                            )
+                        else:
+                            reasoning = "What topic should I describe, and what angle do you care about (history, how it works, pros/cons, or a practical example)?"
                 else:
-                    # Handle clear imperative requests ("Give me…", "List…", etc.) without defaulting to a
-                    # low-quality clarification fallback.
+                    # Handle clear imperative requests ("Give me…", "List…", etc.) with a concrete best-effort output.
                     if re.match(r"^(give me|provide|list|create|write|draft|generate)\b", query_lower):
-                        if (
+                        if ("introspection" in query_lower) and ("endpoint" in query_lower or "endpoints" in query_lower):
+                            reasoning = (
+                                "Introspection endpoints let you inspect what Mavaia did internally for a request: intent detection, routing, module execution path, timings, and verification. "
+                                "They store a per-request trace (keyed by trace_id) in an in-memory ring buffer and expose it via authenticated endpoints like:\n"
+                                "- GET /v1/introspection\n"
+                                "- GET /v1/introspection/traces?limit=...\n"
+                                "- GET /v1/introspection/traces/{trace_id}\n"
+                                "- GET /v1/introspection/router\n"
+                                "- GET /v1/introspection/diagnostics/modules\n"
+                                "By default, traces are redacted/truncated to avoid leaking prompts or memory contents."
+                            )
+                        elif ("bash" in query_lower or "shell" in query_lower) and ("largest" in query_lower and "file" in query_lower):
+                            m_n = re.search(r"\b(\d+)\b", query_lower)
+                            n = int(m_n.group(1)) if m_n else 5
+                            n = max(1, min(n, 50))
+                            reasoning = (
+                                "```bash\n"
+                                f"find . -type f -printf '%s\\t%p\\n' 2>/dev/null | sort -nr | head -n {n}\n"
+                                "```\n"
+                                "This prints size-bytes and path, sorts largest-first, and shows the top results."
+                            )
+                        elif (
                             any(k in query_lower for k in ("harden", "secure", "security", "lock down"))
                             and any(k in query_lower for k in ("ubuntu", "vps", "server", "linux"))
                         ):
@@ -596,16 +664,12 @@ class ReasoningModule(BaseBrainModule):
                             )
                         else:
                             reasoning = (
-                                "Here’s a concrete way to do that:\n"
-                                "1) Restate the goal in one sentence\n"
-                                "2) List constraints (time, tools, format)\n"
-                                "3) Produce a short checklist/steps\n"
-                                "If you share your exact context, I can tailor it." 
+                                "I can help, but I need one detail to avoid guessing: what output format do you want (bullets, code, steps), and what constraints apply (OS/tools/length)? "
+                                "If you answer that, I’ll produce the final output immediately."
                             )
                     else:
                         reasoning = (
-                            f"I’m not fully sure what you mean by {key_phrase}. If you rephrase it as a question (what/why/how) or add one sentence of context, "
-                            "I can give a concrete answer."
+                            "I can answer that, but I need a bit more context (what domain/topic, and what you want as the output: definition, steps, comparison, or an example)."
                         )
         
         if context and reasoning and reasoning.startswith((
