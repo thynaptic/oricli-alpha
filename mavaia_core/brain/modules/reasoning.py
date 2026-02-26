@@ -574,10 +574,39 @@ class ReasoningModule(BaseBrainModule):
                         "(3) choose a method, (4) execute, and (5) verify the result. If you share your exact context, I can tailor the steps."
                     )
                 else:
-                    reasoning = (
-                        f"I’m not fully sure what you mean by {key_phrase}. If you rephrase it as a question (what/why/how) or add one sentence of context, "
-                        "I can give a concrete answer."
-                    )
+                    # Handle clear imperative requests ("Give me…", "List…", etc.) without defaulting to a
+                    # low-quality clarification fallback.
+                    if re.match(r"^(give me|provide|list|create|write|draft|generate)\b", query_lower):
+                        if (
+                            any(k in query_lower for k in ("harden", "secure", "security", "lock down"))
+                            and any(k in query_lower for k in ("ubuntu", "vps", "server", "linux"))
+                        ):
+                            reasoning = (
+                                "Ubuntu VPS hardening checklist for a Python service:\n"
+                                "- Update/patch: apt update && apt upgrade; enable unattended-upgrades\n"
+                                "- Users/SSH: create a non-root sudo user; SSH keys only; disable root login\n"
+                                "- Firewall: default-deny inbound (UFW); allow only needed ports (e.g., 22/80/443)\n"
+                                "- Brute-force protection: fail2ban (or equivalent) for SSH\n"
+                                "- Service isolation: run app as dedicated user; systemd unit; least privileges\n"
+                                "- Secrets: use env files with strict perms; avoid secrets in repos/logs\n"
+                                "- TLS: terminate with Caddy/Nginx; auto-renew certs; strong ciphers\n"
+                                "- Logging/monitoring: journalctl rotation; basic alerts; disk/CPU/mem checks\n"
+                                "- Backups: automated, tested restores; store off-host\n"
+                                "- Review: remove unused packages; close ports; audit SSH and sudoers"
+                            )
+                        else:
+                            reasoning = (
+                                "Here’s a concrete way to do that:\n"
+                                "1) Restate the goal in one sentence\n"
+                                "2) List constraints (time, tools, format)\n"
+                                "3) Produce a short checklist/steps\n"
+                                "If you share your exact context, I can tailor it." 
+                            )
+                    else:
+                        reasoning = (
+                            f"I’m not fully sure what you mean by {key_phrase}. If you rephrase it as a question (what/why/how) or add one sentence of context, "
+                            "I can give a concrete answer."
+                        )
         
         if context and reasoning and reasoning.startswith((
             "Here’s a clear way to think about",

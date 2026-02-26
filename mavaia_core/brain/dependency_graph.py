@@ -57,23 +57,30 @@ class DependencyGraph:
         Returns:
             Set of dependency module names
         """
-        dependencies = set()
-        
-        # Check for explicit dependency declarations
-        # This is a placeholder - in future, modules can declare dependencies
-        # in their metadata or via a separate dependency system
-        
-        # For now, infer from common patterns
-        # cognitive_generator depends on many modules
-        if metadata.name == "cognitive_generator":
-            dependencies.update([
-                "thought_to_text",
-                "memory_graph",
-                "reasoning",
-                "embeddings",
-                "personality_response"
-            ])
-        
+        dependencies: Set[str] = set()
+
+        # Honor explicit dependency declarations when present.
+        explicit = getattr(metadata, "dependencies", None)
+        if explicit:
+            try:
+                for dep in explicit:
+                    if isinstance(dep, str) and dep.strip():
+                        dependencies.add(dep.strip())
+            except TypeError:
+                pass
+
+        # Backward-compatible inference for older modules that don't declare dependencies.
+        if not dependencies and metadata.name == "cognitive_generator":
+            dependencies.update(
+                [
+                    "thought_to_text",
+                    "memory_graph",
+                    "reasoning",
+                    "embeddings",
+                    "personality_response",
+                ]
+            )
+
         return dependencies
     
     def detect_cycles(self) -> List[List[str]]:

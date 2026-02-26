@@ -1,55 +1,78 @@
 from __future__ import annotations
-"""
-Trains Neural Text Generation Models (Character, Word, Transformer) Module
-Trains neural text generation models (character, word, transformer)
+"""Neural text trainer module.
+
+Thin wrapper around `neural_text_generator.train_model` to expose named training
+operations.
 """
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict
 import sys
-from pathlib import Path
+
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from mavaia_core.exceptions import InvalidParameterError
 
 
 class NeuralTextTrainerModule(BaseBrainModule):
-    """Trains neural text generation models (character, word, transformer)"""
-    
+    """Trains neural text generation models (character, word, transformer)."""
+
     def __init__(self):
-        """Initialize the module"""
         self._module_registry = None
-    
+
     @property
     def metadata(self) -> ModuleMetadata:
-        """Return module metadata"""
         return ModuleMetadata(
             name="neural_text_trainer",
             version="1.0.0",
             description="Trains neural text generation models (character, word, transformer)",
-            operations=['train_model', 'train_character_model', 'train_word_model', 'train_transformer_model'],
+            operations=[
+                "train_model",
+                "train_character_model",
+                "train_word_model",
+                "train_transformer_model",
+            ],
             dependencies=[],
             model_required=False,
         )
-    
+
     def initialize(self) -> bool:
-        """Initialize the module"""
         self._init_module_registry()
         return True
-    
-    def _init_module_registry(self):
-        """Lazy initialization of module registry"""
+
+    def _init_module_registry(self) -> None:
         if self._module_registry is None:
             try:
                 from mavaia_core.brain.registry import ModuleRegistry
+
                 self._module_registry = ModuleRegistry
             except ImportError:
                 print("[NeuralTextTrainerModule] ModuleRegistry not available", file=sys.stderr)
                 self._module_registry = None
-    
+
+    def _get_neural_text_generator(self):
+        self._init_module_registry()
+        if not self._module_registry:
+            return None
+        return self._module_registry.get_module("neural_text_generator")
+
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute an operation"""
-        try:
-            # Operations will be routed here
-            return {"success": False, "error": f"Operation {operation} not yet implemented"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    # Methods will be extracted here
+        ntg = self._get_neural_text_generator()
+        if not ntg:
+            return {"success": False, "error": "neural_text_generator module unavailable"}
+
+        if operation == "train_model":
+            return ntg.execute("train_model", params)
+
+        if operation == "train_character_model":
+            return ntg.execute("train_model", {**params, "model_type": "character"})
+
+        if operation == "train_word_model":
+            return ntg.execute("train_model", {**params, "model_type": "word"})
+
+        if operation == "train_transformer_model":
+            return ntg.execute("train_model", {**params, "model_type": "transformer"})
+
+        raise InvalidParameterError(
+            parameter="operation",
+            value=str(operation),
+            reason="Unknown operation for neural_text_trainer",
+        )
