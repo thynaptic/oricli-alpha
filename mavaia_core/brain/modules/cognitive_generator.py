@@ -642,17 +642,18 @@ class CognitiveGeneratorModule(BaseBrainModule):
         # "What is" / "What are" definition questions - treat as search-backed definition.
         # This must run BEFORE creative keyword checks so prompts like "What is a haiku?"
         # return a definition instead of generating a haiku.
-        if (combined.startswith("what is") or combined.startswith("what are") or combined.startswith("define ")) and intent_info["intent"] == "general":
+        if (combined.startswith(("what is", "what are", "what's", "whats", "define "))) and intent_info["intent"] == "general":
             # If it's actually an arithmetic prompt like "What is 15 * 23?", route to math instead.
             if re.search(r"\d", combined) and re.search(r"[\+\-\*\/×÷\^=]", combined):
                 pass
             else:
-                intent_info["intent"] = "reasoning"  # Definition questions need synthesis
+                # Definition-style questions should be answerable from internal cognition by default.
+                # Only require web_search when the user explicitly asks to look something up.
+                intent_info["intent"] = "reasoning"
                 intent_info["query_type"] = "definition"
                 intent_info["requires_reasoning"] = True
-                intent_info["requires_search"] = True  # May need to look up information
-                # Keep definition questions lightweight and predictable to avoid timeouts.
-                intent_info["recommended_modules"] = ["web_search", "reasoning"]
+                intent_info["requires_search"] = False
+                intent_info["recommended_modules"] = ["reasoning"]
                 intent_info["confidence"] = 0.85
 
         # Creative writing queries (poems, stories, lyrics, jokes)
@@ -760,13 +761,12 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 intent_info["confidence"] = 0.7
         
         # "What is" / "What are" definition questions - treat as search-backed definition
-        if (combined.startswith("what is") or combined.startswith("what are")) and intent_info["intent"] == "general":
-            intent_info["intent"] = "reasoning"  # Definition questions need synthesis
+        if combined.startswith(("what is", "what are", "what's", "whats")) and intent_info["intent"] == "general":
+            intent_info["intent"] = "reasoning"
             intent_info["query_type"] = "definition"
             intent_info["requires_reasoning"] = True
-            intent_info["requires_search"] = True  # May need to look up information
-            # Keep definition questions lightweight and predictable to avoid timeouts.
-            intent_info["recommended_modules"] = ["web_search", "reasoning"]
+            intent_info["requires_search"] = False
+            intent_info["recommended_modules"] = ["reasoning"]
             intent_info["confidence"] = 0.85
         
         # Question detection
@@ -801,8 +801,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
         
         query_type = intent_info.get("query_type")
         query_lower = (intent_info.get("input", "") or "").lower().strip()
-        if query_type == "definition" or query_lower.startswith(("what is", "what are")):
-            # Definition questions should prioritize web_search early, but still allow synthesis modules.
+        if (
+            (intent_info.get("intent") == "search" or intent_info.get("requires_search", False))
+            and (query_type == "definition" or query_lower.startswith(("what is", "what are", "what's", "whats")))
+        ):
+            # If we decided this definition needs web, run web_search early.
             if isinstance(recommended, list) and "web_search" not in recommended:
                 recommended = ["web_search", *recommended]
 
@@ -921,11 +924,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         query_text = intent_info.get("input", "") or ""
         query_lower_for_web = query_text.lower() if query_text else query_lower
         
-        if (
-            query_lower_for_web.startswith("what is") or query_lower_for_web.startswith("what are") or
-            query_lower_for_web.startswith("who is") or query_lower_for_web.startswith("who are") or
-            intent_info.get("intent") == "search" or intent_info.get("requires_search", False)
-        ):
+        if intent_info.get("intent") == "search" or intent_info.get("requires_search", False):
             # Add web_search if not already in chain
             if not any(m[0] == "web_search" for m in module_operations):
                 try:
@@ -1582,12 +1581,18 @@ class CognitiveGeneratorModule(BaseBrainModule):
             # for low term overlap.
             is_clarification = bool(
                 re.search(
-                    r"\b(rephrase|clarify|more context|add (?:a bit|some) context|what do you mean|can you explain what you mean)\b",
+                    r"\b(rephrase|clarify|more context|add (?:a bit|some) context|need (?:a bit|more) context|what do you mean|what domain|what domain/topic|can you explain what you mean)\b",
                     output_lower,
                 )
             )
 
-            if intent == "general" and is_clarification:
+            is_direct_question = query_lower.startswith((
+                "what ", "who ", "why ", "how ", "when ", "where ",
+                "what is ", "what are ", "what's ", "whats ", "define ",
+                "explain ", "describe ", "summarize ", "tell me ", "give me ",
+            ))
+
+            if intent == "general" and is_clarification and not is_direct_question:
                 structural_checks["query_coverage"] = 1.0
                 confidence_factors.append(1.0)
             else:
@@ -1644,6 +1649,9 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 "if you share your exact context",
                 "if you share any constraints",
                 "i can tailor it",
+                "need a bit more context",
+                "need more context",
+                "what domain/topic",
             ]
             # Meta-reasoning templates are low-signal even when long; treat as wrong up to a generous threshold.
             is_meta_reasoning = any(pattern in output_lower for pattern in meta_reasoning_patterns) and \
@@ -1755,6 +1763,9 @@ class CognitiveGeneratorModule(BaseBrainModule):
             "produce a short checklist",
             "if you share your exact context",
             "i can tailor it",
+            "need a bit more context",
+            "need more context",
+            "what domain/topic",
         ]
         is_meta_reasoning = any(pattern in output_lower for pattern in meta_reasoning_patterns) and \
                            len(output_lower.split()) < 30  # Short meta-reasoning is definitely wrong

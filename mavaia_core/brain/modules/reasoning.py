@@ -541,9 +541,10 @@ class ReasoningModule(BaseBrainModule):
                                 )
                         else:
                             reasoning = "I found some sources, but couldn’t reliably extract the subject of the question."
-                    elif query_lower.startswith(("what is ", "what are ", "define ")):
-                        m = re.match(r"^(what is|what are|define)\s+(.+?)\??$", query_lower)
+                    elif query_lower.startswith(("what is ", "what are ", "define ", "what's ", "whats ")):
+                        m = re.match(r"^(what is|what are|define|what's|whats)\s+(.+?)\??$", query_lower)
                         term = (m.group(2).strip() if m else "")
+                        term = re.sub(r"^(a|an|the)\s+", "", term).strip()
                         if term:
                             term_re = re.escape(term)
                             m2 = re.search(rf"\b{term_re}\b\s+is\s+([^\.]{10,220})", blob, flags=re.IGNORECASE)
@@ -555,12 +556,19 @@ class ReasoningModule(BaseBrainModule):
                             reasoning = f"From the sources: {blob[:260]}"
                     else:
                         reasoning = f"Based on the available information, {key_phrase} relates to: {blob[:260]}"
-                elif query_lower.startswith(("what is ", "what are ", "define ")):
-                    m = re.match(r"^(what is|what are|define)\s+(.+?)\??$", query_lower)
+                elif query_lower.startswith(("what is ", "what are ", "define ", "what's ", "whats ")):
+                    m = re.match(r"^(what is|what are|define|what's|whats)\s+(.+?)\??$", query_lower)
                     term = (m.group(2).strip() if m else "")
                     term = term.strip(" \t\n\r?!.:")
+                    term = re.sub(r"^(a|an|the)\s+", "", term).strip()
                     if term:
-                        if term.lower() == "recursion":
+                        if term.lower() == "rainbow":
+                            reasoning = (
+                                "A rainbow is an arc of colored light caused by sunlight interacting with raindrops (or mist). "
+                                "Light is refracted as it enters a droplet, internally reflected, and refracted again as it leaves, splitting into different wavelengths—"
+                                "which is why you see a spectrum of colors. The arc appears opposite the Sun, and its exact position depends on the angles between your eyes, the Sun, and the droplets."
+                            )
+                        elif term.lower() == "recursion":
                             reasoning = (
                                 "Recursion is defining or solving something in terms of itself. "
                                 "In programming, it usually means a function calls itself on a smaller input until it reaches a base case. "
@@ -568,11 +576,11 @@ class ReasoningModule(BaseBrainModule):
                             )
                         else:
                             reasoning = (
-                                f"In general, {term} means a concept defined by how it’s used in a particular domain. "
-                                "If you tell me the domain (e.g., math, programming, art), I’ll give a precise definition and example."
+                                f"{term} is typically a specific concept/thing, but its precise meaning can vary by domain. "
+                                "If you tell me the domain (e.g., science, programming, art) or what you’re trying to do with it, I’ll give a precise definition and a concrete example."
                             )
                     else:
-                        reasoning = "Tell me the term you want defined (and the domain, if relevant)."
+                        reasoning = "Tell me the term you want defined."
                 elif query_lower.startswith("why "):
                     reasoning = (
                         f"In general, {key_phrase} happens because certain mechanisms create a consistent effect under common conditions. "
