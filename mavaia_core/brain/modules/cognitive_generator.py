@@ -1664,13 +1664,99 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 issues.append("Response is meta-reasoning instead of an answer")
             confidence_factors.append(0.0 if (is_echo or is_meta_reasoning) else 1.0)
         
-        # Structural Check 4: Coherence (basic check)
+        # Structural Check 4: Syntax coherence (lightweight)
+        def _has_balanced_pairs(s: str) -> bool:
+            pairs = [("(", ")"), ("[", "]"), ("{", "}")]
+            for o, c in pairs:
+                if s.count(o) != s.count(c):
+                    return False
+            return True
+
+        first_chunk = output_lower[:160]
+        keyword_salad = bool(re.search(r"(?:\b[a-z]{3,}\b\s*,\s*){4,}\b[a-z]{3,}\b", first_chunk))
+        too_many_commas = (output.count(",") >= 5 and output_length <= 50)
+        malformed_punct = ", ," in output or ".." in output or "??" in output
+        syntax_ok = _has_balanced_pairs(output) and not keyword_salad and not too_many_commas and not malformed_punct
+        structural_checks["syntax_coherent"] = syntax_ok
+        if not syntax_ok:
+            issues.append("Response syntax appears incoherent (keyword-salad or malformed punctuation)")
+        confidence_factors.append(1.0 if syntax_ok else 0.2)
+
+        # Structural Check 5: Answers the question / specificity to query
+        # - Accept explicit knowledge-gap responses as valid.
+        knowledge_gap_ok = bool(re.search(r"\b(knowledge gap|don['’]t have a reliable offline definition)\b", output_lower))
+
+        # Extract salient query terms (heuristic; no ML deps)
+        stop = {
+            "what","why","how","does","do","did","is","are","was","were","the","a","an","and","or","to","of","in","on","for","with",
+            "who","when","where","which","that","this","these","those","explain","describe","summarize","tell","give","me","please","it","its",
+        }
+        q_words = [w for w in re.findall(r"[a-z0-9]+", query_lower) if len(w) > 3 and w not in stop]
+        salient = q_words[:10]
+        salient_hits = sum(1 for w in set(salient) if w in output_lower)
+
+        # Definition term extraction
+        m_def = re.match(r"^(what is|what are|define|what's|whats)\s+(.+?)\??$", query_lower.strip())
+        def_term = ""
+        if m_def:
+            def_term = re.sub(r"^(a|an|the)\s+", "", (m_def.group(2) or "").strip()).strip(" \t\n\r?!.:")
+
+        boilerplate = any(p in output_lower for p in [
+            "in general",
+            "a useful way to answer is",
+            "certain mechanisms",
+            "identify the mechanism",
+            "typical contributing factors",
+        ])
+
+        answers_question = True
+        specific_to_query = True
+
+        direct_question = query_lower.strip().startswith((
+            "what ", "who ", "why ", "how ", "when ", "where ",
+            "what is ", "what are ", "what's ", "whats ", "define ",
+            "explain ", "describe ", "summarize ", "tell me ", "give me ",
+        ))
+        clarification_reply = bool(re.search(
+            r"\b(rephrase|clarify|more context|add (?:a bit|some) context|need (?:a bit|more) context|what do you mean|can you explain what you mean)\b",
+            output_lower,
+        ))
+
+        if is_question and not knowledge_gap_ok:
+            # For ambiguous/nonsense questions, an explicit clarification request is an acceptable answer.
+            if clarification_reply and not direct_question:
+                answers_question = True
+                specific_to_query = True
+            elif def_term:
+                # Must actually define the term.
+                if def_term not in output_lower or not re.search(r"\b(is|are)\b", output_lower):
+                    answers_question = False
+            else:
+                # Non-definition question: require at least one salient term hit and avoid pure boilerplate.
+                if salient and salient_hits == 0:
+                    answers_question = False
+
+            if boilerplate and salient_hits < 2:
+                specific_to_query = False
+
+        structural_checks["answers_question"] = answers_question or knowledge_gap_ok
+        structural_checks["specific_to_query"] = specific_to_query or knowledge_gap_ok
+
+        if not structural_checks["answers_question"]:
+            issues.append("Response does not appear to answer the actual question")
+        if not structural_checks["specific_to_query"]:
+            issues.append("Response appears generic and not specific to the question")
+
+        confidence_factors.append(1.0 if structural_checks["answers_question"] else 0.2)
+        confidence_factors.append(1.0 if structural_checks["specific_to_query"] else 0.2)
+
+        # Structural Check 6: Coherence (basic structure)
         sentences = output.split(". ")
         has_multiple_sentences = len(sentences) > 1
         structural_checks["has_structure"] = has_multiple_sentences or output_length > 10
         confidence_factors.append(0.8 if has_multiple_sentences else 0.6)
         
-        # Structural Check 5: No obvious nonsense patterns
+        # Structural Check 7: No obvious nonsense patterns
         nonsense_patterns = [
             output_lower == "1",
             output_lower == "yes",

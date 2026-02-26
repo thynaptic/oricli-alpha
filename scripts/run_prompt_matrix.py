@@ -31,6 +31,7 @@ PROMPTS: List[Tuple[str, str]] = [
     ("imperative", "Summarize: Romeo and Juliet are two young lovers from feuding families whose secret relationship ends in tragedy."),
     ("definition", "What is sfumato?"),
     ("explain", "Explain why the sky is blue in simple terms."),
+    ("reasoning", "Why does increasing the order of a Markov chain improve local coherence but often reduce generalization?"),
     ("factual", "What is the capital of Australia?"),
     ("coding", "Why does 0.1 + 0.2 == 0.3 evaluate to False in Python?"),
     ("math", "Calculate 15 * 23"),

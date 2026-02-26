@@ -583,10 +583,22 @@ class ReasoningModule(BaseBrainModule):
                     else:
                         reasoning = "Tell me the term you want defined."
                 elif query_lower.startswith("why "):
-                    reasoning = (
-                        f"In general, {key_phrase} happens because certain mechanisms create a consistent effect under common conditions. "
-                        "A useful way to answer is: identify the mechanism, list typical contributing factors, and note the exceptions."
-                    )
+                    # Avoid keyword-salad templates; answer with best-effort domain reasoning.
+                    if ("markov" in query_lower and "chain" in query_lower and "order" in query_lower):
+                        reasoning = (
+                            "Increasing the order of a Markov chain conditions on a longer history, so it can model short-range structure more precisely—"
+                            "that often improves *local* coherence because the next-step distribution is informed by more context. "
+                            "But higher order also explodes the state/context space: many histories are rare, so estimates become sparse/noisy and the model tends to memorize frequent local patterns. "
+                            "That overfitting hurts generalization to unseen sequences and makes the model brittle when the context shifts. "
+                            "In practice you mitigate this with smoothing/backoff (interpolated n-grams), regularization, or by limiting order to what your data can support."
+                        )
+                    else:
+                        subject = query.strip()[4:].strip()  # after 'why '
+                        subject = re.sub(r"(?i)^does\s+", "", subject).strip()
+                        reasoning = (
+                            f"Because {subject.rstrip('?').strip()} depends on an underlying mechanism and constraints. "
+                            "If you tell me the domain (science, software, economics, etc.), I can give the concrete mechanism and typical exceptions."
+                        )
                 elif query_lower.startswith("how "):
                     if ("git" in query_lower and "undo" in query_lower and "commit" in query_lower):
                         reasoning = (
