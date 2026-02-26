@@ -576,8 +576,9 @@ class ReasoningModule(BaseBrainModule):
                             )
                         else:
                             reasoning = (
-                                f"{term} is typically a specific concept/thing, but its precise meaning can vary by domain. "
-                                "If you tell me the domain (e.g., science, programming, art) or what you’re trying to do with it, I’ll give a precise definition and a concrete example."
+                                f"I don’t have a reliable offline definition for '{term}' in this build. "
+                                "That’s a knowledge gap: it should be added as a curated brain entry (a short definition + example) or covered in training data. "
+                                "If you tell me the domain/context you mean, I can attempt a best-effort explanation and an example, but I may be inaccurate without that added knowledge."
                             )
                     else:
                         reasoning = "Tell me the term you want defined."
