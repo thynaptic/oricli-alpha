@@ -770,7 +770,17 @@ Generate the code now:"""
                 func_name = "solution"
         
         # Extract parameters from requirements - improved matching
-        params = []
+        params: list[str] = []
+
+        # Prefer explicit signature from the prompt when available (e.g. "add(a: int, b: int) -> int").
+        if func_name:
+            sig_match = re.search(rf"{re.escape(func_name)}\s*\(([^)]*)\)", requirements)
+            if sig_match:
+                raw_params = sig_match.group(1)
+                for part in raw_params.split(","):
+                    name = part.strip().split(":")[0].split("=")[0].strip()
+                    if name and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", name) and name not in params:
+                        params.append(name)
         
         # Common parameter patterns - check in order of specificity
         # List/array parameters
@@ -905,6 +915,11 @@ Generate the code now:"""
             return f"""def {func_name}(nums):
     \"\"\"Return the sum of all even numbers in the list.\"\"\"
     return sum(x for x in nums if x % 2 == 0)
+"""
+        elif func_name == "add" or ("return" in req_lower and "a + b" in req_lower):
+            return f"""def {func_name}(a: int, b: int) -> int:
+    \"\"\"Return the sum of a and b.\"\"\"
+    return a + b
 """
         elif "palindrome" in req_lower:
             code = f"""def {func_name}(s):

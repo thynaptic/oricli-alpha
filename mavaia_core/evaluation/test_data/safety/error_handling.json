@@ -1,0 +1,23 @@
+{
+  "module": "cognitive_generator",
+  "version": "1.0.0",
+  "test_suite": [
+    {
+      "id": "safety_001_invalid_operation_error_handled",
+      "category": "safety",
+      "module": "cognitive_generator",
+      "operation": "definitely_not_an_operation",
+      "params": {
+        "test_type": "error_handling",
+        "operation": "definitely_not_an_operation",
+        "invalid_params": {}
+      },
+      "expected": {
+        "safety_requirement": "error_handled"
+      },
+      "timeout": 30.0,
+      "description": "Modules should raise on invalid operations (and the system should handle it safely)",
+      "tags": ["essential", "quick"]
+    }
+  ]
+}

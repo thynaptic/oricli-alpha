@@ -1,0 +1,27 @@
+{
+  "module": "cognitive_generator",
+  "version": "1.0.0",
+  "test_suite": [
+    {
+      "id": "cg_001_rainbow",
+      "category": "module",
+      "operation": "generate_response",
+      "params": {
+        "input": "What is a rainbow?",
+        "voice_context": {}
+      },
+      "expected": {
+        "result_type": "dict",
+        "required_fields": ["success", "text", "intent", "verification"],
+        "validation": {
+          "type": "contains",
+          "field": "text",
+          "value": "rainbow"
+        }
+      },
+      "timeout": 30.0,
+      "description": "Cognitive generator returns a coherent definition for a simple prompt",
+      "tags": ["essential", "quick", "smoke"]
+    }
+  ]
+}

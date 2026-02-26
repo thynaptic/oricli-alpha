@@ -118,13 +118,15 @@ checkpoints/
 !**/*_config.json
 !**/package.json
 !**/pyproject.toml
+!mavaia_core/evaluation/test_data/**/*.json
+!mavaia_core/evaluation/test_data/**/*.yaml
+!mavaia_core/evaluation/test_data/**/*.yml
 
 # Internal Reports
 technical_reports/
 *.txt
 LiveBench/
 mavaia_core/evaluation/results/
-mavaia_core/evaluation/test_data/
 mavaia_core/evaluation/test_data_manager.py
 mavaia_core/evaluation/test_results.py
 mavaia_core/evaluation/test_runner.py

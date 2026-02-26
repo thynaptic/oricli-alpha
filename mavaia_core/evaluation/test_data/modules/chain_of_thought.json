@@ -1,0 +1,27 @@
+{
+  "module": "chain_of_thought",
+  "version": "1.0.0",
+  "test_suite": [
+    {
+      "id": "cot_001_distance",
+      "category": "module",
+      "operation": "execute_cot",
+      "params": {
+        "query": "If a train travels 60 mph for 2 hours, how far does it go?",
+        "reasoning_type": "analytical"
+      },
+      "expected": {
+        "result_type": "dict",
+        "required_fields": ["reasoning", "conclusion"],
+        "validation": {
+          "type": "contains",
+          "field": "conclusion",
+          "value": "120"
+        }
+      },
+      "timeout": 30.0,
+      "description": "Basic arithmetic reasoning: distance = speed * time",
+      "tags": ["essential", "quick", "smoke"]
+    }
+  ]
+}
