@@ -22,8 +22,8 @@ def main():
     # Run all test categories
     categories = ['functional', 'reasoning', 'safety', 'api', 'client', 'system']
     
-    from mavaia_core.evaluation.test_results import TestRunResults, TestRunSummary
-    from datetime import datetime
+    from mavaia_core.evaluation.test_results import TestRunResults, TestStatus
+    from datetime import datetime, timezone
     import uuid
     
     all_results = []
@@ -35,7 +35,7 @@ def main():
             results = runner.run_test_suite(category=category)
             if results and hasattr(results, 'results'):
                 all_results.extend(results.results)
-                passed = sum(1 for r in results.results if r.status.value == 'PASSED')
+                passed = sum(1 for r in results.results if r.status == TestStatus.PASSED)
                 total = len(results.results)
                 print(f"\n{category}: {passed}/{total} passed ({passed*100//total if total > 0 else 0}%)")
         except Exception as e:
@@ -51,7 +51,7 @@ def main():
     combined_results = TestRunResults(
         test_run_id=str(uuid.uuid4()),
         version="1.0.0",
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
     )
     combined_results.results = all_results
     combined_results.compute_statistics()
