@@ -171,6 +171,7 @@ def analyze_what_worked(result: Dict[str, Any]) -> Dict[str, Any]:
     analysis = {
         "worked": [],
         "didnt_work": [],
+        "why_didnt_work": [],
         "issues": [],
         "confidence": None,
         "reasoning_method": None,
@@ -202,16 +203,41 @@ def analyze_what_worked(result: Dict[str, Any]) -> Dict[str, Any]:
             if matches:
                 analysis["worked"].append("Verification passed: output matches intent")
             else:
+                analysis["didnt_work"].append("Final output failed intent verification")
                 analysis["issues"].append("Verification failed: output doesn't match intent")
+
+                structural = verification.get("structural_checks") or {}
+                if isinstance(structural, dict):
+                    failed_checks = [k for k, v in structural.items() if v is False]
+                    for k in failed_checks:
+                        analysis["why_didnt_work"].append(f"Verifier check failed: {k}")
+
                 issues = verification.get("issues", [])
                 for issue in issues:
                     analysis["issues"].append(f"Verification issue: {issue}")
+                if issues:
+                    joined = "; ".join(str(i) for i in issues)
+                    analysis["why_didnt_work"].append(f"Verifier issues: {joined}")
         
         # Check structural confidence
         structural_confidence = result.get("structural_confidence", {})
         if structural_confidence:
             conf = structural_confidence.get("confidence", 0.0)
             analysis["confidence"] = conf
+
+        diagnostic = result.get("diagnostic", {})
+        if isinstance(diagnostic, dict):
+            if diagnostic.get("is_fallback"):
+                analysis["didnt_work"].append("Generation fell back to a generic response path")
+                analysis["why_didnt_work"].append("Primary generation path did not produce a usable answer; fallback was used")
+            gen_method = diagnostic.get("generation_method")
+            if gen_method and gen_method != "unknown":
+                analysis["worked"].append(f"Generation method: {gen_method}")
+            for w in diagnostic.get("warnings", []) or []:
+                analysis["issues"].append(f"Warning: {w}")
+            for err in diagnostic.get("errors", []) or []:
+                analysis["issues"].append(f"Error: {err}")
+                analysis["why_didnt_work"].append(f"Error encountered during generation: {err}")
     
     # Check direct result structure (chain_of_thought format)
     if "steps" in result:
@@ -292,6 +318,9 @@ def analyze_what_worked(result: Dict[str, Any]) -> Dict[str, Any]:
         else:
             analysis["didnt_work"].append(f"Low confidence ({confidence:.2f})")
     
+    if analysis["didnt_work"] and not analysis.get("why_didnt_work"):
+        analysis["why_didnt_work"].append("No explicit causal diagnostics were available; review verifier issues, diagnostic warnings, and trace graph.")
+
     return analysis
 
 
@@ -438,6 +467,14 @@ def display_cognitive_generator_result(result: Dict[str, Any], query: str) -> No
             print(f"  ✗ {item}")
     else:
         print("  (None identified)")
+
+    print("\nWhy It Didn't Work:")
+    why = analysis.get("why_didnt_work", [])
+    if why:
+        for item in why:
+            print(f"  → {item}")
+    else:
+        print("  (None identified)")
     
     print("\nIssues/Concerns:")
     if analysis["issues"]:
@@ -548,6 +585,14 @@ def main():
                 if analysis["didnt_work"]:
                     for item in analysis["didnt_work"]:
                         print(f"  ✗ {item}")
+                else:
+                    print("  (None identified)")
+
+                print("\nWhy It Didn't Work:")
+                why = analysis.get("why_didnt_work", [])
+                if why:
+                    for item in why:
+                        print(f"  → {item}")
                 else:
                     print("  (None identified)")
                 print("\nIssues/Concerns:")

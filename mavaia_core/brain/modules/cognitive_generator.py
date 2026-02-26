@@ -2584,6 +2584,25 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 except Exception as e:
                     logger.debug(f"Web search failed in generator: {e}")
 
+            # Step 0.75: Audience intent → style selection → reasoning scaffold choice
+            # This must run BEFORE any structure/template selection to ensure the generation path
+            # can use the chosen voice/scaffold consistently.
+            try:
+                audience_intent = self._detect_audience_intent(
+                    input_text, context, conversation_history
+                )
+                style_overrides = self._select_style_for_audience(
+                    input_text, audience_intent, voice_context
+                )
+                scaffold = self._choose_reasoning_scaffold(
+                    input_text, audience_intent, voice_context
+                )
+                diagnostic_info["audience_intent"] = audience_intent
+                diagnostic_info["style_overrides"] = style_overrides
+                diagnostic_info["reasoning_scaffold"] = scaffold
+            except Exception:
+                pass
+
             # Step 1: Learned Router - Detect intent and determine module routing
             # NOTE: This uses dynamic module discovery - any new modules added to
             # mavaia_core/brain/modules/ are automatically included in routing
@@ -4129,7 +4148,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
             if self.thought_to_text:
                 result = self.thought_to_text.execute(
                     "generate_sentences",
-                    {"thoughts": thoughts_str, "context": context, "persona": persona},
+                    {"thoughts": thoughts_str, "context": context, "voice_context": voice_context},
                 )
             else:
                 # Fallback if thought_to_text still not available
@@ -4233,7 +4252,106 @@ class CognitiveGeneratorModule(BaseBrainModule):
         
         # Default
         return "casual_conversation"
-    
+
+    def _detect_audience_intent(
+        self,
+        input_text: str,
+        context: str = "",
+        conversation_history: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Infer intended audience and constraints from the prompt (heuristic, low-cost)."""
+        text = (input_text or "").strip()
+        lower = text.lower()
+        signals: list[str] = []
+
+        audience = "general"
+        if any(k in lower for k in ("eli5", "explain like i'm 5", "like i'm five", "for a child", "kid")):
+            audience = "child"
+            signals.append("eli5")
+        elif any(k in lower for k in ("beginner", "in simple terms", "simple terms", "plain english")):
+            audience = "beginner"
+            signals.append("simplify")
+        elif any(k in lower for k in ("expert", "advanced", "deep dive", "technical deep")):
+            audience = "expert"
+            signals.append("expert")
+
+        if any(k in lower for k in ("professional email", "formal email", "write an email", "cover letter")):
+            signals.append("email")
+
+        if any(k in lower for k in ("bullet", "bullets", "bullet points")):
+            signals.append("bullets")
+        if any(k in lower for k in ("step by step", "step-by-step", "steps")):
+            signals.append("steps")
+
+        return {"audience": audience, "signals": signals}
+
+    def _select_style_for_audience(
+        self,
+        input_text: str,
+        audience_intent: dict[str, Any],
+        voice_context: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Choose tone/formality/technical level before any template selection."""
+        lower = (input_text or "").lower()
+        audience = (audience_intent or {}).get("audience", "general")
+        signals = set((audience_intent or {}).get("signals", []) or [])
+
+        overrides: dict[str, Any] = {}
+
+        # Respect explicit tone directives first.
+        if "formal" in lower or "professionally" in lower or "professional" in lower or "email" in signals:
+            overrides["tone"] = "formal"
+            overrides["formality_level"] = 0.8
+        elif "casual" in lower or "chill" in lower or "friendly" in lower:
+            overrides["tone"] = "casual"
+            overrides["formality_level"] = 0.3
+
+        # Technicality: default from audience unless already explicitly set.
+        if audience == "child":
+            overrides.setdefault("technical_level", 0.05)
+            overrides.setdefault("empathy_level", 0.75)
+            overrides.setdefault("tone", "friendly")
+        elif audience == "beginner":
+            overrides.setdefault("technical_level", 0.2)
+        elif audience == "expert":
+            overrides.setdefault("technical_level", 0.7)
+
+        voice_context.update(overrides)
+        return overrides
+
+    def _choose_reasoning_scaffold(
+        self,
+        input_text: str,
+        audience_intent: dict[str, Any],
+        voice_context: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Pick a reasoning scaffold (structure plan) before selecting response templates."""
+        lower = (input_text or "").lower().strip()
+        signals = set((audience_intent or {}).get("signals", []) or [])
+
+        if any(k in lower for k in ("write code", "implement", "function", "in python", "in javascript", "in go")):
+            name = "code"
+            fmt = "fenced_code"
+        elif any(k in lower for k in ("what is", "what's", "define", "meaning of")):
+            name = "definition_then_example"
+            fmt = "short_paragraphs"
+        elif "steps" in signals or any(k in lower for k in ("how do i", "how to")):
+            name = "step_by_step"
+            fmt = "numbered_steps"
+        elif "bullets" in signals:
+            name = "bulleted_summary"
+            fmt = "bullets"
+        elif any(k in lower for k in ("compare", "vs", "versus")):
+            name = "compare_contrast"
+            fmt = "structured"
+        else:
+            name = "direct_answer_then_expand"
+            fmt = "short_paragraphs"
+
+        scaffold = {"name": name, "format": fmt}
+        voice_context["reasoning_scaffold"] = scaffold
+        return scaffold
+
     def _enrich_context_with_conversational_components(
         self, input_text: str, context: str, voice_context: dict[str, Any]
     ) -> str:
@@ -4463,6 +4581,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
         # CRITICAL: Ensure modules are loaded before trying to use them
         self._ensure_modules_loaded()
 
+        persona = str((voice_context or {}).get("base_personality", "mavaia"))
+
         # Use conversation history if provided, otherwise use internal history
         history_to_use = (
             conversation_history
@@ -4669,7 +4789,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         # Expand response if max_tokens >= 200 (detailed mode)
         if max_tokens and max_tokens >= 200 and fallback_response:
             fallback_response = self._expand_response_for_detailed_mode(
-                fallback_response, input_text, selected_thoughts or [], context, persona
+                fallback_response, input_text, selected_thoughts or [], context, voice_context
             )
 
         # GUARANTEE: Always return a non-empty string
