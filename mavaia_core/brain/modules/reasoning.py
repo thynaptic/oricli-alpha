@@ -613,7 +613,22 @@ class ReasoningModule(BaseBrainModule):
                             "(3) choose a method, (4) execute, and (5) verify the result."
                         )
                 elif query_lower.startswith(("describe ", "explain ", "tell me about ")):
-                    if re.search(r"\bmona\s+lisa\b", query_lower):
+                    if ("python" in query_lower) and ("decorator" in query_lower or "decorators" in query_lower):
+                        reasoning = (
+                            "A Python decorator is a callable that takes a function (or class) and returns a new function, letting you wrap behavior without changing the original. "
+                            "The `@decorator` syntax is just sugar for `func = decorator(func)`.\n\n"
+                            "```python\n"
+                            "def log_calls(fn):\n"
+                            "    def wrapper(*args, **kwargs):\n"
+                            "        print(f\"calling {fn.__name__}\")\n"
+                            "        return fn(*args, **kwargs)\n"
+                            "    return wrapper\n\n"
+                            "@log_calls\n"
+                            "def add(a, b):\n"
+                            "    return a + b\n"
+                            "```"
+                        )
+                    elif re.search(r"\bmona\s+lisa\b", query_lower):
                         reasoning = (
                             "The Mona Lisa is a Renaissance portrait by Leonardo da Vinci (early 1500s), housed in the Louvre in Paris. "
                             "It’s known for its subtle, lifelike modeling (including sfumato—soft transitions without hard outlines), its composed pose, "

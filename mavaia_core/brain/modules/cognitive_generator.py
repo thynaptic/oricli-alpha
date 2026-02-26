@@ -624,14 +624,28 @@ class CognitiveGeneratorModule(BaseBrainModule):
         }
         
         # Code-related queries
-        code_keywords = [
-            "code", "python", "function", "class", "import", "def ", "programming",
-            "script", "algorithm", "syntax", "variable", "debug", "error", "exception",
-            "compile", "execute", "run code", "write code", "generate code",
-            # CLI / shell / command requests are code intent (need concrete commands, not prose).
-            "bash", "shell", "one-liner", "oneliner", "command", "cli", "grep", "awk", "sed",
+        # IMPORTANT: do not route purely conceptual questions to codegen just because they mention "Python".
+        # Only treat as code intent when the user is asking to write/generate/implement code or debugging errors.
+        code_write_verbs = ["write", "generate", "implement", "create", "build", "produce"]
+        code_artifacts = [
+            "code", "function", "class", "script", "module", "library",
+            "endpoint", "api", "fastapi", "flask", "django",
+            "unit test", "unit tests", "pytest", "unittest",
         ]
-        if any(keyword in combined for keyword in code_keywords):
+        code_debug_keywords = ["debug", "error", "exception", "traceback", "stack trace"]
+
+        # Avoid false positives on natural language like "from feuding families".
+        code_syntax_markers = ["def ", "class ", "import "]
+        has_python_import_stmt = bool(re.search(r"\bfrom\s+\w+(?:\.\w+)*\s+import\b", combined))
+
+        looks_like_code_request = (
+            any(m in combined for m in code_syntax_markers)
+            or has_python_import_stmt
+            or (any(v in combined for v in code_write_verbs) and any(a in combined for a in code_artifacts))
+            or any(k in combined for k in code_debug_keywords)
+        )
+
+        if looks_like_code_request:
             intent_info["intent"] = "code"
             intent_info["query_type"] = "code"
             intent_info["requires_code"] = True
@@ -689,7 +703,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         # Reasoning queries (analytical, causal, etc.) - CHECK FIRST to prioritize "why" questions
         # This must come before search to catch "why do people find..." as reasoning, not search
         reasoning_keywords = ["why", "how", "analyze", "explain", "reason", "because", "cause",
-                             "effect", "relationship", "compare", "contrast", "evaluate"]
+                             "effect", "relationship", "compare", "contrast", "evaluate", "summarize"]
         if any(keyword in combined for keyword in reasoning_keywords):
             if intent_info["intent"] == "general":
                 intent_info["intent"] = "reasoning"
@@ -1615,6 +1629,14 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     for w in re.findall(r"[A-Za-z0-9]+", input_text)
                     if (len(w) > 3) or (w.isupper() and len(w) >= 2)
                 }
+                # De-emphasize instruction/adjective tokens so we don't incorrectly fail good answers.
+                stop_words = {
+                    "explain", "describe", "summarize", "tell", "show", "give",
+                    "simple", "simply", "terms", "minimal", "example", "examples",
+                    "please",
+                }
+                query_words = {w for w in query_words if w not in stop_words}
+
                 output_words = {
                     w.lower()
                     for w in re.findall(r"[A-Za-z0-9]+", output)
@@ -5939,12 +5961,13 @@ class CognitiveGeneratorModule(BaseBrainModule):
         
         # Remove lines that are just markers or empty
         lines = text.split("\n")
-        preserve_linebreaks = (
+        preserve_indentation = "```" in text
+        # If we have a fenced code block, preserve line breaks/indentation unconditionally.
+        preserve_linebreaks = preserve_indentation or (
             text.count("\n") >= 2
             and len(lines) <= 12
             and all(0 < len(ln.strip()) <= 90 for ln in lines if ln.strip())
         )
-        preserve_indentation = "```" in text
 
         cleaned_lines = []
         for line in lines:

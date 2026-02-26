@@ -661,6 +661,11 @@ Generate the code now:"""
         import re
         
         req_lower = requirements.lower()
+
+        # FastAPI endpoint template
+        if "fastapi" in req_lower:
+            route = "/status" if "status" in req_lower else "/"
+            return f"""from fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"{route}\")\ndef get_status():\n    return {{\"status\": \"ok\"}}\n"""
         
         # Extract function name from requirements - use descriptive names
         func_name = None
@@ -902,11 +907,26 @@ Generate the code now:"""
     return sum(x for x in nums if x % 2 == 0)
 """
         elif "palindrome" in req_lower:
-            return f"""def {func_name}(s):
+            code = f"""def {func_name}(s):
     \"\"\"Check if string is a palindrome, ignoring case and non-alphanumeric.\"\"\"
     cleaned = ''.join(c.lower() for c in s if c.isalnum())
     return cleaned == cleaned[::-1]
 """
+
+            wants_tests = any(k in req_lower for k in ("unit test", "unit tests", "pytest", "unittest", "tests"))
+            wants_three = ("3" in req_lower) or ("three" in req_lower)
+            if wants_tests:
+                tests = [
+                    f"def test_{func_name}_true():\n    assert {func_name}(\"racecar\") is True\n",
+                    f"def test_{func_name}_false():\n    assert {func_name}(\"hello\") is False\n",
+                ]
+                if wants_three:
+                    tests.append(
+                        f"def test_{func_name}_ignores_case_and_punct():\n    assert {func_name}(\"A man, a plan, a canal: Panama\") is True\n"
+                    )
+                code += "\n\n" + "\n".join(tests)
+
+            return code
         elif "longest" in req_lower and "prefix" in req_lower:
             return f"""def {func_name}(strs):
     \"\"\"Find longest common prefix among strings.\"\"\"
@@ -2065,9 +2085,10 @@ class {func_name}:
             
             param_str = ", ".join(params) if params else ""
             return f"""def {func_name}({param_str}):
-    \"\"\"Generated function for: {requirements[:100]}\"\"\"
-    # Implementation needed
-    pass
+    \"\"\"Unable to deterministically generate an implementation for: {requirements[:100]}\"\"\"
+    raise NotImplementedError(
+        \"No deterministic template available for this request; add a new pattern/template to reasoning_code_generator.\"
+    )
 """
 
     def _verify_generated_code(self, code: str, requirements: str) -> Dict[str, Any]:
