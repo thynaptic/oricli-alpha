@@ -670,6 +670,21 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 intent_info["recommended_modules"] = ["reasoning"]
                 intent_info["confidence"] = 0.85
 
+        # Text editing / proofreading (typos, misspellings) should not be routed as creative.
+        editing_keywords = [
+            "typo", "typos", "misspelling", "misspellings",
+            "fix the typos", "fix typos", "correct typos",
+            "fix the misspellings", "fix misspellings", "correct misspellings",
+            "proofread", "proof read", "spellcheck", "spell check",
+            "fix spelling", "correct spelling",
+        ]
+        if intent_info["intent"] == "general" and any(kw in combined for kw in editing_keywords):
+            intent_info["intent"] = "reasoning"
+            intent_info["query_type"] = "editing"
+            intent_info["requires_reasoning"] = True
+            intent_info["recommended_modules"] = ["reasoning"]
+            intent_info["confidence"] = 0.85
+
         # Creative writing queries (poems, stories, lyrics, jokes)
         creative_keywords = [
             "poem", "haiku", "limerick", "sonnet",
@@ -1649,7 +1664,12 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     issues.append(f"Low query term coverage: {coverage:.2f}")
                 confidence_factors.append(min(coverage * 2, 1.0))  # Scale coverage to 0-1
         
-        # Structural Check 3: Answer completeness
+        # Structural Check 3: Echo / non-answer detection
+        # (Do this even for instruction-style prompts that don't contain '?', e.g. typo-fixing.)
+        query_norm = re.sub(r"[^a-z0-9]+", " ", query_lower).strip()
+        output_norm = re.sub(r"[^a-z0-9]+", " ", output_lower).strip()
+        is_echo = (output_norm == query_norm) or (len(query_norm) > 10 and query_norm in output_norm)
+
         is_question = (
             "?" in input_text
             or query_lower.startswith((
@@ -1657,11 +1677,16 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 "explain ", "describe ", "summarize ", "tell me ", "give me ",
             ))
         )
+
+        # For non-creative intents, an echo is always a failure.
+        if intent != "creative" and len(query_norm) > 30:
+            structural_checks.setdefault("is_not_echo", not is_echo)
+            if is_echo:
+                issues.append("Response echoes input instead of answering or transforming")
+                confidence_factors.append(0.0)
+
         if is_question:
             # Questions should have answers, not just echo or meta-reasoning
-            query_norm = re.sub(r"[^a-z0-9]+", " ", query_lower).strip()
-            output_norm = re.sub(r"[^a-z0-9]+", " ", output_lower).strip()
-            is_echo = (output_norm == query_norm) or (len(query_norm) > 10 and query_norm in output_norm)
             
             # Detect meta-reasoning patterns (describing the process instead of answering)
             meta_reasoning_patterns = [

@@ -322,6 +322,9 @@ class LiveBenchTestRunner:
         params["query"] = question_text
         params["text"] = question_text
         params["input"] = question_text
+
+        # cognitive_generator expects OpenAI-style messages
+        params["messages"] = [{"role": "user", "content": question_text}]
         
         # Operation-specific parameter mappings
         if "query" in (operation or "").lower() or "reason" in (operation or "").lower():
@@ -621,6 +624,12 @@ class LiveBenchTestRunner:
                 result.error_type = "InvalidTestCaseError"
                 result.execution_time = time.time() - start_time
                 return result
+
+            # LiveBench evaluators expect release dates as strings; some HF datasets decode this as datetime.
+            rd = question.get("livebench_release_date") if isinstance(question, dict) else None
+            if isinstance(rd, datetime):
+                question = dict(question)
+                question["livebench_release_date"] = rd.strftime("%Y-%m-%d")
             
             # Convert question to module parameters
             module_params = self._convert_question_to_module_params(
@@ -849,8 +858,9 @@ class LiveBenchTestRunner:
         if not questions:
             return test_cases
         
-        # If module specified, filter questions by module's category
-        if module:
+        # If a module is specified without an explicit LiveBench category/task filter,
+        # narrow to the module's mapped category; otherwise, allow cross-category testing.
+        if module and category is None and task is None:
             try:
                 module_instance = self.registry.get_module(
                     module,
@@ -871,6 +881,13 @@ class LiveBenchTestRunner:
         if max_questions and len(questions) > max_questions:
             questions = questions[:max_questions]
         
+        # Ensure modules are discovered before selecting operations.
+        try:
+            if not self.registry._discovered:
+                self.registry.discover_modules(background=False, verbose=False)
+        except Exception:
+            pass
+
         # Convert questions to test cases
         for question in questions:
             question_id = question.get("question_id", "unknown")

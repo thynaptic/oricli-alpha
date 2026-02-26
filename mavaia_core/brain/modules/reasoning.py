@@ -705,7 +705,11 @@ class ReasoningModule(BaseBrainModule):
                             )
                     else:
                         reasoning = (
-                            "I can answer that, but I need a bit more context (what domain/topic, and what you want as the output: definition, steps, comparison, or an example)."
+                            "Knowledge gap: I can’t reliably answer this request with the current offline reasoning templates in this build. "
+                            "What didn’t work: I couldn’t map the prompt to a supported solver or a high-confidence factual pattern. "
+                            "Why it didn’t: this module is deterministic and only covers a limited set of patterns/solvers. "
+                            "Next step: add a specialized module (e.g., constraint-satisfaction solver for logic puzzles, spellcheck for typo-fixing, or a math solver) "
+                            "or add a curated brain entry for the topic."
                         )
         
         if context and reasoning and reasoning.startswith((
