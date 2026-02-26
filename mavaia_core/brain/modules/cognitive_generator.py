@@ -635,8 +635,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
             intent_info["intent"] = "code"
             intent_info["query_type"] = "code"
             intent_info["requires_code"] = True
-            # Keep code Q&A lightweight and deterministic by default (avoid heavy/unstable ML stacks).
-            intent_info["recommended_modules"] = ["reasoning"]
+            # Prefer the internal deterministic code generator for code prompts.
+            intent_info["recommended_modules"] = ["reasoning_code_generator"]
             intent_info["confidence"] = 0.8
         
         # "What is" / "What are" definition questions - treat as search-backed definition.
@@ -946,8 +946,10 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 except Exception:
                     pass  # Web search not available, continue without it
         
-        # Always include reasoning as fallback if not already present
-        if not any(m[0] == "reasoning" for m in module_operations):
+        # Always include reasoning as fallback if not already present.
+        # For code intent, avoid overriding a good code-generation result with generic reasoning fallback.
+        has_code_generator = any(m[0] in {"reasoning_code_generator", "reasoning_code_completion"} for m in module_operations)
+        if not any(m[0] == "reasoning" for m in module_operations) and not (intent == "code" and has_code_generator):
             try:
                 reasoning_metadata = ModuleRegistry.get_metadata("reasoning")
                 if reasoning_metadata and reasoning_metadata.enabled:
@@ -1010,6 +1012,10 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     except Exception:
                         pass
 
+                # Some modules expect operation-specific parameter names.
+                if module_name in {"reasoning_code_generator", "reasoning_code_completion"} and "requirements" not in module_params:
+                    module_params["requirements"] = module_params.get("input", "")
+
                 # Execute module (capture timing for introspection)
                 _t0 = time.time()
                 result = module.execute(operation, module_params)
@@ -1017,7 +1023,15 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 if isinstance(result, dict):
                     result.setdefault("_duration_ms", _dur_ms)
                 results[module_name] = result
-                
+
+                # Prefer explicit code fields for code-generation modules.
+                if module_name in {"reasoning_code_generator", "reasoning_code_completion"} and isinstance(result, dict):
+                    code_text = result.get("code") or result.get("best_code")
+                    if isinstance(code_text, str) and code_text.strip():
+                        fenced = f"```python\n{code_text.strip()}\n```"
+                        result["text"] = fenced
+                        result["response"] = fenced
+
                 # VERIFY WEB CONTENT: If this is a web module, verify the content
                 if module_name in ["web_search", "web_fetch", "web_scraper"]:
                     # Extract web content - web_search returns results array with snippets
@@ -5673,6 +5687,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
             "conclusion",
             "text",
             "response",
+            "code",
+            "best_code",
             "poem",
             "story",
             "narrative",
@@ -5808,10 +5824,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
             and len(lines) <= 12
             and all(0 < len(ln.strip()) <= 90 for ln in lines if ln.strip())
         )
+        preserve_indentation = "```" in text
 
         cleaned_lines = []
         for line in lines:
-            line = line.strip()
+            line = line.rstrip() if preserve_indentation else line.strip()
             # Skip lines that are just metadata or very short context markers
             if line and not any(
                 marker.strip().lower() in line.lower()
@@ -5836,7 +5853,10 @@ class CognitiveGeneratorModule(BaseBrainModule):
 
         # Remove excessive whitespace (but keep line breaks for poem-like outputs)
         if preserve_linebreaks:
-            text = "\n".join(re.sub(r"\s+", " ", ln).strip() for ln in text.split("\n"))
+            if preserve_indentation:
+                text = "\n".join(ln.rstrip() for ln in text.split("\n"))
+            else:
+                text = "\n".join(re.sub(r"\s+", " ", ln).strip() for ln in text.split("\n"))
         else:
             text = re.sub(r"\s+", " ", text)
         
@@ -5854,7 +5874,10 @@ class CognitiveGeneratorModule(BaseBrainModule):
         
         # Remove excessive whitespace again after pattern removal
         if preserve_linebreaks:
-            text = "\n".join(re.sub(r"\s+", " ", ln).strip() for ln in text.split("\n"))
+            if preserve_indentation:
+                text = "\n".join(ln.rstrip() for ln in text.split("\n"))
+            else:
+                text = "\n".join(re.sub(r"\s+", " ", ln).strip() for ln in text.split("\n"))
         else:
             text = re.sub(r"\s+", " ", text)
         

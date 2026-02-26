@@ -152,64 +152,12 @@ class ReasoningCodeGeneratorModule(BaseBrainModule):
         Returns:
             Dictionary containing generated code and reasoning steps
         """
-        # Build code generation prompt
+        # Build code generation prompt (kept for consistency/debugging; not used for deterministic generation)
         prompt = self._build_code_generation_prompt(requirements)
-        
-        # Use cognitive generator for actual code generation
-        generated_code = ""
-        reasoning_steps = []
-        
-        # Try to use cognitive generator if available
-        if self._cognitive_generator:
-            try:
-                cog_result = self._cognitive_generator.execute("generate_response", {
-                    "input": prompt,
-                    "context": "You are a Python programming expert. Generate complete, working Python code that solves the given problem. Return only the Python code in a code block.",
-                    "persona": "code_generator",
-                    "temperature": 0.3,  # Lower temperature for more deterministic code
-                })
-                response_text = cog_result.get("text", "") or cog_result.get("response", "")
-                if response_text:
-                    generated_code = self._extract_code_block(response_text)
-            except Exception as e:
-                pass
-        
-        # Fallback to reasoning modules if cognitive generator didn't produce code
-        if not generated_code:
-            reasoning_result = None
-            
-            if reasoning_method == "cot" and self._cot_module:
-                try:
-                    reasoning_result = self._cot_module.execute("execute_cot", {
-                        "query": prompt,
-                        "context": "Generate Python code that meets the requirements. Return complete, executable Python code.",
-                    })
-                    reasoning_steps = reasoning_result.get("steps", [])
-                except Exception:
-                    pass
-            
-            elif reasoning_method == "tot" and self._tot_module:
-                try:
-                    reasoning_result = self._tot_module.execute("execute_tot", {
-                        "query": prompt,
-                        "context": "Generate Python code that meets the requirements. Return complete, executable Python code.",
-                    })
-                    reasoning_steps = reasoning_result.get("paths", [])
-                except Exception:
-                    pass
-            
-            elif reasoning_method == "mcts" and self._mcts_module:
-                try:
-                    reasoning_result = self._mcts_module.execute("execute_mcts", {
-                        "query": prompt,
-                        "context": "Generate Python code that meets the requirements. Return complete, executable Python code.",
-                    })
-                    reasoning_steps = reasoning_result.get("best_path", [])
-                except Exception:
-                    pass
 
-            # Extract code from reasoning result
-            generated_code = self._extract_code_from_reasoning(reasoning_result, requirements)
+        # Deterministic generation: avoid recursively invoking cognitive_generator (this module is called by it).
+        generated_code = self._generate_code_intelligent(requirements)
+        reasoning_steps: list[Any] = []
 
         # Check if LLM generated stub code
         is_stub = False
@@ -719,9 +667,9 @@ Generate the code now:"""
         func_match = re.search(r'(?:function|def|write\s+a\s+function)\s+(?:called\s+)?(\w+)', requirements, re.IGNORECASE)
         if func_match:
             func_name = func_match.group(1)
-        
-        # Use problem-specific function names if not found
-        if not func_name or func_name.lower() in ["that", "solution", "function"]:
+
+        # Use problem-specific function names if not found (or if the extracted token is just grammar).
+        if not func_name or func_name.lower() in ["that", "solution", "function", "to", "a", "an", "the", "check", "write", "create", "generate", "make"]:
             if "sum" in req_lower and "even" in req_lower:
                 func_name = "sum_even_numbers"
             elif "palindrome" in req_lower:
