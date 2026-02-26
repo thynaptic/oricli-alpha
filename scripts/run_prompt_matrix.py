@@ -88,7 +88,10 @@ def main() -> int:
     passed = 0
     failed = 0
 
-    for category, prompt in PROMPTS:
+    out_dir = Path("mavaia_matrix_results") / "latest"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for i, (category, prompt) in enumerate(PROMPTS, start=1):
         start = time.time()
         signal.alarm(per_prompt_timeout_s)
         try:
@@ -114,6 +117,12 @@ def main() -> int:
             ok = (not _is_obviously_bad(text)) and ok_verify
             dur_ms = int((time.time() - start) * 1000)
 
+            # Always persist the raw result for inspection/regression.
+            slug = f"{i:03d}_{category}".replace("/", "_")
+            (out_dir / f"{slug}.json").write_text(
+                json.dumps(result, indent=2, default=str), encoding="utf-8"
+            )
+
             if ok:
                 passed += 1
                 print(f"✓ [{category}] {prompt}  ({dur_ms}ms)")
@@ -124,23 +133,26 @@ def main() -> int:
                     print(f"  Verification failed: {verification}")
                 print(f"  Bad/empty output: {text!r}")
 
-                out_dir = Path("mavaia_matrix_results")
-                out_dir.mkdir(exist_ok=True)
-                slug = f"{failed:03d}_{category}".replace("/", "_")
-                (out_dir / f"{slug}.json").write_text(
-                    json.dumps(result, indent=2, default=str), encoding="utf-8"
-                )
-
         except _Timeout:
             failed += 1
             dur_ms = int((time.time() - start) * 1000)
             print(f"✗ [{category}] {prompt}  ({dur_ms}ms)")
             print(f"  Timed out after {per_prompt_timeout_s}s")
+            slug = f"{i:03d}_{category}".replace("/", "_")
+            (out_dir / f"{slug}.json").write_text(
+                json.dumps({"prompt": prompt, "category": category, "timeout_s": per_prompt_timeout_s}, indent=2),
+                encoding="utf-8",
+            )
         except Exception as e:
             failed += 1
             dur_ms = int((time.time() - start) * 1000)
             print(f"✗ [{category}] {prompt}  ({dur_ms}ms)")
             print(f"  Exception: {type(e).__name__}: {e}")
+            slug = f"{i:03d}_{category}".replace("/", "_")
+            (out_dir / f"{slug}.json").write_text(
+                json.dumps({"prompt": prompt, "category": category, "exception": f"{type(e).__name__}: {e}"}, indent=2),
+                encoding="utf-8",
+            )
         finally:
             signal.alarm(0)
 
