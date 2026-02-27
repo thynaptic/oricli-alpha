@@ -1097,6 +1097,7 @@ def main():
             s3_region=args.s3_region if args.use_s3 else None,
             s3_endpoint=args.s3_endpoint if args.use_s3 else None,
         )
+        ollama_cache_pull_failed = False
         if args.use_s3:
             # Pull Ollama models from S3 if they were cached there (soft fail on first run)
             try:
@@ -1114,7 +1115,21 @@ def main():
                     src=f"{args.volume_mount_path}/ollama",
                 )
             except Exception as e:
-                print(f"[*] Ollama S3 cache not found or failed (first run?). Ollama will download models fresh. ({_redact_secrets(str(e))})")
+                ollama_cache_pull_failed = True
+                # If a cache object exists but we can't extract it on the pod, it's likely corrupt; invalidate it.
+                ollama_s3_key = f"s3://{args.s3_bucket}/{args.s3_ollama_prefix}/mavaia.tar"
+                aws_flags = []
+                if args.s3_region:
+                    aws_flags += ["--region", args.s3_region]
+                if args.s3_endpoint:
+                    aws_flags += ["--endpoint-url", args.s3_endpoint]
+                try:
+                    if subprocess.run(["aws", "s3", "ls", ollama_s3_key] + aws_flags, capture_output=True, check=False).returncode == 0:
+                        subprocess.run(["aws", "s3", "rm", ollama_s3_key] + aws_flags, capture_output=True, check=False)
+                        print(f"[*] Invalidated Ollama S3 cache at {ollama_s3_key} (will re-upload after fresh pull).")
+                except Exception:
+                    pass
+                print(f"[*] Ollama S3 cache pull failed; Ollama will download models fresh. ({_redact_secrets(str(e))})")
         if not args.no_ollama:
             setup_ollama(
                 pod_ip,
@@ -1137,10 +1152,10 @@ def main():
                     ["aws", "s3", "ls", ollama_s3_key] + aws_check_flags,
                     capture_output=True, check=False,
                 ).returncode == 0
-                if cache_exists:
+                if cache_exists and not ollama_cache_pull_failed:
                     print(f"[*] Ollama S3 cache already exists at {ollama_s3_key}, skipping re-upload.")
                 else:
-                    print(f"[*] Ollama S3 cache not found — uploading for future runs...")
+                    print(f"[*] Ollama S3 cache not found (or invalidated) — uploading for future runs...")
                     s3_sync_pod(
                         pod_ip,
                         pod_port,
