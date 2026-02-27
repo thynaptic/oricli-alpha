@@ -59,6 +59,11 @@ Examples:
 
 import sys
 import json
+import atexit
+import signal
+import traceback
+import threading
+import time
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -75,6 +80,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Don't import NeuralTextGeneratorModule here - import it only when needed
 # This allows --help to work without slow imports
 NeuralTextGeneratorModule = None
+
+_shutdown_requested = False
+_shutdown_reason = None
+_snapshot_attempted = False
 
 
 # Profile directory (relative to script location)
@@ -1358,6 +1367,58 @@ def main():
         help="Search term for HuggingFace dataset search (only works with --source huggingface). "
              "Searches HuggingFace Hub for datasets matching the term.",
     )
+    parser.add_argument(
+        "--watchdog-minutes",
+        type=float,
+        default=5.0,
+        help="Watchdog interval (minutes) to snapshot models during training (0 disables).",
+    )
+    parser.add_argument(
+        "--no-watchdog",
+        action="store_true",
+        help="Disable watchdog snapshots during training.",
+    )
+    parser.add_argument(
+        "--distill",
+        action="store_true",
+        help="Enable transformer-only distillation with a local Ollama teacher.",
+    )
+    parser.add_argument(
+        "--teacher-model",
+        type=str,
+        default="phi4:latest",
+        help="Ollama teacher model name (default: phi4:latest).",
+    )
+    parser.add_argument(
+        "--distill-alpha",
+        type=float,
+        default=0.7,
+        help="Hard loss weight (alpha). Soft loss weight is (1-alpha).",
+    )
+    parser.add_argument(
+        "--distill-temp",
+        type=float,
+        default=2.0,
+        help="Distillation temperature.",
+    )
+    parser.add_argument(
+        "--distill-topk",
+        type=int,
+        default=20,
+        help="Top-k logprobs to request from the teacher.",
+    )
+    parser.add_argument(
+        "--ollama-url",
+        type=str,
+        default="http://localhost:11434",
+        help="Ollama base URL for the teacher (default: http://localhost:11434).",
+    )
+    parser.add_argument(
+        "--teacher-cache-dir",
+        type=str,
+        default=None,
+        help="Optional path to cache teacher logprobs (defaults to run_dir/teacher_cache).",
+    )
 
     # Parse arguments normally (help was already handled above)
     args = parser.parse_args()
@@ -1627,6 +1688,45 @@ def main():
     generator.initialize()
     print("Module initialized.", flush=True)
 
+    def save_snapshot(
+        reason: str,
+        train_params: Dict[str, Any],
+        run_dir: Optional[Path],
+        allow_repeat: bool = False,
+    ) -> None:
+        global _snapshot_attempted
+        if _snapshot_attempted and not allow_repeat:
+            return
+        if not allow_repeat:
+            _snapshot_attempted = True
+        print(f"\n[Snapshot] {reason}. Saving models...", flush=True)
+        try:
+            if run_dir is not None:
+                (run_dir / "interrupted.txt").write_text(
+                    f"{reason}\n",
+                    encoding="utf-8",
+                )
+        except Exception:
+            pass
+        try:
+            snapshot_type = train_params.get("model_type", "both")
+            generator.execute("save_model", {"model_type": snapshot_type})
+            print("[Snapshot] Save complete.", flush=True)
+        except Exception as e:
+            print(f"[Snapshot] Save failed: {e}", flush=True)
+
+    def _signal_handler(signum, frame):
+        global _shutdown_requested, _shutdown_reason
+        _shutdown_requested = True
+        _shutdown_reason = f"Signal {signum} received"
+        raise KeyboardInterrupt
+
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        try:
+            signal.signal(sig, _signal_handler)
+        except Exception:
+            pass
+
     # Check if we should enter sample-only mode
     # Sample-only mode: --sample is set AND no training arguments are provided
     # Note: We check for explicit training arguments, not defaults
@@ -1813,6 +1913,21 @@ def main():
         # Search: explicit argument always overrides
         if args.search:
             train_params["search"] = args.search
+
+        # Distillation settings (transformer-only)
+        if args.distill:
+            train_params["distill"] = True
+            train_params["teacher_model"] = args.teacher_model
+            train_params["distill_alpha"] = args.distill_alpha
+            train_params["distill_temperature"] = args.distill_temp
+            train_params["distill_top_k"] = args.distill_topk
+            train_params["ollama_url"] = args.ollama_url
+            if args.teacher_cache_dir:
+                train_params["teacher_cache_dir"] = args.teacher_cache_dir
+            resolved_model_type = train_params.get("model_type", "both")
+            if resolved_model_type not in ("transformer", "both"):
+                print("⚠ Distillation is only supported for transformer training. Disabling distillation.")
+                train_params.pop("distill", None)
         
         # Resolve run directory and write run metadata early (for reproducibility)
         run_dir = None
@@ -1912,6 +2027,9 @@ def main():
                 config = train_params["transformer_config"]
                 if isinstance(config, dict) and "model_name" in config:
                     config_lines.append(f"[bold]Transformer model:[/bold] [green]{config['model_name']}[/green]")
+            if train_params.get("distill"):
+                config_lines.append(f"[bold]Distillation:[/bold] [green]enabled[/green]")
+                config_lines.append(f"[bold]Teacher:[/bold] [cyan]{train_params.get('teacher_model','phi4:latest')}[/cyan]")
             data_pct = train_params.get("data_percentage", 1.0)
             if data_pct < 1.0:
                 config_lines.append(f"[bold]Data percentage:[/bold] [cyan]{data_pct*100:.1f}%[/cyan]")
@@ -1955,6 +2073,9 @@ def main():
                 config = train_params["transformer_config"]
                 if isinstance(config, dict) and "model_name" in config:
                     print(f"Transformer model: {config['model_name']}")
+            if train_params.get("distill"):
+                print("Distillation: enabled")
+                print(f"Teacher: {train_params.get('teacher_model','phi4:latest')}")
             data_pct = train_params.get("data_percentage", 1.0)
             if data_pct < 1.0:
                 print(f"Data percentage: {data_pct*100:.1f}%")
@@ -1966,8 +2087,56 @@ def main():
             console.print("[bold cyan]Starting training...[/bold cyan]")
         else:
             print("Starting training...")
-        
-        result = generator.execute("train_model", train_params)
+
+        completed = False
+        watchdog_stop = None
+
+        if not args.no_watchdog:
+            interval_minutes = float(args.watchdog_minutes or 0.0)
+            if interval_minutes > 0:
+                watchdog_stop = threading.Event()
+
+                def _watchdog_loop():
+                    interval_s = max(30.0, interval_minutes * 60.0)
+                    while not watchdog_stop.wait(interval_s):
+                        try:
+                            if run_dir is not None:
+                                (run_dir / "watchdog_heartbeat.json").write_text(
+                                    json.dumps(
+                                        {"timestamp": time.time(), "status": "running"},
+                                        indent=2,
+                                    ),
+                                    encoding="utf-8",
+                                )
+                        except Exception:
+                            pass
+                        save_snapshot("Watchdog snapshot", train_params, run_dir, allow_repeat=True)
+
+                threading.Thread(target=_watchdog_loop, daemon=True).start()
+
+        def _atexit_snapshot():
+            if completed:
+                return
+            reason = _shutdown_reason or "Process exiting before training completed"
+            save_snapshot(reason, train_params, run_dir)
+
+        atexit.register(_atexit_snapshot)
+
+        try:
+            result = generator.execute("train_model", train_params)
+            completed = True
+        except KeyboardInterrupt:
+            reason = _shutdown_reason or "CTRL+C / interruption"
+            save_snapshot(reason, train_params, run_dir)
+            return 130
+        except Exception as e:
+            reason = f"Unhandled error: {type(e).__name__}"
+            save_snapshot(reason, train_params, run_dir)
+            traceback.print_exc()
+            return 1
+        finally:
+            if watchdog_stop is not None:
+                watchdog_stop.set()
 
         if not result.get("success"):
             error_msg = result.get('error', 'Unknown error')
@@ -2251,4 +2420,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

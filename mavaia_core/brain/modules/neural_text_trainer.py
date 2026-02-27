@@ -59,17 +59,32 @@ class NeuralTextTrainerModule(BaseBrainModule):
         if not ntg:
             return {"success": False, "error": "neural_text_generator module unavailable"}
 
-        if operation == "train_model":
-            return ntg.execute("train_model", params)
+        try:
+            if operation == "train_model":
+                return ntg.execute("train_model", params)
 
-        if operation == "train_character_model":
-            return ntg.execute("train_model", {**params, "model_type": "character"})
+            if operation == "train_character_model":
+                return ntg.execute("train_model", {**params, "model_type": "character"})
 
-        if operation == "train_word_model":
-            return ntg.execute("train_model", {**params, "model_type": "word"})
+            if operation == "train_word_model":
+                return ntg.execute("train_model", {**params, "model_type": "word"})
 
-        if operation == "train_transformer_model":
-            return ntg.execute("train_model", {**params, "model_type": "transformer"})
+            if operation == "train_transformer_model":
+                return ntg.execute("train_model", {**params, "model_type": "transformer"})
+        except KeyboardInterrupt:
+            model_type = params.get("model_type", "both")
+            snapshot_result = {"success": False, "error": "Snapshot not attempted"}
+            try:
+                snapshot_result = ntg.execute("save_model", {"model_type": model_type})
+            except Exception as e:
+                snapshot_result = {"success": False, "error": str(e)}
+
+            return {
+                "success": False,
+                "error": "Training interrupted by user",
+                "interrupted": True,
+                "snapshot": snapshot_result,
+            }
 
         raise InvalidParameterError(
             parameter="operation",

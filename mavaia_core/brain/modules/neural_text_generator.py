@@ -15,6 +15,7 @@ import warnings
 import logging
 import os
 import math
+import hashlib
 from pathlib import Path
 from contextlib import contextmanager
 from io import StringIO
@@ -108,6 +109,14 @@ except ImportError:
 try:
     import torch
     TORCH_AVAILABLE = True
+except ImportError:
+    pass
+
+# Try to import requests for teacher distillation (Ollama API)
+REQUESTS_AVAILABLE = False
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
 except ImportError:
     pass
 
@@ -712,6 +721,20 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     sequence_length = params.get("sequence_length")
                 transformer_config = params.get("transformer_config", transformer_config)
                 model_name = params.get("model_name", model_name)
+
+                if transformer_config is None:
+                    transformer_config = {}
+                if params.get("distill"):
+                    transformer_config["_distill"] = True
+                    transformer_config["_teacher_model"] = params.get("teacher_model", "phi4:latest")
+                    transformer_config["_distill_alpha"] = params.get("distill_alpha", 0.7)
+                    transformer_config["_distill_temperature"] = params.get("distill_temperature", 2.0)
+                    transformer_config["_distill_top_k"] = params.get("distill_top_k", 20)
+                    transformer_config["_ollama_url"] = params.get("ollama_url", "http://localhost:11434")
+                    if params.get("run_dir"):
+                        transformer_config["_run_dir"] = params.get("run_dir")
+                    if params.get("teacher_cache_dir"):
+                        transformer_config["_teacher_cache_dir"] = params.get("teacher_cache_dir")
             
             # Store training params for policy saving (after policy application)
             training_params_for_policy = {
@@ -724,6 +747,19 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 training_params_for_policy["transformer_config"] = transformer_config
                 training_params_for_policy["block_size"] = transformer_config.get("block_size")
                 training_params_for_policy["gradient_accumulation_steps"] = transformer_config.get("gradient_accumulation_steps")
+            if params.get("distill"):
+                if transformer_config is None:
+                    transformer_config = {}
+                transformer_config["_distill"] = True
+                transformer_config["_teacher_model"] = params.get("teacher_model", "phi4:latest")
+                transformer_config["_distill_alpha"] = params.get("distill_alpha", 0.7)
+                transformer_config["_distill_temperature"] = params.get("distill_temperature", 2.0)
+                transformer_config["_distill_top_k"] = params.get("distill_top_k", 20)
+                transformer_config["_ollama_url"] = params.get("ollama_url", "http://localhost:11434")
+                if params.get("run_dir"):
+                    transformer_config["_run_dir"] = params.get("run_dir")
+                if params.get("teacher_cache_dir"):
+                    transformer_config["_teacher_cache_dir"] = params.get("teacher_cache_dir")
 
             results = {}
             models_trained = 0
@@ -1557,6 +1593,214 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     extra={"module_name": "neural_text_generator", "error_type": type(e).__name__},
                 )
             return {}
+
+    def _ollama_logprobs(
+        self,
+        prompt: str,
+        model: str,
+        top_k: int,
+        temperature: float,
+        num_predict: int,
+        ollama_url: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Fetch top-k logprobs for generated tokens from Ollama."""
+        if not REQUESTS_AVAILABLE:
+            logger.warning(
+                "Requests not available; distillation disabled",
+                extra={"module_name": "neural_text_generator"},
+            )
+            return None
+
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+            "logprobs": True,
+            "num_predict": int(num_predict),
+            "options": {
+                "temperature": float(temperature),
+                "top_k": int(top_k),
+            },
+        }
+        try:
+            resp = requests.post(
+                f"{ollama_url.rstrip('/')}/api/generate",
+                json=payload,
+                timeout=120,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            logger.warning(
+                "Ollama logprobs request failed",
+                exc_info=True,
+                extra={"module_name": "neural_text_generator", "error_type": type(e).__name__},
+            )
+            return None
+
+        logprobs = data.get("logprobs")
+        if logprobs is None:
+            return None
+
+        if isinstance(logprobs, list):
+            return {"logprobs": logprobs, "response": data.get("response", "")}
+        if isinstance(logprobs, dict):
+            if "top_logprobs" in logprobs and isinstance(logprobs["top_logprobs"], list):
+                return {"logprobs": logprobs["top_logprobs"], "response": data.get("response", "")}
+        return {"logprobs": None, "response": data.get("response", "")}
+
+    def _teacher_cache_key(
+        self,
+        prompt: str,
+        model: str,
+        top_k: int,
+        temperature: float,
+        num_predict: int,
+    ) -> str:
+        key = f"{model}|{top_k}|{temperature}|{num_predict}|{prompt}"
+        return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+    def _build_teacher_cache(
+        self,
+        tokens,
+        block_size: int,
+        tokenizer,
+        distill_config: Dict[str, Any],
+        cache_dir: Path,
+    ) -> List[List[Dict[int, float]]]:
+        """Precompute and cache teacher top-k distributions for each chunk."""
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        notes_path = cache_dir / "teacher_notes.jsonl"
+        model = distill_config["teacher_model"]
+        top_k = int(distill_config["top_k"])
+        temperature = float(distill_config["temperature"])
+        num_predict = int(distill_config["num_predict"])
+        ollama_url = distill_config["ollama_url"]
+
+        total_chunks = max(0, len(tokens) - block_size)
+        teacher_probs: List[List[Dict[int, float]]] = []
+        teacher_texts: List[str] = []
+
+        for idx in range(total_chunks):
+            chunk = tokens[idx : idx + block_size]
+            if TORCH_AVAILABLE and hasattr(chunk, "tolist"):
+                chunk_ids = chunk.tolist()
+            else:
+                chunk_ids = list(chunk)
+            prompt = tokenizer.decode(chunk_ids, skip_special_tokens=True)
+            cache_key = self._teacher_cache_key(prompt, model, top_k, temperature, num_predict)
+            cache_path = cache_dir / f"{cache_key}.json"
+
+            if cache_path.exists():
+                try:
+                    with open(cache_path, "r", encoding="utf-8") as f:
+                        cached = json.load(f)
+                    teacher_probs.append(
+                        [
+                            {int(k): float(v) for k, v in entry.items()}
+                            for entry in cached.get("teacher_probs", [])
+                        ]
+                    )
+                    teacher_texts.append(str(cached.get("teacher_response", "")))
+                    if teacher_texts[-1]:
+                        try:
+                            with open(notes_path, "a", encoding="utf-8") as nf:
+                                nf.write(
+                                    json.dumps(
+                                        {
+                                            "chunk_index": idx,
+                                            "cache_key": cache_key,
+                                            "teacher_response": teacher_texts[-1],
+                                        }
+                                    )
+                                    + "\n"
+                                )
+                        except Exception:
+                            pass
+                    continue
+                except Exception:
+                    pass
+
+            logprob_payload = self._ollama_logprobs(
+                prompt=prompt,
+                model=model,
+                top_k=top_k,
+                temperature=temperature,
+                num_predict=num_predict,
+                ollama_url=ollama_url,
+            )
+
+            per_token_probs: List[Dict[int, float]] = []
+            if logprob_payload and logprob_payload.get("logprobs"):
+                for entry in logprob_payload.get("logprobs", []):
+                    top_logprobs = entry.get("top_logprobs")
+                    if not isinstance(top_logprobs, dict):
+                        if isinstance(top_logprobs, list):
+                            top_logprobs = {
+                                str(item.get("token")): float(item.get("logprob"))
+                                for item in top_logprobs
+                                if isinstance(item, dict) and "token" in item and "logprob" in item
+                            }
+                        else:
+                            top_logprobs = {}
+
+                    mapped: Dict[int, float] = {}
+                    for token_str, logp in top_logprobs.items():
+                        try:
+                            ids = tokenizer.encode(str(token_str), add_special_tokens=False)
+                            if len(ids) == 1:
+                                mapped_id = int(ids[0])
+                                mapped[mapped_id] = mapped.get(mapped_id, 0.0) + math.exp(float(logp))
+                        except Exception:
+                            continue
+
+                    if mapped:
+                        total = sum(mapped.values())
+                        if total > 0:
+                            for k in list(mapped.keys()):
+                                mapped[k] = float(mapped[k]) / float(total)
+                    per_token_probs.append(mapped)
+
+            if len(per_token_probs) < block_size:
+                per_token_probs.extend([{} for _ in range(block_size - len(per_token_probs))])
+            elif len(per_token_probs) > block_size:
+                per_token_probs = per_token_probs[:block_size]
+
+            teacher_probs.append(per_token_probs)
+            teacher_texts.append(str(logprob_payload.get("response", "")) if logprob_payload else "")
+
+            try:
+                with open(cache_path, "w", encoding="utf-8") as f:
+                    json.dump(
+                        {"teacher_probs": per_token_probs, "teacher_response": teacher_texts[-1]},
+                        f,
+                    )
+                if teacher_texts[-1]:
+                    with open(notes_path, "a", encoding="utf-8") as nf:
+                        nf.write(
+                            json.dumps(
+                                {
+                                    "chunk_index": idx,
+                                    "cache_key": cache_key,
+                                    "teacher_response": teacher_texts[-1],
+                                }
+                            )
+                            + "\n"
+                        )
+            except Exception:
+                pass
+
+            if (idx + 1) % max(1, min(50, total_chunks // 10 or 1)) == 0:
+                logger.info(
+                    "Teacher cache progress",
+                    extra={
+                        "module_name": "neural_text_generator",
+                        "completed": int(idx + 1),
+                        "total": int(total_chunks),
+                    },
+                )
+
+        return teacher_probs
     
     def _apply_ema_smoothing(self, loss_history: list, alpha: float = 0.3) -> list:
         """
@@ -2069,9 +2313,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         
         # Create dataset class
         class TextDataset(Dataset):
-            def __init__(self, tokens, block_size):
+            def __init__(self, tokens, block_size, teacher_probs: Optional[List[List[Dict[int, float]]]] = None):
                 self.tokens = tokens
                 self.block_size = block_size
+                self.teacher_probs = teacher_probs
             
             def __len__(self):
                 # Ensure we return at least 0 (required by PyTorch Dataset)
@@ -2083,10 +2328,13 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 max_idx = len(self.tokens) - self.block_size - 1
                 idx = min(idx, max(0, max_idx))
                 chunk = self.tokens[idx : idx + self.block_size + 1]
-                return {
+                item = {
                     "input_ids": chunk[:-1],
                     "labels": chunk[1:],
                 }
+                if self.teacher_probs is not None and idx < len(self.teacher_probs):
+                    item["teacher_probs"] = self.teacher_probs[idx]
+                return item
         
         # MICRO-DATASET AUGMENTATION: Permute substrings for tiny HF datasets (before train/val split)
         # This happens early so augmented data is properly distributed
@@ -2130,7 +2378,66 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         train_tokens = tokens[:split_idx]
         val_tokens = tokens[split_idx:]
         
-        train_dataset = TextDataset(train_tokens, block_size)
+        distill_enabled = bool(transformer_config.get("_distill")) if transformer_config else False
+        if distill_enabled and tiny_data_mode:
+            distill_enabled = False
+            logger.info(
+                "Distillation disabled for tiny-data mode",
+                extra={"module_name": "neural_text_generator"},
+            )
+
+        teacher_probs_train: Optional[List[List[Dict[int, float]]]] = None
+        if distill_enabled:
+            teacher_model = transformer_config.get("_teacher_model", "phi4:latest")
+            distill_alpha = float(transformer_config.get("_distill_alpha", 0.7))
+            distill_temperature = float(transformer_config.get("_distill_temperature", 2.0))
+            distill_top_k = int(transformer_config.get("_distill_top_k", 20))
+            ollama_url = transformer_config.get("_ollama_url", "http://localhost:11434")
+
+            source_hash = transformer_config.get("_source_hash")
+            if not source_hash:
+                source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                transformer_config["_source_hash"] = source_hash
+
+            run_dir = transformer_config.get("_run_dir")
+            if run_dir:
+                base_cache_dir = Path(str(run_dir)) / "teacher_cache"
+            else:
+                base_cache_dir = transformer_model_dir / "teacher_cache"
+            if transformer_config.get("_teacher_cache_dir"):
+                base_cache_dir = Path(str(transformer_config.get("_teacher_cache_dir")))
+            cache_dir = base_cache_dir / f"{source_hash}_bs{block_size}"
+
+            distill_config = {
+                "teacher_model": teacher_model,
+                "alpha": distill_alpha,
+                "temperature": distill_temperature,
+                "top_k": distill_top_k,
+                "num_predict": block_size,
+                "ollama_url": ollama_url,
+            }
+
+            if RICH_AVAILABLE:
+                console = Console(stderr=True)
+                _trainer_log(
+                    f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]🧠[/green] "
+                    f"Precomputing teacher cache ({teacher_model})..."
+                )
+            else:
+                logger.info(
+                    "Precomputing teacher cache",
+                    extra={"module_name": "neural_text_generator", "teacher_model": teacher_model},
+                )
+
+            teacher_probs_train = self._build_teacher_cache(
+                train_tokens,
+                block_size,
+                self.transformer_tokenizer,
+                distill_config,
+                cache_dir,
+            )
+
+        train_dataset = TextDataset(train_tokens, block_size, teacher_probs=teacher_probs_train)
         val_dataset = TextDataset(val_tokens, block_size) if len(val_tokens) > block_size else None
         
         # DATA QUALITY ANALYSIS: Analyze dataset before training
@@ -2383,10 +2690,24 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             training_args = TrainingArguments(**training_args_dict)
         
         # Data collator
-        data_collator = DataCollatorForLanguageModeling(
+        base_collator = DataCollatorForLanguageModeling(
             tokenizer=self.transformer_tokenizer,
             mlm=False,  # Causal LM, not masked LM
         )
+
+        class DistillDataCollator:
+            def __init__(self, base):
+                self.base = base
+
+            def __call__(self, features):
+                teacher_probs = [f.pop("teacher_probs", None) for f in features]
+                batch = self.base(features)
+                batch["teacher_probs"] = teacher_probs
+                return batch
+
+        data_collator = base_collator
+        if distill_enabled:
+            data_collator = DistillDataCollator(base_collator)
         
         # Custom trainer callback for time limits and tiny-data loss scaling
         try:
@@ -2638,13 +2959,26 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         
         # Custom Trainer class for KL regularization in tiny-data mode
         class KLRegularizedTrainer(Trainer):
-            """Trainer with KL divergence regularization for tiny-data mode"""
-            def __init__(self, *args, enable_kl_reg: bool = False, kl_weight: float = 0.1, initial_model=None, **kwargs):
+            """Trainer with optional KL regularization and distillation."""
+            def __init__(
+                self,
+                *args,
+                enable_kl_reg: bool = False,
+                kl_weight: float = 0.1,
+                initial_model=None,
+                enable_distill: bool = False,
+                distill_alpha: float = 0.7,
+                distill_temperature: float = 2.0,
+                **kwargs,
+            ):
                 super().__init__(*args, **kwargs)
                 self.enable_kl_reg = enable_kl_reg
                 self.kl_weight = kl_weight
                 self.initial_model = initial_model  # Reference to initial model state
                 self.initial_logits_cache = None  # Cache initial logits for efficiency
+                self.enable_distill = enable_distill
+                self.distill_alpha = distill_alpha
+                self.distill_temperature = distill_temperature
             
             def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
                 """Compute loss with optional KL regularization"""
@@ -2655,6 +2989,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 import torch.nn.functional as F
                 
                 # Get standard loss
+                teacher_probs = inputs.pop("teacher_probs", None)
                 outputs = model(**inputs)
                 logits = outputs.logits if hasattr(outputs, 'logits') else outputs[0]
                 labels = inputs.get("labels")
@@ -2664,6 +2999,33 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
                 loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+                # Distillation loss (soft targets)
+                if self.enable_distill and teacher_probs:
+                    try:
+                        temp = float(self.distill_temperature)
+                        log_probs = F.log_softmax(shift_logits / temp, dim=-1)
+                        soft_losses = []
+                        seq_len = shift_logits.size(1)
+                        batch_size = shift_logits.size(0)
+                        for b in range(min(batch_size, len(teacher_probs))):
+                            per_pos = teacher_probs[b] or []
+                            for t in range(min(seq_len, len(per_pos))):
+                                dist = per_pos[t] or {}
+                                if not dist:
+                                    continue
+                                ids = torch.tensor(list(dist.keys()), device=logits.device)
+                                probs = torch.tensor(list(dist.values()), device=logits.device)
+                                probs = probs / (probs.sum() + 1e-8)
+                                log_p_s = log_probs[b, t, ids]
+                                kl = (probs * (torch.log(probs + 1e-8) - log_p_s)).sum()
+                                soft_losses.append(kl)
+                        if soft_losses:
+                            soft_loss = torch.stack(soft_losses).mean() * (temp ** 2)
+                            alpha = float(self.distill_alpha)
+                            loss = alpha * loss + (1.0 - alpha) * soft_loss
+                    except Exception:
+                        pass
                 
                 # Add KL regularization for tiny-data mode
                 if self.enable_kl_reg and self.initial_model is not None:
@@ -2885,17 +3247,20 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         # Store the context manager for use during training
         suppress_trainer_output = suppress_trainer_output
         
-        # Create trainer (use KLRegularizedTrainer if KL reg is enabled)
-        if use_kl_reg and initial_model_for_kl is not None:
+        # Create trainer (use KLRegularizedTrainer if KL reg or distillation is enabled)
+        if (use_kl_reg and initial_model_for_kl is not None) or distill_enabled:
             trainer = KLRegularizedTrainer(
                 model=self.transformer_model,
                 args=training_args,
                 data_collator=data_collator,
                 train_dataset=train_dataset,
                 eval_dataset=val_dataset,
-                enable_kl_reg=True,
+                enable_kl_reg=bool(use_kl_reg and initial_model_for_kl is not None),
                 kl_weight=0.1,  # KL regularization weight
                 initial_model=initial_model_for_kl,
+                enable_distill=distill_enabled,
+                distill_alpha=float(transformer_config.get("_distill_alpha", 0.7)) if transformer_config else 0.7,
+                distill_temperature=float(transformer_config.get("_distill_temperature", 2.0)) if transformer_config else 2.0,
             )
         else:
             trainer = Trainer(
@@ -3268,20 +3633,53 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 
                 # Recreate dataset if synthetic continuations were added
                 if synthetic_continuations_generated:
-                    stage_train_dataset = TextDataset(train_tokens, current_block_size)
+                    stage_teacher_probs = None
+                    if distill_enabled:
+                        source_hash = transformer_config.get("_source_hash")
+                        if not source_hash:
+                            source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                            transformer_config["_source_hash"] = source_hash
+                        run_dir = transformer_config.get("_run_dir")
+                        if run_dir:
+                            base_cache_dir = Path(str(run_dir)) / "teacher_cache"
+                        else:
+                            base_cache_dir = transformer_model_dir / "teacher_cache"
+                        if transformer_config.get("_teacher_cache_dir"):
+                            base_cache_dir = Path(str(transformer_config.get("_teacher_cache_dir")))
+                        stage_cache_dir = base_cache_dir / f"{source_hash}_bs{current_block_size}"
+                        distill_config = {
+                            "teacher_model": transformer_config.get("_teacher_model", "phi4:latest"),
+                            "alpha": float(transformer_config.get("_distill_alpha", 0.7)),
+                            "temperature": float(transformer_config.get("_distill_temperature", 2.0)),
+                            "top_k": int(transformer_config.get("_distill_top_k", 20)),
+                            "num_predict": current_block_size,
+                            "ollama_url": transformer_config.get("_ollama_url", "http://localhost:11434"),
+                        }
+                        stage_teacher_probs = self._build_teacher_cache(
+                            train_tokens,
+                            current_block_size,
+                            self.transformer_tokenizer,
+                            distill_config,
+                            stage_cache_dir,
+                        )
+
+                    stage_train_dataset = TextDataset(train_tokens, current_block_size, teacher_probs=stage_teacher_probs)
                     stage_val_dataset = TextDataset(val_tokens, current_block_size) if len(val_tokens) > current_block_size else None
                 
                 # Use KLRegularizedTrainer if KL reg is enabled, otherwise regular Trainer
-                if use_kl_reg and initial_model_for_kl is not None:
+                if (use_kl_reg and initial_model_for_kl is not None) or distill_enabled:
                     stage_trainer = KLRegularizedTrainer(
                         model=self.transformer_model,
                         args=stage_training_args,
                         data_collator=data_collator,
                         train_dataset=stage_train_dataset,
                         eval_dataset=stage_val_dataset,
-                        enable_kl_reg=True,
+                        enable_kl_reg=bool(use_kl_reg and initial_model_for_kl is not None),
                         kl_weight=0.1,
                         initial_model=initial_model_for_kl,
+                        enable_distill=distill_enabled,
+                        distill_alpha=float(transformer_config.get("_distill_alpha", 0.7)) if transformer_config else 0.7,
+                        distill_temperature=float(transformer_config.get("_distill_temperature", 2.0)) if transformer_config else 2.0,
                     )
                 else:
                     stage_trainer = Trainer(
@@ -3786,13 +4184,25 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         training_args_dict["evaluation_strategy"] = old_value
                     training_args = TrainingArguments(**training_args_dict)
                 
-                trainer = Trainer(
-                    model=self.transformer_model,
-                    args=training_args,
-                    data_collator=data_collator,
-                    train_dataset=train_dataset,
-                    eval_dataset=val_dataset,
-                )
+                if distill_enabled:
+                    trainer = KLRegularizedTrainer(
+                        model=self.transformer_model,
+                        args=training_args,
+                        data_collator=data_collator,
+                        train_dataset=train_dataset,
+                        eval_dataset=val_dataset,
+                        enable_distill=True,
+                        distill_alpha=float(transformer_config.get("_distill_alpha", 0.7)) if transformer_config else 0.7,
+                        distill_temperature=float(transformer_config.get("_distill_temperature", 2.0)) if transformer_config else 2.0,
+                    )
+                else:
+                    trainer = Trainer(
+                        model=self.transformer_model,
+                        args=training_args,
+                        data_collator=data_collator,
+                        train_dataset=train_dataset,
+                        eval_dataset=val_dataset,
+                    )
                 
                 trainer.add_callback(formatted_logging_callback)  # Format logs
                 # Retry training on CPU
@@ -3894,7 +4304,37 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                                 self.transformer_model = self.transformer_model.to(device)
                             
                             # Recreate dataset with smaller block_size
-                            train_dataset = TextDataset(train_tokens, block_size)
+                            if distill_enabled:
+                                source_hash = transformer_config.get("_source_hash")
+                                if not source_hash:
+                                    source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                                    transformer_config["_source_hash"] = source_hash
+                                run_dir = transformer_config.get("_run_dir")
+                                if run_dir:
+                                    base_cache_dir = Path(str(run_dir)) / "teacher_cache"
+                                else:
+                                    base_cache_dir = transformer_model_dir / "teacher_cache"
+                                if transformer_config.get("_teacher_cache_dir"):
+                                    base_cache_dir = Path(str(transformer_config.get("_teacher_cache_dir")))
+                                fallback_cache_dir = base_cache_dir / f"{source_hash}_bs{block_size}"
+                                distill_config = {
+                                    "teacher_model": transformer_config.get("_teacher_model", "phi4:latest"),
+                                    "alpha": float(transformer_config.get("_distill_alpha", 0.7)),
+                                    "temperature": float(transformer_config.get("_distill_temperature", 2.0)),
+                                    "top_k": int(transformer_config.get("_distill_top_k", 20)),
+                                    "num_predict": block_size,
+                                    "ollama_url": transformer_config.get("_ollama_url", "http://localhost:11434"),
+                                }
+                                teacher_probs_train = self._build_teacher_cache(
+                                    train_tokens,
+                                    block_size,
+                                    self.transformer_tokenizer,
+                                    distill_config,
+                                    fallback_cache_dir,
+                                )
+                                train_dataset = TextDataset(train_tokens, block_size, teacher_probs=teacher_probs_train)
+                            else:
+                                train_dataset = TextDataset(train_tokens, block_size)
                             val_dataset = TextDataset(val_tokens, block_size) if len(val_tokens) > block_size else None
                             
                             # Update training args with minimal settings
@@ -4027,7 +4467,37 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         self.transformer_model = self.transformer_model.to(device)
                     
                     # Recreate dataset with smaller block_size
-                    train_dataset = TextDataset(train_tokens, block_size)
+                    if distill_enabled:
+                        source_hash = transformer_config.get("_source_hash")
+                        if not source_hash:
+                            source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                            transformer_config["_source_hash"] = source_hash
+                        run_dir = transformer_config.get("_run_dir")
+                        if run_dir:
+                            base_cache_dir = Path(str(run_dir)) / "teacher_cache"
+                        else:
+                            base_cache_dir = transformer_model_dir / "teacher_cache"
+                        if transformer_config.get("_teacher_cache_dir"):
+                            base_cache_dir = Path(str(transformer_config.get("_teacher_cache_dir")))
+                        fallback_cache_dir = base_cache_dir / f"{source_hash}_bs{block_size}"
+                        distill_config = {
+                            "teacher_model": transformer_config.get("_teacher_model", "phi4:latest"),
+                            "alpha": float(transformer_config.get("_distill_alpha", 0.7)),
+                            "temperature": float(transformer_config.get("_distill_temperature", 2.0)),
+                            "top_k": int(transformer_config.get("_distill_top_k", 20)),
+                            "num_predict": block_size,
+                            "ollama_url": transformer_config.get("_ollama_url", "http://localhost:11434"),
+                        }
+                        teacher_probs_train = self._build_teacher_cache(
+                            train_tokens,
+                            block_size,
+                            self.transformer_tokenizer,
+                            distill_config,
+                            fallback_cache_dir,
+                        )
+                        train_dataset = TextDataset(train_tokens, block_size, teacher_probs=teacher_probs_train)
+                    else:
+                        train_dataset = TextDataset(train_tokens, block_size)
                     val_dataset = TextDataset(val_tokens, block_size) if len(val_tokens) > block_size else None
                     
                     # Update training args with minimal settings
@@ -4740,4 +5210,3 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             }
 
         return {"success": True, "info": info}
-
