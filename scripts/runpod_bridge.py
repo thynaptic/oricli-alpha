@@ -91,6 +91,7 @@ class RunPodBridge:
         
         if template_id:
             input_fields.append(f'templateId: "{template_id}"')
+            input_fields.append('ports: "22/tcp"')
         elif image:
             input_fields.append(f'imageName: "{image}"')
             input_fields.append('ports: "22/tcp"')
@@ -150,7 +151,7 @@ def setup_pod_env(pod_ip: str, pod_port: int, ssh_key: str, pod_id: str = None, 
             "-i", ssh_key,
             "-p", method["port"],
             method["host"],
-            "apt-get update && apt-get install -y rsync && pip install --upgrade pip && pip install numpy requests PyYAML rich tensorflow torch transformers datasets"
+            "apt-get update && apt-get install -y rsync python3-venv && python3 -m pip install --upgrade pip"
         ]
         
         try:
@@ -162,6 +163,47 @@ def setup_pod_env(pod_ip: str, pod_port: int, ssh_key: str, pod_id: str = None, 
                 time.sleep(10)
             else:
                 raise e
+
+def ensure_mavaia_installed(pod_ip: str, pod_port: int, ssh_key: str, pod_id: str = None, proxy: str = None):
+    print("[*] Installing mavaia_core + training deps in pod venv...")
+
+    if proxy:
+        host = proxy
+        port = "22"
+    else:
+        host = f"root@{pod_ip}"
+        port = str(pod_port)
+
+    install_cmd = (
+        "set -e; "
+        "cd /workspace/mavaia; "
+        "python3 -m venv .venv; "
+        ". .venv/bin/activate; "
+        "pip install --upgrade pip setuptools wheel; "
+        "pip install -e '.[train_neural]' torch transformers; "
+        ".venv/bin/python -c \"import mavaia_core; print('mavaia_core_ok')\""
+    )
+
+    ssh_cmd = [
+        "ssh", "-o", "StrictHostKeyChecking=no",
+        "-o", "PasswordAuthentication=no",
+        "-i", ssh_key,
+        "-p", port,
+        host,
+        install_cmd,
+    ]
+
+    try:
+        subprocess.run(ssh_cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        if (not proxy) and pod_id and e.returncode == 255:
+            print("[*] Direct SSH failed (255), trying via fallback proxy...")
+            ssh_cmd[9] = "22"
+            ssh_cmd[10] = f"{pod_id}-22@ssh.runpod.io"
+            subprocess.run(ssh_cmd, check=True)
+        else:
+            raise e
+
 
 def sync_code(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, pod_id: str = None, proxy: str = None):
     print(f"[*] Syncing code to pod...")
@@ -216,7 +258,7 @@ def remote_train(pod_ip: str, pod_port: int, ssh_key: str, train_args: List[str]
             "-i", ssh_key,
             "-p", "22",
             proxy,
-            f"cd /workspace/mavaia && python3 scripts/train_neural_text_generator.py {args_str}"
+            f"cd /workspace/mavaia && /workspace/mavaia/.venv/bin/python scripts/train_neural_text_generator.py {args_str}"
         ]
         subprocess.run(ssh_cmd, check=True)
         return
@@ -226,7 +268,7 @@ def remote_train(pod_ip: str, pod_port: int, ssh_key: str, train_args: List[str]
         "-i", ssh_key,
         "-p", str(pod_port),
         f"root@{pod_ip}",
-        f"cd /workspace/mavaia && python3 scripts/train_neural_text_generator.py {args_str}"
+        f"cd /workspace/mavaia && /workspace/mavaia/.venv/bin/python scripts/train_neural_text_generator.py {args_str}"
     ]
     try:
         subprocess.run(ssh_cmd, check=True)
@@ -241,13 +283,16 @@ def remote_train(pod_ip: str, pod_port: int, ssh_key: str, train_args: List[str]
 
 def get_artifacts(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, pod_id: str = None, proxy: str = None):
     print(f"[*] Pulling trained models from pod...")
-    
+
+    dest_dir = local_path / "models" / "neural_text_generator_remote"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
     if proxy:
         scp_cmd = [
             "rsync", "-avz",
             "-e", f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p 22",
-            f"{proxy}:/workspace/mavaia/models/neural_text_generator/",
-            str(local_path / "models" / "neural_text_generator_remote/")
+            f"{proxy}:/workspace/mavaia/mavaia_core/models/neural_text_generator/",
+            str(dest_dir) + "/",
         ]
         subprocess.run(scp_cmd, check=True)
         return
@@ -255,8 +300,8 @@ def get_artifacts(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, po
     scp_cmd = [
         "rsync", "-avz",
         "-e", f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p {pod_port}",
-        f"root@{pod_ip}:/workspace/mavaia/models/neural_text_generator/",
-        str(local_path / "models" / "neural_text_generator_remote/")
+        f"root@{pod_ip}:/workspace/mavaia/mavaia_core/models/neural_text_generator/",
+        str(dest_dir) + "/",
     ]
     try:
         proc = subprocess.run(scp_cmd, check=False)
@@ -268,7 +313,7 @@ def get_artifacts(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, po
         if pod_id:
             print("[*] Direct rsync failed, trying via fallback proxy...")
             scp_cmd[3] = f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p 22"
-            scp_cmd[4] = f"{pod_id}-22@ssh.runpod.io:/workspace/mavaia/models/neural_text_generator/"
+            scp_cmd[4] = f"{pod_id}-22@ssh.runpod.io:/workspace/mavaia/mavaia_core/models/neural_text_generator/"
             proc = subprocess.run(scp_cmd, check=False)
             if proc.returncode != 0 and proc.returncode != 23:
                 raise subprocess.CalledProcessError(proc.returncode, scp_cmd)
@@ -398,11 +443,18 @@ def main():
         print(f"[*] Warning: Port 22 not found; falling back to port {ssh_port_info['publicPort']} (mapped from {ssh_port_info['privatePort']})")
     
     if not ssh_port_info:
-        print("[!] Could not find any public port information for pod.")
-        sys.exit(1)
-    
-    pod_ip = ssh_port_info['ip']
-    pod_port = ssh_port_info['publicPort']
+        # Some templates/accounts don't surface runtime public ports; fall back to RunPod's SSH proxy.
+        if pod.get("id"):
+            args.ssh_proxy = args.ssh_proxy or f"{pod['id']}-22@ssh.runpod.io"
+            print(f"[*] No public port info; falling back to SSH proxy: {args.ssh_proxy}")
+            pod_ip = "ssh.runpod.io"
+            pod_port = 22
+        else:
+            print("[!] Could not find any public port information for pod.")
+            sys.exit(1)
+    else:
+        pod_ip = ssh_port_info['ip']
+        pod_port = ssh_port_info['publicPort']
 
     if args.dry_run:
         print(f"[DRY-RUN] Would sync to {pod_ip}:{pod_port} and start training.")
@@ -415,6 +467,7 @@ def main():
     try:
         setup_pod_env(pod_ip, pod_port, args.ssh_key, pod['id'], args.ssh_proxy)
         sync_code(pod_ip, pod_port, args.ssh_key, REPO_ROOT, pod['id'], args.ssh_proxy)
+        ensure_mavaia_installed(pod_ip, pod_port, args.ssh_key, pod['id'], args.ssh_proxy)
         remote_train(pod_ip, pod_port, args.ssh_key, args.train_args, pod['id'], args.ssh_proxy)
         get_artifacts(pod_ip, pod_port, args.ssh_key, REPO_ROOT, pod['id'], args.ssh_proxy)
 
