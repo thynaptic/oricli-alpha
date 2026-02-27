@@ -7,6 +7,7 @@ import argparse
 import requests
 import threading
 import shutil
+import re
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -28,6 +29,23 @@ load_dotenv(REPO_ROOT / ".env")
 # RunPod API configuration
 RUNPOD_API_KEY = os.environ.get("Mavaia_Key")
 RUNPOD_ENDPOINT = "https://api.runpod.io/graphql"
+
+
+def _redact_secrets(text: str) -> str:
+    if not text:
+        return text
+    # Avoid leaking AWS creds if a failed subprocess/ssh command is included in exceptions.
+    patterns = [
+        (r"(AWS_ACCESS_KEY_ID=)'[^']*'", r"\1'***'"),
+        (r'(AWS_ACCESS_KEY_ID=)"[^"]*"', r'\1"***"'),
+        (r"(AWS_SECRET_ACCESS_KEY=)'[^']*'", r"\1'***'"),
+        (r'(AWS_SECRET_ACCESS_KEY=)"[^"]*"', r'\1"***"'),
+        (r"(AWS_SESSION_TOKEN=)'[^']*'", r"\1'***'"),
+        (r'(AWS_SESSION_TOKEN=)"[^"]*"', r'\1"***"'),
+    ]
+    for pat, repl in patterns:
+        text = re.sub(pat, repl, text)
+    return text
 
 class RunPodBridge:
     def __init__(self, api_key: str):
@@ -392,7 +410,7 @@ def _s3_abort_zombies(bucket: str, prefix: str, region: str, endpoint_url: str):
                 )
                 print(f"[*] Aborted zombie multipart upload: {key} ({uid[:8]}...)")
     except Exception as e:
-        print(f"[*] Zombie cleanup skipped: {e}")
+        print(f"[*] Zombie cleanup skipped: {_redact_secrets(str(e))}")
 
 
 def s3_sync_local_to_bucket(
@@ -1096,7 +1114,7 @@ def main():
                     src=f"{args.volume_mount_path}/ollama",
                 )
             except Exception as e:
-                print(f"[*] Ollama S3 cache not found or failed (first run?): {e}. Ollama will download models fresh.")
+                print(f"[*] Ollama S3 cache not found or failed (first run?). Ollama will download models fresh. ({_redact_secrets(str(e))})")
         if not args.no_ollama:
             setup_ollama(
                 pod_ip,
@@ -1210,7 +1228,7 @@ def main():
         try:
             remote_snapshot(pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod['id'], args.ssh_proxy)
         except Exception as e:
-            print(f"[!] Snapshot failed: {e}")
+            print(f"[!] Snapshot failed: {_redact_secrets(str(e))}")
         try:
             get_artifacts(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
             sync_training_data(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
@@ -1242,10 +1260,10 @@ def main():
                     src="/workspace/ollama",
                 )
         except Exception as e:
-            print(f"[!] Artifact sync failed: {e}")
+            print(f"[!] Artifact sync failed: {_redact_secrets(str(e))}")
     except Exception as e:
         failed = True
-        print(f"[!] Error detected: {e}. Saving snapshot and syncing artifacts before exit...")
+        print(f"[!] Error detected: {_redact_secrets(str(e))}. Saving snapshot and syncing artifacts before exit...")
         try:
             remote_snapshot(pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod['id'], args.ssh_proxy)
         except Exception as snap_e:
