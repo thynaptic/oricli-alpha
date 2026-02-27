@@ -440,7 +440,10 @@ def main():
     if not ssh_port_info and public_ports:
         # Fallback to first available if 22 isn't explicitly found
         ssh_port_info = public_ports[0]
-        print(f"[*] Warning: Port 22 not found; falling back to port {ssh_port_info['publicPort']} (mapped from {ssh_port_info['privatePort']})")
+        print(
+            f"[*] Warning: Port 22 not found; falling back to port {ssh_port_info.get('publicPort')} "
+            f"(mapped from {ssh_port_info.get('privatePort', 'unknown')})"
+        )
     
     if not ssh_port_info:
         # Some templates/accounts don't surface runtime public ports; fall back to RunPod's SSH proxy.
