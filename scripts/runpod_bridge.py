@@ -85,71 +85,69 @@ class RunPodBridge:
         volume_id: Optional[str] = None,
         env: Optional[Dict[str, str]] = None,
     ):
-        input_fields = [
-            f'name: "{name}"',
-            f'gpuTypeId: "{gpu_type_id}"',
-            f'gpuCount: 1',
-            f'volumeInGb: 20',
-            f'containerDiskInGb: 10',
-            f'volumeMountPath: "{volume_mount_path}"'
-        ]
+        input_data = {
+            "name": name,
+            "gpuTypeId": gpu_type_id,
+            "gpuCount": 1,
+            "volumeInGb": 50,
+            "containerDiskInGb": 50,
+            "volumeMountPath": volume_mount_path,
+        }
         
         env_vars = []
         if env:
             for k, v in env.items():
                 if v:
-                    env_vars.append(f'{{key: "{k}", value: "{str(v)}"}}')
+                    env_vars.append({"key": k, "value": str(v)})
         if ssh_key_value:
-            env_vars.append(f'{{key: "PUBLIC_KEY", value: "{ssh_key_value}"}}')
-            env_vars.append(f'{{key: "SSH_PUBLIC_KEY", value: "{ssh_key_value}"}}')
+            env_vars.append({"key": "PUBLIC_KEY", "value": ssh_key_value})
+            env_vars.append({"key": "SSH_PUBLIC_KEY", "value": ssh_key_value})
 
         if env_vars:
-            input_fields.append(f'env: [{", ".join(env_vars)}]')
+            input_data["env"] = env_vars
 
         if data_center_id:
-            input_fields.append(f'dataCenterId: "{data_center_id}"')
+            input_data["dataCenterId"] = data_center_id
         if volume_id:
-            input_fields.append(f'volumeId: "{volume_id}"')
+            input_data["networkVolumeId"] = volume_id
         
         if template_id:
-            input_fields.append(f'templateId: "{template_id}"')
-            input_fields.append('ports: "22/tcp"')
+            input_data["templateId"] = template_id
+            input_data["ports"] = "22/tcp"
         elif image:
-            input_fields.append(f'imageName: "{image}"')
-            input_fields.append('ports: "22/tcp"')
-            input_fields.append('dockerArgs: ""')
+            input_data["imageName"] = image
+            input_data["ports"] = "22/tcp"
+            input_data["dockerArgs"] = ""
         
-        input_str = ", ".join(input_fields)
-        
-        query = f"""
-        mutation {{
-          podFindAndDeployOnDemand(input: {{ {input_str} }}) {{
+        query = """
+        mutation CreatePod($input: PodFindAndDeployOnDemandInput!) {
+          podFindAndDeployOnDemand(input: $input) {
             id
             imageName
             name
-          }}
-        }}
+          }
+        }
         """
-        result = self._query(query)
+        result = self._query(query, variables={"input": input_data})
         return result.get("data", {}).get("podFindAndDeployOnDemand")
 
     def stop_pod(self, pod_id: str):
-        query = f"""
-        mutation {{
-          podStop(input: {{ podId: "{pod_id}" }}) {{
+        query = """
+        mutation StopPod($input: PodStopInput!) {
+          podStop(input: $input) {
             id
-          }}
-        }}
+          }
+        }
         """
-        return self._query(query)
+        return self._query(query, variables={"input": {"podId": pod_id}})
 
     def terminate_pod(self, pod_id: str):
-        query = f"""
-        mutation {{
-          podTerminate(input: {{ podId: "{pod_id}" }})
-        }}
+        query = """
+        mutation TerminatePod($input: PodTerminateInput!) {
+          podTerminate(input: $input)
+        }
         """
-        return self._query(query)
+        return self._query(query, variables={"input": {"podId": pod_id}})
 
 def setup_pod_env(pod_ip: str, pod_port: int, ssh_key: str, pod_id: str = None, proxy: str = None):
     print(f"[*] Setting up environment on pod {pod_ip}:{pod_port}...")
@@ -173,7 +171,10 @@ def setup_pod_env(pod_ip: str, pod_port: int, ssh_key: str, pod_id: str = None, 
             "-i", ssh_key,
             "-p", method["port"],
             method["host"],
-            "apt-get update && apt-get install -y rsync python3-venv curl awscli && python3 -m pip install --upgrade pip"
+            "apt-get update -qq && apt-get install -y rsync python3-venv curl zstd pciutils -qq && "
+            "python3 -m pip install --upgrade pip -q && "
+            "pip uninstall -y awscli 2>/dev/null || true; "
+            "pip install --upgrade awscli -q"
         ]
         
         try:
@@ -193,50 +194,103 @@ def ensure_mavaia_installed(
     workdir: str,
     pod_id: str = None,
     proxy: str = None,
+    s3_bucket: str = None,
+    s3_prefix: str = None,
+    s3_region: str = None,
+    s3_endpoint: str = None,
 ):
     print("[*] Installing mavaia_core + training deps in pod venv...")
 
-    if proxy:
-        host = proxy
-        port = "22"
+    # Build S3 vars for injection into remote script
+    s3_key = f"s3://{s3_bucket}/{s3_prefix}/mavaia.tar" if s3_bucket else ""
+    region_flag = f"--region {s3_region}" if s3_region else ""
+    endpoint_flag = f"--endpoint-url {s3_endpoint}" if s3_endpoint else ""
+    aws_flags = f"{region_flag} {endpoint_flag}".strip()
+    aws_cfg = (
+        "aws configure set default.s3.max_concurrent_requests 100; "
+        "aws configure set default.s3.multipart_chunksize 50MB; "
+        "aws configure set default.s3.multipart_threshold 50MB; "
+    )
+
+    # Detect AMD GPU (not CPU/chipset) — be specific: check VGA/3D controller lines
+    is_amd_check = (
+        "IS_AMD=0; "
+        "if command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi > /dev/null 2>&1; then "
+        "  IS_AMD=0; "  # Has a working NVIDIA GPU — definitely not AMD
+        "elif lspci 2>/dev/null | grep -iE '(VGA|3D|Display).*AMD|AMD.*(VGA|3D|Display|Radeon|Instinct)' > /dev/null 2>&1; then "
+        "  IS_AMD=1; "
+        "fi; "
+    )
+
+    # Inject credentials into remote commands (SSH does not forward env vars)
+    cred_export = ""
+    aws_key_id = os.environ.get("AWS_ACCESS_KEY_ID", "")
+    aws_secret = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+    if aws_key_id and aws_secret:
+        cred_export = (
+            f"export AWS_ACCESS_KEY_ID='{aws_key_id}'; "
+            f"export AWS_SECRET_ACCESS_KEY='{aws_secret}'; "
+        )
+
+    # S3 restore block: check if archive exists, extract + install training deps
+    if s3_key:
+        s3_restore_block = (
+            f"{cred_export}{aws_cfg}"
+            f"if aws s3 ls {s3_key} {aws_flags} > /dev/null 2>&1; then "
+            f"  echo '[*] Found S3 archive, restoring...'; "
+            f"  mkdir -p {workdir}/mavaia; "
+            f"  aws s3 cp {s3_key} - {aws_flags} | tar -xf - --no-same-owner -C {workdir}/mavaia; "
+            f"  cd {workdir}/mavaia; "
+            f"  python3 -m venv .venv; "
+            f"  . .venv/bin/activate; "
+            f"  pip install --upgrade pip setuptools wheel -q; "
+            f"  if [ $IS_AMD -eq 1 ]; then "
+            f"    pip install -e '.[train_neural]' transformers -q; "
+            f"    pip uninstall -y tensorflow 2>/dev/null || true; "
+            f"    pip install tensorflow-rocm -q; "
+            f"  else "
+            f"    pip install -e '.[train_neural]' torch transformers -q; "
+            f"  fi; "
+            f"  .venv/bin/python -c \"import mavaia_core; print('s3_restore_ok')\"; "
+            f"  if [ $IS_AMD -eq 1 ]; then touch .mavaia_rocm_initialized; fi; "
+            f"  touch .mavaia_initialized; "
+            f"  exit 0; "
+            f"fi; "
+        )
     else:
-        host = f"root@{pod_ip}"
-        port = str(pod_port)
+        s3_restore_block = ""
 
     install_cmd = (
         "set -e; "
-        f"cd {workdir}/mavaia; "
-        "if [ -f .mavaia_initialized ]; then "
-        "  echo '[*] Mavaia already initialized, skipping install.'; "
+        f"{is_amd_check}"
+        # Fast-path: already initialized
+        f"mkdir -p {workdir}/mavaia && cd {workdir}/mavaia; "
+        "if [ $IS_AMD -eq 1 ] && [ -f .mavaia_rocm_initialized ]; then "
+        "  echo '[*] ROCm Mavaia already initialized.'; exit 0; "
+        "fi; "
+        "if [ $IS_AMD -eq 0 ] && [ -f .mavaia_initialized ]; then "
+        "  echo '[*] Mavaia already initialized.'; exit 0; "
+        "fi; "
+        # Try S3 restore first
+        f"{s3_restore_block}"
+        # Full pip install fallback
+        "python3 -m venv .venv; "
+        ". .venv/bin/activate; "
+        "pip install --upgrade pip setuptools wheel -q; "
+        "if [ $IS_AMD -eq 1 ]; then "
+        "  echo '[*] AMD detected - installing ROCm stack...'; "
+        "  pip install -e '.[train_neural]' transformers -q; "
+        "  pip uninstall -y tensorflow 2>/dev/null || true; "
+        "  pip install tensorflow-rocm -q; "
         "else "
-        "  python3 -m venv .venv; "
-        "  . .venv/bin/activate; "
-        "  pip install --upgrade pip setuptools wheel; "
-        "  pip install -e '.[train_neural]' torch transformers; "
-        "  .venv/bin/python -c \"import mavaia_core; print('mavaia_core_ok')\"; "
-        "  touch .mavaia_initialized; "
-        "fi"
+        "  pip install -e '.[train_neural]' torch transformers -q; "
+        "fi; "
+        ".venv/bin/python -c \"import mavaia_core; print('mavaia_core_ok')\"; "
+        "if [ $IS_AMD -eq 1 ]; then touch .mavaia_rocm_initialized; fi; "
+        "touch .mavaia_initialized; "
     )
 
-    ssh_cmd = [
-        "ssh", "-o", "StrictHostKeyChecking=no",
-        "-o", "PasswordAuthentication=no",
-        "-i", ssh_key,
-        "-p", port,
-        host,
-        install_cmd,
-    ]
-
-    try:
-        subprocess.run(ssh_cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        if (not proxy) and pod_id and e.returncode == 255:
-            print("[*] Direct SSH failed (255), trying via fallback proxy...")
-            ssh_cmd[9] = "22"
-            ssh_cmd[10] = f"{pod_id}-22@ssh.runpod.io"
-            subprocess.run(ssh_cmd, check=True)
-        else:
-            raise e
+    _run_ssh(ssh_key, pod_ip, pod_port, pod_id, proxy, install_cmd)
 
 
 def setup_ollama(pod_ip: str, pod_port: int, ssh_key: str, model_name: str, model_dir: str, pod_id: str = None, proxy: str = None):
@@ -297,6 +351,50 @@ def _aws_env_flags(region: str, endpoint_url: str) -> str:
     return " ".join(flags)
 
 
+def _aws_cli_flags(region: str, endpoint_url: str) -> list:
+    """Return aws CLI flag list for region + endpoint."""
+    flags = []
+    if region:
+        flags += ["--region", region]
+    if endpoint_url:
+        flags += ["--endpoint-url", endpoint_url]
+    return flags
+
+
+def _aws_configure_fast(region: str, endpoint_url: str):
+    """Tune AWS CLI for high-throughput multipart uploads."""
+    for key, val in [
+        ("default.s3.max_concurrent_requests", "100"),
+        ("default.s3.multipart_chunksize", "50MB"),
+        ("default.s3.multipart_threshold", "50MB"),
+    ]:
+        subprocess.run(["aws", "configure", "set", key, val], check=False)
+
+
+def _s3_abort_zombies(bucket: str, prefix: str, region: str, endpoint_url: str):
+    """Abort any stalled multipart uploads that may block new uploads."""
+    flags = _aws_cli_flags(region, endpoint_url)
+    try:
+        result = subprocess.run(
+            ["aws", "s3api", "list-multipart-uploads", "--bucket", bucket] + flags,
+            capture_output=True, text=True, check=False,
+        )
+        import json as _json
+        data = _json.loads(result.stdout or "{}")
+        for upload in data.get("Uploads", []):
+            key = upload["Key"]
+            uid = upload["UploadId"]
+            if key.startswith(prefix):
+                subprocess.run(
+                    ["aws", "s3api", "abort-multipart-upload",
+                     "--bucket", bucket, "--key", key, "--upload-id", uid] + flags,
+                    check=False,
+                )
+                print(f"[*] Aborted zombie multipart upload: {key} ({uid[:8]}...)")
+    except Exception as e:
+        print(f"[*] Zombie cleanup skipped: {e}")
+
+
 def s3_sync_local_to_bucket(
     local_path: Path,
     bucket: str,
@@ -304,24 +402,74 @@ def s3_sync_local_to_bucket(
     region: str,
     endpoint_url: str,
 ):
-    print("[*] Syncing local repo to S3...")
-    cmd = [
-        "aws",
-        "s3",
-        "sync",
-        str(local_path) + "/",
-        f"s3://{bucket}/{prefix}",
-        "--delete",
-        "--exclude", ".git/*",
-        "--exclude", ".venv/*",
-        "--exclude", "__pycache__/*",
-        "--exclude", "*.pyc",
+    """Stream-archive local repo → S3 as a single tar (fast, no per-file overhead)."""
+    print("[*] Packing and streaming local repo → S3 (tar pipe)...")
+    _aws_configure_fast(region, endpoint_url)
+    _s3_abort_zombies(bucket, prefix, region, endpoint_url)
+    s3_key = f"s3://{bucket}/{prefix}/mavaia.tar"
+    tar_cmd = [
+        "tar", "-cf", "-",
+        "--exclude=.git",
+        "--exclude=__pycache__",
+        "--exclude=.venv",
+        "--exclude=*.pyc",
+        "--exclude=*.tmp",
+        "--exclude=.cursor",
+        "--exclude=models",
+        "--exclude=build",
+        "--exclude=LiveBench",
+        "--exclude=*.egg-info",
+        "--exclude=runs",
+        "--exclude=checkpoints",
+        "--exclude=snapshots",
+        "-C", str(local_path), ".",
     ]
-    if region:
-        cmd.extend(["--region", region])
-    if endpoint_url:
-        cmd.extend(["--endpoint-url", endpoint_url])
-    subprocess.run(cmd, check=True)
+    # Use mbuffer if available for a smooth 128M in-memory buffer; otherwise pass directly
+    use_mbuffer = shutil.which("mbuffer") is not None
+    aws_cmd = ["aws", "s3", "cp", "-", s3_key] + _aws_cli_flags(region, endpoint_url)
+    print(f"[*] Uploading to {s3_key} {'(mbuffer)' if use_mbuffer else '(direct pipe)'}...")
+    tar_proc = subprocess.Popen(tar_cmd, stdout=subprocess.PIPE)
+    if use_mbuffer:
+        buf_proc = subprocess.Popen(
+            ["mbuffer", "-m", "128M", "-q"],
+            stdin=tar_proc.stdout, stdout=subprocess.PIPE,
+        )
+        tar_proc.stdout.close()
+        aws_proc = subprocess.Popen(aws_cmd, stdin=buf_proc.stdout)
+        buf_proc.stdout.close()
+        aws_proc.communicate()
+        buf_proc.wait()
+    else:
+        aws_proc = subprocess.Popen(aws_cmd, stdin=tar_proc.stdout)
+        tar_proc.stdout.close()
+        aws_proc.communicate()
+    tar_proc.wait()
+    if tar_proc.returncode not in (0, None) or aws_proc.returncode != 0:
+        raise RuntimeError(f"S3 tar upload failed (tar={tar_proc.returncode}, aws={aws_proc.returncode})")
+    print("[*] Repo archive uploaded to S3.")
+
+
+def _ssh_base(ssh_key: str, port: str, host: str) -> list:
+    return [
+        "ssh", "-o", "StrictHostKeyChecking=no",
+        "-o", "PasswordAuthentication=no",
+        "-i", ssh_key,
+        "-p", port, host,
+    ]
+
+
+def _run_ssh(ssh_key: str, pod_ip: str, pod_port: int, pod_id: str, proxy: str, cmd: str, check: bool = True):
+    """Run a remote shell command, falling back to RunPod proxy on exit 255."""
+    if proxy:
+        subprocess.run(_ssh_base(ssh_key, "22", proxy) + [cmd], check=check)
+        return
+    try:
+        subprocess.run(_ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [cmd], check=check)
+    except subprocess.CalledProcessError as e:
+        if pod_id and e.returncode == 255:
+            subprocess.run(_ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [cmd], check=check)
+        else:
+            raise
 
 
 def s3_sync_pod(
@@ -337,44 +485,59 @@ def s3_sync_pod(
     proxy: str = None,
     src: str = "/workspace/mavaia",
 ):
+    """Push/pull a directory between a pod and S3 using a streamed tar pipe."""
     if direction not in ("pull", "push"):
-        raise ValueError("direction must be pull or push")
+        raise ValueError("direction must be 'pull' or 'push'")
 
-    flags = _aws_env_flags(region, endpoint_url)
-    if direction == "pull":
-        cmd = f"aws s3 sync s3://{bucket}/{prefix} {src} {flags}"
-    else:
-        cmd = f"aws s3 sync {src} s3://{bucket}/{prefix} {flags}"
+    region_flag = f"--region {region}" if region else ""
+    endpoint_flag = f"--endpoint-url {endpoint_url}" if endpoint_url else ""
+    aws_flags = f"{region_flag} {endpoint_flag}".strip()
+    aws_cfg = (
+        "aws configure set default.s3.max_concurrent_requests 50; "
+        "aws configure set default.s3.multipart_chunksize 64MB; "
+        "aws configure set default.s3.multipart_threshold 64MB; "
+    )
+    # Always inject credentials from env (SSH sessions don't forward env vars)
+    aws_key_id = os.environ.get("AWS_ACCESS_KEY_ID", "")
+    aws_secret = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+    cred_export = ""
+    if aws_key_id and aws_secret:
+        cred_export = (
+            f"export AWS_ACCESS_KEY_ID='{aws_key_id}'; "
+            f"export AWS_SECRET_ACCESS_KEY='{aws_secret}'; "
+        )
+    # Abort any zombie multipart uploads for this key before starting
+    abort_zombies = (
+        f"aws s3api list-multipart-uploads --bucket {bucket} {region_flag} {endpoint_flag} 2>/dev/null | "
+        f"python3 -c \"import sys,json; [print(u['Key'],u['UploadId']) for u in json.load(sys.stdin).get('Uploads',[]) if u['Key'].startswith('{prefix}')]\" | "
+        f"while read key uid; do aws s3api abort-multipart-upload --bucket {bucket} --key $key --upload-id $uid {region_flag} {endpoint_flag} 2>/dev/null; done; "
+    )
+    # Use mbuffer on pod if available for steady streaming
+    tar_pipe_push = (
+        f"tar -cf - --exclude=.git --exclude=__pycache__ --exclude=.venv "
+        f"--exclude='*.pyc' --exclude='*.tmp' -C {{src}} . "
+    )
+    s3_key = f"s3://{bucket}/{prefix}/mavaia.tar"
 
-    if proxy:
-        ssh_cmd = [
-            "ssh", "-o", "StrictHostKeyChecking=no",
-            "-o", "PasswordAuthentication=no",
-            "-i", ssh_key,
-            "-p", "22",
-            proxy,
-            cmd,
-        ]
-        subprocess.run(ssh_cmd, check=True)
-        return
+    if direction == "push":
+        cmd = (
+            f"{cred_export}{aws_cfg}{abort_zombies}"
+            f"if command -v mbuffer > /dev/null 2>&1; then "
+            f"  {tar_pipe_push.format(src=src)} | mbuffer -m 128M -q | aws s3 cp - {s3_key} {aws_flags}; "
+            f"else "
+            f"  {tar_pipe_push.format(src=src)} | aws s3 cp - {s3_key} {aws_flags}; "
+            f"fi"
+        )
+        print(f"[*] Streaming pod dir {src} \u2192 {s3_key}...")
+    else:  # pull
+        cmd = (
+            f"{cred_export}{aws_cfg}"
+            f"mkdir -p {src} && "
+            f"aws s3 cp {s3_key} - {aws_flags} | tar -xf - --no-same-owner -C {src}"
+        )
+        print(f"[*] Streaming {s3_key} \u2192 pod dir {src}...")
 
-    ssh_cmd = [
-        "ssh", "-o", "StrictHostKeyChecking=no",
-        "-o", "PasswordAuthentication=no",
-        "-i", ssh_key,
-        "-p", str(pod_port),
-        f"root@{pod_ip}",
-        cmd,
-    ]
-    try:
-        subprocess.run(ssh_cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        if pod_id and e.returncode == 255:
-            ssh_cmd[9] = "22"
-            ssh_cmd[10] = f"{pod_id}-22@ssh.runpod.io"
-            subprocess.run(ssh_cmd, check=True)
-        else:
-            raise e
+    _run_ssh(ssh_key, pod_ip, pod_port, pod_id, proxy, cmd)
 
 def sync_code(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, workdir: str, pod_id: str = None, proxy: str = None):
     print(f"[*] Syncing code to pod...")
@@ -625,8 +788,9 @@ def main():
     parser.add_argument("--s3-endpoint", default="https://s3api-eu-ro-1.runpod.io", help="RunPod S3 endpoint URL")
     parser.add_argument("--s3-prefix", default="mavaia", help="S3 prefix for repo/workspace sync")
     parser.add_argument("--s3-ollama-prefix", default="ollama", help="S3 prefix for Ollama model storage")
-    parser.add_argument("--no-s3", action="store_true", help="Disable S3 sync for workspace/ollama")
-    parser.add_argument("--volume-id", help="Attach an existing RunPod network volume by ID")
+    parser.add_argument("--use-s3", action="store_false", dest="use_s3", default=True, help="Disable S3 sync (enabled by default)")
+    parser.add_argument("--volume-id", default="", help="Attach an existing RunPod network volume by ID (default: empty)")
+    parser.add_argument("--alias", default="mavaia_train", help="Alias for pod name (default: mavaia_train)")
     parser.add_argument("--volume-mount-path", default="/workspace", help="Mount path for the attached volume")
     parser.add_argument("--auto-distill", action="store_true", help="Auto-inject distillation args for transformer training")
     parser.add_argument("--distill-alpha", type=float, default=0.7, help="Hard loss weight for distillation")
@@ -644,6 +808,25 @@ def main():
 
     bridge = RunPodBridge(RUNPOD_API_KEY)
     
+    # Load s3.env if available
+    s3_env_path = REPO_ROOT / "s3.env"
+    if s3_env_path.exists():
+        for line in s3_env_path.read_text().splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                name = k.strip().upper()
+                # RunPod S3 uses these env var names
+                if name == "AWS_ACCESS_KEY_ID" or name == "AWS_SECRET_ACCESS_KEY":
+                    os.environ[name] = v.strip().strip('"').strip("'")
+        print(f"[*] Loaded S3 credentials from {s3_env_path}")
+
+    pod_env = {
+        "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
+        "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
+        "AWS_SESSION_TOKEN": os.environ.get("AWS_SESSION_TOKEN"),
+        "AWS_DEFAULT_REGION": args.s3_region,
+    }
+    
     if not args.ssh_key_value:
         pub_key_path = Path(args.ssh_key).with_suffix(".pub")
         if pub_key_path.exists():
@@ -651,9 +834,14 @@ def main():
             print(f"[*] Auto-loaded public SSH key from {pub_key_path}")
 
     if args.volume_id:
-        args.no_s3 = True
+        args.use_s3 = False
+    else:
+        # If no volume ID, we can search globally for better inventory
+        if args.use_s3:
+            print("[*] S3 persistence enabled with no volume lock: searching all data centers for optimal GPUs...")
+            args.data_center = None
 
-    if not args.no_s3:
+    if args.use_s3:
         if not shutil.which("aws"):
             print("[!] aws CLI not found on VPS. Install awscli or use --no-s3.")
             sys.exit(1)
@@ -692,38 +880,62 @@ def main():
             price_steps = [max_price]
 
         gpu_types = bridge._query("query { gpuTypes { id displayName memoryInGb securePrice communityPrice } }").get("data", {}).get("gpuTypes", [])
+        
+        # Estimate storage cost (~$0.01 per 10GB per hour as a rough safe buffer)
+        storage_overhead = 0.05 # 50GB vol + 50GB disk
 
-        filtered_gpus = []
-        for step in price_steps:
-            print(f"[*] Finding best GPU under ${step}/hr (min {min_price}, max {max_price})...")
-            filtered_gpus = [
-                g for g in gpu_types 
-                if g.get('communityPrice') is not None 
-                and g['communityPrice'] >= min_price
-                and g['communityPrice'] <= step
-                and g.get('memoryInGb') is not None
-                and g.get('memoryInGb') >= 45
-            ]
-            if filtered_gpus:
-                break
+        filtered_gpus = [
+            g for g in gpu_types 
+            if g.get('securePrice') is not None 
+            and (g['securePrice'] + storage_overhead) >= min_price
+            and (g['securePrice'] + storage_overhead) <= max_price
+            and g.get('memoryInGb') is not None
+            and g.get('memoryInGb') >= 45
+        ]
 
         if not filtered_gpus:
-            print(f"[!] No suitable GPUs found under ${price_steps[-1]}/hr.")
+            print(f"[!] No suitable GPUs found under your max price of ${max_price}/hr (min required VRAM: 45GB).")
             sys.exit(1)
 
-        # Sort by memory descending, then price ascending (highest memory, lowest price tiebreaker)
-        filtered_gpus.sort(key=lambda x: (x['memoryInGb'], -x['communityPrice']), reverse=True)
+        # Sort by total cost ascending, then memory descending
+        filtered_gpus.sort(key=lambda x: (x['securePrice'], -x['memoryInGb']))
+        
         best_gpu = filtered_gpus[0]
         gpu_id = best_gpu['id']
         auto_candidate_gpus = filtered_gpus
         
-        print(f"[*] Selected optimal GPU: {best_gpu['displayName']} ({best_gpu['memoryInGb']}GB VRAM @ ${best_gpu['communityPrice']}/hr)")
+        total_estimated = round(best_gpu['securePrice'] + storage_overhead, 2)
+        print(f"[*] Best value candidate: {best_gpu['displayName']} ({best_gpu['memoryInGb']}GB VRAM @ ${best_gpu['securePrice']}/hr + ${storage_overhead} storage = ${total_estimated}/hr)")
+        print(f"[*] Total valid candidates in range: {len(filtered_gpus)}")
     elif args.pod_id:
+        # Resume existing pod flow
         pods = bridge.get_pods()
         pod = next((p for p in pods if p['id'] == args.pod_id), None)
         if not pod:
             print(f"[!] Pod {args.pod_id} not found.")
             sys.exit(1)
+        
+        # Check if pod needs starting
+        if not pod.get("runtime"):
+            print(f"[*] Pod {args.pod_id} is stopped. Starting it...")
+            # mutation PodResume($input: PodResumeInput!) { podResume(input: $input) { id } }
+            bridge._query("""
+                mutation ResumePod($input: PodResumeInput!) {
+                    podResume(input: $input) {
+                        id
+                    }
+                }
+            """, variables={"input": {"podId": args.pod_id, "gpuCount": 1}})
+            
+            print(f"[*] Waiting for pod {args.pod_id} to initialize runtime...")
+            while True:
+                pods = bridge.get_pods()
+                pod = next((p for p in pods if p['id'] == args.pod_id), None)
+                if pod and pod.get("runtime") and pod["runtime"].get("uptimeInSeconds", 0) > 0:
+                    break
+                time.sleep(10)
+
+        gpu_id = None # Signal that no new pod creation is needed
     else:
         print(f"[*] No pod specified. Finding GPU ID for {args.gpu}...")
         gpu_types = bridge._query("query { gpuTypes { id } }").get("data", {}).get("gpuTypes", [])
@@ -742,14 +954,8 @@ def main():
                 else:
                     print(f"[!] Warning: GPU '{args.gpu}' (mapped to '{gpu_id}') not found in available IDs: {gpu_ids[:5]}...")
 
-    pod_env = {
-        "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
-        "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
-        "AWS_SESSION_TOKEN": os.environ.get("AWS_SESSION_TOKEN"),
-        "AWS_DEFAULT_REGION": args.s3_region,
-    }
 
-    if not args.no_s3:
+    if args.use_s3:
         s3_sync_local_to_bucket(
             REPO_ROOT,
             args.s3_bucket,
@@ -772,16 +978,29 @@ def main():
         candidate_gpus = auto_candidate_gpus if args.auto else [{"id": gpu_id, "displayName": gpu_id}]
         for candidate in candidate_gpus:
             candidate_id = candidate.get("id") if isinstance(candidate, dict) else candidate
-            print(f"[*] Launching pod with GPU: {candidate_id}...")
+            candidate_display = candidate.get("displayName") if isinstance(candidate, dict) else candidate_id
+            
+            # Auto-switch image for AMD ROCm
+            current_image = args.image
+            if "AMD" in candidate_display or "MI" in candidate_display:
+                print(f"[*] Detected AMD GPU ({candidate_display}). Switching to ROCm image.")
+                current_image = "runpod/pytorch:2.1.0-py3.10-rocm5.7-devel-ubuntu22.04"
+                pod_env["HSA_OVERRIDE_GFX_VERSION"] = "11.0.0"
+            else:
+                # Reset for NVIDIA if it was changed by a previous candidate in the loop
+                pod_env.pop("HSA_OVERRIDE_GFX_VERSION", None)
+
+            pod_name = args.alias or "mavaia_train"
+            print(f"[*] Launching pod '{pod_name}' with GPU: {candidate_id}...")
             if args.dry_run:
                 print(f"[DRY-RUN] Would launch {candidate_id} pod with template {args.template}")
                 pod = {"id": "dry-run-id", "runtime": {"ports": [{"ip": "1.2.3.4", "publicPort": 1234, "isIpPublic": True}]}}
                 break
             pod_result = bridge.create_pod(
-                name="mavaia-trainer", 
+                name=pod_name, 
                 gpu_type_id=candidate_id, 
                 template_id=args.template, 
-                image=args.image,
+                image=current_image,
                 ssh_key_value=args.ssh_key_value,
                 data_center_id=args.data_center,
                 volume_id=args.volume_id,
@@ -822,7 +1041,7 @@ def main():
     
     if not ssh_port_info:
         # Some templates/accounts don't surface runtime public ports; fall back to RunPod's SSH proxy.
-        if pod.get("id"):
+        if pod and pod.get("id"):
             args.ssh_proxy = args.ssh_proxy or f"{pod['id']}-22@ssh.runpod.io"
             print(f"[*] No public port info; falling back to SSH proxy: {args.ssh_proxy}")
             pod_ip = "ssh.runpod.io"
@@ -848,50 +1067,35 @@ def main():
     watchdog_thread = None
     try:
         setup_pod_env(pod_ip, pod_port, args.ssh_key, pod['id'], args.ssh_proxy)
-        if args.no_s3:
+        if not args.use_s3:
+            # No S3: push code directly via rsync
             sync_code(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
-        else:
-            s3_sync_pod(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                args.s3_bucket,
-                args.s3_prefix,
-                args.s3_region,
-                args.s3_endpoint,
-                "pull",
-                pod['id'],
-                args.ssh_proxy,
-                src=f"{args.volume_mount_path}/mavaia",
-            )
-            s3_sync_pod(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                args.s3_bucket,
-                args.s3_ollama_prefix,
-                args.s3_region,
-                args.s3_endpoint,
-                "pull",
-                pod['id'],
-                args.ssh_proxy,
-                src=f"{args.volume_mount_path}/ollama",
-            )
-        ensure_mavaia_installed(pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod['id'], args.ssh_proxy)
-        if not args.no_s3:
-            s3_sync_pod(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                args.s3_bucket,
-                args.s3_prefix,
-                args.s3_region,
-                args.s3_endpoint,
-                "push",
-                pod['id'],
-                args.ssh_proxy,
-                src=f"{args.volume_mount_path}/mavaia",
-            )
+        # ensure_mavaia_installed handles S3 archive restore internally when use_s3 is set
+        ensure_mavaia_installed(
+            pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod['id'], args.ssh_proxy,
+            s3_bucket=args.s3_bucket if args.use_s3 else None,
+            s3_prefix=args.s3_prefix if args.use_s3 else None,
+            s3_region=args.s3_region if args.use_s3 else None,
+            s3_endpoint=args.s3_endpoint if args.use_s3 else None,
+        )
+        if args.use_s3:
+            # Pull Ollama models from S3 if they were cached there (soft fail on first run)
+            try:
+                s3_sync_pod(
+                    pod_ip,
+                    pod_port,
+                    args.ssh_key,
+                    args.s3_bucket,
+                    args.s3_ollama_prefix,
+                    args.s3_region,
+                    args.s3_endpoint,
+                    "pull",
+                    pod['id'],
+                    args.ssh_proxy,
+                    src=f"{args.volume_mount_path}/ollama",
+                )
+            except Exception as e:
+                print(f"[*] Ollama S3 cache not found or failed (first run?): {e}. Ollama will download models fresh.")
         if not args.no_ollama:
             setup_ollama(
                 pod_ip,
@@ -902,20 +1106,36 @@ def main():
                 pod['id'],
                 args.ssh_proxy,
             )
-            if not args.no_s3:
-                s3_sync_pod(
-                    pod_ip,
-                    pod_port,
-                    args.ssh_key,
-                    args.s3_bucket,
-                    args.s3_ollama_prefix,
-                    args.s3_region,
-                    args.s3_endpoint,
-                    "push",
-                    pod['id'],
-                    args.ssh_proxy,
-                    src=f"{args.volume_mount_path}/ollama",
-                )
+            if args.use_s3:
+                # Only push Ollama cache to S3 if it doesn't exist yet — skip re-uploading 9GB every run
+                ollama_s3_key = f"s3://{args.s3_bucket}/{args.s3_ollama_prefix}/mavaia.tar"
+                aws_check_flags = []
+                if args.s3_region:
+                    aws_check_flags += ["--region", args.s3_region]
+                if args.s3_endpoint:
+                    aws_check_flags += ["--endpoint-url", args.s3_endpoint]
+                cache_exists = subprocess.run(
+                    ["aws", "s3", "ls", ollama_s3_key] + aws_check_flags,
+                    capture_output=True, check=False,
+                ).returncode == 0
+                if cache_exists:
+                    print(f"[*] Ollama S3 cache already exists at {ollama_s3_key}, skipping re-upload.")
+                else:
+                    print(f"[*] Ollama S3 cache not found — uploading for future runs...")
+                    s3_sync_pod(
+                        pod_ip,
+                        pod_port,
+                        args.ssh_key,
+                        args.s3_bucket,
+                        args.s3_ollama_prefix,
+                        args.s3_region,
+                        args.s3_endpoint,
+                        "push",
+                        pod['id'],
+                        args.ssh_proxy,
+                        src=f"{args.volume_mount_path}/ollama",
+                    )
+
 
         if not args.no_watchdog:
             interval_minutes = float(args.watchdog_minutes or 0.0)
@@ -927,9 +1147,9 @@ def main():
                     while not watchdog_stop.wait(interval_s):
                         try:
                             print("[*] Watchdog: snapshot + sync")
-                            remote_snapshot(pod_ip, pod_port, args.ssh_key, pod['id'], args.ssh_proxy)
-                            get_artifacts(pod_ip, pod_port, args.ssh_key, REPO_ROOT, pod['id'], args.ssh_proxy)
-                            sync_training_data(pod_ip, pod_port, args.ssh_key, REPO_ROOT, pod['id'], args.ssh_proxy)
+                            remote_snapshot(pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod['id'], args.ssh_proxy)
+                            get_artifacts(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
+                            sync_training_data(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
                         except Exception as e:
                             print(f"[!] Watchdog failed: {e}")
 
@@ -954,7 +1174,7 @@ def main():
         remote_train(pod_ip, pod_port, args.ssh_key, train_args, args.volume_mount_path, pod['id'], args.ssh_proxy)
         get_artifacts(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
         sync_training_data(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
-        if not args.no_s3:
+        if args.use_s3:
             s3_sync_pod(
                 pod_ip,
                 pod_port,
@@ -993,7 +1213,7 @@ def main():
         try:
             get_artifacts(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
             sync_training_data(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
-            if not args.no_s3:
+            if args.use_s3:
                 s3_sync_pod(
                     pod_ip,
                     pod_port,
@@ -1032,7 +1252,7 @@ def main():
         try:
             get_artifacts(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
             sync_training_data(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
-            if not args.no_s3:
+            if args.use_s3:
                 s3_sync_pod(
                     pod_ip,
                     pod_port,
@@ -1046,19 +1266,22 @@ def main():
                     args.ssh_proxy,
                     src="/workspace/mavaia",
                 )
-                s3_sync_pod(
-                    pod_ip,
-                    pod_port,
-                    args.ssh_key,
-                    args.s3_bucket,
-                    args.s3_ollama_prefix,
-                    args.s3_region,
-                    args.s3_endpoint,
-                    "push",
-                    pod['id'],
-                    args.ssh_proxy,
-                    src="/workspace/ollama",
-                )
+                try:
+                    s3_sync_pod(
+                        pod_ip,
+                        pod_port,
+                        args.ssh_key,
+                        args.s3_bucket,
+                        args.s3_ollama_prefix,
+                        args.s3_region,
+                        args.s3_endpoint,
+                        "push",
+                        pod['id'],
+                        args.ssh_proxy,
+                        src="/workspace/ollama",
+                    )
+                except Exception as ollama_e:
+                    print(f"[*] Ollama S3 push skipped: {ollama_e}")
         except Exception as sync_e:
             print(f"[!] Artifact sync failed: {sync_e}")
     finally:
