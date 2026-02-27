@@ -1,0 +1,23 @@
+{
+    "gpu_type_id": "NVIDIA GeForce RTX 3090",
+    "image_name": "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04",
+    "volume_size_gb": 20,
+    "container_disk_gb": 10,
+    "volume_guest_path": "/workspace",
+    "ssh_username": "root",
+    "sync_excludes": [
+        ".git",
+        "__pycache__",
+        ".venv",
+        ".DS_Store",
+        "*.pyc"
+    ],
+    "default_training_args": [
+        "--epochs",
+        "20",
+        "--source",
+        "wikipedia",
+        "--model-type",
+        "transformer"
+    ]
+}

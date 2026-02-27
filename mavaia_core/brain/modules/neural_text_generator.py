@@ -113,9 +113,16 @@ except ImportError:
 
 # Import data pipeline
 try:
-    from neural_text_generator_data import NeuralTextGeneratorData
+    try:
+        from mavaia_core.brain.modules.neural_text_generator_data import NeuralTextGeneratorData
+    except (ImportError, ValueError):
+        try:
+            from .neural_text_generator_data import NeuralTextGeneratorData
+        except (ImportError, ValueError):
+            from neural_text_generator_data import NeuralTextGeneratorData
 except ImportError:
     NeuralTextGeneratorData = None
+
 
 
 class NeuralTextGeneratorModule(BaseBrainModule):
@@ -474,18 +481,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
-        if not TENSORFLOW_AVAILABLE:
-            return {
-                "success": False,
-                "error": "TensorFlow/Keras not available. Install with: pip install tensorflow",
-            }
+        # Operations that don't need heavy ML stacks
+        if operation == "get_model_info":
+            return self._get_model_info()
 
-        if not NUMPY_AVAILABLE:
-            return {
-                "success": False,
-                "error": "NumPy not available. Install with: pip install numpy",
-            }
-
+        # Operations that might need specific dependencies
         if operation == "train_model":
             return self._train_model(params)
         elif operation == "generate_text":
@@ -496,14 +496,9 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             return self._load_model(params)
         elif operation == "save_model":
             return self._save_model(params)
-        elif operation == "get_model_info":
-            return self._get_model_info()
-        else:
-            raise InvalidParameterError(
-                parameter="operation",
-                value=operation,
-                reason="Unknown operation for neural_text_generator",
-            )
+        
+        return {"success": False, "error": f"Unknown operation: {operation}"}
+
 
     def _train_model(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -735,35 +730,45 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
             # Train character model
             if model_type in ["character", "both"]:
-                if RICH_AVAILABLE:
-                    _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]character-level[/green] model...")
+                if not TENSORFLOW_AVAILABLE:
+                    results["character"] = {"success": False, "error": "TensorFlow/Keras not available for character model. Install with: pip install tensorflow"}
+                elif not NUMPY_AVAILABLE:
+                    results["character"] = {"success": False, "error": "NumPy not available for character model. Install with: pip install numpy"}
                 else:
-                    logger.info(
-                        "Training character-level model",
-                        extra={"module_name": "neural_text_generator"},
+                    if RICH_AVAILABLE:
+                        _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]character-level[/green] model...")
+                    else:
+                        logger.info(
+                            "Training character-level model",
+                            extra={"module_name": "neural_text_generator"},
+                        )
+                    char_result = self._train_character_model(
+                        text, epochs, continue_training, time_limit_seconds
                     )
-                char_result = self._train_character_model(
-                    text, epochs, continue_training, time_limit_seconds
-                )
-                results["character"] = char_result
-                if char_result.get("success"):
-                    models_trained += 1
+                    results["character"] = char_result
+                    if char_result.get("success"):
+                        models_trained += 1
 
             # Train word model
             if model_type in ["word", "both"]:
-                if RICH_AVAILABLE:
-                    _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]word-level[/green] model...")
+                if not TENSORFLOW_AVAILABLE:
+                    results["word"] = {"success": False, "error": "TensorFlow/Keras not available for word model. Install with: pip install tensorflow"}
+                elif not NUMPY_AVAILABLE:
+                    results["word"] = {"success": False, "error": "NumPy not available for word model. Install with: pip install numpy"}
                 else:
-                    logger.info(
-                        "Training word-level model",
-                        extra={"module_name": "neural_text_generator"},
+                    if RICH_AVAILABLE:
+                        _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] Training [green]word-level[/green] model...")
+                    else:
+                        logger.info(
+                            "Training word-level model",
+                            extra={"module_name": "neural_text_generator"},
+                        )
+                    word_result = self._train_word_model(
+                        text, epochs, continue_training, time_limit_seconds
                     )
-                word_result = self._train_word_model(
-                    text, epochs, continue_training, time_limit_seconds
-                )
-                results["word"] = word_result
-                if word_result.get("success"):
-                    models_trained += 1
+                    results["word"] = word_result
+                    if word_result.get("success"):
+                        models_trained += 1
 
             # Train transformer model (if model_type is transformer or both with transformer config)
             should_train_transformer = (
@@ -4160,9 +4165,15 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 temperature = max(0.5, temperature * 0.8)
 
         if model_type == "character":
+            if not NUMPY_AVAILABLE:
+                return {"success": False, "error": "NumPy not available for character generation. Install with: pip install numpy"}
             return self._generate_character_text(prompt, max_length, temperature)
         elif model_type == "word":
+            if not NUMPY_AVAILABLE:
+                return {"success": False, "error": "NumPy not available for word generation. Install with: pip install numpy"}
             return self._generate_word_text(prompt, max_length, temperature)
+        elif model_type == "transformer":
+            return self._generate_transformer_text(prompt, max_length, temperature)
         else:
             return {"success": False, "error": f"Unknown model type: {model_type}"}
 
@@ -4279,6 +4290,64 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             "model_type": "word",
             "length": len(generated_text),
         }
+
+    def _generate_transformer_text(
+        self, prompt: str, max_length: int, temperature: float
+    ) -> Dict[str, Any]:
+        """Generate text using transformer model"""
+        if not TRANSFORMERS_AVAILABLE or not TORCH_AVAILABLE:
+            return {
+                "success": False,
+                "error": "Transformers and torch libraries are required for transformer generation",
+            }
+
+        try:
+            import torch
+        except ImportError:
+            return {"success": False, "error": "Torch not available"}
+
+        if not hasattr(self, 'transformer_model') or self.transformer_model is None:
+            # Try to load model
+            load_result = self._load_model({"model_type": "transformer"})
+            if not load_result.get("success"):
+                return {
+                    "success": False,
+                    "error": f"Transformer model not available: {load_result.get('error')}",
+                }
+
+        try:
+            # Tokenize prompt
+            inputs = self.transformer_tokenizer(prompt, return_tensors="pt")
+            
+            # Move inputs to same device as model
+            device = next(self.transformer_model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+
+            # Generate
+            with torch.no_grad():
+                output_tokens = self.transformer_model.generate(
+                    **inputs,
+                    max_new_tokens=max_length,
+                    temperature=temperature,
+                    do_sample=temperature > 0,
+                    pad_token_id=self.transformer_tokenizer.pad_token_id,
+                    eos_token_id=self.transformer_tokenizer.eos_token_id,
+                )
+
+            # Decode
+            generated_text = self.transformer_tokenizer.decode(
+                output_tokens[0], skip_special_tokens=True
+            )
+
+            return {
+                "success": True,
+                "text": generated_text,
+                "model_type": "transformer",
+                "length": len(generated_text),
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Transformer generation failed: {str(e)}"}
+
 
     def _generate_continuation(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -4489,9 +4558,38 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             else:
                 results["word"] = {"success": False, "error": "Model file not found"}
 
+        if model_type in ["transformer", "both"]:
+            transformer_dir = self.model_dir / "transformer_model"
+            transformer_model_path = transformer_dir / "model"
+            transformer_tokenizer_path = transformer_dir / "tokenizer"
+            
+            if transformer_model_path.exists():
+                if not TRANSFORMERS_AVAILABLE or not TORCH_AVAILABLE:
+                    results["transformer"] = {
+                        "success": False, 
+                        "error": "Transformers/torch not available for loading"
+                    }
+                else:
+                    try:
+                        from transformers import AutoModelForCausalLM, AutoTokenizer
+                        self.transformer_model = AutoModelForCausalLM.from_pretrained(str(transformer_model_path))
+                        
+                        if transformer_tokenizer_path.exists():
+                             self.transformer_tokenizer = AutoTokenizer.from_pretrained(str(transformer_tokenizer_path))
+                        else:
+                             # Fallback to loading from same dir or model name if we could infer it
+                             self.transformer_tokenizer = AutoTokenizer.from_pretrained(str(transformer_model_path))
+                             
+                        results["transformer"] = {"success": True}
+                        self._models_loaded = True
+                    except Exception as e:
+                        results["transformer"] = {"success": False, "error": str(e)}
+            else:
+                results["transformer"] = {"success": False, "error": f"Transformer model directory not found at {transformer_model_path}"}
+
         overall_success = any(r.get("success") for r in results.values())
         
-        # Build detailed error message if save failed
+        # Build detailed error message if load failed
         if not overall_success:
             error_details = []
             for model_name, result in results.items():
@@ -4499,9 +4597,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     error = result.get("error", "Unknown error")
                     error_details.append(f"  - {model_name}: {error}")
             
-            error_msg = "Failed to save models:\n" + "\n".join(error_details)
+            error_msg = "Failed to load models:\n" + "\n".join(error_details)
+
             if not error_details:
-                error_msg = "No models were available to save. Train models first."
+                error_msg = "No models were available to load. Train models first."
             
             return {
                 "success": False,
@@ -4585,7 +4684,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     # Just report success if model exists
                     results["transformer"] = {
                         "success": True,
-                        "path": "transformer model (saved during training)",
+                        "path": str(self.model_dir / "transformer_model"),
                     }
                 except Exception as e:
                     results["transformer"] = {"success": False, "error": str(e)}
@@ -4620,8 +4719,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         info = {
             "tensorflow_available": TENSORFLOW_AVAILABLE,
             "numpy_available": NUMPY_AVAILABLE,
+            "transformers_available": TRANSFORMERS_AVAILABLE,
+            "torch_available": TORCH_AVAILABLE,
             "character_model_loaded": self.char_model is not None,
             "word_model_loaded": self.word_model is not None,
+            "transformer_model_loaded": hasattr(self, 'transformer_model') and self.transformer_model is not None,
             "config_loaded": self._config_loaded,
         }
 
