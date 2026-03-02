@@ -856,6 +856,19 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 transformer_config["_data_size"] = data_size
                 transformer_config["_categories"] = categories
                 
+                # Sentinel parameters
+                transformer_config["_stop_at_loss"] = params.get("stop_at_loss")
+                transformer_config["_plateau_steps"] = params.get("plateau_steps", 50)
+                transformer_config["_plateau_patience"] = params.get("plateau_patience", 3)
+                transformer_config["_min_improvement"] = params.get("min_improvement", 0.01)
+
+                # LoRA parameters
+                transformer_config["_enable_lora"] = params.get("enable_lora", False)
+                transformer_config["_lora_r"] = params.get("lora_r", 16)
+                transformer_config["_lora_alpha"] = params.get("lora_alpha", 32)
+                transformer_config["_lora_dropout"] = params.get("lora_dropout", 0.05)
+                transformer_config["_lora_target_modules"] = params.get("lora_target_modules", ["c_attn", "c_proj", "q_proj", "v_proj"])
+                
                 # Override model_name if provided
                 if model_name:
                     transformer_config["model_name"] = model_name
@@ -2653,15 +2666,15 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             self.transformer_model.resize_token_embeddings(len(self.transformer_tokenizer))
             
             # PEFT / LoRA INTEGRATION
-            if params.get("enable_lora"):
+            if transformer_config.get("_enable_lora"):
                 try:
                     from peft import LoraConfig, get_peft_model, TaskType
                     
                     lora_config = LoraConfig(
-                        r=params.get("lora_r", 16),
-                        lora_alpha=params.get("lora_alpha", 32),
-                        target_modules=params.get("lora_target_modules", ["c_attn", "c_proj", "q_proj", "v_proj"]),
-                        lora_dropout=params.get("lora_dropout", 0.05),
+                        r=transformer_config.get("_lora_r", 16),
+                        lora_alpha=transformer_config.get("_lora_alpha", 32),
+                        target_modules=transformer_config.get("_lora_target_modules", ["c_attn", "c_proj", "q_proj", "v_proj"]),
+                        lora_dropout=transformer_config.get("_lora_dropout", 0.05),
                         bias="none",
                         task_type=TaskType.CAUSAL_LM
                     )
@@ -5067,8 +5080,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 inputs = self.transformer_tokenizer(bos_token, return_tensors="pt")
 
             inputs = {k: v.to(device) for k, v in inputs.items()}
+            
             # Generate
             with torch.no_grad():
+                input_len = inputs["input_ids"].shape[1]
                 output_tokens = self.transformer_model.generate(
                     **inputs,
                     max_new_tokens=max_length,
@@ -5077,11 +5092,15 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     pad_token_id=self.transformer_tokenizer.pad_token_id,
                     eos_token_id=self.transformer_tokenizer.eos_token_id,
                 )
-
-            # Decode
-            generated_text = self.transformer_tokenizer.decode(
-                output_tokens[0], skip_special_tokens=True
-            )
+                
+            # Decode only the NEW tokens
+            generated_tokens = output_tokens[0][input_len:]
+            
+            if len(generated_tokens) == 0:
+                # If no new tokens generated, fallback to decoding full sequence
+                generated_text = self.transformer_tokenizer.decode(output_tokens[0], skip_special_tokens=True)
+            else:
+                generated_text = self.transformer_tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
             return {
                 "success": True,
@@ -5309,7 +5328,16 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             if custom_model_path and Path(custom_model_path).exists():
                 transformer_model_path = Path(custom_model_path)
-                transformer_tokenizer_path = transformer_model_path # Checkpoint dirs usually contain both
+                # SMART TOKENIZER DISCOVERY:
+                # 1. Check if tokenizer is in the same dir
+                # 2. Check if there's a sibling 'tokenizer' dir (common in Mavaia structure)
+                # 3. Check if parent dir has tokenizer files
+                if (transformer_model_path / "tokenizer_config.json").exists():
+                    transformer_tokenizer_path = transformer_model_path
+                elif (transformer_model_path.parent / "tokenizer").exists():
+                    transformer_tokenizer_path = transformer_model_path.parent / "tokenizer"
+                else:
+                    transformer_tokenizer_path = transformer_model_path
             else:
                 transformer_dir = self.model_dir / "transformer_model"
                 transformer_model_path = transformer_dir / "model"
