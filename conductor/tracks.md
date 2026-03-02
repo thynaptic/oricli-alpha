@@ -9,3 +9,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: Implement Stage 2.5 — Prose Modernization & Basic Logic Refinement**
   *Link: [./tracks/prose_logic_20260302/](./tracks/prose_logic_20260302/)*
+
+---
+
+- [ ] **Track: Fix SSH 255 errors during pod stabilization in runpod_bridge.py.**
+  *Link: [./tracks/ssh_fix_20260302/](./tracks/ssh_fix_20260302/)*
+
