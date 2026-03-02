@@ -58,6 +58,29 @@ Examples:
 """
 
 import sys
+import os
+import site
+
+# Ensure project root is in path
+sys.path.insert(0, os.getcwd())
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
+
+# FORCE PATH RESOLUTION: Ensure we can see libraries installed via --user or system pip
+# This is crucial for RunPod environments where SSH sessions have inconsistent paths.
+try:
+    # Add user-site and common system-site directories explicitly
+    user_site = site.getusersitepackages()
+    if user_site and user_site not in sys.path:
+        sys.path.append(user_site)
+    
+    # Add common RunPod/Ubuntu dist-packages
+    for p in ["/usr/local/lib/python3.11/dist-packages", "/usr/lib/python3/dist-packages"]:
+        if os.path.exists(p) and p not in sys.path:
+            sys.path.append(p)
+except Exception:
+    pass
+
+import shutil
 import json
 import atexit
 import signal
@@ -88,6 +111,157 @@ _snapshot_attempted = False
 
 # Profile directory (relative to script location)
 PROFILES_DIR = Path(__file__).parent / "training_profiles"
+
+# DIAGNOSTIC: Print environment info if core libraries are missing
+try:
+    import datasets
+except ImportError:
+    print("\n" + "!" * 80)
+    print("CRITICAL DIAGNOSTIC: datasets library missing from inside the script.")
+    print(f"Current Python: {sys.executable}")
+    print(f"Current Working Directory: {os.getcwd()}")
+    print(f"sys.path: {sys.path}")
+    try:
+        import subprocess
+        print("Installed packages (pip list):")
+        subprocess.run([sys.executable, "-m", "pip", "list"], check=False)
+    except Exception:
+        pass
+    print("!" * 80 + "\n")
+
+
+def _cleanup_disk(run_dir: Optional[Path]) -> None:
+    # Automatic cleanup defaults
+    keep_last_runs = 3
+    keep_last_snapshots = 5
+    max_age_days = 7
+    min_free_gb = 30
+
+    try:
+        base_dir = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator"
+        runs_dir = base_dir / "runs"
+        snapshots_dir = base_dir / "snapshots"
+        now_ts = time.time()
+
+        def _mtime(p: Path) -> float:
+            try:
+                return p.stat().st_mtime
+            except Exception:
+                return now_ts
+
+        protected = set()
+        if run_dir:
+            protected.add(str(run_dir.resolve()))
+
+        # Protect most recent runs
+        if runs_dir.exists():
+            run_list = [p for p in runs_dir.iterdir() if p.is_dir()]
+            run_list.sort(key=_mtime, reverse=True)
+            for p in run_list[:keep_last_runs]:
+                protected.add(str(p.resolve()))
+
+        # Protect most recent snapshots
+        if snapshots_dir.exists():
+            snap_list = [p for p in snapshots_dir.iterdir() if p.is_dir()]
+            snap_list.sort(key=_mtime, reverse=True)
+            for p in snap_list[:keep_last_snapshots]:
+                protected.add(str(p.resolve()))
+
+        def _eligible(p: Path) -> bool:
+            if str(p.resolve()) in protected:
+                return False
+            age_days = (now_ts - _mtime(p)) / 86400.0
+            return age_days >= max_age_days
+
+        # Delete old snapshots
+        if snapshots_dir.exists():
+            for p in sorted([p for p in snapshots_dir.iterdir() if p.is_dir()], key=_mtime):
+                if _eligible(p):
+                    shutil.rmtree(p, ignore_errors=True)
+
+        # Delete old runs
+        if runs_dir.exists():
+            for p in sorted([p for p in runs_dir.iterdir() if p.is_dir()], key=_mtime):
+                if _eligible(p):
+                    shutil.rmtree(p, ignore_errors=True)
+
+        # If still low disk space, delete oldest unprotected runs/snapshots
+        try:
+            usage = shutil.disk_usage(str(base_dir))
+            free_gb = usage.free / (1024**3)
+            if free_gb < min_free_gb:
+                # Delete oldest runs
+                if runs_dir.exists():
+                    for p in sorted([p for p in runs_dir.iterdir() if p.is_dir()], key=_mtime):
+                        if str(p.resolve()) in protected:
+                            continue
+                        shutil.rmtree(p, ignore_errors=True)
+                        usage = shutil.disk_usage(str(base_dir))
+                        free_gb = usage.free / (1024**3)
+                        if free_gb >= min_free_gb:
+                            break
+                # Delete oldest snapshots if still low
+                if free_gb < min_free_gb and snapshots_dir.exists():
+                    for p in sorted([p for p in snapshots_dir.iterdir() if p.is_dir()], key=_mtime):
+                        if str(p.resolve()) in protected:
+                            continue
+                        shutil.rmtree(p, ignore_errors=True)
+                        usage = shutil.disk_usage(str(base_dir))
+                        free_gb = usage.free / (1024**3)
+                        if free_gb >= min_free_gb:
+                            break
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _preflight_checks(train_params: Dict[str, Any], args, run_dir: Optional[Path]) -> None:
+    _cleanup_disk(run_dir)
+    print("[INFO] Preflight checks...", flush=True)
+    hf_token = os.environ.get("HF_TOKEN") or os.environ.get("MAVAIA_HUGGINGFACE_TOKEN")
+    if hf_token:
+        print("[INFO] HF token detected.", flush=True)
+    else:
+        print("[WARN] HF token not set; downloads may be slow or rate-limited.", flush=True)
+
+    # Disk space check (warn only)
+    try:
+        target_path = run_dir if run_dir else Path.cwd()
+        usage = shutil.disk_usage(str(target_path))
+        free_gb = usage.free / (1024**3)
+        if free_gb < 10:
+            print(f"[WARN] Low disk space: {free_gb:.1f} GB free.", flush=True)
+    except Exception:
+        pass
+
+    # Transformers version info
+    try:
+        import transformers  # type: ignore
+
+        ver = getattr(transformers, "__version__", "unknown")
+        print(f"[INFO] transformers version: {ver}", flush=True)
+    except Exception:
+        print("[WARN] transformers not importable; training may fail.", flush=True)
+
+    # Distillation preflight
+    if train_params.get("distill"):
+        try:
+            import requests  # type: ignore
+        except Exception:
+            print("[WARN] requests not available; disabling distillation.", flush=True)
+            train_params["distill"] = False
+            return
+
+        ollama_url = train_params.get("ollama_url", "http://localhost:11434")
+        try:
+            resp = requests.get(f"{ollama_url.rstrip('/')}/api/tags", timeout=5)
+            if resp.status_code >= 400:
+                raise RuntimeError(f"HTTP {resp.status_code}")
+            print("[INFO] Ollama reachable for distillation.", flush=True)
+        except Exception:
+            print("[WARN] Ollama not reachable; disabling distillation.", flush=True)
+            train_params["distill"] = False
 
 
 def discover_profiles() -> Dict[str, Dict[str, Any]]:
@@ -781,6 +955,7 @@ def create_profile_interactive() -> int:
 def print_help_rich(parser, available_profiles):
     """Print help using rich formatting"""
     import argparse
+    import subprocess
     
     try:
         from rich.console import Console
@@ -1374,6 +1549,11 @@ def main():
         help="Watchdog interval (minutes) to snapshot models during training (0 disables).",
     )
     parser.add_argument(
+        "--plain-output",
+        action="store_true",
+        help="Force plain ASCII output (disable rich panels/colors).",
+    )
+    parser.add_argument(
         "--no-watchdog",
         action="store_true",
         help="Disable watchdog snapshots during training.",
@@ -1408,16 +1588,97 @@ def main():
         help="Top-k logprobs to request from the teacher.",
     )
     parser.add_argument(
+        "--distill-precompute-minutes",
+        type=float,
+        default=None,
+        help="Max minutes to precompute teacher cache before starting training (None = no limit).",
+    )
+    parser.add_argument(
         "--ollama-url",
         type=str,
         default="http://localhost:11434",
         help="Ollama base URL for the teacher (default: http://localhost:11434).",
     )
     parser.add_argument(
+        "--anchor-data",
+        type=str,
+        default=None,
+        help="Path to a text file containing anchor data to mix in (Experience Replay).",
+    )
+    parser.add_argument(
         "--teacher-cache-dir",
         type=str,
         default=None,
         help="Optional path to cache teacher logprobs (defaults to run_dir/teacher_cache).",
+    )
+    
+    # PEFT/LoRA arguments
+    parser.add_argument(
+        "--lora",
+        action="store_true",
+        help="Enable LoRA (Low-Rank Adaptation) for efficient transformer fine-tuning.",
+    )
+    parser.add_argument(
+        "--lora-r",
+        type=int,
+        default=16,
+        help="LoRA rank (r). Higher values increase trainable parameters but use more memory.",
+    )
+    parser.add_argument(
+        "--lora-alpha",
+        type=int,
+        default=32,
+        help="LoRA alpha scaling factor.",
+    )
+    parser.add_argument(
+        "--lora-dropout",
+        type=float,
+        default=0.05,
+        help="Dropout probability for LoRA layers.",
+    )
+    
+    # DPO arguments
+    parser.add_argument(
+        "--dpo",
+        action="store_true",
+        help="Enable DPO (Direct Preference Optimization) for alignment.",
+    )
+    parser.add_argument(
+        "--dpo-beta",
+        type=float,
+        default=0.1,
+        help="DPO beta parameter (KL penalty weight).",
+    )
+    parser.add_argument(
+        "--max-prompt-length",
+        type=int,
+        default=256,
+        help="Maximum prompt length for DPO.",
+    )
+    
+    # Curriculum Sentinel (Overfit Watcher) arguments
+    parser.add_argument(
+        "--stop-at-loss",
+        type=float,
+        help="Target loss floor. If training loss falls below this, end stage early.",
+    )
+    parser.add_argument(
+        "--plateau-steps",
+        type=int,
+        default=50,
+        help="Number of steps to monitor for a plateau (no improvement).",
+    )
+    parser.add_argument(
+        "--plateau-patience",
+        type=int,
+        default=3,
+        help="Number of times a plateau must be detected before stopping.",
+    )
+    parser.add_argument(
+        "--min-improvement",
+        type=float,
+        default=0.01,
+        help="Minimum percentage improvement (0.01 = 1%) required to NOT be considered a plateau.",
     )
 
     # Parse arguments normally (help was already handled above)
@@ -1699,7 +1960,7 @@ def main():
             return
         if not allow_repeat:
             _snapshot_attempted = True
-        print(f"\n[Snapshot] {reason}. Saving models...", flush=True)
+        print(f"\n[INFO] Snapshot: {reason}. Saving models...", flush=True)
         try:
             if run_dir is not None:
                 (run_dir / "interrupted.txt").write_text(
@@ -1711,9 +1972,9 @@ def main():
         try:
             snapshot_type = train_params.get("model_type", "both")
             generator.execute("save_model", {"model_type": snapshot_type})
-            print("[Snapshot] Save complete.", flush=True)
+            print("[INFO] Snapshot: save complete.", flush=True)
         except Exception as e:
-            print(f"[Snapshot] Save failed: {e}", flush=True)
+            print(f"[ERROR] Snapshot: save failed: {e}", flush=True)
 
     def _signal_handler(signum, frame):
         global _shutdown_requested, _shutdown_reason
@@ -1752,7 +2013,25 @@ def main():
     sample_only = False
     load_result = None
     
-    if args.sample and not has_training_args:
+    if args.sample and not any([
+        args.epochs != 10,
+        args.train_for_minutes is not None,
+        args.train_for_hours is not None,
+        args.continue_training,
+        args.book_ids is not None,
+        args.categories is not None,
+        args.source is not None and len(args.source) > 0,
+        args.max_text_size is not None,
+        args.max_books is not None,
+        args.data_percentage != 1.0,
+    ]):
+        # We are purely sampling, don't try to load training data
+        sample_only = True
+        has_training_args = False
+    else:
+        sample_only = False
+        
+    if sample_only:
         print("Entering sample-only mode...", flush=True)
         # Sample-only mode - load models and generate
         print("=" * 80)
@@ -1767,7 +2046,14 @@ def main():
         print("  Note: Transformer models may take longer to load.\n")
         
         try:
-            load_result = generator.execute("load_model", {"model_type": sample_model_type})
+            load_params = {"model_type": sample_model_type}
+            if args.transformer_config:
+                import json
+                try:
+                    load_params["transformer_config"] = json.loads(args.transformer_config)
+                except Exception:
+                    pass
+            load_result = generator.execute("load_model", load_params)
         except Exception as e:
             print(f"✗ Error during model loading: {e}")
             print("  This might indicate corrupted model files or missing dependencies.")
@@ -1914,6 +2200,24 @@ def main():
         if args.search:
             train_params["search"] = args.search
 
+        # Sentinel settings
+        if args.stop_at_loss is not None:
+            train_params["stop_at_loss"] = args.stop_at_loss
+        train_params["plateau_steps"] = args.plateau_steps
+        train_params["plateau_patience"] = args.plateau_patience
+        train_params["min_improvement"] = args.min_improvement
+
+        # LoRA settings
+        if args.lora:
+            train_params["enable_lora"] = True
+            train_params["lora_r"] = args.lora_r
+            train_params["lora_alpha"] = args.lora_alpha
+            train_params["lora_dropout"] = args.lora_dropout
+
+        # Experience Replay settings
+        if args.anchor_data:
+            train_params["anchor_data"] = args.anchor_data
+
         # Distillation settings (transformer-only)
         if args.distill:
             train_params["distill"] = True
@@ -1922,11 +2226,13 @@ def main():
             train_params["distill_temperature"] = args.distill_temp
             train_params["distill_top_k"] = args.distill_topk
             train_params["ollama_url"] = args.ollama_url
+            if args.distill_precompute_minutes is not None:
+                train_params["distill_precompute_minutes"] = args.distill_precompute_minutes
             if args.teacher_cache_dir:
                 train_params["teacher_cache_dir"] = args.teacher_cache_dir
             resolved_model_type = train_params.get("model_type", "both")
             if resolved_model_type not in ("transformer", "both"):
-                print("⚠ Distillation is only supported for transformer training. Disabling distillation.")
+                print("[WARN] Distillation is only supported for transformer training. Disabling distillation.")
                 train_params.pop("distill", None)
         
         # Resolve run directory and write run metadata early (for reproducibility)
@@ -1939,6 +2245,8 @@ def main():
             run_dir = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator" / "runs" / ts
         run_dir.mkdir(parents=True, exist_ok=True)
         (run_dir / "checkpoints").mkdir(exist_ok=True)
+
+        _preflight_checks(train_params, args, run_dir)
 
         # Record latest run pointer (useful for deployment tooling)
         try:
@@ -1982,15 +2290,20 @@ def main():
             pass
 
         # Print training configuration
-        # Try to import rich for colored output
-        try:
-            from rich.console import Console
-            from rich.panel import Panel
-            console = Console()
-            use_rich_config = True
-        except ImportError:
+        # Prefer plain ASCII output when requested.
+        plain_output = bool(args.plain_output) or os.environ.get("MAVAIA_PLAIN_OUTPUT") == "1"
+        if plain_output:
             use_rich_config = False
             console = None
+        else:
+            try:
+                from rich.console import Console
+                from rich.panel import Panel
+                console = Console()
+                use_rich_config = True
+            except ImportError:
+                use_rich_config = False
+                console = None
         
         if use_rich_config:
             # Build configuration text
@@ -2122,8 +2435,16 @@ def main():
 
         atexit.register(_atexit_snapshot)
 
+        # DPO settings
+        if args.dpo:
+            train_params["dpo_beta"] = args.dpo_beta
+            train_params["max_prompt_length"] = args.max_prompt_length
+            operation = "train_dpo"
+        else:
+            operation = "train_model"
+
         try:
-            result = generator.execute("train_model", train_params)
+            result = generator.execute(operation, train_params)
             completed = True
         except KeyboardInterrupt:
             reason = _shutdown_reason or "CTRL+C / interruption"
@@ -2132,6 +2453,12 @@ def main():
         except Exception as e:
             reason = f"Unhandled error: {type(e).__name__}"
             save_snapshot(reason, train_params, run_dir)
+            try:
+                err_path = run_dir / "error.log" if run_dir else None
+                if err_path:
+                    err_path.write_text(traceback.format_exc(), encoding="utf-8")
+            except Exception:
+                pass
             traceback.print_exc()
             return 1
         finally:
@@ -2206,6 +2533,27 @@ def main():
             else:
                 print("✗ Failed to save models")
                 print(f"  Error: {save_result.get('error', 'Unknown error')}")
+
+        # Generate a report card after training completes
+        try:
+            report_script = REPO_ROOT / "scripts" / "report_card.py"
+            if report_script.exists() and run_dir:
+                report_out = run_dir / "report_card.txt"
+                subprocess.run(
+                    [
+                        "python3",
+                        str(report_script),
+                        "--format",
+                        "text",
+                        "--grade-source",
+                        "both",
+                        "--text-output",
+                        str(report_out),
+                    ],
+                    check=False,
+                )
+        except Exception:
+            pass
         
         # Load models for sampling if requested
         if args.sample:

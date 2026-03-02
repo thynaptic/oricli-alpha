@@ -1,0 +1,27 @@
+exclude .gitignore
+exclude .gitattributes
+exclude README_INSTALL.md
+exclude INSTALL.md
+exclude MODULES.md
+exclude QUICKSTART.md
+exclude .env
+exclude s3.env
+exclude runpod_bridge.pid
+exclude runpod_monitor.pid
+exclude mavaia_result.json
+
+recursive-exclude .venv *
+recursive-exclude build *
+recursive-exclude models *
+recursive-exclude LiveBench *
+recursive-exclude tests *
+recursive-exclude .cursor *
+recursive-exclude .vscode *
+recursive-exclude __pycache__ *
+recursive-exclude *.egg-info *
+recursive-exclude *.pyc *
+recursive-exclude *.tmp *
+recursive-exclude scripts *
+
+# Only include the actual package
+recursive-include mavaia_core *

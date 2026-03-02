@@ -83,7 +83,9 @@ ml = [
     "jaxlib>=0.4.20",
     "flax>=0.7.0",
     "optax>=0.1.7",
-    "distrax>=0.4.0",
+    "distrax>=0.1.0",
+    "peft>=0.10.0",
+    "trl>=0.8.0",
 ]
 
 [project.scripts]
@@ -102,6 +104,7 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["mavaia_core*"]
+exclude = ["models*", "LiveBench*", "build*", "dist*", "tests*", ".venv*", ".cursor*"]
 
 [tool.setuptools.package-data]
 "mavaia_core" = ["py.typed", "**/*.json", "**/*.db"]

@@ -98,19 +98,20 @@ except ImportError:
     Console = None
 
 # Try to import transformers and torch for transformer model training
-TRANSFORMERS_AVAILABLE = False
-TORCH_AVAILABLE = False
-try:
-    import transformers
-    TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    pass
+def is_transformers_available():
+    try:
+        import transformers
+        return True
+    except ImportError:
+        return False
 
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except ImportError:
-    pass
+def is_torch_available():
+    try:
+        import torch
+        import accelerate
+        return True
+    except ImportError:
+        return False
 
 # Try to import requests for teacher distillation (Ollama API)
 REQUESTS_AVAILABLE = False
@@ -497,6 +498,9 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         # Operations that might need specific dependencies
         if operation == "train_model":
             return self._train_model(params)
+        
+        if operation == "train_dpo":
+            return self._train_dpo_model(params)
         elif operation == "generate_text":
             return self._generate_text(params)
         elif operation == "generate_continuation":
@@ -594,7 +598,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         
         # Detect device for adaptive policy
         device = "cpu"
-        if TORCH_AVAILABLE:
+        if is_torch_available():
             try:
                 import torch
                 if torch.backends.mps.is_available():
@@ -623,6 +627,18 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 max_text_size=max_text_size,
                 search=search,
             )
+            
+            # EXPERIENCE REPLAY: Mix in anchor data if provided
+            if params.get("anchor_data"):
+                anchor_path = Path(params["anchor_data"])
+                if anchor_path.exists():
+                    anchor_text = anchor_path.read_text(encoding="utf-8")
+                    if anchor_text:
+                        if RICH_AVAILABLE:
+                            _trainer_log(f"[bold magenta][Mavaia-Data][/bold magenta] [anchor] Mixing in {len(anchor_text)} chars of Experience Replay data")
+                        else:
+                            logger.info(f"Mixing in {len(anchor_text)} chars of Experience Replay data")
+                        raw_text = (raw_text or "") + "\n\n" + anchor_text
             
             # Get data size for adaptive policy
             data_size = len(raw_text) if raw_text else None
@@ -724,6 +740,13 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
                 if transformer_config is None:
                     transformer_config = {}
+                
+                # Sentinel parameters
+                transformer_config["_stop_at_loss"] = params.get("stop_at_loss")
+                transformer_config["_plateau_steps"] = params.get("plateau_steps", 50)
+                transformer_config["_plateau_patience"] = params.get("plateau_patience", 3)
+                transformer_config["_min_improvement"] = params.get("min_improvement", 0.01)
+
                 if params.get("distill"):
                     transformer_config["_distill"] = True
                     transformer_config["_teacher_model"] = params.get("teacher_model", "phi4:latest")
@@ -733,8 +756,13 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     transformer_config["_ollama_url"] = params.get("ollama_url", "http://localhost:11434")
                     if params.get("run_dir"):
                         transformer_config["_run_dir"] = params.get("run_dir")
-                    if params.get("teacher_cache_dir"):
-                        transformer_config["_teacher_cache_dir"] = params.get("teacher_cache_dir")
+            if params.get("teacher_cache_dir") or params.get("distill_precompute_minutes") is not None:
+                if transformer_config is None:
+                    transformer_config = {}
+                if params.get("teacher_cache_dir"):
+                    transformer_config["_teacher_cache_dir"] = params.get("teacher_cache_dir")
+                if params.get("distill_precompute_minutes") is not None:
+                    transformer_config["_distill_precompute_minutes"] = params.get("distill_precompute_minutes")
             
             # Store training params for policy saving (after policy application)
             training_params_for_policy = {
@@ -758,8 +786,13 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 transformer_config["_ollama_url"] = params.get("ollama_url", "http://localhost:11434")
                 if params.get("run_dir"):
                     transformer_config["_run_dir"] = params.get("run_dir")
+            if params.get("teacher_cache_dir") or params.get("distill_precompute_minutes") is not None:
+                if transformer_config is None:
+                    transformer_config = {}
                 if params.get("teacher_cache_dir"):
                     transformer_config["_teacher_cache_dir"] = params.get("teacher_cache_dir")
+                if params.get("distill_precompute_minutes") is not None:
+                    transformer_config["_distill_precompute_minutes"] = params.get("distill_precompute_minutes")
 
             results = {}
             models_trained = 0
@@ -864,11 +897,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         )
                     
                     # Check if transformers and torch are available
-                    if not TRANSFORMERS_AVAILABLE or not TORCH_AVAILABLE:
+                    if not is_transformers_available() or not is_torch_available():
                         missing = []
-                        if not TRANSFORMERS_AVAILABLE:
+                        if not is_transformers_available():
                             missing.append("transformers")
-                        if not TORCH_AVAILABLE:
+                        if not is_torch_available():
                             missing.append("torch")
                         error_msg = (
                             f"Transformer model training requires {', '.join(missing)} library(ies). "
@@ -1419,7 +1452,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         Returns:
             Augmented token tensor
         """
-        if not TORCH_AVAILABLE:
+        if not is_torch_available():
             return tokens
         
         try:
@@ -1524,7 +1557,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         Returns:
             Dictionary with quality metrics
         """
-        if not TORCH_AVAILABLE:
+        if not is_torch_available():
             return {}
         
         try:
@@ -1668,7 +1701,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         distill_config: Dict[str, Any],
         cache_dir: Path,
     ) -> List[List[Dict[int, float]]]:
-        """Precompute and cache teacher top-k distributions for each chunk."""
+        """Precompute and cache teacher top-k distributions using parallel processing."""
+        import concurrent.futures
+        from functools import partial
+
         cache_dir.mkdir(parents=True, exist_ok=True)
         notes_path = cache_dir / "teacher_notes.jsonl"
         model = distill_config["teacher_model"]
@@ -1676,51 +1712,43 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         temperature = float(distill_config["temperature"])
         num_predict = int(distill_config["num_predict"])
         ollama_url = distill_config["ollama_url"]
+        max_minutes = distill_config.get("max_minutes")
+        start_ts = time.time()
 
         total_chunks = max(0, len(tokens) - block_size)
-        teacher_probs: List[List[Dict[int, float]]] = []
-        teacher_texts: List[str] = []
+        progress_step = max(1, total_chunks // 10) if total_chunks else 1
 
-        for idx in range(total_chunks):
+        # Internal worker function for parallel processing
+        def _process_chunk(idx):
+            # Check time limit
+            if max_minutes is not None and float(max_minutes) > 0:
+                if (time.time() - start_ts) >= float(max_minutes) * 60.0:
+                    return idx, None, None
+
             chunk = tokens[idx : idx + block_size]
-            if TORCH_AVAILABLE and hasattr(chunk, "tolist"):
+            if is_torch_available() and hasattr(chunk, "tolist"):
                 chunk_ids = chunk.tolist()
             else:
                 chunk_ids = list(chunk)
+
             prompt = tokenizer.decode(chunk_ids, skip_special_tokens=True)
             cache_key = self._teacher_cache_key(prompt, model, top_k, temperature, num_predict)
             cache_path = cache_dir / f"{cache_key}.json"
 
+            # 1. Try Cache
             if cache_path.exists():
                 try:
                     with open(cache_path, "r", encoding="utf-8") as f:
                         cached = json.load(f)
-                    teacher_probs.append(
-                        [
-                            {int(k): float(v) for k, v in entry.items()}
-                            for entry in cached.get("teacher_probs", [])
-                        ]
-                    )
-                    teacher_texts.append(str(cached.get("teacher_response", "")))
-                    if teacher_texts[-1]:
-                        try:
-                            with open(notes_path, "a", encoding="utf-8") as nf:
-                                nf.write(
-                                    json.dumps(
-                                        {
-                                            "chunk_index": idx,
-                                            "cache_key": cache_key,
-                                            "teacher_response": teacher_texts[-1],
-                                        }
-                                    )
-                                    + "\n"
-                                )
-                        except Exception:
-                            pass
-                    continue
+                    probs = [
+                        {int(k): float(v) for k, v in entry.items()}
+                        for entry in cached.get("teacher_probs", [])
+                    ]
+                    return idx, probs, str(cached.get("teacher_response", ""))
                 except Exception:
                     pass
 
+            # 2. Fetch from Ollama
             logprob_payload = self._ollama_logprobs(
                 prompt=prompt,
                 model=model,
@@ -1761,46 +1789,52 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                                 mapped[k] = float(mapped[k]) / float(total)
                     per_token_probs.append(mapped)
 
+            # Ensure consistent size
             if len(per_token_probs) < block_size:
                 per_token_probs.extend([{} for _ in range(block_size - len(per_token_probs))])
             elif len(per_token_probs) > block_size:
                 per_token_probs = per_token_probs[:block_size]
 
-            teacher_probs.append(per_token_probs)
-            teacher_texts.append(str(logprob_payload.get("response", "")) if logprob_payload else "")
+            response_text = str(logprob_payload.get("response", "")) if logprob_payload else ""
 
+            # Save result to cache
             try:
                 with open(cache_path, "w", encoding="utf-8") as f:
-                    json.dump(
-                        {"teacher_probs": per_token_probs, "teacher_response": teacher_texts[-1]},
-                        f,
-                    )
-                if teacher_texts[-1]:
-                    with open(notes_path, "a", encoding="utf-8") as nf:
-                        nf.write(
-                            json.dumps(
-                                {
-                                    "chunk_index": idx,
-                                    "cache_key": cache_key,
-                                    "teacher_response": teacher_texts[-1],
-                                }
-                            )
-                            + "\n"
-                        )
+                    json.dump({"teacher_probs": per_token_probs, "teacher_response": response_text}, f)
             except Exception:
                 pass
 
-            if (idx + 1) % max(1, min(50, total_chunks // 10 or 1)) == 0:
-                logger.info(
-                    "Teacher cache progress",
-                    extra={
-                        "module_name": "neural_text_generator",
-                        "completed": int(idx + 1),
-                        "total": int(total_chunks),
-                    },
-                )
+            return idx, per_token_probs, response_text
 
-        return teacher_probs
+        # Execute in parallel
+        # We use 4 workers as a safe default for Ollama concurrency
+        num_workers = 4
+        teacher_probs = [None] * total_chunks
+
+        print(f"[INFO] Initializing Turbo Distiller with {num_workers} parallel workers...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+            futures = {executor.submit(_process_chunk, i): i for i in range(total_chunks)}
+
+            completed = 0
+            for future in concurrent.futures.as_completed(futures):
+                idx, probs, resp = future.result()
+                if probs is not None:
+                    teacher_probs[idx] = probs
+                    completed += 1
+
+                    # Update progress
+                    if completed % max(1, total_chunks // 20) == 0:
+                        pct = (completed / total_chunks) * 100
+                        print(f"[INFO] Turbo Distiller: {completed}/{total_chunks} ({pct:.1f}%)", flush=True)
+                else:
+                    # Timeout reached
+                    break
+
+        # Filter out any None values (in case of timeout) and return
+        final_probs = [p for p in teacher_probs if p is not None]
+        print(f"[SUCCESS] Turbo Distiller complete. Generated {len(final_probs)} teacher samples.")
+        return final_probs
+
     
     def _apply_ema_smoothing(self, loss_history: list, alpha: float = 0.3) -> list:
         """
@@ -1844,7 +1878,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             True if successful
         """
         try:
-            if not TORCH_AVAILABLE:
+            if not is_torch_available():
                 return False
             
             import torch
@@ -1911,7 +1945,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         Returns:
             Tensor of synthetic tokens to add to dataset
         """
-        if not TORCH_AVAILABLE or not TRANSFORMERS_AVAILABLE:
+        if not is_torch_available() or not is_transformers_available():
             return original_tokens
         
         try:
@@ -1998,6 +2032,82 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         except (OverflowError, ValueError, TypeError):
             return None
     
+    def _train_dpo_model(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Train transformer model using DPO (Direct Preference Optimization)"""
+        if not is_transformers_available() or not is_torch_available():
+            return {"success": False, "error": "Transformers and torch required for DPO"}
+            
+        try:
+            from trl import DPOTrainer, DPOConfig
+            from datasets import Dataset
+            import torch
+        except ImportError as e:
+            return {"success": False, "error": f"Failed to import DPO components: {e}"}
+
+        # 1. Load Preference Data
+        print("[INFO] Loading preference data for DPO...")
+        from mavaia_core.brain.modules.neural_text_generator_data import NeuralTextGeneratorData
+        preferences = NeuralTextGeneratorData.load_preferences(
+            book_ids=params.get("book_ids"),
+            max_items=params.get("max_text_size", 1000) # Re-use max_text_size as item limit
+        )
+        
+        if not preferences:
+            return {"success": False, "error": "No preference data loaded for DPO"}
+            
+        dataset = Dataset.from_list(preferences)
+        print(f"[INFO] DPO Dataset ready: {len(dataset)} pairs.")
+
+        # 2. Setup Models
+        model_name = params.get("model_name", "gpt2")
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        
+        print(f"[INFO] Loading model for DPO: {model_name}")
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        ref_model = AutoModelForCausalLM.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+        # 3. Configure DPO
+        output_dir = params.get("run_dir", str(self.model_dir / "dpo_run"))
+        training_args = DPOConfig(
+            output_dir=output_dir,
+            beta=params.get("dpo_beta", 0.1),
+            per_device_train_batch_size=params.get("batch_size", 4),
+            max_length=params.get("sequence_length", 512),
+            max_prompt_length=params.get("max_prompt_length", 256),
+            learning_rate=params.get("learning_rate", 5e-5),
+            num_train_epochs=params.get("epochs", 1),
+            logging_steps=10,
+            save_steps=100,
+            report_to=[],
+            remove_unused_columns=False
+        )
+
+        # 4. Train
+        print("[INFO] Initializing DPOTrainer...")
+        trainer = DPOTrainer(
+            model,
+            ref_model,
+            args=training_args,
+            train_dataset=dataset,
+            tokenizer=tokenizer,
+        )
+        
+        print("[INFO] Starting DPO alignment...")
+        trainer.train()
+        
+        # 5. Save
+        final_dir = Path(output_dir) / "final"
+        trainer.save_model(str(final_dir))
+        
+        return {
+            "success": True, 
+            "model_dir": str(final_dir),
+            "items_processed": len(dataset)
+        }
+
     def _train_transformer_model(
         self,
         text: str,
@@ -2021,7 +2131,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         Returns:
             Training result dictionary
         """
-        if not TRANSFORMERS_AVAILABLE or not TORCH_AVAILABLE:
+        if not is_transformers_available() or not is_torch_available():
             return {
                 "success": False,
                 "error": "Transformers and torch libraries are required for transformer training",
@@ -2049,7 +2159,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         # Detect device and adjust configuration for MPS
         device = "cpu"
         use_mps = False
-        if TORCH_AVAILABLE:
+        if is_torch_available():
             if torch.backends.mps.is_available():
                 use_mps = True
                 device = "mps"
@@ -2314,6 +2424,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         # Create dataset class
         class TextDataset(Dataset):
             def __init__(self, tokens, block_size, teacher_probs: Optional[List[List[Dict[int, float]]]] = None):
+                if len(tokens) <= block_size:
+                    logger.warning(
+                        f"Dataset too small for block_size: tokens={len(tokens)}, block_size={block_size}. "
+                        "This will result in 0 samples."
+                    )
                 self.tokens = tokens
                 self.block_size = block_size
                 self.teacher_probs = teacher_probs
@@ -2416,16 +2531,24 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 "num_predict": block_size,
                 "ollama_url": ollama_url,
             }
+            if transformer_config.get("_distill_precompute_minutes") is not None:
+                distill_config["max_minutes"] = transformer_config.get("_distill_precompute_minutes")
 
+            if os.environ.get("MAVAIA_PLAIN_OUTPUT") == "1":
+                print(
+                    f"[INFO] Precomputing teacher cache ({teacher_model}). "
+                    "Training starts after cache build.",
+                    flush=True,
+                )
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold cyan][Mavaia-Trainer][/bold cyan] [green]🧠[/green] "
-                    f"Precomputing teacher cache ({teacher_model})..."
+                    f"[bold cyan][Mavaia-Trainer][/bold cyan] "
+                    f"Precomputing teacher cache ({teacher_model}). Training starts after cache build."
                 )
             else:
                 logger.info(
-                    "Precomputing teacher cache",
+                    "Precomputing teacher cache (training starts after cache build)",
                     extra={"module_name": "neural_text_generator", "teacher_model": teacher_model},
                 )
 
@@ -2529,6 +2652,39 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # Resize token embeddings if needed
             self.transformer_model.resize_token_embeddings(len(self.transformer_tokenizer))
             
+            # PEFT / LoRA INTEGRATION
+            if params.get("enable_lora"):
+                try:
+                    from peft import LoraConfig, get_peft_model, TaskType
+                    
+                    lora_config = LoraConfig(
+                        r=params.get("lora_r", 16),
+                        lora_alpha=params.get("lora_alpha", 32),
+                        target_modules=params.get("lora_target_modules", ["c_attn", "c_proj", "q_proj", "v_proj"]),
+                        lora_dropout=params.get("lora_dropout", 0.05),
+                        bias="none",
+                        task_type=TaskType.CAUSAL_LM
+                    )
+                    
+                    if RICH_AVAILABLE:
+                        _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] [rocket] Initializing LoRA fine-tuning (r={lora_config.r})")
+                    else:
+                        logger.info(f"Enabling LoRA fine-tuning: r={lora_config.r}")
+                        
+                    self.transformer_model = get_peft_model(self.transformer_model, lora_config)
+                    self.transformer_model.print_trainable_parameters()
+                    
+                    # Enable gradient checkpointing for VRAM efficiency when using LoRA
+                    self.transformer_model.gradient_checkpointing_enable()
+                    training_args_dict["gradient_checkpointing"] = True
+                    # Re-build args with checkpointing enabled
+                    training_args = _build_training_args(training_args_dict)
+                    
+                except ImportError:
+                    logger.warning("PEFT library not found. Falling back to full fine-tuning.")
+                except Exception as e:
+                    logger.error(f"Failed to initialize LoRA: {e}. Falling back to full fine-tuning.")
+
             # Suppress loss_type warning by setting it explicitly
             if hasattr(self.transformer_model.config, 'loss_type'):
                 self.transformer_model.config.loss_type = "ForCausalLMLoss"
@@ -2603,7 +2759,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if use_mps:
             # MPS supports BF16 better than FP16
             try:
-                if TORCH_AVAILABLE and hasattr(torch.backends.mps, 'is_available'):
+                if is_torch_available() and hasattr(torch.backends.mps, 'is_available'):
                     use_mixed_precision = True
                     use_bf16 = True
                     use_fp16 = False
@@ -2613,7 +2769,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     exc_info=True,
                     extra={"module_name": "neural_text_generator", "error_type": type(e).__name__},
                 )
-        elif TORCH_AVAILABLE and torch.cuda.is_available():
+        elif is_torch_available() and torch.cuda.is_available():
             # CUDA supports FP16
             use_mixed_precision = True
             use_bf16 = False
@@ -2672,22 +2828,50 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # More frequent evaluation for better early stopping
             eval_steps = max(50, min(500, len(train_dataset) // (batch_size * (gradient_accumulation_steps or 1)) // 4))
             training_args_dict["eval_steps"] = eval_steps
-            training_args_dict["eval_strategy"] = "steps"  # New parameter name
+            training_args_dict["eval_strategy"] = "steps"
+            training_args_dict["save_strategy"] = "steps"
+            training_args_dict["save_steps"] = eval_steps  # MUST match eval_steps for load_best_model_at_end
             training_args_dict["load_best_model_at_end"] = True
-            training_args_dict["metric_for_best_model"] = "eval_loss"  # Use validation loss for best model
-            training_args_dict["greater_is_better"] = False  # Lower eval_loss is better
+            training_args_dict["metric_for_best_model"] = "eval_loss"
+            training_args_dict["greater_is_better"] = False
         else:
-            training_args_dict["eval_strategy"] = "no"  # New parameter name
+            training_args_dict["eval_strategy"] = "no"
+            training_args_dict["save_strategy"] = "steps"
+            training_args_dict["load_best_model_at_end"] = False
         
-        # Try creating TrainingArguments with eval_strategy first
-        try:
-            training_args = TrainingArguments(**training_args_dict)
-        except TypeError:
-            # If that fails, try with the old parameter name
-            if "eval_strategy" in training_args_dict:
-                old_value = training_args_dict.pop("eval_strategy")
-                training_args_dict["evaluation_strategy"] = old_value
-            training_args = TrainingArguments(**training_args_dict)
+        # Try creating TrainingArguments with fallbacks for older transformers.
+        def _build_training_args(args_dict: Dict[str, Any]) -> TrainingArguments:
+            # ENFORCE STRATEGY CONSISTENCY: transformers requires eval/save strategies to match if load_best_model_at_end is True
+            if args_dict.get("load_best_model_at_end"):
+                # If loading best model, we MUST have evaluation
+                eval_strat = args_dict.get("eval_strategy") or args_dict.get("evaluation_strategy")
+                if not eval_strat or eval_strat == "no":
+                    args_dict["load_best_model_at_end"] = False
+                else:
+                    # Strategies and steps must match
+                    args_dict["save_strategy"] = eval_strat
+                    if eval_strat == "steps" and "eval_steps" in args_dict:
+                        args_dict["save_steps"] = args_dict["eval_steps"]
+
+            try:
+                return TrainingArguments(**args_dict)
+            except TypeError as e:
+                msg = str(e)
+                if "eval_strategy" in args_dict:
+                    old_value = args_dict.pop("eval_strategy")
+                    args_dict["evaluation_strategy"] = old_value
+                    return _build_training_args(args_dict)
+                if "overwrite_output_dir" in args_dict and "overwrite_output_dir" in msg:
+                    args_dict.pop("overwrite_output_dir", None)
+                    return _build_training_args(args_dict)
+                if "evaluation_strategy" in args_dict and "evaluation_strategy" in msg:
+                    args_dict.pop("evaluation_strategy", None)
+                    # If we pop evaluation_strategy, we MUST disable load_best_model_at_end
+                    args_dict["load_best_model_at_end"] = False
+                    return _build_training_args(args_dict)
+                raise
+        
+        training_args = _build_training_args(training_args_dict)
         
         # Data collator
         base_collator = DataCollatorForLanguageModeling(
@@ -2871,6 +3055,72 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 
                 return control
         
+        # Curriculum Sentinel Callback (The "Overfit Watcher")
+        class CurriculumSentinelCallback(TrainerCallback):
+            """Monitors training metrics to detect overfitting, loss floors, and plateaus"""
+            def __init__(
+                self, 
+                loss_floor: Optional[float] = None, 
+                plateau_steps: int = 50, 
+                patience: int = 3,
+                min_improvement: float = 0.01
+            ):
+                super().__init__()
+                self.loss_floor = loss_floor
+                self.plateau_steps = plateau_steps
+                self.patience = patience
+                self.min_improvement = min_improvement
+                self.best_loss = float('inf')
+                self.stagnant_count = 0
+                self.history = []
+
+            def on_step_end(self, args, state, control, **kwargs):
+                # Check metrics every step for absolute precision
+                if not hasattr(state, "log_history") or not state.log_history:
+                    return control
+                
+                latest_logs = state.log_history[-1]
+                current_loss = latest_logs.get("loss")
+                
+                if current_loss is not None:
+                    # 1. Check Loss Floor
+                    if self.loss_floor is not None and current_loss < self.loss_floor:
+                        print(f"\n[Mavaia-Sentinel] 🚀 Loss floor reached ({current_loss:.4f} < {self.loss_floor}). Ending stage early.")
+                        control.should_training_stop = True
+                        return control
+
+                    # 2. Check for Plateau
+                    self.history.append(current_loss)
+                    if len(self.history) > self.plateau_steps:
+                        avg_recent = sum(self.history[-self.plateau_steps:]) / self.plateau_steps
+                        if current_loss > (avg_recent * (1.0 - self.min_improvement)):
+                            self.stagnant_count += 1
+                        else:
+                            self.stagnant_count = 0
+                        
+                        if self.stagnant_count >= self.patience:
+                            print(f"\n[Mavaia-Sentinel] ☕ Plateau detected (no improvement for {self.plateau_steps} steps). Moving to next stage.")
+                            control.should_training_stop = True
+                
+                return control
+
+            def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+                # Check for Overfit Gap during evaluation
+                if metrics and "eval_loss" in metrics:
+                    val_loss = metrics["eval_loss"]
+                    # Find latest training loss from state
+                    train_loss = None
+                    for log in reversed(state.log_history):
+                        if "loss" in log:
+                            train_loss = log["loss"]
+                            break
+                    
+                    if train_loss and val_loss > (train_loss * 2.0) and state.global_step > 100:
+                        print(f"\n[Mavaia-Sentinel] ⚠ Overfit detected! (Val: {val_loss:.4f}, Train: {train_loss:.4f}). Ending stage.")
+                        control.should_training_stop = True
+                
+                return control
+
         # Best model checkpoint callback (tracks and saves best model during training)
         class BestModelCheckpointCallback(TrainerCallback):
             """Track and save best model based on validation loss"""
@@ -2944,7 +3194,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             def on_train_begin(self, args, state, control, model=None, **kwargs):
                 """Store initial model state for KL regularization"""
-                if self.enable_kl_reg and model is not None and TORCH_AVAILABLE:
+                if self.enable_kl_reg and model is not None and is_torch_available():
                     try:
                         import torch
                         # Store initial logits distribution (we'll compute this on first batch)
@@ -2982,7 +3232,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
                 """Compute loss with optional KL regularization"""
-                if not TORCH_AVAILABLE:
+                if not is_torch_available():
                     return super().compute_loss(model, inputs, return_outputs, **kwargs)
                 
                 import torch
@@ -3098,7 +3348,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 )
             
             # Create a copy of the initial model state for KL divergence
-            if TORCH_AVAILABLE:
+            if is_torch_available():
                 try:
                     import torch
                     import copy
@@ -3301,6 +3551,15 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         # Add CSV logging callback for metrics persistence
         csv_logging_callback = CSVLoggingCallback(checkpoint_dir)
         trainer.add_callback(csv_logging_callback)
+        
+        # Add Sentinel Callback (The "Overfit Watcher")
+        sentinel_callback = CurriculumSentinelCallback(
+            loss_floor=transformer_config.get("_stop_at_loss"),
+            plateau_steps=transformer_config.get("_plateau_steps", 50),
+            patience=transformer_config.get("_plateau_patience", 3),
+            min_improvement=transformer_config.get("_min_improvement", 0.01)
+        )
+        trainer.add_callback(sentinel_callback)
         
         if RICH_AVAILABLE:
             console = Console(stderr=True)
@@ -3592,6 +3851,16 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 stage_training_args_dict["num_train_epochs"] = stage_epochs
                 stage_training_args_dict["logging_steps"] = max(1, stage_epochs // 2)  # More frequent logging for tiny stages
                 stage_training_args_dict["report_to"] = []  # Suppress default logging for stages too
+                
+                # Ensure evaluation consistency for this stage
+                if stage_val_dataset:
+                    stage_training_args_dict["eval_strategy"] = "steps"
+                    stage_training_args_dict["save_strategy"] = "steps"
+                    stage_training_args_dict["save_steps"] = stage_training_args_dict.get("eval_steps", 500)
+                    stage_training_args_dict["load_best_model_at_end"] = True
+                else:
+                    stage_training_args_dict["eval_strategy"] = "no"
+                    stage_training_args_dict["load_best_model_at_end"] = False
                 
                 # Recalculate LR scheduling for this stage
                 stage_steps_per_epoch = max(1, len(stage_train_dataset) // effective_batch_size)
@@ -4765,7 +5034,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         self, prompt: str, max_length: int, temperature: float
     ) -> Dict[str, Any]:
         """Generate text using transformer model"""
-        if not TRANSFORMERS_AVAILABLE or not TORCH_AVAILABLE:
+        if not is_transformers_available() or not is_torch_available():
             return {
                 "success": False,
                 "error": "Transformers and torch libraries are required for transformer generation",
@@ -4788,11 +5057,16 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         try:
             # Tokenize prompt
             inputs = self.transformer_tokenizer(prompt, return_tensors="pt")
-            
+
             # Move inputs to same device as model
             device = next(self.transformer_model.parameters()).device
-            inputs = {k: v.to(device) for k, v in inputs.items()}
 
+            # SAFETY CHECK: If prompt is empty after tokenization, use a default token
+            if inputs["input_ids"].shape[1] == 0:
+                bos_token = self.transformer_tokenizer.bos_token or self.transformer_tokenizer.eos_token or " "
+                inputs = self.transformer_tokenizer(bos_token, return_tensors="pt")
+
+            inputs = {k: v.to(device) for k, v in inputs.items()}
             # Generate
             with torch.no_grad():
                 output_tokens = self.transformer_model.generate(
@@ -5029,12 +5303,20 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 results["word"] = {"success": False, "error": "Model file not found"}
 
         if model_type in ["transformer", "both"]:
-            transformer_dir = self.model_dir / "transformer_model"
-            transformer_model_path = transformer_dir / "model"
-            transformer_tokenizer_path = transformer_dir / "tokenizer"
+            # Check if a specific model path was requested via config
+            transformer_config = params.get("transformer_config", {})
+            custom_model_path = transformer_config.get("model_name")
+            
+            if custom_model_path and Path(custom_model_path).exists():
+                transformer_model_path = Path(custom_model_path)
+                transformer_tokenizer_path = transformer_model_path # Checkpoint dirs usually contain both
+            else:
+                transformer_dir = self.model_dir / "transformer_model"
+                transformer_model_path = transformer_dir / "model"
+                transformer_tokenizer_path = transformer_dir / "tokenizer"
             
             if transformer_model_path.exists():
-                if not TRANSFORMERS_AVAILABLE or not TORCH_AVAILABLE:
+                if not is_transformers_available() or not is_torch_available():
                     results["transformer"] = {
                         "success": False, 
                         "error": "Transformers/torch not available for loading"
@@ -5044,7 +5326,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         from transformers import AutoModelForCausalLM, AutoTokenizer
                         self.transformer_model = AutoModelForCausalLM.from_pretrained(str(transformer_model_path))
                         
-                        if transformer_tokenizer_path.exists():
+                        if transformer_tokenizer_path.exists() and (transformer_tokenizer_path / "tokenizer_config.json").exists():
                              self.transformer_tokenizer = AutoTokenizer.from_pretrained(str(transformer_tokenizer_path))
                         else:
                              # Fallback to loading from same dir or model name if we could infer it
@@ -5189,8 +5471,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         info = {
             "tensorflow_available": TENSORFLOW_AVAILABLE,
             "numpy_available": NUMPY_AVAILABLE,
-            "transformers_available": TRANSFORMERS_AVAILABLE,
-            "torch_available": TORCH_AVAILABLE,
+            "transformers_available": is_transformers_available(),
+            "torch_available": is_torch_available(),
             "character_model_loaded": self.char_model is not None,
             "word_model_loaded": self.word_model is not None,
             "transformer_model_loaded": hasattr(self, 'transformer_model') and self.transformer_model is not None,
