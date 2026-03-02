@@ -4,7 +4,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement Stage 3 Capability Phase (HotpotQA) with Automated Sentinel Monitoring**
+- [x] **Track: Implement Stage 3 Capability Phase (HotpotQA) with Automated Sentinel Monitoring**
   *Link: [./tracks/hotpot_qa_20260302/](./tracks/hotpot_qa_20260302/)*
 
 - [ ] **Track: Implement Stage 2.5 — Prose Modernization & Basic Logic Refinement**
