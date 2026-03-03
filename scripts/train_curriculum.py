@@ -44,6 +44,107 @@ def _now_iso():
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
+class SmartResumePolicy:
+    """
+    Intelligent decision engine for curriculum resumption.
+    Determines if a stage should be skipped, retouched, or fully run.
+    """
+
+    def __init__(self, target_loss: float = 0.05, retouch_threshold: float = 0.15):
+        self.target_loss = target_loss
+        self.retouch_threshold = retouch_threshold
+
+    def decide(self, current_loss: float | None) -> tuple[str, float, float]:
+        """
+        Returns (mode, data_scale, epoch_scale)
+        Modes: 'full', 'skip', 'retouch'
+        """
+        if current_loss is None:
+            return "full", 1.0, 1.0
+
+        if current_loss <= self.target_loss:
+            return "skip", 0.0, 0.0
+
+        if current_loss < self.retouch_threshold:
+            # Dynamic Scaling: use less data for smaller gaps
+            gap = current_loss - self.target_loss
+            span = self.retouch_threshold - self.target_loss
+            # Scale data between 10% and 50% for retouches
+            data_scale = max(0.1, min(0.5, gap / span))
+            return "retouch", data_scale, 1.0
+
+        return "full", 1.0, 1.0
+
+
+def _get_stage_performance(stage_name: str, run_root: Path) -> float | None:
+    """
+    Scans for the best/latest performance (loss) for a given stage.
+    """
+    # 1. Look for stage-specific directories in run_root
+    # Pattern: <stage_name>_YYYYMMDD_HHMMSS
+    stage_dirs = list(run_root.glob(f"{stage_name}_*"))
+    
+    # Also check remote sync folders if they exist
+    remote_sync_root = REPO_ROOT / "models" / "neural_text_generator_remote" / "curriculum"
+    if remote_sync_root.exists():
+        stage_dirs.extend(list(remote_sync_root.glob(f"{stage_name}_*")))
+
+    if not stage_dirs:
+        return None
+
+    # Sort by mtime to get latest run
+    stage_dirs.sort(key=lambda d: d.stat().st_mtime, reverse=True)
+
+    for run_dir in stage_dirs:
+        # STRATEGY A: Check for HF Trainer state (Transformer models)
+        trainer_states = list(run_dir.glob("**/trainer_state.json"))
+        if trainer_states:
+            latest_state = max(trainer_states, key=lambda p: p.stat().st_mtime)
+            try:
+                state_data = json.loads(latest_state.read_text())
+                history = state_data.get("log_history", [])
+                # Find latest entry with loss
+                for entry in reversed(history):
+                    loss = entry.get("loss") or entry.get("eval_loss")
+                    if loss is not None:
+                        return float(loss)
+            except Exception:
+                pass
+
+        # STRATEGY B: Check for custom metrics file (RNN models)
+        metrics_files = list(run_dir.glob("**/checkpoints/*_metrics.jsonl"))
+        # Fallback to looking for ANY metrics in the run dir
+        if not metrics_files:
+            metrics_files = list(run_dir.glob("**/*_metrics.jsonl"))
+            
+        if metrics_files:
+            latest_metrics = max(metrics_files, key=lambda p: p.stat().st_mtime)
+            try:
+                lines = latest_metrics.read_text().strip().splitlines()
+                if not lines:
+                    continue
+                
+                # Use the last recorded loss
+                last_row = json.loads(lines[-1])
+                
+                # Check top-level or nested logs
+                logs = last_row.get("logs", last_row)
+                loss = logs.get("loss") or logs.get("eval_loss")
+                
+                # Fallback to second-to-last row
+                if loss is None and len(lines) > 1:
+                    prev_row = json.loads(lines[-2])
+                    prev_logs = prev_row.get("logs", prev_row)
+                    loss = prev_logs.get("loss")
+                    
+                if loss is not None:
+                    return float(loss)
+            except Exception:
+                continue
+            
+    return None
+
+
 def _load_progress(path: Path):
     if not path.exists():
         return {}
@@ -164,6 +265,45 @@ def _auto_stage_overrides(stage: dict):
     return stage
 
 
+def _extract_loss_from_run(run_dir: Path) -> float | None:
+    """
+    Specifically looks for loss in a single run directory.
+    """
+    # 1. Check for HF Trainer state
+    trainer_states = list(run_dir.glob("**/trainer_state.json"))
+    if trainer_states:
+        latest_state = max(trainer_states, key=lambda p: p.stat().st_mtime)
+        try:
+            state_data = json.loads(latest_state.read_text())
+            history = state_data.get("log_history", [])
+            for entry in reversed(history):
+                loss = entry.get("loss") or entry.get("eval_loss")
+                if loss is not None:
+                    return float(loss)
+        except Exception:
+            pass
+
+    # 2. Check for custom metrics
+    metrics_files = list(run_dir.glob("**/*_metrics.jsonl"))
+    if metrics_files:
+        latest_metrics = max(metrics_files, key=lambda p: p.stat().st_mtime)
+        try:
+            lines = latest_metrics.read_text().strip().splitlines()
+            if lines:
+                last_row = json.loads(lines[-1])
+                logs = last_row.get("logs", last_row)
+                loss = logs.get("loss") or logs.get("eval_loss")
+                if loss is None and len(lines) > 1:
+                    prev_row = json.loads(lines[-2])
+                    prev_logs = prev_row.get("logs", prev_row)
+                    loss = prev_logs.get("loss")
+                if loss is not None:
+                    return float(loss)
+        except Exception:
+            pass
+    return None
+
+
 def _run_stage(stage, run_root: Path, extra_args, progress_path: Path, progress: dict, stop_at_loss: float = 0.05, min_improvement: float = 0.01, anchor_text: str = "", batch_size: int = 4, gradient_checkpointing: bool = True, elective_base: str = None):
     run_dir = run_root / f"{stage['name']}_{time.strftime('%Y%m%d_%H%M%S')}"
     
@@ -266,6 +406,7 @@ def _run_stage(stage, run_root: Path, extra_args, progress_path: Path, progress:
     print(f"[INFO] Curriculum: {stage['dataset']}")
     if stage.get("auto_applied"):
         print(f"[INFO] Auto settings: epochs={stage['epochs']} data_pct={stage['data_pct']}")
+    
     progress_stage = {
         "name": stage["name"],
         "title": stage["title"],
@@ -287,8 +428,13 @@ def _run_stage(stage, run_root: Path, extra_args, progress_path: Path, progress:
     progress.setdefault("stages", [])
     progress["stages"].append(progress_stage)
     _write_progress(progress_path, progress)
+    
     try:
         subprocess.run(cmd, check=True)
+        # Extract loss after success
+        loss = _extract_loss_from_run(run_dir)
+        progress_stage["loss"] = loss
+        progress_stage["status"] = "completed"
     except Exception as exc:
         progress_stage["status"] = "failed"
         progress_stage["completed_at"] = _now_iso()
@@ -296,7 +442,7 @@ def _run_stage(stage, run_root: Path, extra_args, progress_path: Path, progress:
         progress["status"] = "failed"
         _write_progress(progress_path, progress)
         raise
-    progress_stage["status"] = "completed"
+        
     progress_stage["completed_at"] = _now_iso()
     _write_progress(progress_path, progress)
     print(f"[INFO] Completed {stage['title']}")
@@ -335,6 +481,9 @@ def main():
     ap.add_argument("--min-improvement", type=float, default=0.01, help="Min improvement to avoid plateau stop")
     ap.add_argument("--batch-size", type=int, default=4, help="Batch size for training stages (default: 4)")
     ap.add_argument("--gradient-checkpointing", action="store_false", dest="no_gradient_checkpointing", help="Disable gradient checkpointing")
+    ap.add_argument("--smart-resume", action="store_true", help="Skip stages already acquired or retouch weak ones")
+    ap.add_argument("--target-loss", type=float, default=0.05, help="Loss threshold for considering a stage acquired")
+    ap.add_argument("--retouch-threshold", type=float, default=0.15, help="Loss threshold for triggering a retouch pass")
     ap.add_argument("--elective", help="Specific stage indices or names to run as LoRA electives (e.g. 6,7 or coding,alignment)")
     ap.add_argument("--elective-base", help="Manual path to a base model for electives (defaults to last non-elective stage output)")
     ap.add_argument("--run-root", default=str(REPO_ROOT / "mavaia_core" / "models" / "neural_text_generator" / "curriculum"))
@@ -462,21 +611,61 @@ def main():
     # to grab samples for the next stage's anchor data.
     accumulated_anchor_text = ""
     
+    policy = SmartResumePolicy(target_loss=args.target_loss, retouch_threshold=args.retouch_threshold)
+    
     _write_progress(progress_path, progress)
     for stage in stages:
-        _run_stage(
-            stage, 
-            run_root, 
-            args.extra_args, 
-            progress_path, 
-            progress, 
-            stop_at_loss=args.stop_at_loss, 
-            min_improvement=args.min_improvement,
-            anchor_text=accumulated_anchor_text,
-            batch_size=args.batch_size,
-            gradient_checkpointing=not args.no_gradient_checkpointing,
-            elective_base=args.elective_base
-        )
+        if args.smart_resume:
+            perf = _get_stage_performance(stage["name"], run_root)
+            mode, data_scale, epoch_scale = policy.decide(perf)
+            
+            if mode == "skip":
+                print(f"[INFO] Stage '{stage['title']}' acquired (Loss: {perf:.4f}). Skipping pass.")
+                # Add a 'skipped' entry to progress so foundation loading can still find a 'completed' path if needed
+                # We search for latest run_dir to point to it
+                latest_dir = None
+                stage_dirs = list(run_root.glob(f"{stage['name']}_*"))
+                remote_sync_root = REPO_ROOT / "models" / "neural_text_generator_remote" / "curriculum"
+                if remote_sync_root.exists():
+                    stage_dirs.extend(list(remote_sync_root.glob(f"{stage['name']}_*")))
+                
+                if stage_dirs:
+                    latest_dir = str(max(stage_dirs, key=lambda d: d.stat().st_mtime))
+
+                progress.setdefault("stages", [])
+                progress["stages"].append({
+                    "name": stage["name"],
+                    "title": stage["title"],
+                    "status": "completed",
+                    "reason": "skipped (already acquired)",
+                    "loss": perf,
+                    "run_dir": latest_dir,
+                    "completed_at": _now_iso()
+                })
+                _write_progress(progress_path, progress)
+                # Still accumulate anchor data for next stages if possible
+                pass 
+            elif mode == "retouch":
+                orig_pct = stage["data_pct"]
+                stage["data_pct"] *= data_scale
+                print(f"[INFO] Stage '{stage['title']}' marginal (Loss: {perf:.4f}). Retouching with {stage['data_pct']*100:.1f}% data (was {orig_pct*100:.1f}%).")
+                # We'll mark the progress entry later in _run_stage
+        
+        # If we didn't skip, run the stage
+        if not args.smart_resume or mode != "skip":
+            _run_stage(
+                stage, 
+                run_root, 
+                args.extra_args, 
+                progress_path, 
+                progress, 
+                stop_at_loss=args.stop_at_loss, 
+                min_improvement=args.min_improvement,
+                anchor_text=accumulated_anchor_text,
+                batch_size=args.batch_size,
+                gradient_checkpointing=not args.no_gradient_checkpointing,
+                elective_base=args.elective_base
+            )
         
         # Accumulate anchor data for the next stage (Experience Replay)
         if args.replay_pct > 0:

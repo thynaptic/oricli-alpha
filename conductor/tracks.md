@@ -22,5 +22,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement Smart Resume & Auto-Gap Detection in train_curriculum.py.**
+- [x] **Track: Implement Smart Resume & Auto-Gap Detection in train_curriculum.py.**
   *Link: [./tracks/smart_resume_20260303/](./tracks/smart_resume_20260303/)*
