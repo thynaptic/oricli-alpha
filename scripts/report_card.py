@@ -124,9 +124,18 @@ def _format_rich_report(report):
     return console.export_text() if not os.isatty(sys.stdout.fileno()) else ""
 
 def _find_latest_training_metrics(root: Path):
-    candidates = list(root.glob("**/checkpoints/*_metrics.jsonl"))
-    # Also check the remote sync folders
-    candidates.extend(list(root.glob("models/neural_text_generator_remote/**/*_metrics.jsonl")))
+    patterns = [
+        "**/checkpoints/*_metrics.jsonl",
+        "**/checkpoints/trainer_state.json",
+        "**/checkpoints/training_metrics.csv",
+        "models/neural_text_generator_remote/**/*_metrics.jsonl",
+        "models/neural_text_generator_remote/**/trainer_state.json",
+        "models/neural_text_generator_remote/**/training_metrics.csv"
+    ]
+    candidates = []
+    for pattern in patterns:
+        candidates.extend(list(root.glob(pattern)))
+        
     if not candidates:
         return None
     return max(candidates, key=lambda p: p.stat().st_mtime)
@@ -135,18 +144,62 @@ def _load_last_metrics(metrics_path: Path):
     if not metrics_path or not metrics_path.exists():
         return None
     try:
-        lines = metrics_path.read_text().strip().splitlines()
-        if not lines:
+        if metrics_path.suffix == ".jsonl":
+            lines = metrics_path.read_text().strip().splitlines()
+            if not lines:
+                return None
+            last_row = json.loads(lines[-1])
+            # Handle nested 'logs' if present (RNN format)
+            if "logs" in last_row:
+                last_row = last_row["logs"]
+            if "loss" not in last_row and len(lines) > 1:
+                prev_row = json.loads(lines[-2])
+                if "logs" in prev_row: prev_row = prev_row["logs"]
+                if "loss" in prev_row:
+                    last_row["loss"] = prev_row["loss"]
+            return last_row
+            
+        elif metrics_path.name == "trainer_state.json":
+            state_data = json.loads(metrics_path.read_text())
+            history = state_data.get("log_history", [])
+            for entry in reversed(history):
+                if "loss" in entry or "eval_loss" in entry:
+                    return {
+                        "loss": entry.get("loss") or entry.get("eval_loss"),
+                        "epoch": entry.get("epoch"),
+                        "step": entry.get("step")
+                    }
             return None
-        # The trainer sometimes logs 'eval_loss' instead of 'loss' at the end
-        last_row = json.loads(lines[-1])
-        if "loss" not in last_row and len(lines) > 1:
-            prev_row = json.loads(lines[-2])
-            if "loss" in prev_row:
-                last_row["loss"] = prev_row["loss"]
-        return last_row
+            
+        elif metrics_path.suffix == ".csv":
+            import csv
+            with open(metrics_path, "r", encoding="utf-8") as f:
+                reader = list(csv.DictReader(f))
+                if not reader:
+                    return None
+                
+                # Iterate backwards to find the last valid training row
+                for row in reversed(reader):
+                    # Skip summary rows (often have more columns or specific keys)
+                    # A valid row must have 'loss' and it should be a reasonable float
+                    try:
+                        loss_val = row.get("loss") or row.get("eval_loss")
+                        if loss_val is not None:
+                            loss_float = float(loss_val)
+                            # If loss is massive (like 34.0 when it was 0.18), it's likely a summary value (total loss?)
+                            # but we'll take it if it's the only one. 
+                            # However, if it has 'None' key (extra columns), it's definitely a summary.
+                            if None in row: 
+                                continue
+                                
+                            row["loss"] = loss_float
+                            return row
+                    except ValueError:
+                        continue
+                return None
     except Exception:
         return None
+    return None
 
 def _loss_trend(metrics_path: Path, max_points: int = 20):
     if not metrics_path or not metrics_path.exists():
@@ -218,12 +271,72 @@ def main():
     
     training_loss = training_metrics.get("loss") if training_metrics else "N/A"
     
+    # Map curriculum stages to subjects for grading
+    subject_map = {
+        "tone_oh_dcft_gemini": "Tone",
+        "logic_orca_math": "Logic",
+        "prose_no_robots": "Prose",
+        "capability_hotpot_qa": "Reasoning",
+        "context_booksum": "Context",
+        "knowledge_wikihop": "Knowledge",
+        "coding_alpaca_python": "Coding",
+        "alignment_dpo": "Alignment",
+        "knowledge_world_dense": "World Knowledge"
+    }
+    
+    # Initialize grades from benchmarks
+    subject_grades = {}
+    if lb_info["category_rates"]:
+        # ONLY use benchmarks if they are newer than the livebench_results_*.json mtime 
+        # (Actually we should check if they are relevant to the current curriculum state)
+        for cat, r in lb_info["category_rates"].items():
+            subject_grades[cat.capitalize()] = _grade_from_rate(r)
+    
+    # Check completed curriculum stages
+    # If a stage was completed AFTER the last benchmark, we should show "Pending Bench"
+    lb_mtime = livebench_path.stat().st_mtime if livebench_path else 0
+    
+    for s in progress.get("stages", []):
+        s_name = s.get("name")
+        s_status = s.get("status")
+        s_mtime = datetime.fromisoformat(s.get("completed_at").replace("Z", "+00:00")).timestamp() if s.get("completed_at") else 0
+        
+        subject_name = subject_map.get(s_name)
+        if not subject_name: continue
+        
+        if s_status == "completed":
+            # If benchmark is missing OR older than completion, mark as pending
+            if subject_name not in subject_grades or lb_mtime < s_mtime:
+                subject_grades[subject_name] = "[yellow]Pending Bench[/yellow]"
+        elif subject_name not in subject_grades:
+            subject_grades[subject_name] = "[dim]Not Started[/dim]"
+
+    # Map cognitive gaps to recommended datasets and curriculum stages
+    gap_recommendations = {
+        "reasoning": ("Stage 4: Capability", ["kitsdk/hotpot_qa"]),
+        "coding": ("Stage 7: Coding", ["iamtarun/python_code_instructions_18k_alpaca", "m-a-p/CodeFeedback-Filtered-Instruction"]),
+        "math": ("Stage 2: Logic", ["microsoft/orca-math-word-problems-200k"]),
+        "knowledge": ("Stage 6: Knowledge", ["kitsdk/wiki_hop"]),
+        "context": ("Stage 5: Context", ["kmfoda/booksum"]),
+        "alignment": ("Stage 8: Alignment", ["Intel/orca_dpo_pairs"]),
+    }
+
     next_steps = ["Monitor Sentinel for Plateaus"]
+    
+    # Dynamically inject recommendations based on gaps
+    if lb_info["gaps"]:
+        for gap in lb_info["gaps"]:
+            gap_lower = gap.lower()
+            if gap_lower in gap_recommendations:
+                stage, datasets = gap_recommendations[gap_lower]
+                next_steps.insert(0, f"Retouch {stage} using: {', '.join(datasets)}")
+    
     curr_stage = progress.get("current_stage", "")
-    if "alignment" in curr_stage or "knowledge_world" in curr_stage:
-        next_steps.insert(0, "Proceed to Stage 9: Comprehensive World Knowledge")
-    else:
-        next_steps.insert(0, "Continue Curriculum Stage 4: Multi-hop Reasoning")
+    if not next_steps or "Proceed" not in str(next_steps):
+        if "alignment" in curr_stage or "knowledge_world" in curr_stage:
+            next_steps.insert(0, "Proceed to Stage 9: Comprehensive World Knowledge")
+        else:
+            next_steps.insert(0, "Continue Curriculum Stage 4: Multi-hop Reasoning")
     
     report = {
         "report_date": _now_iso(),
@@ -237,7 +350,7 @@ def main():
         "training_loss": f"{training_loss:.4f}" if isinstance(training_loss, float) else "N/A",
         "training_loss_trend": _loss_trend(metrics_path),
         "self_confidence": f"{mavaia_result.get('confidence', 0):.2f}",
-        "subject_grades": {cat: _grade_from_rate(r) for cat, r in lb_info["category_rates"].items()},
+        "subject_grades": subject_grades,
         "gaps": lb_info["gaps"],
         "next_steps": next_steps
     }

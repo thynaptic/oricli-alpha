@@ -2137,11 +2137,18 @@ def main():
             )
             get_bench_results(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
             
+            _rich_log("Remote benchmark successful! Results retrieved.", "bold green", "✓")
+
+            # AUTOMATED DIPLOMA UPDATE
+            _rich_log("Updating Mavaia Diploma with new benchmark data...", "cyan", "🎓")
+            try:
+                subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "report_card.py")], check=False)
+            except Exception as e:
+                _rich_log(f"Failed to update report card: {e}", "yellow", "⚠")
+            
             if args.use_s3:
                 # We also push the results to S3 for persistence
                 s3_sync_pod(pod_ip, pod_port, args.ssh_key, args.s3_bucket, args.s3_prefix, args.s3_region, args.s3_endpoint, "push", pod['id'], args.ssh_proxy, src=f"{args.volume_mount_path}/mavaia")
-
-            _rich_log("Remote benchmark successful! Results retrieved.", "bold green", "✓")
         else:
             train_args = list(args.train_args)
             if args.batch_size:
