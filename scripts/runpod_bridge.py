@@ -1065,7 +1065,7 @@ def remote_benchmark(
     if hf_token:
         env_prefix += f"HF_TOKEN='{hf_token}' "
     
-    cmd = f"cd {workdir}/mavaia && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
+    cmd = f"cd {workdir}/mavaia && echo '[DEBUG] Pod directory content:' && ls -F && echo '[DEBUG] LiveBench content:' && ls -R LiveBench/ 2>/dev/null || echo 'LiveBench folder missing' && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
 
     if proxy:
         ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [cmd]
@@ -1581,7 +1581,7 @@ def main():
     
     # Forwarded args
     parser.add_argument("--benchmark", action="store_true", help="Run benchmark mode instead of training")
-    parser.add_argument("--bench-script", default="LiveBench/livebench/evaluate.py", help="Path to evaluation script on the pod")
+    parser.add_argument("--bench-script", default="LiveBench/livebench/run_livebench.py", help="Path to evaluation script on the pod")
     parser.add_argument("--bench-args", nargs=argparse.REMAINDER, help="Forwarded arguments for the benchmark script")
     parser.add_argument("train_args", nargs=argparse.REMAINDER, help="Args for training script")
     parser.add_argument(
