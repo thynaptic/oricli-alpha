@@ -13,6 +13,7 @@ Mavaia Core addresses the complexity of orchestrating modular AI systems while e
 
 ## Key Features
 - **Module Library**: A rich set of plug-and-play cognitive modules.
+- **Curriculum Electives**: Ability to train specialized LoRA adapters (modes) for specific domains without model overbasing.
 - **Observability**: Built-in metrics, health monitoring, and introspection for cognitive state.
 - **Validation & Benchmarking**: Tools to ensure cognitive performance and accuracy (e.g., LiveBench integration).
 - **Hot-Swappable Cognitive Adapters**: The ability to swap reasoning engines and models at runtime without service interruption.
