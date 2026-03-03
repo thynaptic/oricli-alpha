@@ -1052,33 +1052,55 @@ def remote_benchmark(
     workdir: str,
     pod_id: str = None,
     proxy: str = None,
-    script_rel: str = "LiveBench/livebench/evaluate.py",
+    script_rel: str = "LiveBench/livebench/run_livebench.py",
     progress=None,
     task_id=None,
 ):
     _rich_log("Starting benchmark on remote pod...", "bold green", "📊", progress=progress, task_id=task_id)
     if bench_args and bench_args[0] == "--":
         bench_args = bench_args[1:]
+    
+    # Extract model path to pass to API server
+    model_path = None
+    for i, arg in enumerate(bench_args):
+        if arg == "--model":
+            model_path = bench_args[i+1]
+            break
+
     args_str = " ".join(bench_args) if bench_args else ""
     env_prefix = "PYTHONUNBUFFERED=1 "
     hf_token = os.environ.get("HF_TOKEN")
     if hf_token:
         env_prefix += f"HF_TOKEN='{hf_token}' "
     
-    cmd = f"cd {workdir}/mavaia && echo '[DEBUG] Pod directory content:' && ls -F && echo '[DEBUG] LiveBench content:' && ls -R LiveBench/ 2>/dev/null || echo 'LiveBench folder missing' && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); cd LiveBench/livebench && {env_prefix}$PYTHON_EXE run_livebench.py {args_str}"
+    if model_path:
+        env_prefix += f"MAVAIA_MODEL_PATH='{model_path}' "
+
+    # Command to start server in background, wait for it, run bench, then kill server
+    server_cmd = "PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); "
+    server_cmd += f"cd {workdir}/mavaia && {env_prefix} $PYTHON_EXE -m mavaia_core.api.server --no-auto-port --port 8000 > server.log 2>&1 & "
+    server_cmd += "SERVER_PID=$!; "
+    server_cmd += "echo 'Waiting for API server to start...'; "
+    server_cmd += "for i in {1..30}; do if curl -s http://localhost:8000/health > /dev/null; then echo 'Server ready!'; break; fi; sleep 2; done; "
+    
+    bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}; "
+    
+    cleanup_cmd = "kill $SERVER_PID || true"
+    
+    full_remote_cmd = f"{server_cmd} {bench_cmd} {cleanup_cmd}"
 
     if proxy:
-        ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [cmd]
+        ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [full_remote_cmd]
         subprocess.run(ssh_cmd, check=True)
         return
 
-    ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [cmd]
+    ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [full_remote_cmd]
     try:
         subprocess.run(ssh_cmd, check=True)
     except subprocess.CalledProcessError as e:
         if pod_id and e.returncode == 255:
             _rich_log("Direct SSH failed (255); retrying via proxy.", "yellow", "⚠", progress=progress, task_id=task_id)
-            ssh_cmd = _ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [cmd]
+            ssh_cmd = _ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [full_remote_cmd]
             subprocess.run(ssh_cmd, check=True)
         else:
             raise e
