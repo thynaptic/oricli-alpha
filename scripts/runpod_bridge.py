@@ -590,7 +590,7 @@ def ensure_mavaia_installed(
         "rm -rf datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy PIL torch torchvision torchaudio xxhash multiprocess dill fsspec aiohttp requests tqdm yaml safetensors 2>/dev/null || true; "
         "find . -maxdepth 1 -name '*.so' -delete; "
         "echo '[INFO] Installing core ML libraries (this may take a few minutes)...'; "
-        "\"$VENV_PY\" -m pip install --upgrade datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash shortuuid libtmux python-dotenv -q || true; "
+        "\"$VENV_PY\" -m pip install --upgrade datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash shortuuid libtmux python-dotenv uvicorn fastapi pydantic beautifulsoup4 PyPDF2 PyYAML -q || true; "
 
         "if [ -d LiveBench ]; then "
         "  echo '[INFO] LiveBench detected. Installing in editable mode...'; "
@@ -1082,9 +1082,9 @@ def remote_benchmark(
     # Ensure PYTHONPATH is set and use nohup + absolute log path
     server_cmd += f"cd {workdir}/mavaia && {env_prefix} PYTHONPATH=. nohup $PYTHON_EXE -m mavaia_core.api.server --host 127.0.0.1 --port 8000 --no-auto-port > {log_path} 2>&1 & "
     server_cmd += "SERVER_PID=$!; "
-    server_cmd += "echo \"Waiting for API server to start on 127.0.0.1:8000 (Log: {log_path})...\"; "
+    server_cmd += f"echo \"Waiting for API server to start on 127.0.0.1:8000 (Log: {log_path})...\"; "
     # Check /v1/models instead of /health to ensure models are actually loaded
-    server_cmd += f"for i in $(seq 1 60); do if curl -s http://127.0.0.1:8000/v1/models > /dev/null; then echo 'Server ready and models loaded!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo 'Server died! Tail of {log_path}:'; tail -n 20 {log_path}; break; fi; sleep 2; done; "
+    server_cmd += f"for i in $(seq 1 60); do if curl -s http://127.0.0.1:8000/v1/models > /dev/null; then echo 'Server ready and models loaded!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo \"Server died! Tail of {log_path}:\"; tail -n 20 {log_path}; break; fi; sleep 2; done; "
     
     bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}; "
     
