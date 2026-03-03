@@ -2141,6 +2141,37 @@ def main():
 
         if args.benchmark:
             bench_args = list(args.bench_args) if args.bench_args else []
+            
+            # Ensure --model is present
+            has_model = False
+            for i, arg in enumerate(bench_args):
+                if arg == "--model":
+                    has_model = True
+                    break
+            
+            if not has_model:
+                # Try to find the latest run from latest_run.txt
+                default_model = "mavaia_core/models/neural_text_generator"
+                latest_run_ptr = REPO_ROOT / "mavaia_core" / "models" / "neural_text_generator" / "latest_run.txt"
+                if latest_run_ptr.exists():
+                    try:
+                        latest_path = Path(latest_run_ptr.read_text().strip())
+                        if latest_path.is_absolute():
+                            # Convert to relative path from REPO_ROOT if possible
+                            try:
+                                default_model = str(latest_path.relative_to(REPO_ROOT))
+                            except ValueError:
+                                # If it's absolute but not under REPO_ROOT (e.g. from a different machine)
+                                # we try to find it under mavaia_core/models...
+                                if "mavaia_core/models" in str(latest_path):
+                                    default_model = str(latest_path).split("mavaia_core/models")[-1]
+                                    default_model = "mavaia_core/models" + default_model
+                    except Exception:
+                        pass
+                
+                _rich_log(f"No model specified for benchmark. Defaulting to latest: {default_model}", "cyan", "🤖")
+                bench_args.extend(["--model", default_model])
+
             remote_benchmark(
                 pod_ip, pod_port, args.ssh_key, bench_args, args.volume_mount_path,
                 pod['id'], args.ssh_proxy, script_rel=args.bench_script,
