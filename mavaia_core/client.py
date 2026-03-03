@@ -2492,12 +2492,13 @@ class MavaiaClient:
                 except Exception:
                     pass
             
-            # If still empty, raise error
+            # If still empty, raise error with the module's error message if available
             if not response_text or not str(response_text).strip():
+                error_detail = result.get("error") or "Returned empty response"
                 raise ModuleOperationError(
                     actual_module_name or "cognitive_generator",
-                    operation_to_use,
-                    "Returned empty response"
+                    operation_to_use or "generate_response",
+                    error_detail
                 )
         reasoning_steps = result.get("reasoning_steps")
         confidence = result.get("confidence")
