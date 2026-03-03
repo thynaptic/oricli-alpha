@@ -1077,13 +1077,14 @@ def remote_benchmark(
         env_prefix += f"MAVAIA_MODEL_PATH='{model_path}' "
 
     # Command to start server in background, wait for it, run bench, then kill server
+    log_path = f"{workdir}/mavaia/server.log"
     server_cmd = "PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); "
-    # Revert to single process to avoid OOM/concurrency issues with model loading
-    server_cmd += f"cd {workdir}/mavaia && {env_prefix} $PYTHON_EXE -m mavaia_core.api.server --host 127.0.0.1 --port 8000 --no-auto-port > server.log 2>&1 & "
+    # Ensure PYTHONPATH is set and use nohup + absolute log path
+    server_cmd += f"cd {workdir}/mavaia && {env_prefix} PYTHONPATH=. nohup $PYTHON_EXE -m mavaia_core.api.server --host 127.0.0.1 --port 8000 --no-auto-port > {log_path} 2>&1 & "
     server_cmd += "SERVER_PID=$!; "
-    server_cmd += "echo 'Waiting for API server to start on 127.0.0.1:8000...'; "
+    server_cmd += "echo \"Waiting for API server to start on 127.0.0.1:8000 (Log: {log_path})...\"; "
     # Check /v1/models instead of /health to ensure models are actually loaded
-    server_cmd += "for i in {1..60}; do if curl -s http://127.0.0.1:8000/v1/models > /dev/null; then echo 'Server ready and models loaded!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo 'Server died! Tail of server.log:'; tail -n 20 server.log; break; fi; sleep 2; done; "
+    server_cmd += f"for i in $(seq 1 60); do if curl -s http://127.0.0.1:8000/v1/models > /dev/null; then echo 'Server ready and models loaded!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo 'Server died! Tail of {log_path}:'; tail -n 20 {log_path}; break; fi; sleep 2; done; "
     
     bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}; "
     
