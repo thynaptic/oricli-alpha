@@ -226,9 +226,16 @@ class ModuleRegistry:
                 # Proactively skip modules that will try to pull large HF models at import-time.
                 # This avoids long hangs/timeouts on live servers and keeps core cognition responsive.
                 try:
+                    import os
+                    enable_heavy = os.getenv("MAVAIA_ENABLE_HEAVY_MODULES", "false").lower() in (
+                        "true",
+                        "1",
+                        "yes",
+                    )
+                    
                     text = module_file.read_text(encoding="utf-8", errors="ignore")
 
-                    if any(
+                    if not enable_heavy and any(
                         m in text
                         for m in (
                             "from_pretrained(",
@@ -243,12 +250,6 @@ class ModuleRegistry:
                     # On live servers, default to skipping modules that import heavy ML stacks at
                     # module import-time (TensorFlow/torch/transformers/JAX). These are optional
                     # for core cognition, and can cause latency/noise/hangs.
-                    import os
-                    enable_heavy = os.getenv("MAVAIA_ENABLE_HEAVY_MODULES", "false").lower() in (
-                        "true",
-                        "1",
-                        "yes",
-                    )
                     if not enable_heavy and any(
                         m in text
                         for m in (
