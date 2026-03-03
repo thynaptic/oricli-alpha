@@ -2371,6 +2371,7 @@ class MavaiaClient:
                 
             input_val = params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else params.get("input", "")
             fallback_params = {
+                "prompt": input_val,
                 "input": input_val,
                 "text": input_val,
                 "context": params.get("context", ""),
@@ -2474,6 +2475,7 @@ class MavaiaClient:
                         fallback_result = text_gen.execute(
                             "generate_with_neural",
                             {
+                                "prompt": input_val,
                                 "input": input_val,
                                 "text": input_val,
                                 "context": params.get("context", ""),
