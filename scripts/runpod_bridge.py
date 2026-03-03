@@ -977,6 +977,7 @@ def sync_models_to_pod(pod_ip: str, pod_port: int, ssh_key: str, local_path: Pat
     if proxy:
         rsync_cmd = [
             "rsync", "-az", "--info=stats2",
+            "--no-owner", "--no-group",
             "-e", _ssh_e(ssh_key, "22"),
             str(src_dir) + "/",
             f"{proxy}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/"
@@ -986,6 +987,7 @@ def sync_models_to_pod(pod_ip: str, pod_port: int, ssh_key: str, local_path: Pat
 
     rsync_cmd = [
         "rsync", "-az", "--info=stats2",
+        "--no-owner", "--no-group",
         "-e", _ssh_e(ssh_key, str(pod_port)),
         str(src_dir) + "/",
         f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/"
@@ -1090,6 +1092,7 @@ def get_artifacts(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, wo
     if proxy:
         scp_cmd = [
             "rsync", "-az", "--info=stats2",
+            "--no-owner", "--no-group",
             "-e", _ssh_e(ssh_key, "22"),
             f"{proxy}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
             str(dest_dir) + "/",
@@ -1099,6 +1102,7 @@ def get_artifacts(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, wo
 
     scp_cmd = [
         "rsync", "-az", "--info=stats2",
+        "--no-owner", "--no-group",
         "-e", _ssh_e(ssh_key, str(pod_port)),
         f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
         str(dest_dir) + "/",
@@ -1130,6 +1134,7 @@ def get_bench_results(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path
     if proxy:
         scp_cmd = [
             "rsync", "-az", "--info=stats2",
+            "--no-owner", "--no-group",
             "-e", _ssh_e(ssh_key, "22"),
         ] + patterns + [
             f"{proxy}:{workdir}/mavaia/",
@@ -1140,6 +1145,7 @@ def get_bench_results(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path
 
     scp_cmd = [
         "rsync", "-az", "--info=stats2",
+        "--no-owner", "--no-group",
         "-e", _ssh_e(ssh_key, str(pod_port)),
     ] + patterns + [
         f"root@{pod_ip}:{workdir}/mavaia/",
@@ -1171,12 +1177,14 @@ def sync_training_data(pod_ip: str, pod_port: int, ssh_key: str, local_path: Pat
     if proxy:
         rsync_cmd = [
             "rsync", "-az", "--info=stats2",
+            "--no-owner", "--no-group",
             "-e", _ssh_e(ssh_key, "22"),
             f"{proxy}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
             str(dest_dir / "models") + "/",
         ]
         cache_cmd = [
             "rsync", "-az", "--info=stats2",
+            "--no-owner", "--no-group",
             "-e", _ssh_e(ssh_key, "22"),
             f"{proxy}:{workdir}/mavaia/mavaia_core/data/",
             str(dest_dir / "data_cache") + "/",
@@ -1191,12 +1199,14 @@ def sync_training_data(pod_ip: str, pod_port: int, ssh_key: str, local_path: Pat
 
     rsync_cmd = [
         "rsync", "-az", "--info=stats2",
+        "--no-owner", "--no-group",
         "-e", _ssh_e(ssh_key, str(pod_port)),
         f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
         str(dest_dir / "models") + "/",
     ]
     cache_cmd = [
         "rsync", "-az", "--info=stats2",
+        "--no-owner", "--no-group",
         "-e", _ssh_e(ssh_key, str(pod_port)),
         f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/data/",
         str(dest_dir / "data_cache") + "/",
