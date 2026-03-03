@@ -1007,6 +1007,70 @@ def sync_models_to_pod(pod_ip: str, pod_port: int, ssh_key: str, local_path: Pat
             if proc.returncode not in (0, 23):
                 raise subprocess.CalledProcessError(proc.returncode, rsync_cmd)
 
+def summarize_results(local_path: Path):
+    """Lightweight gap detection and dataset recommendations without the full diploma."""
+    results_path = None
+    # Find latest livebench_results_*.json
+    candidates = list(local_path.glob("livebench_results_*.json"))
+    if not candidates:
+        _rich_log("No benchmark results found to summarize.", "yellow", "⚠")
+        return
+    
+    results_path = max(candidates, key=lambda p: p.stat().st_mtime)
+    _rich_log(f"Analyzing results from: {results_path.name}", "cyan", "🔍")
+    
+    try:
+        data = json.loads(results_path.read_text())
+        results = data.get("results", [])
+        
+        from collections import defaultdict
+        totals = defaultdict(int)
+        passed = defaultdict(int)
+        for item in results:
+            rd = item.get("result_data") or {}
+            cat = rd.get("livebench_category") or item.get("category")
+            if not cat: continue
+            totals[cat] += 1
+            if item.get("status") == "passed": passed[cat] += 1
+        
+        category_rates = {cat: passed[cat]/totals[cat] for cat in totals if totals[cat]}
+        gaps = [cat for cat, rate in category_rates.items() if rate < 0.5]
+        
+        # Recommendations mapping
+        recs = {
+            "reasoning": ("Stage 4: Capability", ["kitsdk/hotpot_qa"]),
+            "coding": ("Stage 7: Coding", ["iamtarun/python_code_instructions_18k_alpaca", "m-a-p/CodeFeedback-Filtered-Instruction"]),
+            "math": ("Stage 2: Logic", ["microsoft/orca-math-word-problems-200k"]),
+            "knowledge": ("Stage 6: Knowledge", ["kitsdk/wiki_hop"]),
+            "context": ("Stage 5: Context", ["kmfoda/booksum"]),
+            "alignment": ("Stage 8: Alignment", ["Intel/orca_dpo_pairs"]),
+        }
+
+        print("\n" + "="*60)
+        print("📊 MAVAIA COGNITIVE GAP ANALYSIS")
+        print("="*60)
+        
+        if not category_rates:
+            print("No category data found in results.")
+        else:
+            for cat, rate in sorted(category_rates.items()):
+                status = "[PASS]" if rate >= 0.5 else "[GAP]"
+                print(f"{cat:<25} {rate:>6.1%} {status}")
+        
+        if gaps:
+            print("\n💡 RECOMMENDED RETOUCH STAGES:")
+            for gap in gaps:
+                gap_lower = gap.lower()
+                if gap_lower in recs:
+                    stage, datasets = recs[gap_lower]
+                    print(f"  • {stage}: Use {', '.join(datasets)}")
+        else:
+            print("\n✨ No critical gaps detected! Foundation is solid.")
+        print("="*60 + "\n")
+
+    except Exception as e:
+        _rich_log(f"Failed to summarize results: {e}", "red", "✗")
+
 def remote_train(
     pod_ip: str,
     pod_port: int,
@@ -2176,6 +2240,13 @@ def main():
         if args.benchmark:
             bench_args = list(args.bench_args) if args.bench_args else []
             
+            # Ensure --bench-name is present to test ALL subjects
+            has_bench = any(arg == "--bench-name" for arg in bench_args)
+            if not has_bench:
+                # Add all standard categories
+                _rich_log("No benchmark categories specified. Testing all subjects.", "cyan", "📚")
+                bench_args.extend(["--bench-name", "live_bench/coding", "live_bench/data_analysis", "live_bench/instruction_following", "live_bench/language", "live_bench/math", "live_bench/reasoning"])
+
             # Ensure --model is present
             has_model = False
             for i, arg in enumerate(bench_args):
@@ -2237,12 +2308,8 @@ def main():
             
             _rich_log("Remote benchmark successful! Results retrieved.", "bold green", "✓")
 
-            # AUTOMATED DIPLOMA UPDATE
-            _rich_log("Updating Mavaia Diploma with new benchmark data...", "cyan", "🎓")
-            try:
-                subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "report_card.py")], check=False)
-            except Exception as e:
-                _rich_log(f"Failed to update report card: {e}", "yellow", "⚠")
+            # LIGHTWEIGHT GAP ANALYSIS
+            summarize_results(REPO_ROOT)
             
             if args.use_s3:
                 # We also push the results to S3 for persistence
