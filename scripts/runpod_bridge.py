@@ -1078,10 +1078,10 @@ def remote_benchmark(
 
     # Command to start server in background, wait for it, run bench, then kill server
     server_cmd = "PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); "
-    server_cmd += f"cd {workdir}/mavaia && {env_prefix} $PYTHON_EXE -m mavaia_core.api.server --no-auto-port --port 8000 > server.log 2>&1 & "
+    server_cmd += f"cd {workdir}/mavaia && {env_prefix} $PYTHON_EXE -m mavaia_core.api.server --no-auto-port --port 8000 --host 127.0.0.1 > server.log 2>&1 & "
     server_cmd += "SERVER_PID=$!; "
-    server_cmd += "echo 'Waiting for API server to start...'; "
-    server_cmd += "for i in {1..30}; do if curl -s http://localhost:8000/health > /dev/null; then echo 'Server ready!'; break; fi; sleep 2; done; "
+    server_cmd += "echo 'Waiting for API server to start on 127.0.0.1:8000...'; "
+    server_cmd += "for i in {1..60}; do if curl -s http://127.0.0.1:8000/health > /dev/null; then echo 'Server ready!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo 'Server died! Check server.log'; cat server.log; break; fi; sleep 2; done; "
     
     bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}; "
     
@@ -2203,7 +2203,7 @@ def main():
             has_api_base = any(arg == "--api-base" for arg in bench_args)
             if not has_api_base:
                 _rich_log("Providing dummy api-base for local model evaluation.", "dim", "ℹ")
-                bench_args.extend(["--api-base", "http://localhost:8000/v1", "--api-key", "dummy"])
+                bench_args.extend(["--api-base", "http://127.0.0.1:8000/v1", "--api-key", "dummy"])
 
             remote_benchmark(
                 pod_ip, pod_port, args.ssh_key, bench_args, args.volume_mount_path,
