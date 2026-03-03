@@ -19,9 +19,3 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Fix persistent SSH 255 errors during pod stabilization in runpod_bridge.py (Regression/Unresolved).**
   *Link: [./tracks/ssh_stability_20260302/](./tracks/ssh_stability_20260302/)*
-
----
-
-- [x] **Track: Implement elective LoRA modes in train_curriculum.py to allow specialized training.**
-  *Link: [./tracks/curriculum_electives_20260303/](./tracks/curriculum_electives_20260303/)*
-
