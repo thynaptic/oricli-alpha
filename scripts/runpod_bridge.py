@@ -1152,7 +1152,7 @@ def remote_benchmark(
     # Check /v1/models instead of /health to ensure models are actually loaded
     server_cmd += f"for i in $(seq 1 60); do if curl -s http://127.0.0.1:8000/v1/models > /dev/null; then echo 'Server ready and models loaded!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo \"Server died! Tail of {log_path}:\"; tail -n 20 {log_path}; break; fi; sleep 2; done; "
     
-    bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && echo 'Executing: $PYTHON_EXE run_livebench.py {args_str}' && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}"
+    bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && echo \"[DEBUG] Working directory: $(pwd)\" && echo 'Executing: $PYTHON_EXE run_livebench.py {args_str}' && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}"
     
     # If benchmark fails, cat the server log to help debugging
     full_remote_cmd = f"{server_cmd} if ! {bench_cmd}; then echo '!!! BENCHMARK FAILED !!!'; echo 'Server Log:'; cat {log_path}; exit 1; fi; kill $SERVER_PID || true"
