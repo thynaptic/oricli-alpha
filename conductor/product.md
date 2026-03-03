@@ -18,7 +18,7 @@ Mavaia Core addresses the complexity of orchestrating modular AI systems while e
 - **Curriculum Electives**: Ability to train specialized LoRA adapters (modes) for specific domains without model overbasing.
 - **Intelligent Resource Allocation**: Dynamic GPU matching logic that selects optimal hardware based on training size and VRAM requirements.
 - **Observability**: Built-in metrics, health monitoring, and introspection for cognitive state.
-- **Validation & Benchmarking**: Tools to ensure cognitive performance and accuracy (e.g., LiveBench integration).
+- **Remote Validation & Benchmarking**: Dedicated bridge mode for high-performance evaluation on remote GPUs (e.g., LiveBench integration) with automated result synchronization.
 - **Hot-Swappable Cognitive Adapters**: The ability to swap reasoning engines and models at runtime without service interruption.
 
 ## Future Vision (12 Months)
