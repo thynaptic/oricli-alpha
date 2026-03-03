@@ -480,7 +480,7 @@ def setup_pod_env(pod_ip: str, pod_port: int, ssh_key: str, pod_id: str = None, 
             # Clean up the raw message for the UI
             diag_msg = raw.splitlines()[-1] if "\n" in raw else raw
             if "Connection closed" in raw or "exit 255" in raw:
-                diag_msg = "Proxy routing not established yet"
+                diag_msg = "Proxy routing not established yet (Normal for new pods)"
             elif "Connection refused" in raw:
                 diag_msg = "SSH service starting"
             elif "Permission denied" in raw:
@@ -495,12 +495,14 @@ def setup_pod_env(pod_ip: str, pod_port: int, ssh_key: str, pod_id: str = None, 
             )
             
             if i < max_retries - 1:
-                # MANDATORY GRACE: If it's the first proxy failure, wait longer
+                # MANDATORY GRACE: If it's the first proxy failure, wait significantly longer
+                # Global proxy routing can take up to 60-90s to propagate
                 if is_proxy and i == 0:
-                    _rich_log("First proxy attempt failed; waiting 45s for global routing...", "dim", "⏳", progress=progress, task_id=task_id)
-                    time.sleep(45)
+                    _rich_log("First proxy attempt failed; waiting 60s for global routing propagation...", "dim", "⏳", progress=progress, task_id=task_id)
+                    time.sleep(60)
                 else:
-                    delay = 15 if is_proxy and i < 5 else 5
+                    # Increasing delay for proxy attempts
+                    delay = 20 if is_proxy and i < 10 else 5
                     time.sleep(delay)
                 continue
             
