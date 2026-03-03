@@ -2177,6 +2177,12 @@ def main():
                 _rich_log(f"No model specified for benchmark. Defaulting to latest: {default_model}", "cyan", "🤖")
                 bench_args.extend(["--model", default_model])
 
+            # Ensure --api-base is present if using a local model path
+            has_api_base = any(arg == "--api-base" for arg in bench_args)
+            if not has_api_base:
+                _rich_log("Providing dummy api-base for local model evaluation.", "dim", "ℹ")
+                bench_args.extend(["--api-base", "http://localhost:8000/v1", "--api-key", "dummy"])
+
             remote_benchmark(
                 pod_ip, pod_port, args.ssh_key, bench_args, args.volume_mount_path,
                 pod['id'], args.ssh_proxy, script_rel=args.bench_script,
