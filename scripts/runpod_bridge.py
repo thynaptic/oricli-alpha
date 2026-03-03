@@ -1152,7 +1152,7 @@ def remote_benchmark(
     # Check /v1/models instead of /health to ensure models are actually loaded
     server_cmd += f"for i in $(seq 1 60); do if curl -s http://127.0.0.1:8000/v1/models > /dev/null; then echo 'Server ready and models loaded!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo \"Server died! Tail of {log_path}:\"; tail -n 20 {log_path}; break; fi; sleep 2; done; "
     
-    bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}"
+    bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && echo 'Executing: $PYTHON_EXE run_livebench.py {args_str}' && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}"
     
     # If benchmark fails, cat the server log to help debugging
     full_remote_cmd = f"{server_cmd} if ! {bench_cmd}; then echo '!!! BENCHMARK FAILED !!!'; echo 'Server Log:'; cat {log_path}; exit 1; fi; kill $SERVER_PID || true"
@@ -1223,9 +1223,9 @@ def get_bench_results(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path
     patterns = [
         "--include=livebench_results_*.json",
         "--include=mavaia_result.json",
-        "--include=data/***", # Recursive include for data folder
-        "--include=*.json",
-        "--include=*.jsonl",
+        "--include=data/***",
+        "--include=**/*.json",
+        "--include=**/*.jsonl",
         "--exclude=*"
     ]
 
@@ -2299,6 +2299,9 @@ def main():
             # Always force fresh results to ensure we don't skip anything
             if "--remove-existing-judgment-file" not in bench_args:
                 bench_args.append("--remove-existing-judgment-file")
+            
+            # Remove any resume flags to force fresh start
+            bench_args = [arg for arg in bench_args if arg not in ("--resume", "--resume-inference", "--resume-grading")]
 
             remote_benchmark(
                 pod_ip, pod_port, args.ssh_key, bench_args, args.volume_mount_path,
