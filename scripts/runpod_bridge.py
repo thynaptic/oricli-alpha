@@ -590,7 +590,7 @@ def ensure_mavaia_installed(
         "rm -rf datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy PIL torch torchvision torchaudio xxhash multiprocess dill fsspec aiohttp requests tqdm yaml safetensors 2>/dev/null || true; "
         "find . -maxdepth 1 -name '*.so' -delete; "
         "echo '[INFO] Installing core ML libraries (this may take a few minutes)...'; "
-        "\"$VENV_PY\" -m pip install --upgrade datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash -q || true; "
+        "\"$VENV_PY\" -m pip install --upgrade datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash shortuuid libtmux python-dotenv -q || true; "
 
         "if [ -d LiveBench ]; then "
         "  echo '[INFO] LiveBench detected. Installing in editable mode...'; "
@@ -1065,7 +1065,7 @@ def remote_benchmark(
     if hf_token:
         env_prefix += f"HF_TOKEN='{hf_token}' "
     
-    cmd = f"cd {workdir}/mavaia && echo '[DEBUG] Pod directory content:' && ls -F && echo '[DEBUG] LiveBench content:' && ls -R LiveBench/ 2>/dev/null || echo 'LiveBench folder missing' && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
+    cmd = f"cd {workdir}/mavaia && echo '[DEBUG] Pod directory content:' && ls -F && echo '[DEBUG] LiveBench content:' && ls -R LiveBench/ 2>/dev/null || echo 'LiveBench folder missing' && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); cd LiveBench/livebench && {env_prefix}$PYTHON_EXE run_livebench.py {args_str}"
 
     if proxy:
         ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [cmd]
@@ -2169,6 +2169,11 @@ def main():
                     except Exception:
                         pass
                 
+                # Make path absolute for pod context since we cd into LiveBench/livebench
+                if not default_model.startswith("/"):
+                    # On pod it will be in /workspace/mavaia/...
+                    default_model = f"{args.volume_mount_path}/mavaia/{default_model}"
+
                 _rich_log(f"No model specified for benchmark. Defaulting to latest: {default_model}", "cyan", "🤖")
                 bench_args.extend(["--model", default_model])
 
