@@ -2300,6 +2300,10 @@ def main():
             if "--remove-existing-judgment-file" not in bench_args:
                 bench_args.append("--remove-existing-judgment-file")
             
+            # FORCE FOREGROUND MODE: Otherwise it spawns a tmux session and exits instantly
+            if "--mode" not in bench_args:
+                bench_args.extend(["--mode", "single"])
+            
             # Remove any resume flags to force fresh start
             bench_args = [arg for arg in bench_args if arg not in ("--resume", "--resume-inference", "--resume-grading")]
 
