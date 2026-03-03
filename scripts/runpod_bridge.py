@@ -1082,7 +1082,8 @@ def remote_benchmark(
     server_cmd += f"cd {workdir}/mavaia && {env_prefix} $PYTHON_EXE -m uvicorn mavaia_core.api.server:create_app --factory --host 127.0.0.1 --port 8000 --workers 4 > server.log 2>&1 & "
     server_cmd += "SERVER_PID=$!; "
     server_cmd += "echo 'Waiting for API server to start on 127.0.0.1:8000...'; "
-    server_cmd += "for i in {1..60}; do if curl -s http://127.0.0.1:8000/health > /dev/null; then echo 'Server ready!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo 'Server died! Check server.log'; cat server.log; break; fi; sleep 2; done; "
+    # Check /v1/models instead of /health to ensure models are actually loaded
+    server_cmd += "for i in {1..60}; do if curl -s http://127.0.0.1:8000/v1/models > /dev/null; then echo 'Server ready and models loaded!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo 'Server died! Check server.log'; cat server.log; break; fi; sleep 2; done; "
     
     bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}; "
     
@@ -2205,6 +2206,11 @@ def main():
             if not has_api_base:
                 _rich_log("Providing dummy api-base for local model evaluation.", "dim", "ℹ")
                 bench_args.extend(["--api-base", "http://127.0.0.1:8000/v1", "--api-key", "dummy"])
+            
+            # Ensure --parallel-requests is 1 to avoid overwhelming the local uvicorn
+            has_parallel = any(arg == "--parallel-requests" for arg in bench_args)
+            if not has_parallel:
+                bench_args.extend(["--parallel-requests", "1"])
 
             remote_benchmark(
                 pod_ip, pod_port, args.ssh_key, bench_args, args.volume_mount_path,
