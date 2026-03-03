@@ -5377,8 +5377,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 transformer_config = params.get("transformer_config", {})
                 custom_model_path = transformer_config.get("model_name")
             
-            if custom_model_path and Path(custom_model_path).exists():
-                base_path = Path(custom_model_path)
+            # Resolve the actual path
+            base_path = Path(custom_model_path) if custom_model_path else self.model_dir
+            
+            if base_path and base_path.exists():
                 # Check for 'transformer' subfolder first
                 if (base_path / "transformer").exists():
                     transformer_model_path = base_path / "transformer"
@@ -5395,11 +5397,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 else:
                     transformer_tokenizer_path = transformer_model_path
             else:
-                # Default location
+                # Default location fallback
                 transformer_model_path = self.model_dir / "transformer"
                 transformer_tokenizer_path = transformer_model_path
             
-            if transformer_model_path.exists():
+            if transformer_model_path.exists() and ((transformer_model_path / "config.json").exists() or (transformer_model_path / "model.safetensors").exists()):
                 if not is_transformers_available() or not is_torch_available():
                     results["transformer"] = {
                         "success": False, 
