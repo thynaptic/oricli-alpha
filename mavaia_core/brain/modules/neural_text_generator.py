@@ -4913,7 +4913,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         Args:
             params:
                 - prompt: Starting text/prompt
-                - model_type: "character" or "word" (default from config)
+                - model_type: "character", "word", or "transformer"
                 - max_length: Maximum length to generate (default: 500)
                 - temperature: Sampling temperature (default: 0.7)
                 - voice_context: Optional voice context for style adaptation
@@ -4922,10 +4922,28 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             Generated text
         """
         prompt = params.get("prompt", "")
-        model_type = params.get(
-            "model_type",
-            self.config.get("generation", {}).get("default_model", "character"),
-        )
+        
+        # Intelligent model type detection
+        model_type = params.get("model_type")
+        if not model_type:
+            # 1. Prefer already loaded model
+            if hasattr(self, 'transformer_model') and self.transformer_model is not None:
+                model_type = "transformer"
+            elif hasattr(self, 'char_model') and self.char_model is not None:
+                model_type = "character"
+            elif hasattr(self, 'word_model') and self.word_model is not None:
+                model_type = "word"
+            # 2. Check filesystem if model_dir is set
+            elif self.model_dir:
+                if (self.model_dir / "transformer").exists() or (self.model_dir / "model.safetensors").exists() or (self.model_dir / "config.json").exists():
+                    model_type = "transformer"
+                elif (self.model_dir / "char_model.keras").exists() or (self.model_dir / "char_model.json").exists():
+                    model_type = "character"
+            
+            # 3. Fallback to config or hard default
+            if not model_type:
+                model_type = self.config.get("generation", {}).get("default_model", "character")
+
         max_length = params.get(
             "max_length",
             self.config.get("generation", {}).get("max_length", 500),
