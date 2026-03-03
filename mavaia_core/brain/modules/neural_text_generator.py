@@ -4936,6 +4936,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 model_type = "word"
             # 2. Check filesystem if model_dir is set
             elif self.model_dir:
+                # DEBUG LOGGING for remote troubleshooting
+                logger.info(f"[DEBUG] Detecting model type at {self.model_dir}", extra={"module_name": "neural_text_generator"})
                 if (self.model_dir / "transformer").exists() or (self.model_dir / "model.safetensors").exists() or (self.model_dir / "config.json").exists():
                     model_type = "transformer"
                 elif (self.model_dir / "char_model.keras").exists() or (self.model_dir / "char_model.json").exists():
@@ -4944,6 +4946,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # 3. Fallback to config or hard default
             if not model_type:
                 model_type = self.config.get("generation", {}).get("default_model", "character")
+        
+        logger.info(f"[DEBUG] Selected model_type: {model_type}", extra={"module_name": "neural_text_generator"})
 
         max_length = params.get(
             "max_length",
