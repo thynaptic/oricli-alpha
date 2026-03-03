@@ -1078,7 +1078,8 @@ def remote_benchmark(
 
     # Command to start server in background, wait for it, run bench, then kill server
     server_cmd = "PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); "
-    server_cmd += f"cd {workdir}/mavaia && {env_prefix} $PYTHON_EXE -m mavaia_core.api.server --no-auto-port --port 8000 --host 127.0.0.1 > server.log 2>&1 & "
+    # We use uvicorn workers to handle potential concurrency issues
+    server_cmd += f"cd {workdir}/mavaia && {env_prefix} $PYTHON_EXE -m uvicorn mavaia_core.api.server:create_app --factory --host 127.0.0.1 --port 8000 --workers 4 > server.log 2>&1 & "
     server_cmd += "SERVER_PID=$!; "
     server_cmd += "echo 'Waiting for API server to start on 127.0.0.1:8000...'; "
     server_cmd += "for i in {1..60}; do if curl -s http://127.0.0.1:8000/health > /dev/null; then echo 'Server ready!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo 'Server died! Check server.log'; cat server.log; break; fi; sleep 2; done; "
