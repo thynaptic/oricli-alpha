@@ -2366,8 +2366,13 @@ class MavaiaClient:
         # Adjust params for fallback modules if needed
         if is_fallback and actual_module_name == "text_generation_engine":
             # text_generation_engine might need different params
+            if operation_to_use == "generate_response" or operation_to_use == "generate_full_response":
+                operation_to_use = "generate_with_neural"
+                
+            input_val = params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else params.get("input", "")
             fallback_params = {
-                "input": params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else params.get("input", ""),
+                "input": input_val,
+                "text": input_val,
                 "context": params.get("context", ""),
             }
             params = fallback_params
