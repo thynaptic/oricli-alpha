@@ -2421,8 +2421,13 @@ class MavaiaClient:
                         if fallback_module:
                             # Adjust params for fallback module
                             if fallback_name == "text_generation_engine":
+                                # If we're doing direct text generation (no thoughts), use generate_with_neural
+                                if operation_to_use == "generate_full_response" or not operation_to_use:
+                                    fallback_op = "generate_with_neural"
+                                
                                 fallback_params = {
                                     "input": params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else params.get("input", ""),
+                                    "text": params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else params.get("input", ""),
                                     "context": params.get("context", ""),
                                 }
                             else:
@@ -2460,10 +2465,12 @@ class MavaiaClient:
                 try:
                     text_gen = ModuleRegistry.get_module("text_generation_engine")
                     if text_gen:
+                        input_val = params.get("input", params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else "")
                         fallback_result = text_gen.execute(
-                            "generate_full_response",
+                            "generate_with_neural",
                             {
-                                "input": params.get("input", params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else ""),
+                                "input": input_val,
+                                "text": input_val,
                                 "context": params.get("context", ""),
                             }
                         )

@@ -235,9 +235,15 @@ class NeuralTextGeneratorModule(BaseBrainModule):
     def _setup_model_directory(self):
         """Setup model storage directory"""
         if self.model_dir is None:
-            self.model_dir = (
-                Path(__file__).parent.parent.parent / "models" / "neural_text_generator"
-            )
+            # Respect MAVAIA_MODEL_PATH if provided
+            env_path = os.environ.get("MAVAIA_MODEL_PATH")
+            if env_path:
+                self.model_dir = Path(env_path)
+            else:
+                self.model_dir = (
+                    Path(__file__).parent.parent.parent / "models" / "neural_text_generator"
+                )
+            
             self.model_dir.mkdir(parents=True, exist_ok=True)
             (self.model_dir / "checkpoints").mkdir(exist_ok=True)
 
@@ -2108,7 +2114,6 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             beta=params.get("dpo_beta", 0.1),
             per_device_train_batch_size=params.get("batch_size", 4),
             max_length=params.get("sequence_length", 512),
-            max_prompt_length=params.get("max_prompt_length", 256),
             learning_rate=params.get("learning_rate", 5e-5),
             num_train_epochs=params.get("epochs", 1),
             logging_steps=10,
@@ -2125,6 +2130,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             args=training_args,
             train_dataset=dataset,
             tokenizer=tokenizer,
+            max_prompt_length=params.get("max_prompt_length", 256),
         )
         
         print("[INFO] Starting DPO alignment...")
