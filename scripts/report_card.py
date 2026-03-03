@@ -189,11 +189,18 @@ def main():
     ap = argparse.ArgumentParser(description="Generate a Rich Report Card for Mavaia")
     ap.add_argument("--progress", default="")
     ap.add_argument("--format", choices=["text", "json", "rich"], default="rich")
-    ap.add_argument("--output", default="")
+    ap.add_argument("--output", default="", help="JSON output path")
+    ap.add_argument("--text-output", default="", help="Text output path")
+    ap.add_argument("--grade-source", choices=["local", "remote", "both"], default="both")
     args = ap.parse_args()
 
     # Data Discovery
-    progress_path = _find_latest(["**/curriculum_progress.json"], REPO_ROOT)
+    progress_path = None
+    if args.progress:
+        progress_path = Path(args.progress)
+    else:
+        progress_path = _find_latest(["**/curriculum_progress.json"], REPO_ROOT)
+    
     progress = _load_json(progress_path) or {}
     
     metrics_path = _find_latest_training_metrics(REPO_ROOT)
@@ -211,6 +218,13 @@ def main():
     
     training_loss = training_metrics.get("loss") if training_metrics else "N/A"
     
+    next_steps = ["Monitor Sentinel for Plateaus"]
+    curr_stage = progress.get("current_stage", "")
+    if "alignment" in curr_stage or "knowledge_world" in curr_stage:
+        next_steps.insert(0, "Proceed to Stage 9: Comprehensive World Knowledge")
+    else:
+        next_steps.insert(0, "Continue Curriculum Stage 4: Multi-hop Reasoning")
+    
     report = {
         "report_date": _now_iso(),
         "student": "Mavaia",
@@ -225,18 +239,23 @@ def main():
         "self_confidence": f"{mavaia_result.get('confidence', 0):.2f}",
         "subject_grades": {cat: _grade_from_rate(r) for cat, r in lb_info["category_rates"].items()},
         "gaps": lb_info["gaps"],
-        "next_steps": ["Continue Curriculum Stage 3: Multi-hop Reasoning", "Monitor Sentinel for Plateaus"]
+        "next_steps": next_steps
     }
 
+    text_report = ""
     if USE_RICH and args.format in ("rich", "text"):
         text_report = _format_rich_report(report)
     else:
         # Fallback to simple print if no rich
-        print(f"Mavaia Report Card - {report['report_date']}")
-        print(f"Loss: {report['training_loss']} | Trend: {report['training_loss_trend']}")
+        text_report = f"Mavaia Report Card - {report['report_date']}\n"
+        text_report += f"Loss: {report['training_loss']} | Trend: {report['training_loss_trend']}\n"
+        print(text_report)
 
     if args.output:
         Path(args.output).write_text(json.dumps(report, indent=2))
+    
+    if args.text_output:
+        Path(args.text_output).write_text(text_report)
 
     return 0
 

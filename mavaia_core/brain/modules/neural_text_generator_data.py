@@ -205,73 +205,192 @@ class HuggingFaceSource(BaseDataSource):
                     dataset_config = parts[2]
 
             dataset = None
-            try:
-                if dataset_config:
-                    logger.info(f"Loading HF dataset '{dataset_id}' [config={dataset_config}]...")
-                    dataset = load_dataset(dataset_id, dataset_config, split="train", streaming=False)
-                else:
-                    logger.info(f"Loading HF dataset '{dataset_id}'...")
-                    dataset = load_dataset(dataset_id, split="train", streaming=False)
-            except Exception as e:
-                if dataset_config:
+            # Helper to try loading a dataset with various combinations
+            def _try_load(path, config=None):
+                # 1. Try common splits WITHOUT trust_remote_code first (modern datasets)
+                for split in ["train", "data", "main"]:
                     try:
-                        logger.info(f"Retrying '{dataset_id}' as filter...")
-                        dataset = load_dataset(dataset_id, split="train", streaming=False)
-                        dataset_filter = dataset_config
+                        if config:
+                            return load_dataset(path, config, split=split, streaming=True)
+                        else:
+                            return load_dataset(path, split=split, streaming=True)
                     except Exception:
-                        return None
-                else:
+                        continue
+                
+                # 2. Try WITH trust_remote_code fallback for legacy datasets
+                for split in ["train", "data", "main"]:
+                    try:
+                        if config:
+                            return load_dataset(path, config, split=split, streaming=True, trust_remote_code=True)
+                        else:
+                            return load_dataset(path, split=split, streaming=True, trust_remote_code=True)
+                    except Exception:
+                        continue
+                
+                # 3. Try discovery of splits if specific ones fail
+                try:
+                    from datasets import get_dataset_split_names
+                    # Try without trust first
+                    available_splits = None
+                    try:
+                        available_splits = get_dataset_split_names(path, config) if config else get_dataset_split_names(path)
+                    except Exception:
+                        available_splits = get_dataset_split_names(path, config, trust_remote_code=True) if config else get_dataset_split_names(path, trust_remote_code=True)
+                    
+                    if available_splits:
+                        split = available_splits[0]
+                        try:
+                            return load_dataset(path, config, split=split, streaming=True) if config else load_dataset(path, split=split, streaming=True)
+                        except Exception:
+                            return load_dataset(path, config, split=split, streaming=True, trust_remote_code=True) if config else load_dataset(path, split=split, streaming=True, trust_remote_code=True)
+                except Exception:
+                    pass
+
+                # Final attempt: direct dict return
+                try:
+                    # Without trust
+                    try:
+                        ds_dict = load_dataset(path, config, streaming=True) if config else load_dataset(path, streaming=True)
+                    except Exception:
+                        ds_dict = load_dataset(path, config, streaming=True, trust_remote_code=True) if config else load_dataset(path, streaming=True, trust_remote_code=True)
+                    
+                    if isinstance(ds_dict, dict) and ds_dict:
+                        return ds_dict[next(iter(ds_dict.keys()))]
+                    return ds_dict
+                except Exception:
                     return None
+
+            if dataset_config:
+                logger.info(f"Loading HF dataset '{dataset_id}' [config={dataset_config}]...")
+                dataset = _try_load(dataset_id, dataset_config)
+                
+                if dataset is None:
+                    logger.info(f"Retrying '{dataset_id}' without config, using '{dataset_config}' as filter...")
+                    dataset = _try_load(dataset_id)
+                    dataset_filter = dataset_config
+            else:
+                logger.info(f"Loading HF dataset '{dataset_id}'...")
+                dataset = _try_load(dataset_id)
             
             if dataset is None:
+                logger.error(f"Failed to load dataset '{dataset_id}' (tried multiple splits/configs)")
                 return None
             
             if dataset_filter:
-                filter_col = None
-                for col in dataset.column_names:
-                    sample_size = min(100, len(dataset))
-                    if any(str(dataset[i].get(col)) == dataset_filter for i in range(sample_size)):
-                        filter_col = col
-                        break
-                if filter_col:
-                    dataset = dataset.filter(lambda x: str(x[filter_col]) == dataset_filter)
+                try:
+                    filter_col = None
+                    # Sample a few rows to find the filter column
+                    sample = []
+                    try:
+                        it = iter(dataset)
+                        for _ in range(50):
+                            sample.append(next(it))
+                    except (StopIteration, Exception):
+                        pass
+                    
+                    if sample:
+                        for col in dataset.column_names:
+                            if any(str(x.get(col)).lower() == dataset_filter.lower() for x in sample):
+                                filter_col = col
+                                break
+                    
+                    if filter_col:
+                        logger.info(f"Filtering column '{filter_col}' by '{dataset_filter}'...")
+                        dataset = dataset.filter(lambda x: str(x[filter_col]).lower() == dataset_filter.lower())
+                    else:
+                        # If no column matches the filter value, check if the filter IS a column name
+                        if dataset_filter in dataset.column_names:
+                            logger.info(f"Using filter '{dataset_filter}' as target column name.")
+                            text_column = dataset_filter
+                        else:
+                            logger.warning(f"Could not find column or value matching filter '{dataset_filter}'")
+                except Exception as e:
+                    logger.warning(f"Filtering failed for {dataset_id}: {e}")
             
             all_text = []
-            text_columns = ["text", "content", "conversations", "conversation", "message", "messages", "article", "body"]
+            text_columns = ["text", "content", "conversations", "conversation", "message", "messages", "article", "body", "chapter", "chapter_text", "summary", "summary_text"]
             
+            # Identify the best column to extract text from
             text_column = None
-            for col in text_columns:
-                if col in dataset.column_names:
-                    text_column = col
-                    break
+            
+            # 1. If filter matched a column name, use it (verified it exists in dataset.column_names)
+            if 'discovered_column' in locals() and discovered_column:
+                text_column = discovered_column
+            
+            # 2. Try standard names if no column identified yet
+            if not text_column:
+                for col in text_columns:
+                    if col in dataset.column_names:
+                        # VERIFY it's not empty in the first row
+                        try:
+                            first_row = next(iter(dataset))
+                            if first_row.get(col):
+                                text_column = col
+                                break
+                        except Exception:
+                            pass
+            
+            # 3. Smart discovery from first row (longest non-empty string)
+            if not text_column:
+                try:
+                    first_row = None
+                    try:
+                        it = iter(dataset)
+                        first_row = next(it)
+                    except (StopIteration, Exception):
+                        pass
+                    
+                    if first_row:
+                        best_col = None
+                        max_len = -1
+                        for col in dataset.column_names:
+                            val = first_row.get(col)
+                            if val and isinstance(val, str):
+                                if len(val) > max_len:
+                                    max_len = len(val)
+                                    best_col = col
+                            elif val and isinstance(val, (list, dict)) and max_len < 0:
+                                best_col = col
+                        text_column = best_col
+                except Exception:
+                    pass
+            
+            # 4. Final fallback to first column
+            if not text_column and dataset.column_names:
+                text_column = dataset.column_names[0]
             
             if not text_column:
-                for col in dataset.column_names:
-                    if len(dataset) > 0:
-                        val = dataset[0].get(col)
-                        if isinstance(val, (str, list, dict)):
-                            text_column = col
-                            break
-            
-            if not text_column:
+                logger.error(f"Could not identify any columns in dataset '{dataset_id}'.")
                 return None
             
             logger.info(f"Extracting from column '{text_column}'...")
             
-            for idx, example in enumerate(dataset):
+            current_size = 0
+            # Use an iterator to handle both normal and IterableDataset
+            it = iter(dataset)
+            for idx in range(10000): # Hard limit for safety
+                try:
+                    example = next(it)
+                except (StopIteration, Exception):
+                    break
+                    
                 if text_column in example:
                     parts = self._extract_text_recursive(example[text_column])
                     if parts:
-                        all_text.append("\n".join(parts))
+                        chunk = "\n".join(parts)
+                        all_text.append(chunk)
+                        current_size += len(chunk)
                 
-                if max_text_size and sum(len(t) for t in all_text) >= max_text_size:
+                if max_text_size and current_size >= max_text_size:
                     break
             
             if not all_text:
+                logger.warning(f"No text extracted from column '{text_column}' in dataset '{dataset_id}'.")
                 return None
                 
             combined = "\n\n".join(all_text)
             try:
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
                 cache_file.write_text(combined, encoding="utf-8")
             except Exception:
                 pass
@@ -356,9 +475,10 @@ class HuggingFaceSource(BaseDataSource):
         if book_ids:
             for dataset_name in book_ids:
                 dataset_id = str(dataset_name).strip()
-                safe_filename = dataset_id.replace('/', '_').replace('\\', '_')
+                safe_filename = dataset_id.replace('/', '_').replace('\\', '_').replace(':', '_')
                 cache_file = cache_dir / f"{safe_filename}.txt"
                 
+                # Check cache first
                 if cache_file.exists():
                     try:
                         text = cache_file.read_text(encoding="utf-8")
@@ -368,12 +488,16 @@ class HuggingFaceSource(BaseDataSource):
                     except Exception:
                         pass
                 
+                # Load and extract
                 text = self._load_dataset_text(dataset_id, cache_file, max_text_size)
                 if text:
                     all_text.append(text)
                 else:
-                    raise RuntimeError(f"Failed to load dataset '{dataset_id}'.")
+                    raise RuntimeError(f"Failed to load dataset '{dataset_id}'. Ensure it exists and has text columns.")
         
+        if not all_text:
+            return ""
+            
         return "\n\n".join(all_text)
 
 class Registry:

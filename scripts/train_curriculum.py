@@ -26,12 +26,18 @@ except Exception:
 
 import subprocess
 import time
+import random
 from datetime import datetime
 from pathlib import Path
 
+# Paths
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRAIN_SCRIPT = REPO_ROOT / "scripts" / "train_neural_text_generator.py"
 REPORT_SCRIPT = REPO_ROOT / "scripts" / "report_card.py"
+
+# Determine Python executable
+VENV_PY = REPO_ROOT / ".venv" / "bin" / "python"
+PYTHON_EXE = str(VENV_PY) if VENV_PY.exists() else sys.executable
 
 
 def _now_iso():
@@ -70,46 +76,53 @@ def _stage_defs(common_epochs: int, data_pct: float, wikitext: bool):
         },
         {
             "name": "prose_no_robots",
-            "title": "Stage 2.5: Prose Modernization",
+            "title": "Stage 3: Prose Modernization",
             "age": "Age 14",
             "school": "Junior High",
             "dataset": "HuggingFaceH4/no_robots",
         },
         {
             "name": "capability_hotpot_qa",
-            "title": "Stage 3: Capability Phase",
+            "title": "Stage 4: Capability Phase",
             "age": "Age 16",
             "school": "High School",
             "dataset": "hotpot_qa:distractor",
         },
         {
             "name": "context_booksum",
-            "title": "Stage 4: Context Phase",
+            "title": "Stage 5: Context Phase",
             "age": "Age 19",
             "school": "Undergraduate",
             "dataset": "kmfoda/booksum:chapter",
         },
         {
             "name": "knowledge_wikihop",
-            "title": "Stage 5: Knowledge Phase",
+            "title": "Stage 6: Knowledge Phase",
             "age": "Age 23",
             "school": "Graduate School",
-            "dataset": "microsoft/wiki_hop:original",
+            "dataset": "kitsdk/wiki_hop",
         },
         {
             "name": "coding_alpaca_python",
-            "title": "Stage 6: Coding Phase",
+            "title": "Stage 7: Coding Phase",
             "age": "Age 27",
             "school": "Doctoral Program",
             "dataset": "iamtarun/python_code_instructions_18k_alpaca",
         },
         {
             "name": "alignment_dpo",
-            "title": "Stage 7: Alignment Phase",
+            "title": "Stage 8: Alignment Phase",
             "age": "Post-Doc",
             "school": "Sovereign Alignment",
             "dataset": "Intel/orca_dpo_pairs",
             "is_dpo": True,
+        },
+        {
+            "name": "knowledge_world_dense",
+            "title": "Stage 9: Comprehensive World Knowledge",
+            "age": "Age 30",
+            "school": "Deep Intelligence Integration",
+            "dataset": ["tau/commonsense_qa", "HuggingFaceFW/fineweb-edu", "wikimedia/wikipedia:20231101.en"],
         },
     ]
     for s in stages:
@@ -119,23 +132,30 @@ def _stage_defs(common_epochs: int, data_pct: float, wikitext: bool):
 
 
 def _auto_stage_overrides(stage: dict):
-    dataset = stage.get("dataset", "").lower()
+    datasets = stage.get("dataset", "")
+    if isinstance(datasets, list):
+        datasets_str = " ".join(datasets).lower()
+    else:
+        datasets_str = str(datasets).lower()
+        
     overrides = {}
     # Default pod-friendly heuristics by dataset family.
-    if "oh-dcft" in dataset:
+    if "oh-dcft" in datasets_str:
         overrides = {"epochs": 1, "data_pct": 0.2}
-    elif "orca-math" in dataset:
+    elif "orca-math" in datasets_str:
         overrides = {"epochs": 1, "data_pct": 0.1}
-    elif "no_robots" in dataset:
+    elif "no_robots" in datasets_str:
         overrides = {"epochs": 2, "data_pct": 0.5} # Smaller, higher quality
-    elif "hotpot_qa" in dataset:
+    elif "hotpot_qa" in datasets_str:
         overrides = {"epochs": 1, "data_pct": 0.1}
-    elif "booksum" in dataset:
+    elif "booksum" in datasets_str:
         overrides = {"epochs": 1, "data_pct": 0.3}
-    elif "wiki_hop" in dataset:
+    elif "wiki_hop" in datasets_str:
         overrides = {"epochs": 1, "data_pct": 0.1}
-    elif "python_code" in dataset:
+    elif "python_code" in datasets_str:
         overrides = {"epochs": 2, "data_pct": 0.4}
+    elif "knowledge_world_dense" == stage["name"] or "fineweb-edu" in datasets_str:
+        overrides = {"epochs": 1, "data_pct": 0.1} # Large diversity, keep pct low for speed
     
     if overrides:
         stage["epochs"] = overrides["epochs"]
@@ -185,17 +205,33 @@ def _run_stage(stage, run_root: Path, extra_args, progress_path: Path, progress:
         if base_to_use:
             load_from = base_to_use
             local_extra_args.extend(["--adapter-name", stage["name"]])
+    else:
+        # Core Sequential Stage: Load foundation from previous stage (elective or core)
+        if progress.get("stages"):
+            # Find absolute last completed stage of any type
+            last_completed = None
+            for s in reversed(progress.get("stages", [])):
+                if s.get("status") == "completed":
+                    last_completed = s.get("run_dir")
+                    break
+            
+            if last_completed:
+                load_from = last_completed
+                print(f"[INFO] Continuing from last completed stage: {load_from}")
+
+    # Handle datasets (can be string or list)
+    datasets = stage["dataset"]
+    if isinstance(datasets, str):
+        datasets = [datasets]
 
     cmd = [
-        sys.executable,
+        PYTHON_EXE,
         str(TRAIN_SCRIPT),
         "--plain-output",
         "--model-type",
         "transformer",
         "--source",
         "huggingface",
-        "--book-ids",
-        stage["dataset"],
         "--epochs",
         str(stage["epochs"]),
         "--data-percentage",
@@ -207,6 +243,9 @@ def _run_stage(stage, run_root: Path, extra_args, progress_path: Path, progress:
         "--batch-size",
         str(batch_size),
     ]
+    
+    # Add all datasets
+    cmd.extend(["--book-ids"] + datasets)
 
     if load_from:
         cmd.extend(["--continue-training", "--run-dir", str(load_from)])
@@ -267,7 +306,7 @@ def _run_stage(stage, run_root: Path, extra_args, progress_path: Path, progress:
             report_out = run_root / "report_card.txt"
             subprocess.run(
                 [
-                    "python3",
+                    PYTHON_EXE,
                     str(REPORT_SCRIPT),
                     "--format",
                     "text",
@@ -306,12 +345,17 @@ def main():
     if args.list_stages:
         stages = _stage_defs(1, 0.2, False)
         print("\nAvailable Curriculum Stages:")
-        print("-" * 60)
-        print(f"{'Idx':<5} {'Name':<25} {'Title':<30}")
-        print("-" * 60)
+        print("-" * 80)
+        print(f"{'Idx':<5} {'Name':<25} {'Title':<30} {'Datasets'}")
+        print("-" * 80)
         for i, s in enumerate(stages):
-            print(f"{i+1:<5} {s['name']:<25} {s['title']:<30}")
-        print("-" * 60)
+            ds = s["dataset"]
+            if isinstance(ds, list):
+                ds_str = ", ".join(ds)
+            else:
+                ds_str = str(ds)
+            print(f"{i+1:<5} {s['name']:<25} {s['title']:<30} {ds_str}")
+        print("-" * 80)
         return 0
 
     run_root = Path(args.run_root)
@@ -439,16 +483,22 @@ def main():
             try:
                 # We'll grab a small slice of the current stage's cached text
                 # Note: This runs on the local machine to prepare the next stage's anchor file
-                safe_filename = stage["dataset"].replace('/', '_').replace(':', '_')
-                cache_file = REPO_ROOT / "mavaia_core" / "data" / "huggingface" / f"{safe_filename}.txt"
-                if cache_file.exists():
-                    full_text = cache_file.read_text(encoding="utf-8")
-                    # Take a random slice proportional to replay_pct
-                    sample_size = int(len(full_text) * (args.replay_pct / len(stages)))
-                    start_idx = random.randint(0, max(0, len(full_text) - sample_size))
-                    anchor_sample = full_text[start_idx : start_idx + sample_size]
-                    accumulated_anchor_text += "\n\n" + anchor_sample
-                    print(f"[INFO] Added {len(anchor_sample)} chars to Experience Replay buffer.")
+                datasets = stage["dataset"]
+                if isinstance(datasets, str):
+                    datasets = [datasets]
+                
+                for ds_id in datasets:
+                    safe_filename = ds_id.replace('/', '_').replace(':', '_')
+                    cache_file = REPO_ROOT / "mavaia_core" / "data" / "huggingface" / f"{safe_filename}.txt"
+                    if cache_file.exists():
+                        full_text = cache_file.read_text(encoding="utf-8")
+                        # Take a random slice proportional to replay_pct
+                        sample_size = int(len(full_text) * (args.replay_pct / (len(stages) * len(datasets))))
+                        if sample_size > 0:
+                            start_idx = random.randint(0, max(0, len(full_text) - sample_size))
+                            anchor_sample = full_text[start_idx : start_idx + sample_size]
+                            accumulated_anchor_text += "\n\n" + anchor_sample
+                            print(f"[INFO] Added {len(anchor_sample)} chars from {ds_id} to Experience Replay buffer.")
             except Exception as e:
                 print(f"[WARN] Could not capture anchor data for {stage['name']}: {e}")
 
@@ -460,7 +510,7 @@ def main():
             report_out = run_root / "report_card.txt"
             subprocess.run(
                 [
-                    "python3",
+                    PYTHON_EXE,
                     str(REPORT_SCRIPT),
                     "--format",
                     "text",
