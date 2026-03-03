@@ -1151,9 +1151,17 @@ def get_artifacts(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, wo
 def get_bench_results(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, workdir: str, pod_id: str = None, proxy: str = None, progress=None, task_id=None):
     _rich_log("Pulling benchmark results from pod...", "cyan", "📥", progress=progress, task_id=task_id)
 
-    # We want to pull any json file starting with livebench_results_ or mavaia_result
-    # These are usually in the repo root on the pod.
-    patterns = ["--include=livebench_results_*.json", "--include=mavaia_result.json", "--exclude=*"]
+    # Patterns to pull results
+    # 1. Root level results (livebench_results_*.json, mavaia_result.json)
+    # 2. Nested data folder results (gen_api_answer outputs)
+    patterns = [
+        "--include=livebench_results_*.json",
+        "--include=mavaia_result.json",
+        "--include=data/***", # Recursive include for data folder
+        "--include=*.json",
+        "--include=*.jsonl",
+        "--exclude=*"
+    ]
 
     if proxy:
         scp_cmd = [
@@ -1161,7 +1169,7 @@ def get_bench_results(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path
             "--no-owner", "--no-group",
             "-e", _ssh_e(ssh_key, "22"),
         ] + patterns + [
-            f"{proxy}:{workdir}/mavaia/",
+            f"{proxy}:{workdir}/mavaia/LiveBench/livebench/",
             str(local_path) + "/",
         ]
         subprocess.run(scp_cmd, check=True)
@@ -1172,7 +1180,7 @@ def get_bench_results(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path
         "--no-owner", "--no-group",
         "-e", _ssh_e(ssh_key, str(pod_port)),
     ] + patterns + [
-        f"root@{pod_ip}:{workdir}/mavaia/",
+        f"root@{pod_ip}:{workdir}/mavaia/LiveBench/livebench/",
         str(local_path) + "/",
     ]
     try:
@@ -2214,6 +2222,10 @@ def main():
             has_parallel = any(arg == "--parallel-requests" for arg in bench_args)
             if not has_parallel:
                 bench_args.extend(["--parallel-requests", "1"])
+            
+            # Always force fresh results to ensure we don't skip anything
+            if "--remove-existing-judgment-file" not in bench_args:
+                bench_args.append("--remove-existing-judgment-file")
 
             remote_benchmark(
                 pod_ip, pod_port, args.ssh_key, bench_args, args.volume_mount_path,
