@@ -1068,7 +1068,7 @@ def remote_benchmark(
             break
 
     args_str = " ".join(bench_args) if bench_args else ""
-    env_prefix = "PYTHONUNBUFFERED=1 "
+    env_prefix = "PYTHONUNBUFFERED=1 MAVAIA_ENABLE_HEAVY_MODULES=true "
     hf_token = os.environ.get("HF_TOKEN")
     if hf_token:
         env_prefix += f"HF_TOKEN='{hf_token}' "
