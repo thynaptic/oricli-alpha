@@ -153,7 +153,13 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         self.word_vocab = None
         self.word_vocab_reverse = None
         self.config = None
-        self.model_dir = None
+        
+        # Respect MAVAIA_MODEL_PATH if provided
+        env_path = os.environ.get("MAVAIA_MODEL_PATH")
+        if env_path:
+            self.model_dir = Path(env_path)
+        else:
+            self.model_dir = None
         self._models_loaded = False
         self._config_loaded = False
 
@@ -235,17 +241,12 @@ class NeuralTextGeneratorModule(BaseBrainModule):
     def _setup_model_directory(self):
         """Setup model storage directory"""
         if self.model_dir is None:
-            # Respect MAVAIA_MODEL_PATH if provided
-            env_path = os.environ.get("MAVAIA_MODEL_PATH")
-            if env_path:
-                self.model_dir = Path(env_path)
-            else:
-                self.model_dir = (
-                    Path(__file__).parent.parent.parent / "models" / "neural_text_generator"
-                )
+            self.model_dir = (
+                Path(__file__).parent.parent.parent / "models" / "neural_text_generator"
+            )
             
-            self.model_dir.mkdir(parents=True, exist_ok=True)
-            (self.model_dir / "checkpoints").mkdir(exist_ok=True)
+        self.model_dir.mkdir(parents=True, exist_ok=True)
+        (self.model_dir / "checkpoints").mkdir(exist_ok=True)
 
         # Keep adaptive policies in a stable directory (default model_dir) even when using per-run output dirs.
         if self._policy_dir is None and self.model_dir is not None:
