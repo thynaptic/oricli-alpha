@@ -1086,11 +1086,10 @@ def remote_benchmark(
     # Check /v1/models instead of /health to ensure models are actually loaded
     server_cmd += f"for i in $(seq 1 60); do if curl -s http://127.0.0.1:8000/v1/models > /dev/null; then echo 'Server ready and models loaded!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo \"Server died! Tail of {log_path}:\"; tail -n 20 {log_path}; break; fi; sleep 2; done; "
     
-    bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}; "
+    bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}"
     
-    cleanup_cmd = "kill $SERVER_PID || true"
-    
-    full_remote_cmd = f"{server_cmd} {bench_cmd} {cleanup_cmd}"
+    # If benchmark fails, cat the server log to help debugging
+    full_remote_cmd = f"{server_cmd} if ! {bench_cmd}; then echo '!!! BENCHMARK FAILED !!!'; echo 'Server Log:'; cat {log_path}; exit 1; fi; kill $SERVER_PID || true"
 
     if proxy:
         ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [full_remote_cmd]
@@ -2182,24 +2181,27 @@ def main():
                     try:
                         latest_path = Path(latest_run_ptr.read_text().strip())
                         if latest_path.is_absolute():
-                            # Convert to relative path from REPO_ROOT if possible
-                            try:
-                                default_model = str(latest_path.relative_to(REPO_ROOT))
-                            except ValueError:
-                                # If it's absolute but not under REPO_ROOT (e.g. from a different machine)
-                                # we try to find it under mavaia_core/models...
-                                if "mavaia_core/models" in str(latest_path):
-                                    default_model = str(latest_path).split("mavaia_core/models")[-1]
-                                    default_model = "mavaia_core/models" + default_model
+                            path_str = str(latest_path)
+                            # MAP LOCAL REMOTE-SYNC PATHS TO POD PATHS
+                            # Local: .../models/neural_text_generator_remote/curriculum/stage_x
+                            # Pod: /workspace/mavaia/mavaia_core/models/neural_text_generator/curriculum/stage_x
+                            if "models/neural_text_generator_remote" in path_str:
+                                rel = path_str.split("models/neural_text_generator_remote")[-1].lstrip("/")
+                                default_model = f"mavaia_core/models/neural_text_generator/{rel}"
+                            else:
+                                try:
+                                    default_model = str(latest_path.relative_to(REPO_ROOT))
+                                except ValueError:
+                                    if "mavaia_core/models" in path_str:
+                                        default_model = "mavaia_core/models" + path_str.split("mavaia_core/models")[-1]
                     except Exception:
                         pass
                 
                 # Make path absolute for pod context since we cd into LiveBench/livebench
                 if not default_model.startswith("/"):
-                    # On pod it will be in /workspace/mavaia/...
                     default_model = f"{args.volume_mount_path}/mavaia/{default_model}"
 
-                _rich_log(f"No model specified for benchmark. Defaulting to latest: {default_model}", "cyan", "🤖")
+                _rich_log(f"No model specified for benchmark. Defaulting to: {default_model}", "cyan", "🤖")
                 bench_args.extend(["--model", default_model])
 
             # Ensure --api-base is present if using a local model path
