@@ -17,6 +17,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Fix persistent SSH 255 errors during pod stabilization in runpod_bridge.py (Regression/Unresolved).**
+- [x] **Track: Fix persistent SSH 255 errors during pod stabilization in runpod_bridge.py (Regression/Unresolved).**
   *Link: [./tracks/ssh_stability_20260302/](./tracks/ssh_stability_20260302/)*
 

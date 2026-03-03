@@ -8,8 +8,27 @@ import requests
 import threading
 import shutil
 import re
+import socket
+import random
 from pathlib import Path
 from typing import Dict, Any, Optional, List
+
+# Try to import rich for beautiful output
+try:
+    from rich.console import Console
+    from rich.table import Table
+    from rich.panel import Panel
+    from rich.text import Text
+    from rich.live import Live
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+    from rich import box
+    from rich.markup import escape
+    console = Console()
+    USE_RICH = True
+except ImportError:
+    USE_RICH = False
+    console = None
+    escape = lambda x: x
 
 # Add project root to path
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -30,6 +49,21 @@ load_dotenv(REPO_ROOT / ".env")
 RUNPOD_API_KEY = os.environ.get("Mavaia_Key")
 RUNPOD_ENDPOINT = "https://api.runpod.io/graphql"
 
+def _rich_log(message: str, style: str = "white", icon: str = "", progress=None, task_id=None):
+    # Remove old-school prefixes if they exist in the message string
+    message = re.sub(r"^\[(\*|INFO|ERROR|WARN|SUCCESS|!|DRY-RUN)\]\s*", "", message)
+    
+    if progress and task_id is not None:
+        icon_str = f"{icon} " if icon else ""
+        safe_msg = escape(message)
+        progress.update(task_id, description=f"[{style}]{icon_str}{safe_msg}[/{style}]")
+        return
+
+    if USE_RICH:
+        icon_str = f"{icon} " if icon else ""
+        console.print(f"[{style}]{icon_str}{message}[/{style}]")
+    else:
+        print(f"{icon} {message}" if icon else message)
 
 def _redact_secrets(text: str) -> str:
     if not text:
@@ -82,9 +116,11 @@ class RunPodBridge:
                 if isinstance(ext, dict):
                     code = ext.get("code")
                 if code:
-                    print(f"[ERROR] RunPod: {code} - {msg}")
+                    if code == "SUPPLY_CONSTRAINT":
+                        continue
+                    _rich_log(f"RunPod: {code} - {msg}", "red", "✗")
                 else:
-                    print(f"[ERROR] RunPod: {msg}")
+                    _rich_log(f"RunPod: {msg}", "red", "✗")
         if response.status_code >= 400 and not allow_http_error:
             response.raise_for_status()
         return data
@@ -190,6 +226,9 @@ class RunPodBridge:
         if ssh_key_value:
             env_vars.append({"key": "PUBLIC_KEY", "value": ssh_key_value})
             env_vars.append({"key": "SSH_PUBLIC_KEY", "value": ssh_key_value})
+            env_vars.append({"key": "RUNPOD_PUBLIC_KEY", "value": ssh_key_value})
+            env_vars.append({"key": "TCP_PORT_22", "value": ssh_key_value})
+            env_vars.append({"key": "SSH_KEY", "value": ssh_key_value})
 
         if env_vars:
             input_data["env"] = env_vars
@@ -237,17 +276,16 @@ class RunPodBridge:
         """
         return self._query(query, variables={"input": {"podId": pod_id}})
 
-def setup_pod_env(pod_ip: str, pod_port: int, ssh_key: str, pod_id: str = None, proxy: str = None):
-    print(f"[*] Checking environment on pod {pod_ip}:{pod_port}...")
-    
-    # Try direct first, then proxy
+def setup_pod_env(pod_ip: str, pod_port: int, ssh_key: str, pod_id: str = None, proxy: str = None, progress=None, task_id=None, bridge: "RunPodBridge" = None):
+    # Try direct first (real public IP:port), then proxy (ssh.runpod.io user).
     connection_methods = []
+    if pod_ip and str(pod_ip) != "ssh.runpod.io":
+        connection_methods.append({"host": f"root@{pod_ip}", "port": str(pod_port)})
+
     if proxy:
         connection_methods.append({"host": proxy, "port": "22"})
-    else:
-        connection_methods.append({"host": f"root@{pod_ip}", "port": str(pod_port)})
-        if pod_id:
-            connection_methods.append({"host": f"{pod_id}-22@ssh.runpod.io", "port": "22"})
+    elif pod_id:
+        connection_methods.append({"host": f"{pod_id}-22@ssh.runpod.io", "port": "22"})
         
     # Skip install if rsync and aws are already present
     check_cmd = "command -v rsync >/dev/null 2>&1 && command -v aws >/dev/null 2>&1"
@@ -256,31 +294,91 @@ def setup_pod_env(pod_ip: str, pod_port: int, ssh_key: str, pod_id: str = None, 
         "python3 -m pip install --upgrade pip -q && "
         "if ! command -v aws >/dev/null 2>&1; then pip install --upgrade awscli -q; fi"
     )
-    
-    full_cmd = f"if ! ({check_cmd}); then {install_cmd}; else echo '[INFO] Tools already present, skipping setup.'; fi"
+    full_cmd = f"if ! ({check_cmd}); then {install_cmd}; fi"
 
-    max_retries = 30
+    max_retries = 40
     for i in range(max_retries):
         method = connection_methods[0] if i % 2 == 0 or len(connection_methods) == 1 else connection_methods[1]
-        ssh_cmd = [
-            "ssh", "-o", "StrictHostKeyChecking=no",
-            "-o", "PasswordAuthentication=no",
-            "-o", "ConnectTimeout=10",
-            "-i", ssh_key,
-            "-p", method["port"],
-            method["host"],
-            full_cmd
-        ]
-        
+        is_proxy = "ssh.runpod.io" in method["host"]
+
+        # If the pod is already gone, don't spin on SSH retries.
+        if bridge and pod_id and i % 3 == 0:
+            try:
+                pods = bridge.get_pods()
+                if not any(p.get("id") == pod_id for p in pods):
+                    raise RuntimeError(f"Pod {pod_id} not found; SSH target is stale")
+            except Exception as e:
+                if "not found" in str(e).lower():
+                    raise
+
+        # Single line status with counter
+        _rich_log(f"Stabilizing SSH connection ({i+1}/{max_retries})...", "cyan", "⏳", progress=progress, task_id=task_id)
+
+        # FIRST: Fast TCP check (ONLY for direct connections; gateway is always open)
+        if not is_proxy:
+            try:
+                host_only = method["host"].split("@", 1)[-1]
+                socket.create_connection((host_only, int(method["port"])), timeout=2.0).close()
+            except Exception:
+                if i < max_retries - 1:
+                    time.sleep(3)
+                    continue
+
+        # Try a quick handshake check
         try:
-            subprocess.run(ssh_cmd, check=True)
+            # FORCE ROOT for direct IP connections (Standard for RunPod)
+            target = f"root@{method['host'].split('@')[-1]}" if not is_proxy else method['host']
+            
+            subprocess.run(
+                _ssh_base(ssh_key, method["port"], target) + ["true"],
+                check=True,
+                capture_output=True,
+                timeout=15,
+                text=True,
+            )
+            
+            # If handshake succeeded, run the environment setup
+            _rich_log("Connection stable! Preparing environment...", "cyan", "🛠", progress=progress, task_id=task_id)
+            subprocess.run(
+                _ssh_base(ssh_key, method["port"], target) + [full_cmd],
+                check=True,
+                capture_output=bool(progress),
+                text=True,
+            )
             return
-        except subprocess.CalledProcessError as e:
-            if e.returncode == 255 and i < max_retries - 1:
-                print(f"[*] SSH method {method['host']} failed. Retrying... ({i+1}/{max_retries})")
-                time.sleep(10)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            raw = ""
+            if isinstance(e, subprocess.CalledProcessError):
+                raw = (e.stderr or e.stdout or f"exit {e.returncode}").strip()
             else:
-                raise e
+                raw = "Handshake timed out"
+
+            # Clean up the raw message for the UI
+            diag_msg = raw.splitlines()[-1] if "\n" in raw else raw
+            if "Connection closed" in raw or "exit 255" in raw:
+                diag_msg = "Proxy closed connection (routing not ready)"
+            elif "Connection refused" in raw:
+                diag_msg = "Connection refused (SSH service starting)"
+            elif "Permission denied" in raw:
+                diag_msg = "Permission denied (Auth failed - check key)"
+            
+            _rich_log(
+                f"SSH not ready ({method['host']}): {diag_msg}",
+                "dim",
+                "…",
+                progress=progress,
+                task_id=task_id,
+            )
+            
+            if i < max_retries - 1:
+                # Patience for proxy routing
+                delay = 15 if is_proxy and i < 5 else 5
+                time.sleep(delay)
+                continue
+            
+            # Final attempt: run without capture so user can see what's happening
+            subprocess.run(_ssh_base(ssh_key, method["port"], target) + [full_cmd], check=True)
+            return
 
 def ensure_mavaia_installed(
     pod_ip: str,
@@ -297,8 +395,10 @@ def ensure_mavaia_installed(
     pip_debug: bool = False,
     pip_stream: bool = False,
     editable_install: bool = False,
+    progress=None,
+    task_id=None,
 ):
-    print("[*] Ensuring environment is ready (Minimalist Mode)...")
+    _rich_log("Ensuring environment is ready (Minimalist Mode)...", "cyan", "🛠", progress=progress, task_id=task_id)
 
     # Build S3 vars for injection into remote script
     s3_key = f"s3://{s3_bucket}/{s3_prefix}/mavaia.tar" if s3_bucket else ""
@@ -359,20 +459,22 @@ def ensure_mavaia_installed(
 
         # 2. CLEANUP & SYSTEM INSTALL: Clear the project-root mess and install to system
         "echo '[INFO] Cleaning up project root and ensuring system-level extras...'; "
-        "rm -rf datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl 2>/dev/null || true; "
-        "\"$VENV_PY\" -m pip install datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl --break-system-packages -q || true; "
+        "rm -rf datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy PIL torch torchvision torchaudio xxhash multiprocess dill fsspec aiohttp requests tqdm yaml safetensors 2>/dev/null || true; "
+        "find . -maxdepth 1 -name '*.so' -delete; "
+        "echo '[INFO] Installing core ML libraries (this may take a few minutes)...'; "
+        "\"$VENV_PY\" -m pip install --upgrade datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash -q || true; "
 
 
         # 3. Final verification
-        "if ! \"$VENV_PY\" -c 'import datasets; import transformers' >/dev/null 2>&1; then "
-        "  echo '[ERROR] Core libraries still failing. Traceback:'; "
-        "  \"$VENV_PY\" -c 'import transformers' 2>&1; "
-        "  \"$VENV_PY\" -c 'import datasets' 2>&1; "
+        "echo '[INFO] Diagnostic: Listing root files on pod...'; ls -F; "
+        "echo '[INFO] Verifying core libraries...'; "
+        "if ! \"$VENV_PY\" -c 'import torch; import datasets; import transformers' >/dev/null 2>&1; then "
+        "  echo '[ERROR] Core libraries still failing. Traceback details:'; "
+        "  \"$VENV_PY\" -c 'import torch' 2>&1 || echo 'Torch failed'; "
+        "  \"$VENV_PY\" -c 'import transformers' 2>&1 || echo 'Transformers failed'; "
+        "  \"$VENV_PY\" -c 'import datasets' 2>&1 || echo 'Datasets failed'; "
         "  exit 1; "
         "fi; "
-        
-        "echo '[INFO] Running HF Dataset Quality Check...'; "
-        "\"$VENV_PY\" scripts/test_hf_load.py || exit 1; "
         
         "echo '[SUCCESS] Environment ready. System Python: '$VENV_PY; "
     )
@@ -380,8 +482,8 @@ def ensure_mavaia_installed(
     _run_ssh(ssh_key, pod_ip, pod_port, pod_id, proxy, install_cmd)
 
 
-def setup_ollama(pod_ip: str, pod_port: int, ssh_key: str, model_name: str, model_dir: str, pod_id: str = None, proxy: str = None):
-    print(f"[*] Setting up Ollama (model: {model_name})...")
+def setup_ollama(pod_ip: str, pod_port: int, ssh_key: str, model_name: str, model_dir: str, pod_id: str = None, proxy: str = None, progress=None, task_id=None):
+    _rich_log(f"Setting up Ollama (model: {model_name})...", "cyan", "🦙", progress=progress, task_id=task_id)
 
     ollama_cmd = (
         "set -e; "
@@ -398,33 +500,17 @@ def setup_ollama(pod_ip: str, pod_port: int, ssh_key: str, model_name: str, mode
     )
 
     if proxy:
-        ssh_cmd = [
-            "ssh", "-o", "StrictHostKeyChecking=no",
-            "-o", "PasswordAuthentication=no",
-            "-i", ssh_key,
-            "-p", "22",
-            proxy,
-            ollama_cmd,
-        ]
+        ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [ollama_cmd]
         subprocess.run(ssh_cmd, check=True)
         return
 
-    ssh_cmd = [
-        "ssh", "-o", "StrictHostKeyChecking=no",
-        "-o", "PasswordAuthentication=no",
-        "-i", ssh_key,
-        "-p", str(pod_port),
-        f"root@{pod_ip}",
-        ollama_cmd,
-    ]
+    ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [ollama_cmd]
     try:
         subprocess.run(ssh_cmd, check=True)
     except subprocess.CalledProcessError as e:
         if pod_id and e.returncode == 255:
-            print("[WARN] Direct SSH failed (255); retrying via proxy.")
-            # Swap to RunPod SSH proxy (update port + host entries)
-            ssh_cmd[8] = "22"
-            ssh_cmd[9] = f"{pod_id}-22@ssh.runpod.io"
+            _rich_log("Direct SSH failed (255); retrying via proxy.", "yellow", "⚠", progress=progress, task_id=task_id)
+            ssh_cmd = _ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [ollama_cmd]
             subprocess.run(ssh_cmd, check=True)
         else:
             raise e
@@ -478,9 +564,9 @@ def _s3_abort_zombies(bucket: str, prefix: str, region: str, endpoint_url: str):
                      "--bucket", bucket, "--key", key, "--upload-id", uid] + flags,
                     check=False,
                 )
-                print(f"[*] Aborted zombie multipart upload: {key} ({uid[:8]}...)")
+                _rich_log(f"Aborted zombie multipart upload: {key} ({uid[:8]}...)", "dim", "ℹ")
     except Exception as e:
-        print(f"[*] Zombie cleanup skipped: {_redact_secrets(str(e))}")
+        _rich_log(f"Zombie cleanup skipped: {_redact_secrets(str(e))}", "dim", "ℹ")
 
 
 def s3_sync_local_to_bucket(
@@ -491,7 +577,7 @@ def s3_sync_local_to_bucket(
     endpoint_url: str,
 ):
     """Stream-archive local repo → S3 as a single tar (fast, no per-file overhead)."""
-    print("[*] Packing and streaming local repo → S3 (tar pipe)...")
+    _rich_log("Packing and streaming local repo → S3 (tar pipe)...", "cyan", "📦")
     _aws_configure_fast(region, endpoint_url)
     _s3_abort_zombies(bucket, prefix, region, endpoint_url)
     s3_key = f"s3://{bucket}/{prefix}/mavaia.tar"
@@ -511,12 +597,18 @@ def s3_sync_local_to_bucket(
         "--exclude=runs",
         "--exclude=checkpoints",
         "--exclude=snapshots",
+        "--exclude=numpy",
+        "--exclude=PIL",
+        "--exclude=torch",
+        "--exclude=transformers",
+        "--exclude=datasets",
+        "--exclude=accelerate",
         "-C", str(local_path), ".",
     ]
     # Use mbuffer if available for a smooth 128M in-memory buffer; otherwise pass directly
     use_mbuffer = shutil.which("mbuffer") is not None
     aws_cmd = ["aws", "s3", "cp", "-", s3_key] + _aws_cli_flags(region, endpoint_url)
-    print(f"[*] Uploading to {s3_key} {'(mbuffer)' if use_mbuffer else '(direct pipe)'}...")
+    _rich_log(f"Uploading to {s3_key} {'(mbuffer)' if use_mbuffer else '(direct pipe)'}...", "cyan", "📤")
     tar_proc = subprocess.Popen(tar_cmd, stdout=subprocess.PIPE)
     if use_mbuffer:
         buf_proc = subprocess.Popen(
@@ -535,22 +627,43 @@ def s3_sync_local_to_bucket(
     tar_proc.wait()
     if tar_proc.returncode not in (0, None) or aws_proc.returncode != 0:
         raise RuntimeError(f"S3 tar upload failed (tar={tar_proc.returncode}, aws={aws_proc.returncode})")
-    print("[*] Repo archive uploaded to S3.")
+    _rich_log("Repo archive uploaded to S3.", "bold green", "✓")
 
 
-def _ssh_base(ssh_key: str, port: str, host: str) -> list:
+def _ssh_base(ssh_key: str, port: str, host: str, log_level: str = "ERROR") -> list:
     # Short, reliable SSH defaults for flaky public endpoints.
     return [
         "ssh",
         "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", f"LogLevel={log_level}",
         "-o", "PasswordAuthentication=no",
-        "-o", "ConnectTimeout=15",
+        "-o", "IdentitiesOnly=yes",
+        "-o", "ConnectTimeout=20",
+        "-o", "TCPKeepAlive=yes",
         "-o", "ServerAliveInterval=15",
         "-o", "ServerAliveCountMax=3",
         "-i", ssh_key,
         "-p", port,
         host,
     ]
+
+
+def _ssh_e(ssh_key: str, port: str) -> str:
+    # For rsync/scp -e; mirrors _ssh_base options.
+    return (
+        "ssh "
+        "-o StrictHostKeyChecking=no "
+        "-o UserKnownHostsFile=/dev/null "
+        "-o LogLevel=ERROR "
+        "-o PasswordAuthentication=no "
+        "-o IdentitiesOnly=yes "
+        "-o ConnectTimeout=20 "
+        "-o TCPKeepAlive=yes "
+        "-o ServerAliveInterval=15 "
+        "-o ServerAliveCountMax=3 "
+        f"-i {ssh_key} -p {port}"
+    )
 
 
 def _run_ssh(
@@ -563,13 +676,15 @@ def _run_ssh(
     check: bool = True,
     retries: int = 2,
     retry_delay_s: float = 3.0,
+    progress=None,
+    task_id=None,
 ):
     """Run a remote shell command, with retries and proxy fallback on exit 255."""
     def _try(cmd_list: list) -> None:
         attempt = 0
         while True:
             try:
-                subprocess.run(cmd_list, check=check)
+                subprocess.run(cmd_list, check=check, capture_output=bool(progress))
                 return
             except subprocess.CalledProcessError as e:
                 attempt += 1
@@ -585,6 +700,7 @@ def _run_ssh(
         _try(_ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [cmd])
     except subprocess.CalledProcessError as e:
         if pod_id and e.returncode == 255:
+            _rich_log("Direct SSH failed (255); retrying via proxy.", "yellow", "⚠", progress=progress, task_id=task_id)
             _try(_ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [cmd])
         else:
             raise
@@ -602,6 +718,8 @@ def s3_sync_pod(
     pod_id: str = None,
     proxy: str = None,
     src: str = "/workspace/mavaia",
+    progress=None,
+    task_id=None,
 ):
     """Push/pull a directory between a pod and S3 using a streamed tar pipe."""
     if direction not in ("pull", "push"):
@@ -633,7 +751,9 @@ def s3_sync_pod(
     # Use mbuffer on pod if available for steady streaming
     tar_pipe_push = (
         f"tar -cf - --exclude=.git --exclude=__pycache__ --exclude=.venv "
-        f"--exclude='*.pyc' --exclude='*.tmp' -C {{src}} . "
+        f"--exclude='*.pyc' --exclude='*.tmp' "
+        f"--exclude=numpy --exclude=PIL --exclude=torch --exclude=transformers --exclude=datasets --exclude=accelerate "
+        f"-C {{src}} . "
     )
     s3_key = f"s3://{bucket}/{prefix}/mavaia.tar"
 
@@ -646,65 +766,74 @@ def s3_sync_pod(
             f"  {tar_pipe_push.format(src=src)} | aws s3 cp - {s3_key} {aws_flags}; "
             f"fi"
         )
-        print(f"[*] Streaming pod dir {src} -> {s3_key}...")
+        _rich_log(f"Streaming pod dir {src} -> {s3_key}...", "cyan", "📤", progress=progress, task_id=task_id)
     else:  # pull
         cmd = (
             f"{cred_export}{aws_cfg}"
             f"mkdir -p {src} && "
             f"aws s3 cp {s3_key} - {aws_flags} | tar -xf - --no-same-owner -C {src}"
         )
-        print(f"[*] Streaming {s3_key} -> pod dir {src}...")
+        _rich_log(f"Streaming {s3_key} -> pod dir {src}...", "cyan", "📥", progress=progress, task_id=task_id)
 
-    _run_ssh(ssh_key, pod_ip, pod_port, pod_id, proxy, cmd)
+    _run_ssh(ssh_key, pod_ip, pod_port, pod_id, proxy, cmd, progress=progress, task_id=task_id)
 
-def sync_code(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, workdir: str, pod_id: str = None, proxy: str = None):
-    print(f"[*] Syncing code to pod...")
-    
-    if proxy:
-        rsync_cmd = [
-            "rsync", "-az", "--info=stats2,progress2", "--human-readable",
-            "--no-owner", "--no-group", "--no-perms",
-            "-e", f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p 22",
-            "--exclude", ".git", "--exclude", "__pycache__", "--exclude", ".venv",
-            "--exclude", "models", "--exclude", "mavaia_core/models",
-            "--exclude", "mavaia_core/data", "--exclude", "data",
-            "--exclude", "LiveBench", "--exclude", "build", "--exclude", "tmp",
-            str(local_path) + "/",
-            f"{proxy}:{workdir}/mavaia"
-        ]
-        subprocess.run(rsync_cmd, check=True)
-        return
-        
-    rsync_cmd = [
-        "rsync", "-az", "--info=stats2,progress2", "--human-readable",
-        "--no-owner", "--no-group", "--no-perms",
-        "-e", f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p {pod_port}",
+def sync_code(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, workdir: str, pod_id: str = None, proxy: str = None, progress=None, task_id=None):
+    _rich_log("Syncing code to pod...", "cyan", "🔄", progress=progress, task_id=task_id)
+
+    rsync_info = ["--info=stats2,progress2"] if not progress else ["--quiet"]
+
+    # Common excludes for rsync
+    common_excludes = [
         "--exclude", ".git", "--exclude", "__pycache__", "--exclude", ".venv",
         "--exclude", ".cursor", "--exclude", ".vscode", "--exclude", "tmp",
         "--exclude", "models", "--exclude", "mavaia_core/models",
         "--exclude", "mavaia_core/data", "--exclude", "data",
         "--exclude", "LiveBench", "--exclude", "build",
+        "--exclude", "numpy", "--exclude", "PIL", "--exclude", "torch",
+        "--exclude", "transformers", "--exclude", "datasets", "--exclude", "accelerate"
+    ]
+
+    if proxy:
+        rsync_cmd = [
+            "rsync", "-az", "--human-readable",
+            "--no-owner", "--no-group", "--no-perms",
+            "-e", _ssh_e(ssh_key, "22"),
+            str(local_path) + "/",
+            f"{proxy}:{workdir}/mavaia"
+        ] + common_excludes + rsync_info
+        subprocess.run(rsync_cmd, check=True)
+        return
+
+    rsync_cmd = [
+        "rsync", "-az", "--human-readable",
+        "--no-owner", "--no-group", "--no-perms",
+        "-e", _ssh_e(ssh_key, str(pod_port)),
         str(local_path) + "/",
         f"root@{pod_ip}:{workdir}/mavaia"
-    ]
+    ] + common_excludes + rsync_info
     try:
         proc = subprocess.run(rsync_cmd, check=False)
         if proc.returncode != 0 and proc.returncode != 23:
             # 23 means partial transfer (often harmless for locked local files)
             raise subprocess.CalledProcessError(proc.returncode, rsync_cmd)
         elif proc.returncode == 23:
-            print("[INFO] Rsync completed with status 23 (partial transfer). Safe to proceed.")
+            _rich_log("Rsync completed with status 23 (partial transfer). Safe to proceed.", "dim", "ℹ")
 
     except subprocess.CalledProcessError:
         if pod_id:
-            print("[WARN] Direct rsync failed; retrying via proxy.")
-            rsync_cmd[4] = f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p 22"
+            _rich_log("Direct rsync failed; retrying via proxy.", "yellow", "⚠", progress=progress, task_id=task_id)
+            # Find the index of the SSH command (-e flag value)
+            for idx, item in enumerate(rsync_cmd):
+                if item == "-e":
+                    rsync_cmd[idx+1] = _ssh_e(ssh_key, "22")
+                    break
             rsync_cmd[-1] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia"
             proc = subprocess.run(rsync_cmd, check=False)
             if proc.returncode != 0 and proc.returncode != 23:
                 raise subprocess.CalledProcessError(proc.returncode, rsync_cmd)
             elif proc.returncode == 23:
-                print("[INFO] Rsync completed with status 23 (partial transfer) via proxy. Safe to proceed.")
+                _rich_log("Rsync completed with status 23 (partial transfer) via proxy. Safe to proceed.", "dim", "ℹ", progress=progress, task_id=task_id)
+
 
 def remote_train(
     pod_ip: str,
@@ -715,8 +844,10 @@ def remote_train(
     pod_id: str = None,
     proxy: str = None,
     script_rel: str = "scripts/train_neural_text_generator.py",
+    progress=None,
+    task_id=None,
 ):
-    print(f"[*] Starting training on remote pod...")
+    _rich_log("Starting training on remote pod...", "bold green", "🏋", progress=progress, task_id=task_id)
     if train_args and train_args[0] == "--":
         train_args = train_args[1:]
     args_str = " ".join(train_args)
@@ -728,36 +859,23 @@ def remote_train(
         env_prefix += f"HF_TOKEN='{hf_token}' "
     
     if proxy:
-        ssh_cmd = [
-            "ssh", "-o", "StrictHostKeyChecking=no", "-o", "PasswordAuthentication=no",
-            "-i", ssh_key,
-            "-p", "22",
-            proxy,
-            f"cd {workdir}/mavaia && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
-        ]
+        ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [f"cd {workdir}/mavaia && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"]
         subprocess.run(ssh_cmd, check=True)
         return
 
-    ssh_cmd = [
-        "ssh", "-o", "StrictHostKeyChecking=no", "-o", "PasswordAuthentication=no",
-        "-i", ssh_key,
-        "-p", str(pod_port),
-        f"root@{pod_ip}",
-        f"cd {workdir}/mavaia && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
-    ]
+    ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [f"cd {workdir}/mavaia && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"]
     try:
         subprocess.run(ssh_cmd, check=True)
     except subprocess.CalledProcessError as e:
         if pod_id and e.returncode == 255:
-            print("[WARN] Direct SSH failed (255); retrying via proxy.")
-            ssh_cmd[8] = "22"
-            ssh_cmd[9] = f"{pod_id}-22@ssh.runpod.io"
+            _rich_log("Direct SSH failed (255); retrying via proxy.", "yellow", "⚠", progress=progress, task_id=task_id)
+            ssh_cmd = _ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [f"cd {workdir}/mavaia && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"]
             subprocess.run(ssh_cmd, check=True)
         else:
             raise e
 
-def get_artifacts(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, workdir: str, pod_id: str = None, proxy: str = None):
-    print(f"[*] Pulling trained models from pod...")
+def get_artifacts(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, workdir: str, pod_id: str = None, proxy: str = None, progress=None, task_id=None):
+    _rich_log("Pulling trained models from pod...", "cyan", "📥", progress=progress, task_id=task_id)
 
     dest_dir = local_path / "models" / "neural_text_generator_remote"
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -765,7 +883,7 @@ def get_artifacts(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, wo
     if proxy:
         scp_cmd = [
             "rsync", "-az", "--info=stats2",
-            "-e", f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p 22",
+            "-e", _ssh_e(ssh_key, "22"),
             f"{proxy}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
             str(dest_dir) + "/",
         ]
@@ -774,7 +892,7 @@ def get_artifacts(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, wo
 
     scp_cmd = [
         "rsync", "-az", "--info=stats2",
-        "-e", f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p {pod_port}",
+        "-e", _ssh_e(ssh_key, str(pod_port)),
         f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
         str(dest_dir) + "/",
     ]
@@ -783,20 +901,20 @@ def get_artifacts(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, wo
             if proc.returncode != 0 and proc.returncode != 23:
                 raise subprocess.CalledProcessError(proc.returncode, scp_cmd)
             elif proc.returncode == 23:
-                print("[INFO] Rsync completed with status 23 (partial transfer). Safe to proceed.")
+                _rich_log("Rsync completed with status 23 (partial transfer). Safe to proceed.", "dim", "ℹ")
     except subprocess.CalledProcessError:
         if pod_id:
-            print("[WARN] Direct rsync failed; retrying via proxy.")
-            scp_cmd[3] = f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p 22"
-            scp_cmd[4] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/neural_text_generator/"
+            _rich_log("Direct rsync failed; retrying via proxy.", "yellow", "⚠", progress=progress, task_id=task_id)
+            scp_cmd[4] = _ssh_e(ssh_key, "22")
+            scp_cmd[5] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/neural_text_generator/"
             proc = subprocess.run(scp_cmd, check=False)
             if proc.returncode != 0 and proc.returncode != 23:
                 raise subprocess.CalledProcessError(proc.returncode, scp_cmd)
             elif proc.returncode == 23:
-                print("[INFO] Rsync completed with status 23 (partial transfer) via proxy. Safe to proceed.")
+                _rich_log("Rsync completed with status 23 (partial transfer) via proxy. Safe to proceed.", "dim", "ℹ", progress=progress, task_id=task_id)
 
-def sync_training_data(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, workdir: str, pod_id: str = None, proxy: str = None):
-    print("[*] Syncing training data (runs, checkpoints, cache) from pod...")
+def sync_training_data(pod_ip: str, pod_port: int, ssh_key: str, local_path: Path, workdir: str, pod_id: str = None, proxy: str = None, progress=None, task_id=None):
+    _rich_log("Syncing training data (runs, checkpoints, cache) from pod...", "cyan", "📥", progress=progress, task_id=task_id)
 
     dest_dir = local_path / "models" / "neural_text_generator_remote" / "training_data"
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -804,13 +922,13 @@ def sync_training_data(pod_ip: str, pod_port: int, ssh_key: str, local_path: Pat
     if proxy:
         rsync_cmd = [
             "rsync", "-az", "--info=stats2",
-            "-e", f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p 22",
+            "-e", _ssh_e(ssh_key, "22"),
             f"{proxy}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
             str(dest_dir / "models") + "/",
         ]
         cache_cmd = [
             "rsync", "-az", "--info=stats2",
-            "-e", f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p 22",
+            "-e", _ssh_e(ssh_key, "22"),
             f"{proxy}:{workdir}/mavaia/mavaia_core/data/",
             str(dest_dir / "data_cache") + "/",
         ]
@@ -819,18 +937,18 @@ def sync_training_data(pod_ip: str, pod_port: int, ssh_key: str, local_path: Pat
             if proc.returncode not in (0, 23):
                 raise subprocess.CalledProcessError(proc.returncode, cmd)
             if proc.returncode == 23:
-                print("[INFO] Rsync completed with status 23 (partial transfer). Safe to proceed.")
+                _rich_log("Rsync completed with status 23 (partial transfer). Safe to proceed.", "dim", "ℹ")
         return
 
     rsync_cmd = [
         "rsync", "-az", "--info=stats2",
-        "-e", f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p {pod_port}",
+        "-e", _ssh_e(ssh_key, str(pod_port)),
         f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
         str(dest_dir / "models") + "/",
     ]
     cache_cmd = [
         "rsync", "-az", "--info=stats2",
-        "-e", f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p {pod_port}",
+        "-e", _ssh_e(ssh_key, str(pod_port)),
         f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/data/",
         str(dest_dir / "data_cache") + "/",
     ]
@@ -840,20 +958,20 @@ def sync_training_data(pod_ip: str, pod_port: int, ssh_key: str, local_path: Pat
             if proc.returncode not in (0, 23):
                 raise subprocess.CalledProcessError(proc.returncode, cmd)
             if proc.returncode == 23:
-                print("[INFO] Rsync completed with status 23 (partial transfer). Safe to proceed.")
+                _rich_log("Rsync completed with status 23 (partial transfer). Safe to proceed.", "dim", "ℹ")
     except subprocess.CalledProcessError:
         if pod_id:
-            print("[WARN] Direct rsync failed; retrying via proxy.")
-            rsync_cmd[3] = f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p 22"
-            rsync_cmd[4] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/neural_text_generator/"
-            cache_cmd[3] = f"ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=no -i {ssh_key} -p 22"
-            cache_cmd[4] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/data/"
+            _rich_log("Direct rsync failed; retrying via proxy.", "yellow", "⚠", progress=progress, task_id=task_id)
+            rsync_cmd[4] = _ssh_e(ssh_key, "22")
+            rsync_cmd[5] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/neural_text_generator/"
+            cache_cmd[4] = _ssh_e(ssh_key, "22")
+            cache_cmd[5] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/data/"
             for cmd in (rsync_cmd, cache_cmd):
                 proc = subprocess.run(cmd, check=False)
                 if proc.returncode not in (0, 23):
                     raise subprocess.CalledProcessError(proc.returncode, cmd)
                 if proc.returncode == 23:
-                    print("[INFO] Rsync completed with status 23 (partial transfer) via proxy. Safe to proceed.")
+                    _rich_log("Rsync completed with status 23 (partial transfer) via proxy. Safe to proceed.", "dim", "ℹ")
 
 
 def _select_candidate_gpus(bridge: RunPodBridge, min_price: float, max_price: float, min_vram: int) -> List[Dict]:
@@ -951,18 +1069,26 @@ def _fleet_auditor_cmd(workdir: str) -> str:
 _FLEET_LOCK = threading.Lock()
 _FLEET_IN_FLIGHT = set()
 _BALANCE_LOW = threading.Event()
+_FLEET_PROGRESS = None
 
 
 def _fleet_worker(bridge: RunPodBridge, args, role: Dict[str, Any], stop_event: threading.Event):
+    global _FLEET_PROGRESS
     pod_id = None
     retry_sleep = 30
     min_price = float(args.min_price)
     max_price = float(args.max_price)
+    
+    # Add a progress task for this worker if fleet progress is active
+    task_id = None
+    if _FLEET_PROGRESS:
+        task_id = _FLEET_PROGRESS.add_task(description=f"[{role['role']}] Initializing...", total=None)
+
     # Stagger workers slightly to reduce contention.
     time.sleep({"distill": 0, "normal": 5, "auditor": 10}.get(role["role"], 0))
     while not stop_event.is_set():
         if _BALANCE_LOW.is_set():
-            print(f"[WARN] Balance below ${args.min_balance:.2f}. Fleet paused.")
+            _rich_log(f"Balance below ${args.min_balance:.2f}. Fleet paused.", "yellow", "⚠", progress=_FLEET_PROGRESS, task_id=task_id)
             time.sleep(min(60, retry_sleep))
             retry_sleep = min(retry_sleep * 2, 300)
             continue
@@ -971,7 +1097,7 @@ def _fleet_worker(bridge: RunPodBridge, args, role: Dict[str, Any], stop_event: 
             pods = bridge.get_pods()
             pod = next((p for p in pods if p['id'] == pod_id), None)
             if not pod or not pod.get("runtime"):
-                print(f"[WARN] Pod {pod_id} for role {role['role']} missing; restarting.")
+                _rich_log(f"Pod {pod_id} for role {role['role']} missing; restarting.", "yellow", "⚠", progress=_FLEET_PROGRESS, task_id=task_id)
                 pod_id = None
             else:
                 time.sleep(30)
@@ -979,7 +1105,7 @@ def _fleet_worker(bridge: RunPodBridge, args, role: Dict[str, Any], stop_event: 
 
         candidates = _select_candidate_gpus(bridge, min_price, max_price, args.min_vram)
         if not candidates:
-            print(f"[INFO] No available GPUs for role {role['role']}. Retrying in {retry_sleep}s...")
+            _rich_log(f"No available GPUs for role {role['role']}. Retrying in {retry_sleep}s...", "dim", "ℹ", progress=_FLEET_PROGRESS, task_id=task_id)
             time.sleep(retry_sleep)
             retry_sleep = min(retry_sleep * 2, 300)
             continue
@@ -993,7 +1119,7 @@ def _fleet_worker(bridge: RunPodBridge, args, role: Dict[str, Any], stop_event: 
                     candidate = c
                     break
         if not candidate:
-            print(f"[INFO] All candidate GPUs are in-flight. Retrying in {retry_sleep}s...")
+            _rich_log(f"All candidate GPUs are in-flight. Retrying in {retry_sleep}s...", "dim", "ℹ", progress=_FLEET_PROGRESS, task_id=task_id)
             time.sleep(retry_sleep)
             retry_sleep = min(retry_sleep * 2, 300)
             continue
@@ -1004,7 +1130,7 @@ def _fleet_worker(bridge: RunPodBridge, args, role: Dict[str, Any], stop_event: 
         if "AMD" in candidate_display or "MI" in candidate_display:
             current_image = "runpod/pytorch:2.1.0-py3.10-rocm5.7-devel-ubuntu22.04"
         pod_name = role["name"]
-        print(f"[INFO] Launching pod '{pod_name}' with GPU: {candidate_display}...")
+        _rich_log(f"[{role['role']}] Looking for GPU with {candidate_display}...", "cyan", "🔍", progress=_FLEET_PROGRESS, task_id=task_id)
         pod_result = bridge.create_pod(
             name=pod_name,
             gpu_type_id=candidate_id,
@@ -1023,7 +1149,7 @@ def _fleet_worker(bridge: RunPodBridge, args, role: Dict[str, Any], stop_event: 
             },
         )
         if not pod_result:
-            print(f"[WARN] Failed to create pod for role {role['role']}.")
+            _rich_log(f"Failed to create pod for role {role['role']}.", "red", "✗", progress=_FLEET_PROGRESS, task_id=task_id)
             with _FLEET_LOCK:
                 if candidate_id in _FLEET_IN_FLIGHT:
                     _FLEET_IN_FLIGHT.remove(candidate_id)
@@ -1035,7 +1161,7 @@ def _fleet_worker(bridge: RunPodBridge, args, role: Dict[str, Any], stop_event: 
         with _FLEET_LOCK:
             if candidate_id in _FLEET_IN_FLIGHT:
                 _FLEET_IN_FLIGHT.remove(candidate_id)
-        print(f"[INFO] Pod {pod_id} launched for role {role['role']}. Waiting for runtime...")
+        _rich_log(f"Pod {pod_id} launched for role {role['role']}! Waiting for runtime...", "cyan", "🚀", progress=_FLEET_PROGRESS, task_id=task_id)
         while True:
             pods = bridge.get_pods()
             pod = next((p for p in pods if p['id'] == pod_id), None)
@@ -1058,8 +1184,8 @@ def _fleet_worker(bridge: RunPodBridge, args, role: Dict[str, Any], stop_event: 
             proxy = None
 
         # Setup + sync
-        setup_pod_env(pod_ip, pod_port, args.ssh_key, pod_id, proxy)
-        sync_code(pod_ip, pod_port, args.ssh_key, REPO_ROOT, role["workdir"], pod_id, proxy)
+        setup_pod_env(pod_ip, pod_port, args.ssh_key, pod_id, proxy, progress=_FLEET_PROGRESS, task_id=task_id, bridge=bridge)
+        sync_code(pod_ip, pod_port, args.ssh_key, REPO_ROOT, role["workdir"], pod_id, proxy, progress=_FLEET_PROGRESS, task_id=task_id)
         ensure_mavaia_installed(
             pod_ip, pod_port, args.ssh_key, role["workdir"], pod_id, proxy,
             s3_bucket=args.s3_bucket if args.use_s3 else None,
@@ -1070,18 +1196,23 @@ def _fleet_worker(bridge: RunPodBridge, args, role: Dict[str, Any], stop_event: 
             pip_debug=args.pip_debug,
             pip_stream=args.pip_stream,
             editable_install=args.editable_install,
+            progress=_FLEET_PROGRESS, task_id=task_id
         )
 
         if role["role"] == "distill" and not args.no_ollama:
-            setup_ollama(pod_ip, pod_port, args.ssh_key, args.teacher_model, args.ollama_model_dir, pod_id, proxy)
+            setup_ollama(pod_ip, pod_port, args.ssh_key, args.teacher_model, args.ollama_model_dir, pod_id, proxy, progress=_FLEET_PROGRESS, task_id=task_id)
 
         if role["role"] == "auditor":
-            _run_ssh(args.ssh_key, pod_ip, pod_port, pod_id, proxy, _fleet_auditor_cmd(role["workdir"]))
+            _run_ssh(args.ssh_key, pod_ip, pod_port, pod_id, proxy, _fleet_auditor_cmd(role["workdir"]), progress=_FLEET_PROGRESS, task_id=task_id)
         else:
             train_args = list(role["train_args"])
             script_rel = role.get("script", "scripts/train_neural_text_generator.py")
             if script_rel.endswith("train_neural_text_generator.py") and "--plain-output" not in train_args:
                 train_args.append("--plain-output")
+            
+            # NOTE: For training, we might want to exit progress display to see logs, 
+            # but for now we'll stay in it until training starts.
+            _rich_log(f"Role {role['role']} training starting...", "bold green", "🏋", progress=_FLEET_PROGRESS, task_id=task_id)
             remote_train(pod_ip, pod_port, args.ssh_key, train_args, role["workdir"], pod_id, proxy, script_rel=script_rel)
 
         # Best-effort termination to avoid leaks; restart loop will acquire a new pod if needed.
@@ -1091,10 +1222,10 @@ def _fleet_worker(bridge: RunPodBridge, args, role: Dict[str, Any], stop_event: 
             pass
 
         # If training ends, loop to restart
-        print(f"[WARN] Role {role['role']} completed or failed; restarting search.")
+        _rich_log(f"Role {role['role']} completed or failed; restarting search.", "yellow", "🔄", progress=_FLEET_PROGRESS, task_id=task_id)
         pod_id = None
 
-def remote_snapshot(pod_ip: str, pod_port: int, ssh_key: str, workdir: str, pod_id: str = None, proxy: str = None):
+def remote_snapshot(pod_ip: str, pod_port: int, ssh_key: str, workdir: str, pod_id: str = None, proxy: str = None, progress=None, task_id=None):
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     snapshot_cmd = (
         "set -e; "
@@ -1110,32 +1241,18 @@ def remote_snapshot(pod_ip: str, pod_port: int, ssh_key: str, workdir: str, pod_
     ).format(ts=timestamp)
 
     if proxy:
-        ssh_cmd = [
-            "ssh", "-o", "StrictHostKeyChecking=no",
-            "-o", "PasswordAuthentication=no",
-            "-i", ssh_key,
-            "-p", "22",
-            proxy,
-            snapshot_cmd,
-        ]
+        ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [snapshot_cmd]
         subprocess.run(ssh_cmd, check=True)
         return
 
-    ssh_cmd = [
-        "ssh", "-o", "StrictHostKeyChecking=no",
-        "-o", "PasswordAuthentication=no",
-        "-i", ssh_key,
-        "-p", str(pod_port),
-        f"root@{pod_ip}",
-        snapshot_cmd,
-    ]
+    ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [snapshot_cmd]
     try:
         subprocess.run(ssh_cmd, check=True)
     except subprocess.CalledProcessError:
         if pod_id:
+            _rich_log("Direct SSH failed (255); retrying via proxy.", "yellow", "⚠", progress=progress, task_id=task_id)
             # Swap to RunPod SSH proxy (update port + host entries)
-            ssh_cmd[8] = "22"
-            ssh_cmd[9] = f"{pod_id}-22@ssh.runpod.io"
+            ssh_cmd = _ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [snapshot_cmd]
             subprocess.run(ssh_cmd, check=True)
         else:
             raise
@@ -1145,7 +1262,7 @@ def main():
     parser.add_argument("--pod-id", help="Existing pod ID to use")
     parser.add_argument("--gpu", default="NVIDIA RTX A6000", help="GPU type for new pod")
     parser.add_argument("--image", default="runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04", help="Container image")
-    parser.add_argument("--template", default="runpod-torch-v240", help="RunPod Template ID")
+    parser.add_argument("--template", help="RunPod Template ID (overrides --image if provided)")
     parser.add_argument("--ssh-key", default=str(Path.home() / ".ssh" / "mavaia_key"), help="Path to your local private SSH key")
     parser.add_argument("--ssh-key-value", help="Public SSH key content (or name) to inject into the pod")
     parser.add_argument("--ssh-proxy", help="Full SSH proxy host (e.g. 68aeykzanq67mn-64411855@ssh.runpod.io)")
@@ -1194,6 +1311,15 @@ def main():
         help="Run curriculum training (scripts/train_curriculum.py) instead of standard training.",
     )
     parser.add_argument(
+        "--stage",
+        help="Specific curriculum stage indices or names to run (e.g. 1,5,7 or logic,prose). Only works with --curriculum.",
+    )
+    parser.add_argument(
+        "--list-stages",
+        action="store_true",
+        help="List all available curriculum stages and exit",
+    )
+    parser.add_argument(
         "--fleet-curriculum",
         action="store_true",
         help="In fleet mode, run curriculum training for the normal role instead of standard training.",
@@ -1213,6 +1339,10 @@ def main():
         action="store_true",
         help="Disable live pip output streaming (use periodic status logs).",
     )
+    parser.add_argument(
+        "--script",
+        help="Custom script to run on the pod (relative to repo root).",
+    )
 
     args = parser.parse_args()
     if args.editable_install_forced:
@@ -1221,8 +1351,12 @@ def main():
         args.pip_stream = True
 
 
+    if args.list_stages:
+        subprocess.run([sys.executable, "scripts/train_curriculum.py", "--list-stages"])
+        return 0
+
     if not RUNPOD_API_KEY:
-        print("[!] Error: Mavaia_Key not found in .env")
+        _rich_log("Error: Mavaia_Key not found in .env", "red", "✗")
         sys.exit(1)
 
     bridge = RunPodBridge(RUNPOD_API_KEY)
@@ -1235,7 +1369,7 @@ def main():
             if bal < args.min_balance:
                 if not _BALANCE_LOW.is_set():
                     _BALANCE_LOW.set()
-                    print(f"[WARN] Balance ${bal:.2f} below ${args.min_balance:.2f}. Stopping pods.")
+                    _rich_log(f"Balance ${bal:.2f} below ${args.min_balance:.2f}. Stopping pods.", "yellow", "⚠")
                     try:
                         for p in bridge.get_pods():
                             if str(p.get("name", "")).startswith("mavaia_"):
@@ -1245,7 +1379,7 @@ def main():
             else:
                 if _BALANCE_LOW.is_set():
                     _BALANCE_LOW.clear()
-                    print(f"[INFO] Balance ${bal:.2f} >= ${args.min_balance:.2f}. Resuming.")
+                    _rich_log(f"Balance ${bal:.2f} >= ${args.min_balance:.2f}. Resuming.", "bold green", "✓")
             time.sleep(max(30, args.balance_watchdog_seconds))
     
     # Load s3.env if available
@@ -1258,7 +1392,7 @@ def main():
                 # RunPod S3 uses these env var names
                 if name == "AWS_ACCESS_KEY_ID" or name == "AWS_SECRET_ACCESS_KEY":
                     os.environ[name] = v.strip().strip('"').strip("'")
-        print(f"[*] Loaded S3 credentials from {s3_env_path}")
+        _rich_log(f"Loaded S3 credentials from {s3_env_path}", "dim", "🔑")
 
     if args.hf_token:
         os.environ["HF_TOKEN"] = args.hf_token
@@ -1275,24 +1409,27 @@ def main():
         pub_key_path = Path(args.ssh_key).with_suffix(".pub")
         if pub_key_path.exists():
             args.ssh_key_value = pub_key_path.read_text().strip()
-            print(f"[*] Auto-loaded public SSH key from {pub_key_path}")
+            _rich_log(f"Auto-loaded public SSH key from {pub_key_path}", "dim", "🔑")
 
     if args.volume_id:
         args.use_s3 = False
     else:
         # If no volume ID, we can search globally for better inventory
         if args.use_s3:
-            print("[*] S3 persistence enabled with no volume lock: searching all data centers for optimal GPUs...")
+            _rich_log("S3 persistence enabled with no volume lock: searching all data centers for optimal GPUs...", "cyan", "🌐")
             args.data_center = None
 
     if args.use_s3:
         if not shutil.which("aws"):
-            print("[!] aws CLI not found on VPS. Install awscli or use --no-s3.")
+            _rich_log("aws CLI not found on VPS. Install awscli or use --no-s3.", "red", "✗")
             sys.exit(1)
 
     auto_timeout_s = None
+    if args.stage:
+        args.curriculum = True
+
     if args.curriculum and not args.auto and not args.fleet and not args.pod_id:
-        print("[INFO] Curriculum mode enabled; auto pod search activated (5 minute limit).")
+        _rich_log("Curriculum mode enabled; auto pod search activated (5 minute limit).", "cyan", "ℹ")
         args.auto = True
         auto_timeout_s = 300
 
@@ -1301,34 +1438,51 @@ def main():
     if args.fleet:
         threading.Thread(target=_balance_watchdog, daemon=True).start()
         if not args.volume_id:
-            print("[ERROR] Fleet mode requires --volume-id (200GB network volume).")
+            _rich_log("Fleet mode requires --volume-id (200GB network volume).", "red", "✗")
             sys.exit(1)
         if args.volume_mount_path != "/workspace":
-            print("[WARN] Fleet mode expects volume mounted at /workspace. Overriding.")
+            _rich_log("Fleet mode expects volume mounted at /workspace. Overriding.", "yellow", "⚠")
             args.volume_mount_path = "/workspace"
         roles = _fleet_role_specs(args)
         stop_event = threading.Event()
         workers = []
-        for role in roles:
-            t = threading.Thread(target=_fleet_worker, args=(bridge, args, role, stop_event), daemon=True)
-            t.start()
-            workers.append(t)
-        print("[INFO] Fleet mode active. Press CTRL+C to stop.")
-        try:
-            while True:
-                time.sleep(5)
-        except KeyboardInterrupt:
-            print("[INFO] Stopping fleet...")
-            stop_event.set()
+        
+        global _FLEET_PROGRESS
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as fleet_progress:
+            _FLEET_PROGRESS = fleet_progress
+            for role in roles:
+                t = threading.Thread(target=_fleet_worker, args=(bridge, args, role, stop_event), daemon=True)
+                t.start()
+                workers.append(t)
+            
+            _rich_log("Fleet mode active. Press CTRL+C to stop.", "bold green", "🚀")
+            try:
+                while True:
+                    time.sleep(5)
+            except KeyboardInterrupt:
+                _rich_log("Stopping fleet...", "yellow", "🛑")
+                stop_event.set()
         return 0
 
     if args.auto:
         threading.Thread(target=_balance_watchdog, daemon=True).start()
-        print("[*] Auto-manage enabled: Finding existing pods...")
+        
+        if USE_RICH:
+            console.print(Panel(
+                Text.from_markup("[bold magenta]MAVAIA RUNPOD BRIDGE[/bold magenta]\n[cyan]Auto-Selection Mode Active[/cyan]"),
+                box=box.DOUBLE, border_style="magenta"
+            ))
+        
+        _rich_log("Finding existing pods...", "dim", "🔍")
         pods = bridge.get_pods()
         for p in pods:
-            print(f"[*] Terminating existing pod {p['id']} ({p.get('name')})...")
-            bridge.terminate_pod(p['id'])
+            if str(p.get("name", "")).startswith("mavaia_"):
+                _rich_log(f"Terminating existing pod {p['id']} ({p.get('name')})", "yellow", "💥")
+                bridge.terminate_pod(p['id'])
         
         # Build price steps from range
         min_price = float(args.min_price)
@@ -1340,67 +1494,52 @@ def main():
                 max_price = float(max_str.strip())
             except Exception:
                 pass
-        if max_price < min_price:
-            min_price, max_price = max_price, min_price
-        step = float(args.auto_price_step) if args.auto_price_step else 0.05
-        if step <= 0:
-            step = 0.05
-        price_steps = []
-        p = min_price
-        # Avoid floating drift
-        while p <= max_price + 1e-9:
-            price_steps.append(round(p, 2))
-            p += step
-        if not price_steps:
-            price_steps = [max_price]
-
-        gpu_types = bridge.get_gpu_types_with_availability()
-        if not gpu_types:
-            print("[WARN] Unable to fetch GPU availability right now. Retrying shortly...")
-            time.sleep(10)
-            gpu_types = bridge.get_gpu_types_with_availability()
-        if not gpu_types:
-            print("[ERROR] Unable to fetch GPU availability. Aborting.")
-            sys.exit(1)
         
-        # Estimate storage cost (~$0.01 per 10GB per hour as a rough safe buffer)
-        storage_overhead = 0.20 # 200GB vol + 200GB disk
-
-        filtered_gpus = [
-            g for g in gpu_types
-            if bridge.gpu_is_available(g)
-            if g.get('securePrice') is not None 
-            and (g['securePrice'] + storage_overhead) >= min_price
-            and (g['securePrice'] + storage_overhead) <= max_price
-            and g.get('memoryInGb') is not None
-            and g.get('memoryInGb') >= args.min_vram
-        ]
+        # Use the central selection logic to find valid GPUs
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            progress.add_task(description="Scanning RunPod Inventory...", total=None)
+            filtered_gpus = _select_candidate_gpus(bridge, min_price, max_price, args.min_vram)
 
         if not filtered_gpus:
-            print(f"[!] No suitable GPUs found under your max price of ${max_price}/hr (min required VRAM: {args.min_vram}GB).")
+            _rich_log(f"No suitable GPUs found under ${max_price}/hr", "red", "✗")
+            _rich_log("Note: Blackwell and PRO 4500/5000 cards are explicitly excluded for stability.", "dim")
             sys.exit(1)
 
         # Sort by total cost ascending, then memory descending
         filtered_gpus.sort(key=lambda x: (x['securePrice'], -x['memoryInGb']))
         
+        if USE_RICH:
+            gpu_table = Table(title="Candidate GPUs Found", box=box.SIMPLE)
+            gpu_table.add_column("Display Name", style="green")
+            gpu_table.add_column("VRAM", style="cyan")
+            gpu_table.add_column("Price/hr", style="yellow")
+            
+            for g in filtered_gpus[:5]: # Show top 5
+                gpu_table.add_row(g['displayName'], f"{g['memoryInGb']}GB", f"${g['securePrice']:.2f}")
+            console.print(gpu_table)
+
         best_gpu = filtered_gpus[0]
         gpu_id = best_gpu['id']
         auto_candidate_gpus = filtered_gpus
         
+        storage_overhead = 0.20
         total_estimated = round(best_gpu['securePrice'] + storage_overhead, 2)
-        print(f"[*] Best value candidate: {best_gpu['displayName']} ({best_gpu['memoryInGb']}GB VRAM @ ${best_gpu['securePrice']}/hr + ${storage_overhead} storage = ${total_estimated}/hr)")
-        print(f"[*] Total valid candidates in range: {len(filtered_gpus)}")
+        _rich_log(f"Selected: {best_gpu['displayName']} (${total_estimated}/hr total)", "bold green", "✓")
     elif args.pod_id:
         # Resume existing pod flow
         pods = bridge.get_pods()
         pod = next((p for p in pods if p['id'] == args.pod_id), None)
         if not pod:
-            print(f"[!] Pod {args.pod_id} not found.")
+            _rich_log(f"Pod {args.pod_id} not found.", "red", "✗")
             sys.exit(1)
         
         # Check if pod needs starting
         if not pod.get("runtime"):
-            print(f"[*] Pod {args.pod_id} is stopped. Starting it...")
+            _rich_log(f"Pod {args.pod_id} is stopped. Starting it...", "cyan", "⚡")
             # mutation PodResume($input: PodResumeInput!) { podResume(input: $input) { id } }
             bridge._query("""
                 mutation ResumePod($input: PodResumeInput!) {
@@ -1410,7 +1549,7 @@ def main():
                 }
             """, variables={"input": {"podId": args.pod_id, "gpuCount": 1}})
             
-            print(f"[*] Waiting for pod {args.pod_id} to initialize runtime...")
+            _rich_log(f"Waiting for pod {args.pod_id} to initialize runtime...", "cyan", "⏳")
             while True:
                 pods = bridge.get_pods()
                 pod = next((p for p in pods if p['id'] == args.pod_id), None)
@@ -1420,8 +1559,15 @@ def main():
 
         gpu_id = None # Signal that no new pod creation is needed
     else:
-        print(f"[*] No pod specified. Finding GPU ID for {args.gpu}...")
+        _rich_log(f"No pod specified. Finding GPU ID for {args.gpu}...", "dim", "🔍")
         gpu_types = bridge.get_gpu_types_with_availability()
+        
+        # Safety Check for manual GPU selection
+        incompatible_keywords = ["Blackwell", "PRO 4500", "PRO 5000"]
+        if any(kw in args.gpu for kw in incompatible_keywords):
+            _rich_log(f"GPU '{args.gpu}' is known to be incompatible with our current software stack.", "red", "✗")
+            sys.exit(1)
+
         gpu_ids = [g['id'] for g in gpu_types]
         
         gpu_id = None
@@ -1435,7 +1581,7 @@ def main():
                 if f"gpu_{gpu_id}" in gpu_ids:
                     gpu_id = f"gpu_{gpu_id}"
                 else:
-                    print(f"[!] Warning: GPU '{args.gpu}' (mapped to '{gpu_id}') not found in available IDs: {gpu_ids[:5]}...")
+                    _rich_log(f"Warning: GPU '{args.gpu}' (mapped to '{gpu_id}') not found in available IDs: {gpu_ids[:5]}...", "yellow", "⚠")
 
 
     if args.use_s3:
@@ -1453,7 +1599,7 @@ def main():
             gpu_info_list = bridge.get_gpu_types_with_availability()
             gpu_info = next((g for g in gpu_info_list if g.get("id") == gpu_id), None)
             if gpu_info and gpu_info.get("memoryInGb") is not None and gpu_info.get("memoryInGb") < args.min_vram:
-                print(f"[!] GPU {gpu_info.get('displayName', gpu_id)} has {gpu_info.get('memoryInGb')}GB VRAM; minimum is {args.min_vram}GB.")
+                _rich_log(f"GPU {gpu_info.get('displayName', gpu_id)} has {gpu_info.get('memoryInGb')}GB VRAM; minimum is {args.min_vram}GB.", "red", "✗")
                 sys.exit(1)
         except Exception:
             pass
@@ -1461,226 +1607,195 @@ def main():
         candidate_gpus = auto_candidate_gpus if args.auto else [{"id": gpu_id, "displayName": gpu_id}]
         retry_sleep = 30
         auto_start = time.time() if auto_timeout_s else None
-        while True:
-            if auto_start and (time.time() - auto_start) >= auto_timeout_s:
-                print("[INFO] Auto search timed out after 5 minutes. Exiting.")
-                sys.exit(1)
-            if args.auto:
-                print("[INFO] Refreshing GPU availability...")
-                gpu_types = bridge.get_gpu_types_with_availability()
-                filtered_gpus = [
-                    g for g in gpu_types
-                    if bridge.gpu_is_available(g)
-                    if g.get('securePrice') is not None
-                    and (g['securePrice'] + storage_overhead) >= min_price
-                    and (g['securePrice'] + storage_overhead) <= max_price
-                    and g.get('memoryInGb') is not None
-                    and g.get('memoryInGb') >= args.min_vram
-                ]
-                if filtered_gpus:
-                    filtered_gpus.sort(key=lambda x: (x['securePrice'], -x['memoryInGb']))
-                    candidate_gpus = filtered_gpus
-                else:
-                    candidate_gpus = []
-            for candidate in candidate_gpus:
-                if _BALANCE_LOW.is_set():
-                    print(f"[WARN] Balance below ${args.min_balance:.2f}. Auto mode paused.")
-                    time.sleep(min(60, retry_sleep))
-                    continue
-                candidate_id = candidate.get("id") if isinstance(candidate, dict) else candidate
-                candidate_display = candidate.get("displayName") if isinstance(candidate, dict) else candidate_id
-                availability_snapshot = bridge.get_gpu_types_with_availability()
-                candidate_info = next((g for g in availability_snapshot if g.get("id") == candidate_id), None)
-                if candidate_info is not None and not bridge.gpu_is_available(candidate_info):
-                    print(f"[WARN] GPU {candidate_display} is not available right now. Skipping.")
-                    continue
+        
+        # Use a unified progress manager for the landing phase
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[dim]{task.completed}/300s[/dim]"),
+            console=console
+        ) as progress:
+            pod_task = progress.add_task(description="Looking for GPU...", total=300)
+            
+            while True:
+                if auto_start and (time.time() - auto_start) >= auto_timeout_s:
+                    _rich_log("Auto search timed out after 5 minutes. Exiting.", "red", "✗", progress=progress, task_id=pod_task)
+                    sys.exit(1)
+                if args.auto:
+                    progress.update(pod_task, description="Looking for GPU (refreshing availability)...")
+                    candidate_gpus = _select_candidate_gpus(bridge, min_price, max_price, args.min_vram)
+                
+                for candidate in candidate_gpus:
+                    if _BALANCE_LOW.is_set():
+                        _rich_log(f"Balance below ${args.min_balance:.2f}. Auto mode paused.", "yellow", "⚠", progress=progress, task_id=pod_task)
+                        time.sleep(min(60, retry_sleep))
+                        continue
+                    candidate_id = candidate.get("id") if isinstance(candidate, dict) else candidate
+                    candidate_display = candidate.get("displayName") if isinstance(candidate, dict) else candidate_id
+                    availability_snapshot = bridge.get_gpu_types_with_availability()
+                    candidate_info = next((g for g in availability_snapshot if g.get("id") == candidate_id), None)
+                    if candidate_info is not None and not bridge.gpu_is_available(candidate_info):
+                        progress.update(pod_task, description=f"No matches on {candidate_display}, looking for others...")
+                        continue
 
-                # Auto-switch image for AMD ROCm
-                current_image = args.image
-                if "AMD" in candidate_display or "MI" in candidate_display:
-                    print(f"[*] Detected AMD GPU ({candidate_display}). Switching to ROCm image.")
-                    current_image = "runpod/pytorch:2.1.0-py3.10-rocm5.7-devel-ubuntu22.04"
-                    pod_env["HSA_OVERRIDE_GFX_VERSION"] = "11.0.0"
-                else:
-                    # Reset for NVIDIA if it was changed by a previous candidate in the loop
-                    pod_env.pop("HSA_OVERRIDE_GFX_VERSION", None)
+                    # Auto-switch image for AMD ROCm
+                    current_image = args.image
+                    if "AMD" in candidate_display or "MI" in candidate_display:
+                        _rich_log(f"Detected AMD GPU ({candidate_display}). Switching to ROCm image.", "cyan", "🔧", progress=progress, task_id=pod_task)
+                        current_image = "runpod/pytorch:2.1.0-py3.10-rocm5.7-devel-ubuntu22.04"
+                        pod_env["HSA_OVERRIDE_GFX_VERSION"] = "11.0.0"
+                    else:
+                        pod_env.pop("HSA_OVERRIDE_GFX_VERSION", None)
 
-                pod_name = args.alias or "mavaia_train"
-                print(f"[*] Launching pod '{pod_name}' with GPU: {candidate_display}...")
-                if args.dry_run:
-                    print(f"[DRY-RUN] Would launch {candidate_display} pod with template {args.template}")
-                    pod = {"id": "dry-run-id", "runtime": {"ports": [{"ip": "1.2.3.4", "publicPort": 1234, "isIpPublic": True}]}}
-                    break
-                pod_result = bridge.create_pod(
-                    name=pod_name,
-                    gpu_type_id=candidate_id,
-                    template_id=args.template,
-                    image=current_image,
-                    ssh_key_value=args.ssh_key_value,
-                    data_center_id=args.data_center,
-                    volume_id=args.volume_id,
-                    volume_mount_path=args.volume_mount_path,
-                    env=pod_env,
-                )
-                if not pod_result:
-                    print(f"[!] Failed to create pod with {candidate_display}, trying next candidate...")
-                    continue
-                pod_id = pod_result['id']
-                print(f"[*] Pod {pod_id} launched. Waiting for it to be ready...")
-
-                # Polling for readiness
-                while True:
-                    pods = bridge.get_pods()
-                    pod = next((p for p in pods if p['id'] == pod_id), None)
-                    if pod and pod.get("runtime") and pod["runtime"].get("uptimeInSeconds", 0) > 0:
+                    pod_name = args.alias or "mavaia_train"
+                    progress.update(pod_task, description=f"Looking for GPU with {candidate_display}...")
+                    if args.dry_run:
+                        _rich_log(f"[DRY-RUN] Would launch {candidate_display} pod", "dim", progress=progress, task_id=pod_task)
+                        pod = {"id": "dry-run-id", "runtime": {"ports": [{"ip": "1.2.3.4", "publicPort": 1234, "isIpPublic": True}]}}
                         break
-                    time.sleep(10)
-                break
+                    
+                    pod_result = bridge.create_pod(
+                        name=pod_name,
+                        gpu_type_id=candidate_id,
+                        template_id=args.template,
+                        image=current_image,
+                        ssh_key_value=args.ssh_key_value,
+                        data_center_id=args.data_center,
+                        volume_id=args.volume_id,
+                        volume_mount_path=args.volume_mount_path,
+                        env=pod_env,
+                    )
+                    if not pod_result:
+                        progress.update(pod_task, description=f"No matches on {candidate_display}, trying next...")
+                        continue
+                    
+                    pod_id = pod_result['id']
+                    progress.update(pod_task, description=f"Found pod {pod_id}! Launching...")
+                    
+                    poll_start = time.time()
+                    while True:
+                        pods = bridge.get_pods()
+                        pod = next((p for p in pods if p['id'] == pod_id), None)
+                        uptime = pod.get("runtime", {}).get("uptimeInSeconds", 0) if pod and pod.get("runtime") else 0
+                        
+                        if uptime > 0:
+                            progress.update(pod_task, completed=300)
+                            break
+                        
+                        elapsed = time.time() - poll_start
+                        progress.update(pod_task, completed=min(299, int(elapsed)), description=f"Launching pod {pod_id}: Waiting for runtime...")
+                        
+                        if elapsed > 300:
+                            _rich_log("Safety timeout reached. Attempting to proceed...", "yellow", "⚠", progress=progress, task_id=pod_task)
+                            break
+                        time.sleep(5)
+                    
+                    _rich_log(f"Pod {pod_id} landed on {candidate_display}!", "bold green", "✓", progress=progress, task_id=pod_task)
+                    break
 
-            if pod:
-                break
+                if pod:
+                    break
 
-            print("[WARN] Failed to create pod with any candidate GPU.")
-            if args.auto and not args.dry_run:
-                print(f"[INFO] Capacity constrained. Retrying in {retry_sleep}s...")
-                print("[INFO] Refreshing availability before retry.")
-                time.sleep(retry_sleep)
-                retry_sleep = min(retry_sleep * 2, 300)
-                continue
+                progress.update(pod_task, description="Failed to create pod with any candidate GPU. Retrying...")
+                if args.auto and not args.dry_run:
+                    time.sleep(retry_sleep)
+                    retry_sleep = min(retry_sleep * 2, 300)
+                    continue
 
-            sys.exit(1)
+                sys.exit(1)
+
+    # NOW pod is either found (args.pod_id) or created above.
+    if not pod:
+        _rich_log("Failed to acquire a pod.", "red", "✗")
+        sys.exit(1)
 
     # Get SSH details
-    # Look for privatePort 22, then fallback to first available public port
-    public_ports = [p for p in pod.get("runtime", {}).get("ports", []) if p.get("isIpPublic")]
+    runtime_info = pod.get("runtime", {})
+    ports_info = runtime_info.get("ports") or []
+    public_ports = [p for p in ports_info if p.get("isIpPublic")]
     ssh_port_info = next((p for p in public_ports if p.get("privatePort") == 22), None)
     
     if not ssh_port_info and public_ports:
-        # Fallback to first available if 22 isn't explicitly found
         ssh_port_info = public_ports[0]
-        print(
-            f"[*] Warning: Port 22 not found; falling back to port {ssh_port_info.get('publicPort')} "
-            f"(mapped from {ssh_port_info.get('privatePort', 'unknown')})"
-        )
     
     if not ssh_port_info:
-        # Some templates/accounts don't surface runtime public ports; fall back to RunPod's SSH proxy.
-        if pod and pod.get("id"):
+        if pod.get("id"):
             args.ssh_proxy = args.ssh_proxy or f"{pod['id']}-22@ssh.runpod.io"
-            print(f"[*] No public port info; falling back to SSH proxy: {args.ssh_proxy}")
             pod_ip = "ssh.runpod.io"
             pod_port = 22
         else:
-            print("[!] Could not find any public port information for pod.")
+            _rich_log("Could not find public port information for pod.", "red", "✗")
             sys.exit(1)
     else:
         pod_ip = ssh_port_info['ip']
         pod_port = ssh_port_info['publicPort']
 
-    if args.dry_run:
-        print(f"[DRY-RUN] Would sync to {pod_ip}:{pod_port} and start training.")
-        return
-
-    # Wait a bit for SSH service to be ready
-    print("[*] Waiting 60s for SSH service to initialize...")
-    time.sleep(60)
-
+    # Initialize and Train
     interrupted = False
     failed = False
     watchdog_stop = None
     watchdog_thread = None
+    
     try:
-        setup_pod_env(pod_ip, pod_port, args.ssh_key, pod['id'], args.ssh_proxy)
-        
-        # ALWAYS sync code via rsync as well to ensure latest diagnostic fixes are present
-        sync_code(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
-        
-        # ensure_mavaia_installed handles S3 archive restore internally when use_s3 is set
-        ensure_mavaia_installed(
-            pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod['id'], args.ssh_proxy,
-            s3_bucket=args.s3_bucket if args.use_s3 else None,
-            s3_prefix=args.s3_prefix if args.use_s3 else None,
-            s3_region=args.s3_region if args.use_s3 else None,
-            s3_endpoint=args.s3_endpoint if args.use_s3 else None,
-            force_reinstall=args.force_refresh,
-            pip_debug=args.pip_debug,
-            pip_stream=args.pip_stream,
-            editable_install=args.editable_install,
-        )
-        ollama_cache_pull_failed = False
-        if args.use_s3:
-            # Pull Ollama models from S3 if they were cached there (soft fail on first run)
-            try:
-                s3_sync_pod(
-                    pod_ip,
-                    pod_port,
-                    args.ssh_key,
-                    args.s3_bucket,
-                    args.s3_ollama_prefix,
-                    args.s3_region,
-                    args.s3_endpoint,
-                    "pull",
-                    pod['id'],
-                    args.ssh_proxy,
-                    src=f"{args.volume_mount_path}/ollama",
-                )
-            except Exception as e:
-                ollama_cache_pull_failed = True
-                # If a cache object exists but we can't extract it on the pod, it's likely corrupt; invalidate it.
-                ollama_s3_key = f"s3://{args.s3_bucket}/{args.s3_ollama_prefix}/mavaia.tar"
-                aws_flags = []
-                if args.s3_region:
-                    aws_flags += ["--region", args.s3_region]
-                if args.s3_endpoint:
-                    aws_flags += ["--endpoint-url", args.s3_endpoint]
-                try:
-                    if subprocess.run(["aws", "s3", "ls", ollama_s3_key] + aws_flags, capture_output=True, check=False).returncode == 0:
-                        subprocess.run(["aws", "s3", "rm", ollama_s3_key] + aws_flags, capture_output=True, check=False)
-                        print(f"[*] Invalidated Ollama S3 cache at {ollama_s3_key} (will re-upload after fresh pull).")
-                except Exception:
-                    pass
-                print(f"[*] Ollama S3 cache pull failed; Ollama will download models fresh. ({_redact_secrets(str(e))})")
-        if not args.no_ollama:
-            setup_ollama(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                args.teacher_model,
-                args.ollama_model_dir,
-                pod['id'],
-                args.ssh_proxy,
+        # Initialization phase (single line progress)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            pod_task = progress.add_task(description="Initializing pod...", total=None)
+            
+            if args.dry_run:
+                _rich_log(f"[DRY-RUN] Would sync to {pod_ip}:{pod_port} and start training.", "dim", progress=progress, task_id=pod_task)
+                return
+
+            # Instead of a hard 60s sleep, we let setup_pod_env's loop handle the service startup patience
+            setup_pod_env(pod_ip, pod_port, args.ssh_key, pod['id'], args.ssh_proxy, progress=progress, task_id=pod_task, bridge=bridge)
+            sync_code(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy, progress=progress, task_id=pod_task)
+            
+            ensure_mavaia_installed(
+                pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod['id'], args.ssh_proxy,
+                s3_bucket=args.s3_bucket if args.use_s3 else None,
+                s3_prefix=args.s3_prefix if args.use_s3 else None,
+                s3_region=args.s3_region if args.use_s3 else None,
+                s3_endpoint=args.s3_endpoint if args.use_s3 else None,
+                force_reinstall=args.force_refresh,
+                pip_debug=args.pip_debug,
+                pip_stream=args.pip_stream,
+                editable_install=args.editable_install,
+                progress=progress, task_id=pod_task
             )
+            
+            ollama_cache_pull_failed = False
             if args.use_s3:
-                # Only push Ollama cache to S3 if it doesn't exist yet — skip re-uploading 9GB every run
-                ollama_s3_key = f"s3://{args.s3_bucket}/{args.s3_ollama_prefix}/mavaia.tar"
-                aws_check_flags = []
-                if args.s3_region:
-                    aws_check_flags += ["--region", args.s3_region]
-                if args.s3_endpoint:
-                    aws_check_flags += ["--endpoint-url", args.s3_endpoint]
-                cache_exists = subprocess.run(
-                    ["aws", "s3", "ls", ollama_s3_key] + aws_check_flags,
-                    capture_output=True, check=False,
-                ).returncode == 0
-                if cache_exists and not ollama_cache_pull_failed:
-                    print(f"[*] Ollama S3 cache already exists at {ollama_s3_key}, skipping re-upload.")
-                else:
-                    print(f"[*] Ollama S3 cache not found (or invalidated) — uploading for future runs...")
+                try:
                     s3_sync_pod(
-                        pod_ip,
-                        pod_port,
-                        args.ssh_key,
-                        args.s3_bucket,
-                        args.s3_ollama_prefix,
-                        args.s3_region,
-                        args.s3_endpoint,
-                        "push",
-                        pod['id'],
-                        args.ssh_proxy,
-                        src=f"{args.volume_mount_path}/ollama",
+                        pod_ip, pod_port, args.ssh_key, args.s3_bucket, args.s3_ollama_prefix,
+                        args.s3_region, args.s3_endpoint, "pull", pod['id'], args.ssh_proxy,
+                        src=f"{args.volume_mount_path}/ollama", progress=progress, task_id=pod_task
                     )
+                except Exception as e:
+                    ollama_cache_pull_failed = True
+                    _rich_log(f"Ollama S3 cache pull failed fresh. ({_redact_secrets(str(e))})", "yellow", "⚠", progress=progress, task_id=pod_task)
+            
+            if not args.no_ollama:
+                setup_ollama(
+                    pod_ip, pod_port, args.ssh_key, args.teacher_model, args.ollama_model_dir,
+                    pod['id'], args.ssh_proxy, progress=progress, task_id=pod_task
+                )
+                if args.use_s3 and ollama_cache_pull_failed:
+                    _rich_log("Uploading Ollama cache for future runs...", "cyan", "📤", progress=progress, task_id=pod_task)
+                    s3_sync_pod(
+                        pod_ip, pod_port, args.ssh_key, args.s3_bucket, args.s3_ollama_prefix,
+                        args.s3_region, args.s3_endpoint, "push", pod['id'], args.ssh_proxy,
+                        src=f"{args.volume_mount_path}/ollama", progress=progress, task_id=pod_task
+                    )
+            
+            progress.update(pod_task, description=f"Pod {pod['id']} ready!")
+            time.sleep(1)
 
-
+        # After initialization, we exit the Progress block and resume normal scrolling logs for training
         if not args.no_watchdog:
             interval_minutes = float(args.watchdog_minutes or 0.0)
             if interval_minutes > 0:
@@ -1690,22 +1805,28 @@ def main():
                     interval_s = max(60.0, interval_minutes * 60.0)
                     while not watchdog_stop.wait(interval_s):
                         try:
-                            print("[INFO] Watchdog: snapshot + sync")
+                            _rich_log("Watchdog: snapshot + sync", "cyan", "🐕")
                             remote_snapshot(pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod['id'], args.ssh_proxy)
                             get_artifacts(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
                             sync_training_data(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
                         except Exception as e:
-                            print(f"[WARN] Watchdog failed: {e}")
+                            _rich_log(f"Watchdog failed: {e}", "yellow", "⚠")
 
                 watchdog_thread = threading.Thread(target=_watchdog_loop, daemon=True)
                 watchdog_thread.start()
 
         train_args = list(args.train_args)
-        script_rel = "scripts/train_neural_text_generator.py"
+        script_rel = args.script or "scripts/train_neural_text_generator.py"
         if args.curriculum:
             script_rel = "scripts/train_curriculum.py"
+            if args.stage:
+                _rich_log(f"Targeting curriculum stages: {args.stage}", "cyan", "🎯")
+                if "--stages" not in train_args:
+                    train_args.extend(["--stages", args.stage])
+            else:
+                _rich_log("Running full curriculum sequence", "cyan", "📚")
         else:
-            if not args.rich_output and "--plain-output" not in train_args:
+            if not args.rich_output and "--plain-output" not in train_args and script_rel.endswith("train_neural_text_generator.py"):
                 train_args.append("--plain-output")
             if args.auto_distill:
                 if "--distill" not in train_args:
@@ -1722,154 +1843,87 @@ def main():
                 if "--model-type" not in train_args and "--model_type" not in train_args:
                     train_args.extend(["--model-type", "transformer"])
             else:
-                # Enforce distillation off unless explicitly enabled.
-                distill_flags = {
-                    "--distill",
-                    "--teacher-model",
-                    "--distill-alpha",
-                    "--distill-temp",
-                    "--distill-topk",
-                    "--distill-precompute-minutes",
-                    "--ollama-url",
-                    "--teacher-cache-dir",
-                }
+                distill_flags = {"--distill", "--teacher-model", "--distill-alpha", "--distill-temp", "--distill-topk", "--distill-precompute-minutes", "--ollama-url", "--teacher-cache-dir"}
                 cleaned = []
-                it = iter(range(len(train_args)))
                 i = 0
                 while i < len(train_args):
                     arg = train_args[i]
                     if arg in distill_flags:
-                        # Skip flag and its value if present.
-                        if i + 1 < len(train_args) and not train_args[i + 1].startswith("--"):
-                            i += 2
-                        else:
-                            i += 1
+                        if i + 1 < len(train_args) and not train_args[i + 1].startswith("--"): i += 2
+                        else: i += 1
                         continue
                     cleaned.append(arg)
                     i += 1
                 if cleaned != train_args:
-                    print("[INFO] Distillation disabled (use --auto-distill to enable).")
+                    _rich_log("Distillation disabled (use --auto-distill to enable).", "yellow", "⚠")
                 train_args = cleaned
 
         remote_train(
-            pod_ip,
-            pod_port,
-            args.ssh_key,
-            train_args,
-            args.volume_mount_path,
-            pod['id'],
-            args.ssh_proxy,
-            script_rel=script_rel,
+            pod_ip, pod_port, args.ssh_key, train_args, args.volume_mount_path,
+            pod['id'], args.ssh_proxy, script_rel=script_rel,
         )
         get_artifacts(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
         sync_training_data(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
+        
         if args.use_s3:
-            s3_sync_pod(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                args.s3_bucket,
-                args.s3_prefix,
-                args.s3_region,
-                args.s3_endpoint,
-                "push",
-                pod['id'],
-                args.ssh_proxy,
-                src=f"{args.volume_mount_path}/mavaia",
-            )
-            s3_sync_pod(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                args.s3_bucket,
-                args.s3_ollama_prefix,
-                args.s3_region,
-                args.s3_endpoint,
-                "push",
-                pod['id'],
-                args.ssh_proxy,
-                src=f"{args.volume_mount_path}/ollama",
-            )
+            s3_sync_pod(pod_ip, pod_port, args.ssh_key, args.s3_bucket, args.s3_prefix, args.s3_region, args.s3_endpoint, "push", pod['id'], args.ssh_proxy, src=f"{args.volume_mount_path}/mavaia")
+            s3_sync_pod(pod_ip, pod_port, args.ssh_key, args.s3_bucket, args.s3_ollama_prefix, args.s3_region, args.s3_endpoint, "push", pod['id'], args.ssh_proxy, src=f"{args.volume_mount_path}/ollama")
 
-        print("[*] Remote training successful! Artifacts retrieved.")
+        _rich_log("Remote training successful! Artifacts retrieved.", "bold green", "✓")
+
     except KeyboardInterrupt:
         interrupted = True
-        print("[*] CTRL+C detected: giving pod SSH 5s to stabilize...")
+        _rich_log("CTRL+C detected: giving pod SSH 5s to stabilize...", "yellow", "⚠")
         time.sleep(5)
-        print("[*] Attempting to save snapshot and sync artifacts before exit...")
+        _rich_log("Attempting to save snapshot and sync artifacts before exit...", "cyan", "💾")
         try:
             remote_snapshot(pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod['id'], args.ssh_proxy)
         except Exception as e:
-            print(f"[!] Snapshot failed (likely process already dead): {_redact_secrets(str(e))}")
+            _rich_log(f"Snapshot failed: {_redact_secrets(str(e))}", "red", "✗")
         
-        # Retry artifact pull up to 3 times
         for attempt in range(3):
             try:
-                print(f"[*] Syncing artifacts (attempt {attempt+1}/3)...")
+                _rich_log(f"Syncing artifacts (attempt {attempt+1}/3)...", "cyan", "🔄")
                 get_artifacts(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
                 sync_training_data(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
-                print("[✓] Sync successful!")
+                _rich_log("Sync successful!", "bold green", "✓")
                 break
             except Exception as e:
-                print(f"[!] Sync attempt {attempt+1} failed: {_redact_secrets(str(e))}")
-                if attempt < 2:
-                    time.sleep(5)
+                _rich_log(f"Sync attempt {attempt+1} failed: {_redact_secrets(str(e))}", "red", "✗")
+                if attempt < 2: time.sleep(5)
+
     except Exception as e:
         failed = True
-        print(f"[!] Error detected: {_redact_secrets(str(e))}. Saving snapshot and syncing artifacts before exit...")
+        _rich_log(f"Error detected: {_redact_secrets(str(e))}. Saving snapshot...", "red", "✗")
         try:
             remote_snapshot(pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod['id'], args.ssh_proxy)
         except Exception as snap_e:
-            print(f"[!] Snapshot failed: {snap_e}")
+            _rich_log(f"Snapshot failed: {snap_e}", "red", "✗")
         try:
             get_artifacts(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
             sync_training_data(pod_ip, pod_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, pod['id'], args.ssh_proxy)
             if args.use_s3:
-                s3_sync_pod(
-                    pod_ip,
-                    pod_port,
-                    args.ssh_key,
-                    args.s3_bucket,
-                    args.s3_prefix,
-                    args.s3_region,
-                    args.s3_endpoint,
-                    "push",
-                    pod['id'],
-                    args.ssh_proxy,
-                    src="/workspace/mavaia",
-                )
+                s3_sync_pod(pod_ip, pod_port, args.ssh_key, args.s3_bucket, args.s3_prefix, args.s3_region, args.s3_endpoint, "push", pod['id'], args.ssh_proxy, src="/workspace/mavaia")
                 try:
-                    s3_sync_pod(
-                        pod_ip,
-                        pod_port,
-                        args.ssh_key,
-                        args.s3_bucket,
-                        args.s3_ollama_prefix,
-                        args.s3_region,
-                        args.s3_endpoint,
-                        "push",
-                        pod['id'],
-                        args.ssh_proxy,
-                        src="/workspace/ollama",
-                    )
+                    s3_sync_pod(pod_ip, pod_port, args.ssh_key, args.s3_bucket, args.s3_ollama_prefix, args.s3_region, args.s3_endpoint, "push", pod['id'], args.ssh_proxy, src="/workspace/ollama")
                 except Exception as ollama_e:
-                    print(f"[*] Ollama S3 push skipped: {ollama_e}")
+                    _rich_log(f"Ollama S3 push skipped: {ollama_e}", "yellow", "⚠")
         except Exception as sync_e:
-            print(f"[!] Artifact sync failed: {sync_e}")
+            _rich_log(f"Artifact sync failed: {sync_e}", "red", "✗")
+
     finally:
         if watchdog_stop is not None:
             watchdog_stop.set()
-        if args.terminate:
-            print(f"[*] Terminating pod {pod['id']}...")
-            bridge.terminate_pod(pod['id'])
-        else:
-            print(f"[*] Stopping pod {pod['id']} (saving costs)...")
-            bridge.stop_pod(pod['id'])
+        if pod and pod.get("id") and pod['id'] != "dry-run-id":
+            if args.terminate:
+                _rich_log(f"Terminating pod {pod['id']}...", "red", "💥")
+                bridge.terminate_pod(pod['id'])
+            else:
+                _rich_log(f"Stopping pod {pod['id']} (saving costs)...", "yellow", "🛑")
+                bridge.stop_pod(pod['id'])
 
-    if interrupted:
-        return 130
-    if failed:
-        return 1
+    if interrupted: return 130
+    if failed: return 1
 
 if __name__ == "__main__":
     sys.exit(main() or 0)
