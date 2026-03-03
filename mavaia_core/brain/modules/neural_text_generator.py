@@ -812,7 +812,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             extra={"module_name": "neural_text_generator"},
                         )
                     char_result = self._train_character_model(
-                        text, epochs, continue_training, time_limit_seconds
+                        text, epochs, continue_training, time_limit_seconds, batch_size
                     )
                     results["character"] = char_result
                     if char_result.get("success"):
@@ -833,7 +833,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             extra={"module_name": "neural_text_generator"},
                         )
                     word_result = self._train_word_model(
-                        text, epochs, continue_training, time_limit_seconds
+                        text, epochs, continue_training, time_limit_seconds, batch_size
                     )
                     results["word"] = word_result
                     if word_result.get("success"):
@@ -861,6 +861,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 transformer_config["_plateau_steps"] = params.get("plateau_steps", 50)
                 transformer_config["_plateau_patience"] = params.get("plateau_patience", 3)
                 transformer_config["_min_improvement"] = params.get("min_improvement", 0.01)
+
+                # Training parameters
+                transformer_config["_gradient_checkpointing"] = params.get("gradient_checkpointing", False)
+                if batch_size is not None:
+                    transformer_config["batch_size"] = batch_size
 
                 # LoRA parameters
                 transformer_config["_enable_lora"] = params.get("enable_lora", False)
@@ -1030,7 +1035,12 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             }
 
     def _train_character_model(
-        self, text: str, epochs: int, continue_training: bool, time_limit_seconds: Optional[float] = None
+        self,
+        text: str,
+        epochs: int,
+        continue_training: bool,
+        time_limit_seconds: Optional[float] = None,
+        batch_size: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Train character-level model
@@ -1040,6 +1050,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             epochs: Number of epochs (may be limited by time)
             continue_training: Whether to continue from existing model
             time_limit_seconds: Maximum training time in seconds (None = no limit)
+            batch_size: Batch size for training
         """
         sequence_length = self.config.get("training", {}).get("sequence_length", 100)
         start_time = time.time()
@@ -1107,7 +1118,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         )
 
         # Train with time limit support
-        batch_size = self.config.get("training", {}).get("batch_size", 64)
+        if batch_size is None:
+            batch_size = self.config.get("training", {}).get("batch_size", 64)
         
         # Custom callback for time-based training and checkpoint saving
         class TrainingCallback(keras.callbacks.Callback):
@@ -1214,7 +1226,12 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         }
 
     def _train_word_model(
-        self, text: str, epochs: int, continue_training: bool, time_limit_seconds: Optional[float] = None
+        self,
+        text: str,
+        epochs: int,
+        continue_training: bool,
+        time_limit_seconds: Optional[float] = None,
+        batch_size: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Train word-level model
@@ -1224,6 +1241,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             epochs: Number of epochs (may be limited by time)
             continue_training: Whether to continue from existing model
             time_limit_seconds: Maximum training time in seconds (None = no limit)
+            batch_size: Batch size for training
         """
         sequence_length = self.config.get("training", {}).get("sequence_length", 100)
         start_time = time.time()
@@ -1293,7 +1311,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         )
 
         # Train with time limit support
-        batch_size = self.config.get("training", {}).get("batch_size", 64)
+        if batch_size is None:
+            batch_size = self.config.get("training", {}).get("batch_size", 64)
         
         # Custom callback for time-based training and checkpoint saving
         class TrainingCallback(keras.callbacks.Callback):
@@ -2792,6 +2811,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             use_bf16 = False
             use_fp16 = False
         
+        gradient_checkpointing = transformer_config.get("_gradient_checkpointing", False)
+
         # Build training args dict - handle version differences
         training_args_dict = {
             "output_dir": output_dir,
@@ -2808,6 +2829,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             "prediction_loss_only": True,
             "fp16": use_fp16,
             "bf16": use_bf16,
+            "gradient_checkpointing": gradient_checkpointing,
             "max_grad_norm": 1.0,  # Gradient clipping to prevent exploding gradients
             "dataloader_pin_memory": False if use_mps else True,  # Disable pin_memory for MPS (not supported)
             "report_to": [],  # Disable default logging to suppress raw dict output
@@ -5322,26 +5344,36 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 results["word"] = {"success": False, "error": "Model file not found"}
 
         if model_type in ["transformer", "both"]:
-            # Check if a specific model path was requested via config
-            transformer_config = params.get("transformer_config", {})
-            custom_model_path = transformer_config.get("model_name")
+            # Load transformer model from its specific directory
+            # Check for specific model path in params first
+            custom_model_path = params.get("model_path")
+            
+            # If not in top-level params, check in transformer_config
+            if not custom_model_path:
+                transformer_config = params.get("transformer_config", {})
+                custom_model_path = transformer_config.get("model_name")
             
             if custom_model_path and Path(custom_model_path).exists():
-                transformer_model_path = Path(custom_model_path)
+                base_path = Path(custom_model_path)
+                # Check for 'transformer' subfolder first
+                if (base_path / "transformer").exists():
+                    transformer_model_path = base_path / "transformer"
+                else:
+                    transformer_model_path = base_path
+                
                 # SMART TOKENIZER DISCOVERY:
-                # 1. Check if tokenizer is in the same dir
-                # 2. Check if there's a sibling 'tokenizer' dir (common in Mavaia structure)
-                # 3. Check if parent dir has tokenizer files
                 if (transformer_model_path / "tokenizer_config.json").exists():
                     transformer_tokenizer_path = transformer_model_path
+                elif (transformer_model_path / "tokenizer").exists():
+                    transformer_tokenizer_path = transformer_model_path / "tokenizer"
                 elif (transformer_model_path.parent / "tokenizer").exists():
                     transformer_tokenizer_path = transformer_model_path.parent / "tokenizer"
                 else:
                     transformer_tokenizer_path = transformer_model_path
             else:
-                transformer_dir = self.model_dir / "transformer_model"
-                transformer_model_path = transformer_dir / "model"
-                transformer_tokenizer_path = transformer_dir / "tokenizer"
+                # Default location
+                transformer_model_path = self.model_dir / "transformer"
+                transformer_tokenizer_path = transformer_model_path
             
             if transformer_model_path.exists():
                 if not is_transformers_available() or not is_torch_available():
@@ -5460,11 +5492,22 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # Transformer models are saved differently (if they exist)
             if hasattr(self, 'transformer_model') and self.transformer_model is not None:
                 try:
-                    # Transformer models are typically saved by the training function
-                    # Just report success if model exists
+                    adapter_name = params.get("adapter_name")
+                    if adapter_name:
+                        # Save as a specialized adapter
+                        save_path = self.model_dir / f"adapter_{adapter_name}"
+                    else:
+                        save_path = self.model_dir / "transformer"
+                    
+                    save_path.mkdir(parents=True, exist_ok=True)
+                    self.transformer_model.save_pretrained(str(save_path))
+                    
+                    if hasattr(self, 'transformer_tokenizer') and self.transformer_tokenizer is not None:
+                        self.transformer_tokenizer.save_pretrained(str(save_path))
+
                     results["transformer"] = {
                         "success": True,
-                        "path": str(self.model_dir / "transformer_model"),
+                        "path": str(save_path),
                     }
                 except Exception as e:
                     results["transformer"] = {"success": False, "error": str(e)}

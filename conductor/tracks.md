@@ -22,6 +22,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement elective LoRA modes in train_curriculum.py to allow specialized training.**
+- [x] **Track: Implement elective LoRA modes in train_curriculum.py to allow specialized training.**
   *Link: [./tracks/curriculum_electives_20260303/](./tracks/curriculum_electives_20260303/)*
 

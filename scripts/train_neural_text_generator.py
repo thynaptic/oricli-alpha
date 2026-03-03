@@ -997,6 +997,8 @@ def print_help_rich(parser, available_profiles):
             ],
             'training': [
                 {'name': '--epochs', 'help': 'Number of training epochs', 'default': '10'},
+                {'name': '--batch-size', 'help': 'Batch size for training'},
+                {'name': '--gradient-checkpointing', 'help': 'Enable gradient checkpointing (saves VRAM)'},
                 {'name': '--train-for-minutes', 'help': 'Maximum training time in minutes (overrides epochs if set)'},
                 {'name': '--train-for-hours', 'help': 'Maximum training time in hours (overrides epochs if set)'},
                 {'name': '--max-text-size', 'help': 'Maximum text size in characters'},
@@ -1417,7 +1419,19 @@ def main():
         "--run-dir",
         type=str,
         default=None,
-        help="Output directory for this training run (models, checkpoints, run_config.json). Defaults to mavaia_core/models/neural_text_generator/runs/<timestamp>.",
+        help="Input/Output directory for this training run. If --continue-training is used, this is where the base model is loaded from.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Explicit output directory for model artifacts. If provided, overrides --run-dir for saving.",
+    )
+    parser.add_argument(
+        "--adapter-name",
+        type=str,
+        default=None,
+        help="Unique name for the LoRA adapter (elective). Used as suffix for saved weights.",
     )
     parser.add_argument(
         "--seed",
@@ -1541,6 +1555,16 @@ def main():
         type=str,
         help="Search term for HuggingFace dataset search (only works with --source huggingface). "
              "Searches HuggingFace Hub for datasets matching the term.",
+    )
+    parser.add_argument(
+        "--gradient-checkpointing",
+        action="store_true",
+        help="Enable gradient checkpointing for transformer training (saves VRAM).",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        help="Batch size for training (overrides config/profile).",
     )
     parser.add_argument(
         "--watchdog-minutes",
@@ -1971,7 +1995,10 @@ def main():
             pass
         try:
             snapshot_type = train_params.get("model_type", "both")
-            generator.execute("save_model", {"model_type": snapshot_type})
+            save_params = {"model_type": snapshot_type}
+            if train_params.get("adapter_name"):
+                save_params["adapter_name"] = train_params["adapter_name"]
+            generator.execute("save_model", save_params)
             print("[INFO] Snapshot: save complete.", flush=True)
         except Exception as e:
             print(f"[ERROR] Snapshot: save failed: {e}", flush=True)
@@ -2170,6 +2197,20 @@ def main():
         elif "data_percentage" not in train_params:
             train_params["data_percentage"] = 1.0
         
+        # Batch size: explicit arg overrides profile/default
+        if args.batch_size:
+            train_params["batch_size"] = args.batch_size
+        
+        # Gradient checkpointing: explicit arg
+        if args.gradient_checkpointing:
+            train_params["gradient_checkpointing"] = True
+        
+        # Adapter name & Output dir
+        if args.adapter_name:
+            train_params["adapter_name"] = args.adapter_name
+        if args.output_dir:
+            train_params["output_dir"] = args.output_dir
+        
         # Book IDs: explicit argument always overrides
         if args.book_ids:
             train_params["book_ids"] = args.book_ids
@@ -2236,26 +2277,40 @@ def main():
                 train_params.pop("distill", None)
         
         # Resolve run directory and write run metadata early (for reproducibility)
-        run_dir = None
-        if args.run_dir:
-            run_dir = Path(args.run_dir).expanduser()
+        # PRIMARY directory for all new files (configs, checkpoints, saves)
+        final_run_dir = None
+        if args.output_dir:
+            final_run_dir = Path(args.output_dir).expanduser()
+            print(f"[INFO] Using explicit output directory: {final_run_dir}")
+        elif args.run_dir:
+            final_run_dir = Path(args.run_dir).expanduser()
         else:
             # Default: per-run directory under the module's model folder
             ts = __import__("datetime").datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            run_dir = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator" / "runs" / ts
-        run_dir.mkdir(parents=True, exist_ok=True)
-        (run_dir / "checkpoints").mkdir(exist_ok=True)
+            final_run_dir = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator" / "runs" / ts
+        
+        final_run_dir.mkdir(parents=True, exist_ok=True)
+        (final_run_dir / "checkpoints").mkdir(exist_ok=True)
 
-        _preflight_checks(train_params, args, run_dir)
+        # Model path for loading (source)
+        if args.continue_training:
+            if args.run_dir:
+                train_params["model_path"] = str(Path(args.run_dir).expanduser())
+                print(f"[INFO] Will load base model from: {train_params['model_path']}")
+            else:
+                train_params["model_path"] = str(final_run_dir)
+
+        _preflight_checks(train_params, args, final_run_dir)
 
         # Record latest run pointer (useful for deployment tooling)
         try:
             latest_ptr = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator" / "latest_run.txt"
-            latest_ptr.write_text(str(run_dir) + "\n", encoding="utf-8")
+            latest_ptr.write_text(str(final_run_dir) + "\n", encoding="utf-8")
         except Exception:
             pass
 
-        train_params["run_dir"] = str(run_dir)
+        train_params["run_dir"] = str(final_run_dir)
+        run_dir = final_run_dir # For backward compatibility in this script block
         if args.seed is not None:
             train_params["seed"] = int(args.seed)
 
@@ -2326,8 +2381,16 @@ def main():
                 config_lines.append(f"[bold]Training time:[/bold] [cyan]{train_params['train_for_hours']} hours[/cyan]")
             elif train_params.get("train_for_minutes"):
                 config_lines.append(f"[bold]Training time:[/bold] [cyan]{train_params['train_for_minutes']} minutes[/cyan]")
-            elif train_params.get("epochs"):
+            if train_params.get("epochs"):
                 config_lines.append(f"[bold]Epochs:[/bold] [cyan]{train_params['epochs']}[/cyan]")
+            if train_params.get("batch_size"):
+                config_lines.append(f"[bold]Batch size:[/bold] [cyan]{train_params['batch_size']}[/cyan]")
+            if train_params.get("gradient_checkpointing"):
+                config_lines.append(f"[bold]Gradient checkpointing:[/bold] [green]enabled[/green]")
+            if train_params.get("adapter_name"):
+                config_lines.append(f"[bold]LoRA Adapter Name:[/bold] [yellow]{train_params['adapter_name']}[/yellow]")
+            if train_params.get("output_dir"):
+                config_lines.append(f"[bold]Output Directory:[/bold] [cyan]{train_params['output_dir']}[/cyan]")
             if train_params.get("max_text_size"):
                 config_lines.append(f"[bold]Max text size:[/bold] [cyan]{train_params['max_text_size']:,} characters[/cyan]")
             if train_params.get("max_books"):
@@ -2374,6 +2437,14 @@ def main():
                 print(f"Training time: {train_params['train_for_minutes']} minutes")
             elif train_params.get("epochs"):
                 print(f"Epochs: {train_params['epochs']}")
+            if train_params.get("batch_size"):
+                print(f"Batch size: {train_params['batch_size']}")
+            if train_params.get("gradient_checkpointing"):
+                print("Gradient checkpointing: enabled")
+            if train_params.get("adapter_name"):
+                print(f"LoRA Adapter Name: {train_params['adapter_name']}")
+            if train_params.get("output_dir"):
+                print(f"Output Directory: {train_params['output_dir']}")
             if train_params.get("max_text_size"):
                 print(f"Max text size: {train_params['max_text_size']:,} characters")
             if train_params.get("max_books"):
