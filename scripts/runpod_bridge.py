@@ -1178,7 +1178,10 @@ if [ $READY -eq 0 ]; then
     exit 1
 fi
 
-cd LiveBench/livebench
+cd {workdir}/mavaia/LiveBench/livebench
+echo "[DEBUG] Cleaning old benchmark data..."
+rm -rf data/ mavaia_result.json livebench_results_*.json
+
 if [ ! -f run_livebench.py ]; then
     echo "ERROR: run_livebench.py not found in $(pwd)"
     ls -F
