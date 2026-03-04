@@ -2340,6 +2340,10 @@ def main():
             if "--remove-existing-judgment-file" not in bench_args:
                 bench_args.append("--remove-existing-judgment-file")
             
+            # Use a clean display name so LiveBench doesn't use the full path as an identifier
+            if "--model-display-name" not in bench_args:
+                bench_args.extend(["--model-display-name", "mavaia"])
+            
             # FORCE FOREGROUND MODE: Otherwise it spawns a tmux session and exits instantly
             if "--mode" not in bench_args:
                 bench_args.extend(["--mode", "single"])
