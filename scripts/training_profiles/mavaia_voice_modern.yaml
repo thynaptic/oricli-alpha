@@ -1,0 +1,42 @@
+name: mavaia_voice_modern
+description: >
+  Shapes Mavaia's character model on clean, modern prose — not Victorian
+  Gutenberg. Uses Wikipedia (factual clarity) and HuggingFace wikitext +
+  bookcorpus (modern sentence flow and conversational rhythm) to produce
+  a neutral, intelligent, readable voice without dated cadence.
+
+# Modern, neutral sources
+sources:
+  - wikipedia
+  - huggingface
+
+# HuggingFace datasets — clean modern prose, not AI-conversation quirks
+search:
+  - "wikitext"
+  - "bookcorpus"
+  - "openwebtext"
+
+# Broad content categories for generalist fluency
+categories:
+  - technical
+  - non_fiction
+  - science
+  - philosophy
+
+# Character model only — this is the missing piece.
+# Word model can be layered on top later if needed.
+model_type: character
+
+# Train for 2 hours — enough to develop real fluency without overfitting.
+# epochs is a ceiling; train_for_hours will stop it first.
+epochs: 9999
+train_for_hours: 2
+
+# Data config — generous but not unlimited
+max_books: 8
+max_text_size: 1000000   # 1M chars of dense, clean text
+data_percentage: 0.85
+
+# Auto-sample at the end to verify generation quality
+sample_after_training: true
+sample_model_type: character
