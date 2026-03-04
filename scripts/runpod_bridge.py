@@ -1472,7 +1472,10 @@ fi
 
 cd {workdir}/mavaia/LiveBench/livebench
 echo "[DEBUG] Cleaning old benchmark data..."
-rm -rf data/ mavaia_result.json livebench_results_*.json
+# Archive existing results instead of deleting them to avoid data loss on partial runs
+rm -rf data_old/
+if [ -d data/ ]; then mv data/ data_old/; fi
+rm -f mavaia_result.json livebench_results_*.json
 
 if [ ! -f run_livebench.py ]; then
     echo "ERROR: run_livebench.py not found in $(pwd)"
@@ -1605,83 +1608,43 @@ def get_bench_results(
         "Pulling benchmark results from pod...", "cyan", "📥", progress=progress, task_id=task_id
     )
 
-    # Patterns to pull results
-    # 1. Root level results (livebench_results_*.json, mavaia_result.json)
-    # 2. Nested data folder results (gen_api_answer outputs)
-    patterns = [
-        "--include=livebench_results_*.json",
-        "--include=mavaia_result.json",
-        "--include=data/",
-        "--include=data/**",
-        "--exclude=*",
-    ]
-
-    if proxy:
-        scp_cmd = (
-            [
-                "rsync",
-                "-az",
-                "--info=stats2",
-                "--no-owner",
-                "--no-group",
-                "-e",
-                _ssh_e(ssh_key, "22"),
-            ]
-            + patterns
-            + [
-                f"{proxy}:{workdir}/mavaia/LiveBench/livebench/",
-                str(local_path) + "/",
-            ]
-        )
-        subprocess.run(scp_cmd, check=True)
-        return
-
-    scp_cmd = (
-        [
-            "rsync",
-            "-az",
-            "--info=stats2",
-            "--no-owner",
-            "--no-group",
-            "-e",
-            _ssh_e(ssh_key, str(pod_port)),
-        ]
-        + patterns
-        + [
-            f"root@{pod_ip}:{workdir}/mavaia/LiveBench/livebench/",
+    remote_base = f"{workdir}/mavaia/LiveBench/livebench"
+    
+    def run_sync(host_str, port_str):
+        ssh_cmd = _ssh_e(ssh_key, port_str)
+        # 1. Pull root level JSON results
+        sync_root_cmd = [
+            "rsync", "-az", "--info=stats2", "--no-owner", "--no-group",
+            "-e", ssh_cmd,
+            "--include=livebench_results_*.json",
+            "--include=mavaia_result.json",
+            "--exclude=*",
+            f"{host_str}:{remote_base}/",
             str(local_path) + "/",
         ]
-    )
+        # 2. Pull the entire data directory
+        sync_data_cmd = [
+            "rsync", "-az", "--info=stats2", "--no-owner", "--no-group",
+            "-e", ssh_cmd,
+            f"{host_str}:{remote_base}/data/",
+            str(local_path / "data") + "/",
+        ]
+        subprocess.run(sync_root_cmd, check=True)
+        subprocess.run(sync_data_cmd, check=True)
+
     try:
-        proc = subprocess.run(scp_cmd, check=False)
-        if proc.returncode != 0 and proc.returncode != 23:
-            raise subprocess.CalledProcessError(proc.returncode, scp_cmd)
-        elif proc.returncode == 23:
-            _rich_log(
-                "Rsync completed with status 23 (partial transfer). Safe to proceed.", "dim", "ℹ"
-            )
-    except subprocess.CalledProcessError:
-        if pod_id:
-            _rich_log(
-                "Direct rsync failed; retrying via proxy.",
-                "yellow",
-                "⚠",
-                progress=progress,
-                task_id=task_id,
-            )
-            scp_cmd[4] = _ssh_e(ssh_key, "22")
-            scp_cmd[5 + len(patterns)] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/"
-            proc = subprocess.run(scp_cmd, check=False)
-            if proc.returncode != 0 and proc.returncode != 23:
-                raise subprocess.CalledProcessError(proc.returncode, scp_cmd)
-            elif proc.returncode == 23:
-                _rich_log(
-                    "Rsync completed with status 23 (partial transfer) via proxy. Safe to proceed.",
-                    "dim",
-                    "ℹ",
-                    progress=progress,
-                    task_id=task_id,
-                )
+        remote_host = proxy if proxy else f"root@{pod_ip}"
+        remote_port = "22" if proxy else str(pod_port)
+        run_sync(remote_host, remote_port)
+    except Exception as e:
+        if pod_id and not proxy:
+            _rich_log("Direct rsync failed; retrying via proxy.", "yellow", "⚠", progress=progress, task_id=task_id)
+            try:
+                run_sync(f"{pod_id}-22@ssh.runpod.io", "22")
+            except Exception as retry_e:
+                _rich_log(f"Proxy rsync also failed: {retry_e}", "red", "✗", progress=progress, task_id=task_id)
+        else:
+            _rich_log(f"Result sync failed: {e}", "red", "✗", progress=progress, task_id=task_id)
 
 
 def sync_training_data(
