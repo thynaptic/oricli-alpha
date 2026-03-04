@@ -1686,10 +1686,23 @@ def get_internal_bench_results(
             "--no-group",
             "-e",
             ssh_cmd,
+            # Pull the entire results directory content accurately
+            f"{host_str}:{workdir}/mavaia/mavaia_core/evaluation/results/",
+            str(dest_dir) + "/",
+        ]
+        # Also specifically ensure any root level report HTMLs are caught if they are outside
+        sync_html_cmd = [
+            "rsync",
+            "-az",
+            "--include=report_*.html",
+            "--exclude=*",
+            "-e",
+            ssh_cmd,
             f"{host_str}:{workdir}/mavaia/mavaia_core/evaluation/results/",
             str(dest_dir) + "/",
         ]
         subprocess.run(sync_cmd, check=True)
+        subprocess.run(sync_html_cmd, check=False) # Fallback, don't crash if no extra HTMLs
 
     try:
         remote_host = proxy if proxy else f"root@{pod_ip}"
@@ -3417,32 +3430,36 @@ def main():
             _rich_log("Starting Mavaia Internal Knowledge Benchmark...", "bold green", "🚀")
             
             # Internal bench uses run_tests.py with --internal-bench
-            # We override script and args for remote_train style execution
             script_rel = "run_tests.py"
             bench_args = ["--internal-bench", "--quiet"]
             
-            remote_train(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                bench_args,
-                args.volume_mount_path,
-                pod["id"],
-                args.ssh_proxy,
-                script_rel=script_rel,
-            )
-            
-            get_internal_bench_results(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                REPO_ROOT,
-                args.volume_mount_path,
-                pod["id"],
-                args.ssh_proxy,
-            )
-            
-            _rich_log("Internal benchmark complete! Results retrieved.", "bold green", "✓")
+            try:
+                remote_train(
+                    pod_ip,
+                    pod_port,
+                    args.ssh_key,
+                    bench_args,
+                    args.volume_mount_path,
+                    pod["id"],
+                    args.ssh_proxy,
+                    script_rel=script_rel,
+                )
+            except subprocess.CalledProcessError as e:
+                _rich_log(f"Benchmark script finished with non-zero exit code (some tests may have failed).", "yellow", "⚠")
+            except Exception as e:
+                _rich_log(f"Benchmark execution error: {e}", "red", "✗")
+            finally:
+                # ALWAYS attempt to pull results, even on failure
+                get_internal_bench_results(
+                    pod_ip,
+                    pod_port,
+                    args.ssh_key,
+                    REPO_ROOT,
+                    args.volume_mount_path,
+                    pod["id"],
+                    args.ssh_proxy,
+                )
+                _rich_log("Internal benchmark process complete. Results retrieved.", "bold green", "✓")
         else:
             train_args = list(args.train_args)
             if args.batch_size:
