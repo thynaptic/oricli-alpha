@@ -78,7 +78,10 @@ def forensic_analysis(category="data_analysis/tablereformat"):
                 print(f"LLM Output: {llm_output[:300]}...")
                 examples_shown += 1
 
-if __name__ == "__main__":
+def main():
     import sys
     cat = sys.argv[1] if len(sys.argv) > 1 else "data_analysis/tablereformat"
     forensic_analysis(cat)
+
+if __name__ == "__main__":
+    main()
