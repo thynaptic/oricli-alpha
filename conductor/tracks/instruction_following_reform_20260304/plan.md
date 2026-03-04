@@ -18,3 +18,6 @@ This plan outlines the forensic analysis steps to understand the 2.5% benchmark 
 - [x] Task: Draft a design for a dedicated `InstructionFollowingModule` that handles formatting tasks with high priority.
 - [x] Task: Propose updates to the curriculum (Stage 8: Alignment) to specifically target these failures.
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Reform Proposal' (Protocol in workflow.md)
+
+## Phase: Review Fixes
+- [x] Task: Apply review suggestions 8dddeef
