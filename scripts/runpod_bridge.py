@@ -1133,7 +1133,7 @@ def remote_benchmark(
             model_path = bench_args[i+1]
             break
 
-    args_str = " ".join(bench_args) if bench_args else ""
+    args_str = " ".join(f"'{a}'" if " " in a else a for a in bench_args)
     env_prefix = "PYTHONUNBUFFERED=1 MAVAIA_ENABLE_HEAVY_MODULES=true "
     hf_token = os.environ.get("HF_TOKEN")
     if hf_token:
@@ -1142,33 +1142,70 @@ def remote_benchmark(
     if model_path:
         env_prefix += f"MAVAIA_MODEL_PATH='{model_path}' "
 
-    # Command to start server in background, wait for it, run bench, then kill server
     log_path = f"{workdir}/mavaia/server.log"
-    server_cmd = "PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); "
-    # Ensure PYTHONPATH is set and use nohup + absolute log path
-    server_cmd += f"cd {workdir}/mavaia && {env_prefix} PYTHONPATH=. nohup $PYTHON_EXE -m mavaia_core.api.server --host 127.0.0.1 --port 8000 --no-auto-port > {log_path} 2>&1 & "
-    server_cmd += "SERVER_PID=$!; "
-    server_cmd += f"echo \"Waiting for API server to start on 127.0.0.1:8000 (Log: {log_path})...\"; "
-    # Check /v1/models instead of /health to ensure models are actually loaded
-    server_cmd += f"for i in $(seq 1 60); do if curl -s http://127.0.0.1:8000/v1/models > /dev/null; then echo 'Server ready and models loaded!'; break; fi; if ! kill -0 $SERVER_PID 2>/dev/null; then echo \"Server died! Tail of {log_path}:\"; tail -n 20 {log_path}; break; fi; sleep 2; done; "
     
-    bench_cmd = f"cd {workdir}/mavaia/LiveBench/livebench && echo \"[DEBUG] Working directory: $(pwd)\" && echo 'Executing: $PYTHON_EXE run_livebench.py {args_str}' && {env_prefix} $PYTHON_EXE run_livebench.py {args_str}"
-    
-    # If benchmark fails, cat the server log to help debugging
-    full_remote_cmd = f"{server_cmd} if ! {bench_cmd}; then echo '!!! BENCHMARK FAILED !!!'; echo 'Server Log:'; cat {log_path}; exit 1; fi; kill $SERVER_PID || true"
+    # Build a robust single script to run on the pod
+    remote_script = f"""
+set -e
+PYTHON_EXE=$(if [ -f {workdir}/mavaia/.venv/bin/python ]; then echo {workdir}/mavaia/.venv/bin/python; else echo python3; fi)
+echo "[DEBUG] Using Python: $PYTHON_EXE"
+
+cd {workdir}/mavaia
+echo "[DEBUG] Starting API server..."
+{env_prefix} PYTHONPATH=. nohup $PYTHON_EXE -m mavaia_core.api.server --host 127.0.0.1 --port 8000 --no-auto-port > {log_path} 2>&1 &
+SERVER_PID=$!
+
+echo "Waiting for API server to start on 127.0.0.1:8000..."
+READY=0
+for i in $(seq 1 60); do
+    if curl -s http://127.0.0.1:8000/v1/models > /dev/null; then
+        echo "Server ready and models loaded!"
+        READY=1
+        break
+    fi
+    if ! kill -0 $SERVER_PID 2>/dev/null; then
+        echo "Server died! Tail of {log_path}:"
+        tail -n 20 {log_path}
+        exit 1
+    fi
+    sleep 2
+done
+
+if [ $READY -eq 0 ]; then
+    echo "Timeout waiting for server. Tail of {log_path}:"
+    tail -n 20 {log_path}
+    kill $SERVER_PID || true
+    exit 1
+fi
+
+cd LiveBench/livebench
+if [ ! -f run_livebench.py ]; then
+    echo "ERROR: run_livebench.py not found in $(pwd)"
+    ls -F
+    kill $SERVER_PID || true
+    exit 1
+fi
+
+echo "[DEBUG] Starting LiveBench evaluation..."
+echo "Executing: $PYTHON_EXE run_livebench.py {args_str}"
+{env_prefix} $PYTHON_EXE run_livebench.py {args_str}
+
+echo "Benchmark complete. Cleaning up..."
+kill $SERVER_PID || true
+"""
 
     if proxy:
-        ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [full_remote_cmd]
+        ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [remote_script]
         subprocess.run(ssh_cmd, check=True)
         return
 
-    ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [full_remote_cmd]
+    ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [remote_script]
     try:
         subprocess.run(ssh_cmd, check=True)
     except subprocess.CalledProcessError as e:
         if pod_id and e.returncode == 255:
             _rich_log("Direct SSH failed (255); retrying via proxy.", "yellow", "⚠", progress=progress, task_id=task_id)
-            ssh_cmd = _ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [full_remote_cmd]
+            ssh_cmd = _ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [remote_script]
             subprocess.run(ssh_cmd, check=True)
         else:
             raise e
