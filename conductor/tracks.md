@@ -22,5 +22,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: High-Precision Instruction Following Reform**
+- [x] **Track: High-Precision Instruction Following Reform**
 *Link: [./tracks/instruction_reform_20260304/](./tracks/instruction_reform_20260304/)*
