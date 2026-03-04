@@ -22,5 +22,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Instruction Following Reform (Data Deep Dive)**
+- [x] **Track: Instruction Following Reform (Data Deep Dive)**
 *Link: [./tracks/instruction_following_reform_20260304/](./tracks/instruction_following_reform_20260304/)*
