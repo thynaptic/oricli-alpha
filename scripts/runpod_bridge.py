@@ -1688,6 +1688,7 @@ def main():
     parser.add_argument("--min-balance", type=float, default=5.0, help="Minimum balance required to run (USD)")
     parser.add_argument("--balance-watchdog-seconds", type=int, default=60, help="Balance check interval (seconds)")
     parser.add_argument("--terminate", action="store_true", help="Terminate pod after training")
+    parser.add_argument("--no-auto-report", action="store_true", help="Disable the post-benchmark summary report")
     parser.add_argument("--dry-run", action="store_true", help="Just print commands")
     parser.add_argument("--watchdog-minutes", type=float, default=10.0, help="Watchdog interval (minutes) to snapshot/sync during training (0 disables)")
     parser.add_argument("--no-watchdog", action="store_true", help="Disable watchdog snapshots during training")
@@ -2359,8 +2360,9 @@ def main():
             
             _rich_log("Remote benchmark successful! Results retrieved.", "bold green", "✓")
 
-            # LIGHTWEIGHT GAP ANALYSIS
-            summarize_results(REPO_ROOT)
+            if not args.no_auto_report:
+                # LIGHTWEIGHT GAP ANALYSIS
+                summarize_results(REPO_ROOT)
             
             if args.use_s3:
                 # We also push the results to S3 for persistence

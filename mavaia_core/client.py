@@ -2457,6 +2457,16 @@ class MavaiaClient:
                                 )
                             
                             if response_text and str(response_text).strip():
+                                # CLEANUP: Remove assistant chatter that breaks benchmarks
+                                chatter_patterns = [
+                                    r"^I'm here to help\. What would you like to know\?",
+                                    r"^I'm here to help\.",
+                                    r"^Hello! I'm Mavaia.*",
+                                    r"^As an AI assistant.*",
+                                ]
+                                for pattern in chatter_patterns:
+                                    response_text = re.sub(pattern, "", response_text, flags=re.IGNORECASE | re.MULTILINE).strip()
+                                
                                 # Fallback succeeded!
                                 actual_module_name = fallback_name
                                 operation_to_use = fallback_op if fallback_op else operation_to_use
@@ -2487,6 +2497,16 @@ class MavaiaClient:
                             fallback_result.get("generated_text", "")
                         )
                         if response_text and str(response_text).strip():
+                            # CLEANUP: Remove assistant chatter
+                            chatter_patterns = [
+                                r"^I'm here to help\. What would you like to know\?",
+                                r"^I'm here to help\.",
+                                r"^Hello! I'm Mavaia.*",
+                                r"^As an AI assistant.*",
+                            ]
+                            for pattern in chatter_patterns:
+                                response_text = re.sub(pattern, "", response_text, flags=re.IGNORECASE | re.MULTILINE).strip()
+                            
                             result = fallback_result
                             actual_module_name = "text_generation_engine"
                 except Exception:
