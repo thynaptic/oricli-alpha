@@ -2280,9 +2280,9 @@ def main():
             # Ensure --bench-name is present to test ALL subjects
             has_bench = any(arg == "--bench-name" for arg in bench_args)
             if not has_bench:
-                # Add all standard categories
+                # Use the top-level 'live_bench' name, which the script expands correctly
                 _rich_log("No benchmark categories specified. Testing all subjects.", "cyan", "📚")
-                bench_args.extend(["--bench-name", "live_bench/coding", "live_bench/data_analysis", "live_bench/instruction_following", "live_bench/language", "live_bench/math", "live_bench/reasoning"])
+                bench_args.extend(["--bench-name", "live_bench"])
 
             # Ensure --model is present
             has_model = False
