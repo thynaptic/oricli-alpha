@@ -2425,6 +2425,11 @@ def main():
                         "--bench",
                         "Run microbenchmarks per module to establish performance baselines.",
                     ),
+                    (
+                        "--internal-bench",
+                        "Run Mavaia's internal knowledge benchmark suite.\n"
+                        "Tests core reasoning, science, logic, and instruction following locally.",
+                    ),
                 ],
                 "Graph & Introspection": [
                     (
@@ -2501,8 +2506,8 @@ def main():
             _.print_help()
     
     # Lazy load CLI class only when needed
-    # If no arguments provided, start interactive CLI
-    if len(sys.argv) == 1:
+    # If explicit flag provided, start interactive CLI
+    if '--interactive' in sys.argv or '-i' in sys.argv:
         TestRunnerCLIClass = _get_cli_class()
         cli = TestRunnerCLIClass()
         try:
@@ -3042,6 +3047,14 @@ def main():
         )
     )
     parser.add_argument(
+        "--internal-bench",
+        action="store_true",
+        help=(
+            "Run Mavaia's internal knowledge benchmark suite locally. "
+            "Evaluates reasoning, instruction following, and general knowledge."
+        )
+    )
+    parser.add_argument(
         "--watch",
         action="store_true",
         help=(
@@ -3285,6 +3298,7 @@ def main():
         runner._order_by = args.order_by
         runner._fuzz = args.fuzz
         runner._bench = args.bench
+        runner._internal_bench = args.internal_bench
         runner._stress = args.stress
         runner._matrix = args.matrix
         runner._profile = args.profile
@@ -3301,6 +3315,13 @@ def main():
     if not args.quiet:
         print("Running test suite...", flush=True)
     
+    if getattr(runner, '_internal_bench', False):
+        # Filter by internal_benchmark tag
+        args.tags = ["internal_benchmark"]
+        args.tag_mode = "all"
+        if not args.quiet:
+            print("🚀 Running Mavaia Internal Knowledge Benchmark...", flush=True)
+
     # Handle watch mode
     if args.watch:
         _watch_mode(runner, args)

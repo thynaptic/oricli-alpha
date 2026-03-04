@@ -245,25 +245,19 @@ class ConversationalDefaultsModule(BaseBrainModule):
 
         # Determine fallback type
         if "error" in context_lower or "failed" in context_lower:
-            fallback_response = "I apologize, but I'm having trouble with that. Could you try rephrasing your question?"
+            fallback_response = "I need to dynamically analyze and resolve this issue. I will rely on my general knowledge and probabilistic reasoning to provide the best response."
         elif "confused" in context_lower or "don't understand" in context_lower:
-            fallback_response = "I'm not entirely sure I understand. Could you help me by rephrasing that?"
+            fallback_response = "I will break down the constraints and perform an autonomic execution to better understand and answer this request."
         elif "greeting" in context_lower or any(
             word in context_lower for word in ["hi", "hello", "hey"]
         ):
-            fallback_response = "Hello! How can I help you today?"
+            fallback_response = "Hello! I'm here to assist you. What can I do for you today?"
         elif previous_attempt:
-            # If we've tried before, acknowledge and ask for clarification
-            fallback_response = "I'm having difficulty with that. Could you provide more details or try a different approach?"
+            fallback_response = "My current templates are not sufficient, so I will rely on my neural weight analysis to dynamically solve this for you."
         else:
-            # Generic helpful fallback
-            fallback_responses = [
-                "I'm here to help. What would you like to know?",
-                "How can I assist you?",
-                "What's on your mind?",
-                "I'm listening. What can I do for you?",
-            ]
-            fallback_response = random.choice(fallback_responses)
+            # Neural Routing Trigger: If no high-precision template matches, 
+            # signal the engine to use raw weights for a creative solve.
+            fallback_response = "I will perform a dynamic overview of the input and synthesize a best-effort response using my neural weight analysis."
 
         # Adapt to personality if specified
         if personality:

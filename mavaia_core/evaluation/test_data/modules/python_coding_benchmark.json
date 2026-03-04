@@ -27,6 +27,28 @@
       "timeout": 30.0,
       "description": "Generate a simple function and validate it executes correctly",
       "tags": ["essential", "quick"]
+    },
+    {
+      "id": "code_002_reverse_string",
+      "category": "functional",
+      "module": "reasoning_code_generator",
+      "operation": "generate_code_reasoning",
+      "params": {
+        "requirements": "Write a Python function reverse_string(s: str) -> str that returns the reversed string.",
+        "reasoning_method": "cot"
+      },
+      "expected": {
+        "validation": {
+          "type": "code_execution",
+          "test_cases": [
+            {"input": {"s": "hello"}, "expected_output": "olleh"},
+            {"input": {"s": "mavaia"}, "expected_output": "aiviam"}
+          ]
+        }
+      },
+      "timeout": 30.0,
+      "description": "Generate a string reversal function",
+      "tags": ["essential"]
     }
   ]
 }

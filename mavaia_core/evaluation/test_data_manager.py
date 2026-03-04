@@ -267,8 +267,8 @@ class TestDataManager:
         for test_file in test_files:
             try:
                 suite = self.load_test_file(test_file)
-                # Use module name as key, or file name if no module specified
-                key = suite.module or test_file.stem
+                # Use file name as key to prevent overwriting suites with same module
+                key = test_file.stem
                 suites[key] = suite
             except Exception as e:
                 print(

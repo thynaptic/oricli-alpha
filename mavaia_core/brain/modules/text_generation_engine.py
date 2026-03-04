@@ -218,48 +218,8 @@ class TextGenerationEngineModule(BaseBrainModule):
             # Final fallback
             initial_text = ". ".join(str(t) for t in thoughts) + "."
 
-        # Step 2: Enhance phrasing using hybrid_phrasing_service
-        enhanced_text = self._enhance_text_phrasing(initial_text, voice_context, context)
-
-        # Step 3: Generate sentence-by-sentence with coherence
-        sentences = self._split_into_sentences(enhanced_text)
-        coherent_sentences = []
-        
-        for i, sentence in enumerate(sentences):
-            if sentence.strip():
-                # Generate/refine individual sentence
-                sentence_result = self._generate_sentence({
-                    "sentence": sentence,
-                    "previous_sentences": coherent_sentences,
-                    "voice_context": voice_context,
-                    "context": context,
-                })
-                refined_sentence = sentence_result.get("sentence", sentence)
-                coherent_sentences.append(refined_sentence)
-
-        # Step 4: Ensure coherence between sentences
-        coherent_text = self._ensure_sentence_coherence(
-            coherent_sentences, voice_context
-        )
-
-        # Step 5: Apply voice style
-        final_text = self._apply_voice_to_text(coherent_text, voice_context)
-
-        # Step 6: Grammar correction
-        if self.neural_grammar:
-            try:
-                grammar_result = self.neural_grammar.execute(
-                    "naturalize_response",
-                    {
-                        "text": final_text,
-                        "voice_context": voice_context,
-                        "context": context,
-                    },
-                )
-                if grammar_result and grammar_result.get("text"):
-                    final_text = grammar_result["text"]
-            except Exception:
-                pass  # Continue if grammar correction fails
+        # By-pass stylings to allow raw SLM output
+        final_text = initial_text
 
         # Calculate confidence
         confidence = self._calculate_confidence(
@@ -641,17 +601,7 @@ class TextGenerationEngineModule(BaseBrainModule):
             if result.get("success"):
                 generated_text = result.get("text", "")
                 
-                # Apply voice style if available
-                if self.universal_voice_engine:
-                    try:
-                        voice_result = self.universal_voice_engine.execute(
-                            "apply_voice_style",
-                            {"text": generated_text, "voice_context": voice_context},
-                        )
-                        if voice_result.get("success"):
-                            generated_text = voice_result.get("text", generated_text)
-                    except Exception:
-                        pass
+                # Skip style application to retain raw SLM capabilities
 
                 return {
                     "success": True,
