@@ -1199,38 +1199,39 @@ def sync_models_to_pod(
 ):
     _rich_log("Syncing model weights to pod...", "cyan", "📤", progress=progress, task_id=task_id)
 
-    src_dir = local_path / "mavaia_core" / "models" / "neural_text_generator"
+    src_dir = local_path / "mavaia_core" / "models"
     if not src_dir.exists():
         _rich_log(
-            "No local models found to sync.", "yellow", "⚠", progress=progress, task_id=task_id
+            "No local models directory found to sync.", "yellow", "⚠", progress=progress, task_id=task_id
         )
         return
 
-    if proxy:
-        rsync_cmd = [
-            "rsync",
-            "-az",
-            "--info=stats2",
-            "--no-owner",
-            "--no-group",
-            "-e",
-            _ssh_e(ssh_key, "22"),
-            str(src_dir) + "/",
-            f"{proxy}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
-        ]
-        subprocess.run(rsync_cmd, check=True)
-        return
-
-    rsync_cmd = [
+    common_args = [
         "rsync",
         "-az",
         "--info=stats2",
         "--no-owner",
         "--no-group",
+        "--exclude", "runs",
+        "--exclude", "checkpoints",
+        "--exclude", "*.log",
+    ]
+
+    if proxy:
+        rsync_cmd = common_args + [
+            "-e",
+            _ssh_e(ssh_key, "22"),
+            str(src_dir) + "/",
+            f"{proxy}:{workdir}/mavaia/mavaia_core/models/",
+        ]
+        subprocess.run(rsync_cmd, check=True)
+        return
+
+    rsync_cmd = common_args + [
         "-e",
         _ssh_e(ssh_key, str(pod_port)),
         str(src_dir) + "/",
-        f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
+        f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/",
     ]
     try:
         proc = subprocess.run(rsync_cmd, check=False)
@@ -1245,13 +1246,16 @@ def sync_models_to_pod(
                 progress=progress,
                 task_id=task_id,
             )
-            rsync_cmd[4] = _ssh_e(ssh_key, "22")
-            rsync_cmd[5] = (
-                f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/neural_text_generator/"
-            )
-            proc = subprocess.run(rsync_cmd, check=False)
+            # Adjust command for proxy
+            new_cmd = common_args + [
+                "-e",
+                _ssh_e(ssh_key, "22"),
+                str(src_dir) + "/",
+                f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/",
+            ]
+            proc = subprocess.run(new_cmd, check=False)
             if proc.returncode not in (0, 23):
-                raise subprocess.CalledProcessError(proc.returncode, rsync_cmd)
+                raise subprocess.CalledProcessError(proc.returncode, new_cmd)
 
 
 def summarize_results(local_path: Path):
