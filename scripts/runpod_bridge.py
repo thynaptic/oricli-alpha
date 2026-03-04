@@ -1654,6 +1654,70 @@ def get_bench_results(
             _rich_log(f"Result sync failed: {e}", "red", "✗", progress=progress, task_id=task_id)
 
 
+def get_internal_bench_results(
+    pod_ip: str,
+    pod_port: int,
+    ssh_key: str,
+    local_path: Path,
+    workdir: str,
+    pod_id: str = None,
+    proxy: str = None,
+    progress=None,
+    task_id=None,
+):
+    _rich_log(
+        "Pulling internal benchmark results from pod...",
+        "cyan",
+        "📥",
+        progress=progress,
+        task_id=task_id,
+    )
+
+    dest_dir = local_path / "mavaia_core" / "evaluation" / "results"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    def run_sync(host_str, port_str):
+        ssh_cmd = _ssh_e(ssh_key, port_str)
+        sync_cmd = [
+            "rsync",
+            "-az",
+            "--info=stats2",
+            "--no-owner",
+            "--no-group",
+            "-e",
+            ssh_cmd,
+            f"{host_str}:{workdir}/mavaia/mavaia_core/evaluation/results/",
+            str(dest_dir) + "/",
+        ]
+        subprocess.run(sync_cmd, check=True)
+
+    try:
+        remote_host = proxy if proxy else f"root@{pod_ip}"
+        remote_port = "22" if proxy else str(pod_port)
+        run_sync(remote_host, remote_port)
+    except Exception as e:
+        if pod_id and not proxy:
+            _rich_log(
+                "Direct rsync failed; retrying via proxy.",
+                "yellow",
+                "⚠",
+                progress=progress,
+                task_id=task_id,
+            )
+            try:
+                run_sync(f"{pod_id}-22@ssh.runpod.io", "22")
+            except Exception as retry_e:
+                _rich_log(
+                    f"Proxy rsync also failed: {retry_e}",
+                    "red",
+                    "✗",
+                    progress=progress,
+                    task_id=task_id,
+                )
+        else:
+            _rich_log(f"Result sync failed: {e}", "red", "✗", progress=progress, task_id=task_id)
+
+
 def sync_training_data(
     pod_ip: str,
     pod_port: int,
@@ -2227,6 +2291,8 @@ def remote_snapshot(
 
 
 def main():
+    # DEBUG: Verify we are running the correct version
+    # print(f"DEBUG: sys.argv = {sys.argv}", file=sys.stderr)
     parser = argparse.ArgumentParser(description="Mavaia RunPod Training Bridge")
     parser.add_argument("--pod-id", help="Existing pod ID to use")
     parser.add_argument("--gpu", default="NVIDIA RTX A6000", help="GPU type for new pod")
@@ -2395,11 +2461,10 @@ def main():
         help="Path to evaluation script on the pod",
     )
     parser.add_argument(
-        "--bench-args",
-        nargs=argparse.REMAINDER,
-        help="Forwarded arguments for the benchmark script",
+        "--internal-bench",
+        action="store_true",
+        help="Run Mavaia's internal knowledge benchmark (run_tests.py --internal-bench) on the pod.",
     )
-    parser.add_argument("train_args", nargs=argparse.REMAINDER, help="Args for training script")
     parser.add_argument(
         "--curriculum",
         action="store_true",
@@ -2438,8 +2503,19 @@ def main():
         "--script",
         help="Custom script to run on the pod (relative to repo root).",
     )
+    
+    # We use parse_known_args() instead of REMAINDER to prevent greedy swallowing of flags.
+    # Everything runpod_bridge doesn't know will be passed to the remote task.
+    args, extra_args = parser.parse_known_args()
+    
+    # Store extras in the appropriate field for downward compatibility
+    if args.internal_bench or args.benchmark:
+        args.bench_args = extra_args
+        args.train_args = []
+    else:
+        args.train_args = extra_args
+        args.bench_args = []
 
-    args = parser.parse_args()
     if args.editable_install_forced:
         args.editable_install = True
     if not args.no_pip_stream:
@@ -3337,6 +3413,36 @@ def main():
                     args.ssh_proxy,
                     src=f"{args.volume_mount_path}/mavaia",
                 )
+        elif args.internal_bench:
+            _rich_log("Starting Mavaia Internal Knowledge Benchmark...", "bold green", "🚀")
+            
+            # Internal bench uses run_tests.py with --internal-bench
+            # We override script and args for remote_train style execution
+            script_rel = "run_tests.py"
+            bench_args = ["--internal-bench", "--quiet"]
+            
+            remote_train(
+                pod_ip,
+                pod_port,
+                args.ssh_key,
+                bench_args,
+                args.volume_mount_path,
+                pod["id"],
+                args.ssh_proxy,
+                script_rel=script_rel,
+            )
+            
+            get_internal_bench_results(
+                pod_ip,
+                pod_port,
+                args.ssh_key,
+                REPO_ROOT,
+                args.volume_mount_path,
+                pod["id"],
+                args.ssh_proxy,
+            )
+            
+            _rich_log("Internal benchmark complete! Results retrieved.", "bold green", "✓")
         else:
             train_args = list(args.train_args)
             if args.batch_size:
