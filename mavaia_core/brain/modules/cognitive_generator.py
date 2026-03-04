@@ -57,6 +57,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         self.natural_transitions = None
         self.response_naturalizer = None
         self.instruction_following = None
+        self.system_prompt_builder = None
         # Conversation tracking
         self._conversation_history = []
         self._last_responses = []
@@ -290,6 +291,13 @@ class CognitiveGeneratorModule(BaseBrainModule):
             try:
                 self.instruction_following = ModuleRegistry.get_module(
                     "instruction_following"
+                )
+            except Exception:
+                pass
+            
+            try:
+                self.system_prompt_builder = ModuleRegistry.get_module(
+                    "mavaia_system_prompt_builder"
                 )
             except Exception:
                 pass
@@ -2668,9 +2676,20 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     diagnostic_info["generation_method"] = "instruction_following_bypass"
                     
                     if self.text_generation_engine:
+                        # Build high-precision minimalist prompt
+                        final_prompt = input_text
+                        if self.system_prompt_builder:
+                            prompt_res = self.system_prompt_builder.execute("build_system_prompt", {
+                                "task_execution": True
+                            })
+                            if prompt_res.get("success"):
+                                sys_prompt = prompt_res["result"].get("prompt", "")
+                                if sys_prompt:
+                                    final_prompt = f"{sys_prompt}\n\nUSER INPUT:\n{input_text}\n\nOUTPUT:\n"
+
                         task_params = self.instruction_following.execute("execute_task", {"input_text": input_text})
                         gen_res = self.text_generation_engine.execute("generate_with_neural", {
-                            "prompt": input_text,
+                            "prompt": final_prompt,
                             "context": context,
                             "task_execution": True, # Triggers minimalist prompt in SystemPromptBuilder
                             "temperature": 0.1,      # Lower temperature for higher precision
