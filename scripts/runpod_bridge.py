@@ -1435,12 +1435,27 @@ try:
     if torch.cuda.is_available():
         print(f"[HEALTH] GPU: {{torch.cuda.get_device_name(0)}}")
     
-    print("[HEALTH] Instantiating CognitiveGenerator...")
-    from mavaia_core.brain.modules.cognitive_generator import CognitiveGenerator
-    cg = CognitiveGenerator()
+    print("[HEALTH] Initializing ModuleRegistry...")
+    from mavaia_core.brain.registry import ModuleRegistry
+    ModuleRegistry.discover_modules(verbose=False)
+    
+    print("[HEALTH] Retrieving cognitive_generator...")
+    cg = ModuleRegistry.get_module("cognitive_generator")
+    if not cg:
+        print("[HEALTH] ERROR: Could not find 'cognitive_generator' in registry.")
+        sys.exit(1)
+        
+    cg.initialize()
     
     print("[HEALTH] Attempting tiny generation...")
-    res = cg.generate_response("Hello", max_tokens=5)
+    res = cg.execute(
+        operation="generate_response",
+        params={
+            "input": "Hello",
+            "max_tokens": 5
+        }
+    )
+    
     print(f"[HEALTH] Result text: '{{res.get('text', '')}}'")
     
     # Check if we got the 'analyzing' placeholder
