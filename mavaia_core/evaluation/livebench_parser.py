@@ -26,6 +26,7 @@ class LiveBenchResultParser:
         "knowledge": ("Stage 6: Knowledge", ["kitsdk/wiki_hop"]),
         "language": ("Stage 3: Prose", ["mlfoundations-dev/oh-dcft-v3.1-gemini-1.5-pro"]),
         "instruction_following": ("Stage 8: Alignment", ["Intel/orca_dpo_pairs"]),
+        "data_analysis": ("Stage 5: Integration", ["mavaia/data-analysis-curriculum"]),
     }
 
     def __init__(self, verbose: bool = False):

@@ -12,6 +12,11 @@ import math
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
+# Add project root to path to allow importing mavaia_core
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.append(str(REPO_ROOT))
+
 # Try to import Mavaia parser
 try:
     from mavaia_core.evaluation.livebench_parser import LiveBenchResultParser
