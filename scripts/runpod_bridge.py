@@ -1460,8 +1460,8 @@ except Exception as e:
     remote_cmd = (
         f"cd {workdir}/mavaia && "
         f"PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); "
-        f"echo '{health_script}' > model_health_check.py && "
-        f"$PYTHON_EXE model_health_check.py"
+        f"cat << 'EOF' > model_health_check.py\n{health_script}\nEOF\n"
+        f"PYTHONPATH=. $PYTHON_EXE model_health_check.py"
     )
 
     try:
@@ -2384,8 +2384,6 @@ def remote_snapshot(
 
 
 def main():
-    # DEBUG: Verify we are running the correct version
-    # print(f"DEBUG: sys.argv = {sys.argv}", file=sys.stderr)
     parser = argparse.ArgumentParser(description="Mavaia RunPod Training Bridge")
     parser.add_argument("--pod-id", help="Existing pod ID to use")
     parser.add_argument("--gpu", default="NVIDIA RTX A6000", help="GPU type for new pod")
