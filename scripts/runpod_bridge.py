@@ -1373,6 +1373,9 @@ def remote_train(
     hf_token = os.environ.get("HF_TOKEN")
     if hf_token:
         env_prefix += f"HF_TOKEN='{hf_token}' "
+    
+    if "run_tests.py" in script_rel or "train" in script_rel:
+        env_prefix += "MAVAIA_ENABLE_HEAVY_MODULES=true "
 
     if proxy:
         ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [
@@ -1401,6 +1404,83 @@ def remote_train(
             subprocess.run(ssh_cmd, check=True)
         else:
             raise e
+
+
+def check_model_health(
+    pod_ip: str,
+    pod_port: int,
+    ssh_key: str,
+    workdir: str,
+    pod_id: str = None,
+    proxy: str = None,
+    progress=None,
+    task_id=None,
+):
+    """Verifies if the Neural Text Generator can actually load and run on the pod."""
+    _rich_log("Performing Model Health Check on pod...", "cyan", "🩺", progress=progress, task_id=task_id)
+    
+    health_script = f"""
+import os
+import sys
+
+# Force heavy modules for the health check
+os.environ['MAVAIA_ENABLE_HEAVY_MODULES'] = 'true'
+os.environ['MAVAIA_STRICT_INIT'] = 'true'
+
+try:
+    print("[HEALTH] Checking torch and CUDA...")
+    import torch
+    print(f"[HEALTH] Torch version: {{torch.__version__}}")
+    print(f"[HEALTH] CUDA available: {{torch.cuda.is_available()}}")
+    if torch.cuda.is_available():
+        print(f"[HEALTH] GPU: {{torch.cuda.get_device_name(0)}}")
+    
+    print("[HEALTH] Instantiating CognitiveGenerator...")
+    from mavaia_core.brain.modules.cognitive_generator import CognitiveGenerator
+    cg = CognitiveGenerator()
+    
+    print("[HEALTH] Attempting tiny generation...")
+    res = cg.generate_response("Hello", max_tokens=5)
+    print(f"[HEALTH] Result text: '{{res.get('text', '')}}'")
+    
+    # Check if we got the 'analyzing' placeholder
+    if "analyzing your request" in res.get('text', '').lower():
+        print("[HEALTH] WARNING: Received placeholder response instead of model inference.")
+        sys.exit(2)
+        
+    print("[HEALTH] SUCCESS: Model is active and responding.")
+    sys.exit(0)
+except Exception as e:
+    print(f"[HEALTH] ERROR: {{str(e)}}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+"""
+    
+    remote_cmd = (
+        f"cd {workdir}/mavaia && "
+        f"PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); "
+        f"echo '{health_script}' > model_health_check.py && "
+        f"$PYTHON_EXE model_health_check.py"
+    )
+
+    try:
+        if proxy:
+            ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [remote_cmd]
+        else:
+            ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [remote_cmd]
+            
+        result = subprocess.run(ssh_cmd, check=True, capture_output=True, text=True)
+        _rich_log("Model Health Check passed!", "bold green", "✓", progress=progress, task_id=task_id)
+        return True
+    except subprocess.CalledProcessError as e:
+        _rich_log("Model Health Check FAILED!", "bold red", "✗", progress=progress, task_id=task_id)
+        print(e.stdout)
+        print(e.stderr)
+        
+        if e.returncode == 2:
+            _rich_log("Detailed Diagnosis: Model loaded but returned a placeholder. This usually means weights are missing or incompatible.", "yellow", "🔍")
+        return False
 
 
 def remote_benchmark(
@@ -3149,8 +3229,8 @@ def main():
                 task_id=pod_task,
             )
 
-            # For benchmarking, we must push the weights if they are not already there
-            if args.benchmark:
+            # For benchmarking/internal testing, we must push the weights if they are not already there
+            if args.benchmark or args.internal_bench:
                 sync_models_to_pod(
                     pod_ip,
                     pod_port,
@@ -3434,6 +3514,20 @@ def main():
             bench_args = ["--internal-bench", "--quiet"]
             
             try:
+                # 1. Health check first
+                health_ok = check_model_health(
+                    pod_ip,
+                    pod_port,
+                    args.ssh_key,
+                    args.volume_mount_path,
+                    pod["id"],
+                    args.ssh_proxy,
+                )
+                
+                if not health_ok:
+                    _rich_log("Proceeding with benchmark despite health check failure, but results may be degraded.", "yellow", "⚠")
+
+                # 2. Run the actual benchmark
                 remote_train(
                     pod_ip,
                     pod_port,
