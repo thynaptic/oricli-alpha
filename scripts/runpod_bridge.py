@@ -1450,10 +1450,10 @@ try:
     print("[HEALTH] Attempting tiny generation...")
     res = cg.execute(
         operation="generate_response",
-        params={
+        params={{
             "input": "Hello",
             "max_tokens": 5
-        }
+        }}
     )
     
     print(f"[HEALTH] Result text: '{{res.get('text', '')}}'")
