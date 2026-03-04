@@ -89,7 +89,7 @@ def run_diagnostic(base_dir: str = "LiveBench/livebench/data"):
 
     print("\n--- Diagnostic Complete ---")
 
-if __name__ == "__main__":
+def main():
     # Check if we are in the mavaia root or livebench root
     if Path("LiveBench/livebench/data").exists():
         run_diagnostic("LiveBench/livebench/data")
@@ -97,3 +97,6 @@ if __name__ == "__main__":
         run_diagnostic("data")
     else:
         run_diagnostic(".")
+
+if __name__ == "__main__":
+    main()
