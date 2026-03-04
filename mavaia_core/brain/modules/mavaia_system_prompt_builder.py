@@ -34,8 +34,8 @@ class MavaiaSystemPromptBuilderModule(BaseBrainModule):
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="mavaia_system_prompt_builder",
-            version="1.0.0",
-            description="Centralized system prompt builder for standalone Mavaia",
+            version="1.1.0",
+            description="Centralized system prompt builder for standalone Mavaia with TASK_EXECUTION support",
             operations=[
                 "build_system_prompt",
                 "build_section",
@@ -99,24 +99,31 @@ class MavaiaSystemPromptBuilderModule(BaseBrainModule):
         user_feedback = params.get("user_feedback")
         user_profile = params.get("user_profile")
         conversation_id = params.get("conversation_id")
+        
+        # High-precision task execution mode
+        task_execution = params.get("task_execution", False)
 
         sections: list[str] = []
 
-        # Core Identity
-        sections.append(self._build_core_identity_section())
+        if task_execution:
+            # Minimalist, high-precision prompt for task execution
+            sections.append(self._build_task_execution_section())
+        else:
+            # Core Identity
+            sections.append(self._build_core_identity_section())
 
-        # Personality Instructions
-        personality_section = self._build_personality_section(
-            personality_id=personality_id,
-            personality_config=personality_config,
-            personality_tone_context=personality_tone_context,
-            slang_detection=slang_detection,
-            cultural_references=cultural_references,
-            emotional_state=emotional_state,
-            user_profile=user_profile,
-            conversation_id=conversation_id,
-        )
-        sections.append(personality_section)
+            # Personality Instructions
+            personality_section = self._build_personality_section(
+                personality_id=personality_id,
+                personality_config=personality_config,
+                personality_tone_context=personality_tone_context,
+                slang_detection=slang_detection,
+                cultural_references=cultural_references,
+                emotional_state=emotional_state,
+                user_profile=user_profile,
+                conversation_id=conversation_id,
+            )
+            sections.append(personality_section)
 
         # Safe Completions Guidance
         if safe_completion_result:
@@ -125,11 +132,12 @@ class MavaiaSystemPromptBuilderModule(BaseBrainModule):
                 personality_config=personality_config,
             ))
 
-        # Capabilities
-        sections.append(self._build_capabilities_section())
+        if not task_execution:
+            # Capabilities
+            sections.append(self._build_capabilities_section())
 
-        # Behavioral Guidelines
-        sections.append(self._build_behavioral_guidelines_section())
+            # Behavioral Guidelines
+            sections.append(self._build_behavioral_guidelines_section())
 
         # Conversation Context
         if conversation_context:
@@ -174,6 +182,11 @@ class MavaiaSystemPromptBuilderModule(BaseBrainModule):
             return {
                 "success": True,
                 "result": {"section": self._build_behavioral_guidelines_section()},
+            }
+        elif section_type == "task_execution":
+            return {
+                "success": True,
+                "result": {"section": self._build_task_execution_section()},
             }
         else:
             return {
@@ -220,6 +233,20 @@ Key Personality Traits:
 - Self-aware (know your capabilities and limitations honestly)
 - Continuously learning (adapt from conversation patterns)
 - Natural and conversational (sound like a great chat partner, not a robot)"""
+
+    def _build_task_execution_section(self) -> str:
+        """Build task execution section for high-precision mode"""
+        return """CORE IDENTITY: TASK EXECUTION MODE
+
+You are currently in High-Precision Task Execution mode. Your sole objective is to provide the most accurate and formatted response possible based on the user's specific technical requirements.
+
+CRITICAL CONSTRAINTS:
+1. ZERO FILLER: Do not include conversational preambles, acknowledgments, or polite closing statements.
+2. RAW OUTPUT ONLY: Provide only the requested data (JSON, CSV, Table, etc.) without any extra text.
+3. NO META-TALK: Do not explain what you are doing or how you processed the data.
+4. STRICT ADHERENCE: Follow formatting instructions exactly as specified.
+
+If you are asked to convert a table to JSONL, your entire response should be valid JSONL lines."""
 
     def _build_personality_section(
         self,
@@ -480,4 +507,3 @@ You have access to your action history. Use this context to:
 Apply these instructions to your response immediately. This feedback takes priority over your default personality settings."""
 
         return ""
-
