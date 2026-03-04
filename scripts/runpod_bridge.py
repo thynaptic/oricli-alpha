@@ -1085,6 +1085,8 @@ def sync_code(
         "--exclude",
         ".vscode",
         "--exclude",
+        ".ruff_cache",
+        "--exclude",
         "tmp",
         "--exclude",
         "models",

@@ -947,7 +947,6 @@ def create_profile_interactive() -> int:
             console.print()
         else:
             print(f"Error saving profile: {e}", file=sys.stderr)
-        import traceback
         traceback.print_exc()
         return 1
 
@@ -1795,7 +1794,6 @@ def main():
             return 0
         except Exception as e:
             print(f"Error listing sources: {e}", file=sys.stderr)
-            import traceback
             traceback.print_exc()
             return 1
     
@@ -1921,7 +1919,6 @@ def main():
             return 0
         except Exception as e:
             print(f"Error listing profiles: {e}", file=sys.stderr)
-            import traceback
             traceback.print_exc()
             return 1
 
@@ -1962,7 +1959,6 @@ def main():
             print("Module imported successfully", flush=True)
         except Exception as e:
             print(f"ERROR: Failed to import module: {e}", flush=True)
-            import traceback
             traceback.print_exc()
             return 1
 
@@ -2318,7 +2314,7 @@ def main():
         try:
             import subprocess, platform
             try:
-                git_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent.parent).decode().strip()
+                git_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent.parent, stderr=subprocess.DEVNULL).decode().strip()
             except Exception:
                 git_sha = None
 

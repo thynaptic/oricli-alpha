@@ -119,19 +119,39 @@ def resolve_path(p_str, root, env_name):
     return p
 
 def generate_layout(root, env_name):
-    # Detect curriculum path
-    curriculum_dir = root / "mavaia_core" / "models" / "neural_text_generator" / "curriculum"
-    if not curriculum_dir.exists():
-        curriculum_dir = root / "models" / "neural_text_generator_remote" / "curriculum"
+    # Detect curriculum path - Check both local and remote-sync
+    local_curriculum = root / "mavaia_core" / "models" / "neural_text_generator" / "curriculum"
+    remote_curriculum = root / "models" / "neural_text_generator_remote" / "curriculum"
+    
+    curriculum_dir = None
+    
+    # Prioritize based on file freshness if both exist
+    if local_curriculum.exists() and remote_curriculum.exists():
+        local_mtime = (local_curriculum / "curriculum_progress.json").stat().st_mtime if (local_curriculum / "curriculum_progress.json").exists() else 0
+        remote_mtime = (remote_curriculum / "curriculum_progress.json").stat().st_mtime if (remote_curriculum / "curriculum_progress.json").exists() else 0
         
-    progress_path = curriculum_dir / "curriculum_progress.json"
-    if not progress_path.exists():
-        # Try finding ANY curriculum_progress.json
-        alt_path = root / "models" / "neural_text_generator_remote" / "training_data" / "models" / "curriculum" / "curriculum_progress.json"
-        if alt_path.exists():
-            progress_path = alt_path
+        if remote_mtime > local_mtime:
+            curriculum_dir = remote_curriculum
         else:
-            return Text(f"Error: Curriculum progress not found at {progress_path}", style="bold red")
+            curriculum_dir = local_curriculum
+    elif remote_curriculum.exists():
+        curriculum_dir = remote_curriculum
+    else:
+        curriculum_dir = local_curriculum
+        
+    if not curriculum_dir or not curriculum_dir.exists():
+        # Last resort fallback to ANY curriculum folder
+        possible = list(root.glob("**/curriculum/curriculum_progress.json"))
+        if possible:
+            progress_path = possible[0]
+            curriculum_dir = progress_path.parent
+        else:
+            return Text(f"Error: Curriculum progress not found", style="bold red")
+    else:
+        progress_path = curriculum_dir / "curriculum_progress.json"
+        
+    if not progress_path.exists():
+        return Text(f"Error: Curriculum progress not found at {progress_path}", style="bold red")
 
     try:
         with open(progress_path, "r") as f:
