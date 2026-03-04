@@ -56,6 +56,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         self.uncertainty_expression = None
         self.natural_transitions = None
         self.response_naturalizer = None
+        self.instruction_following = None
         # Conversation tracking
         self._conversation_history = []
         self._last_responses = []
@@ -282,6 +283,13 @@ class CognitiveGeneratorModule(BaseBrainModule):
             try:
                 self.response_naturalizer = ModuleRegistry.get_module(
                     "response_naturalizer"
+                )
+            except Exception:
+                pass
+            
+            try:
+                self.instruction_following = ModuleRegistry.get_module(
+                    "instruction_following"
                 )
             except Exception:
                 pass
@@ -2649,6 +2657,40 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 diagnostic_info["reasoning_scaffold"] = scaffold
             except Exception:
                 pass
+
+            # Step 0.8: High-Precision Instruction Bypass (Hard Bypass)
+            # Check for formatting/data tasks that need zero conversational drift
+            if self.instruction_following:
+                intent_res = self.instruction_following.execute("detect_intent", {"input_text": input_text})
+                if intent_res.get("is_high_precision"):
+                    diagnostic_info["high_precision_task"] = True
+                    diagnostic_info["matched_keywords"] = intent_res.get("matched_keywords", [])
+                    diagnostic_info["generation_method"] = "instruction_following_bypass"
+                    
+                    if self.text_generation_engine:
+                        task_params = self.instruction_following.execute("execute_task", {"input_text": input_text})
+                        gen_res = self.text_generation_engine.execute("generate_with_neural", {
+                            "prompt": input_text,
+                            "context": context,
+                            "task_execution": True, # Triggers minimalist prompt in SystemPromptBuilder
+                            "temperature": 0.1,      # Lower temperature for higher precision
+                            "max_length": max_tokens or 1000,
+                        })
+                        if gen_res.get("success"):
+                            generated_text = gen_res.get("text", "")
+                            # Skip conversational filters and return raw output
+                            return {
+                                "success": True,
+                                "text": generated_text,
+                                "trace_id": trace_id,
+                                "method": "instruction_following_bypass",
+                                "confidence": 1.0,
+                                "diagnostic": diagnostic_info,
+                            }
+                        else:
+                            diagnostic_info["warnings"].append(f"Instruction bypass direct generation failed: {gen_res.get('error')}")
+                    else:
+                        diagnostic_info["warnings"].append("Instruction bypass skipped: text_generation_engine not loaded")
 
             # Step 1: Learned Router - Detect intent and determine module routing
             # NOTE: This uses dynamic module discovery - any new modules added to
