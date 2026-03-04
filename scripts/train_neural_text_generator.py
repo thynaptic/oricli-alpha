@@ -2298,10 +2298,12 @@ def main():
 
         _preflight_checks(train_params, args, final_run_dir)
 
-        # Record latest run pointer (useful for deployment tooling)
+        # Record latest run pointer (useful for deployment tooling).
+        # Store *only* the run_id (basename), not the full absolute path, so the
+        # pointer is portable across local and remote (RunPod) environments.
         try:
             latest_ptr = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator" / "latest_run.txt"
-            latest_ptr.write_text(str(final_run_dir) + "\n", encoding="utf-8")
+            latest_ptr.write_text(final_run_dir.name + "\n", encoding="utf-8")
         except Exception:
             pass
 

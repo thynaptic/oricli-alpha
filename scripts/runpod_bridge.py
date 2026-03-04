@@ -41,6 +41,46 @@ except ImportError:
     console = None
     escape = lambda x: x
 
+    # Minimal no-op stubs so rich-dependent calls don't raise NameError
+    class _NoOpCtx:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def update(self, *a, **kw): pass
+        def add_task(self, *a, **kw): return self
+        def __call__(self, *a, **kw): return ""
+        def __str__(self): return ""
+
+    class Progress(_NoOpCtx):
+        def __init__(self, *a, **kw): pass
+
+    class Live(_NoOpCtx):
+        def __init__(self, *a, **kw): pass
+        def update(self, *a, **kw): pass
+
+    class SpinnerColumn:
+        def __init__(self, *a, **kw): pass
+
+    class BarColumn:
+        def __init__(self, *a, **kw): pass
+
+    class TextColumn:
+        def __init__(self, *a, **kw): pass
+
+    class Table:
+        def __init__(self, *a, **kw): pass
+        def add_column(self, *a, **kw): pass
+        def add_row(self, *a, **kw): pass
+
+    class Panel:
+        def __init__(self, *a, **kw): pass
+
+    class Text:
+        def __init__(self, *a, **kw): pass
+
+    class box:
+        ROUNDED = None
+        SIMPLE = None
+
 # Add project root to path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -926,6 +966,7 @@ def _ssh_e(ssh_key: str, port: str) -> str:
     )
 
 
+
 def _run_ssh(
     ssh_key: str,
     pod_ip: str,
@@ -1070,7 +1111,7 @@ def sync_code(
 ):
     _rich_log("Syncing code to pod...", "cyan", "🔄", progress=progress, task_id=task_id)
 
-    rsync_info = ["--info=stats2,progress2"] if not progress else ["--quiet"]
+    rsync_info = ["--quiet"] if progress else []
 
     # Common excludes for rsync
     common_excludes = [
@@ -1116,10 +1157,8 @@ def sync_code(
         rsync_cmd = (
             [
                 "rsync",
-                "-az",
+                "-rlptz",
                 "--human-readable",
-                "--no-owner",
-                "--no-group",
                 "--no-perms",
                 "-e",
                 _ssh_e(ssh_key, "22"),
@@ -1135,10 +1174,8 @@ def sync_code(
     rsync_cmd = (
         [
             "rsync",
-            "-az",
+            "-rlptz",
             "--human-readable",
-            "--no-owner",
-            "--no-group",
             "--no-perms",
             "-e",
             _ssh_e(ssh_key, str(pod_port)),
@@ -1208,10 +1245,7 @@ def sync_models_to_pod(
 
     common_args = [
         "rsync",
-        "-az",
-        "--info=stats2",
-        "--no-owner",
-        "--no-group",
+        "-rlptz",
         "--exclude", "runs",
         "--exclude", "checkpoints",
         "--exclude", "*.log",
@@ -1426,12 +1460,44 @@ def check_model_health(
     health_script = f"""
 import os
 import sys
+import json
+from pathlib import Path
 
 # Force heavy modules for the health check
 os.environ['MAVAIA_ENABLE_HEAVY_MODULES'] = 'true'
 os.environ['MAVAIA_STRICT_INIT'] = 'true'
 
+def check_fs():
+    print("[HEALTH-FS] Checking filesystem for models...")
+    base_dir = Path('/workspace/mavaia/mavaia_core/models/neural_text_generator')
+    if not base_dir.exists():
+        print(f"[HEALTH-FS] Base directory {{base_dir}} does NOT exist.")
+        return
+    
+    print(f"[HEALTH-FS] Base directory {{base_dir}} exists.")
+    print(f"[HEALTH-FS] Contents: {{os.listdir(base_dir)}}")
+    
+    latest_ptr = base_dir / "latest_run.txt"
+    if latest_ptr.exists():
+        raw = latest_ptr.read_text().strip()
+        # The file may contain a full absolute local path (e.g. /Users/cass/.../runs/20260226_213048)
+        # On the pod we only care about the run ID (the last path component)
+        run_id = Path(raw).name
+        print(f"[HEALTH-FS] latest_run.txt raw value: {{raw}}")
+        print(f"[HEALTH-FS] Resolved run_id: {{run_id}}")
+        run_dir = base_dir / "runs" / run_id
+        if run_dir.exists():
+            print(f"[HEALTH-FS] Run directory {{run_dir}} exists.")
+            print(f"[HEALTH-FS] Run contents: {{os.listdir(run_dir)}}")
+            ckpt_dir = run_dir / "checkpoints"
+            if ckpt_dir.exists():
+                print(f"[HEALTH-FS] Checkpoints: {{os.listdir(ckpt_dir)}}")
+        else:
+            print(f"[HEALTH-FS] Run directory {{run_dir}} NOT found.")
+
 try:
+    check_fs()
+    
     print("[HEALTH] Checking torch and CUDA...")
     import torch
     print(f"[HEALTH] Torch version: {{torch.__version__}}")
@@ -1439,7 +1505,7 @@ try:
     if torch.cuda.is_available():
         print(f"[HEALTH] GPU: {{torch.cuda.get_device_name(0)}}")
     
-    print("[HEALTH] Initializing ModuleRegistry...")
+    print("[HEALTH] Discovering modules (MAVAIA_ENABLE_HEAVY_MODULES=true)...")
     from mavaia_core.brain.registry import ModuleRegistry
     ModuleRegistry.discover_modules(verbose=False)
     
@@ -1449,8 +1515,6 @@ try:
         print("[HEALTH] ERROR: Could not find 'cognitive_generator' in registry.")
         sys.exit(1)
         
-    cg.initialize()
-    
     print("[HEALTH] Attempting tiny generation...")
     res = cg.execute(
         operation="generate_response",
@@ -1460,15 +1524,25 @@ try:
         }}
     )
     
-    print(f"[HEALTH] Result text: '{{res.get('text', '')}}'")
+    text = res.get('text', '')
+    print(f"[HEALTH] Result text: '{{text}}'")
     
     # Check if we got the 'analyzing' placeholder
-    if "analyzing your request" in res.get('text', '').lower():
-        print("[HEALTH] WARNING: Received placeholder response instead of model inference.")
+    if "I'm analyzing your request" in text:
+        print("[HEALTH] WARNING: Placeholder detected. Models are NOT loaded.")
+        # If models are missing, try to report why NTG failed
+        ntg = ModuleRegistry.get_module("neural_text_generator")
+        if ntg:
+            print(f"[HEALTH] NTG model_dir: {{ntg.model_dir}}")
+            print(f"[HEALTH] NTG char_model: {{ntg.char_model is not None}}")
+            # Try to load explicitly
+            load_res = ntg.execute("load_model", {{"model_type": "character"}})
+            print(f"[HEALTH] Explicit load result: {{load_res}}")
         sys.exit(2)
-        
-    print("[HEALTH] SUCCESS: Model is active and responding.")
-    sys.exit(0)
+    else:
+        print("[HEALTH] SUCCESS: Real model output detected.")
+        sys.exit(0)
+
 except Exception as e:
     print(f"[HEALTH] ERROR: {{str(e)}}")
     import traceback
@@ -1476,12 +1550,14 @@ except Exception as e:
     sys.exit(1)
 """
     
-    remote_cmd = (
-        f"cd {workdir}/mavaia && "
-        f"PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); "
-        f"cat << 'EOF' > model_health_check.py\n{health_script}\nEOF\n"
-        f"PYTHONPATH=. $PYTHON_EXE model_health_check.py"
-    )
+    remote_cmd = f"""
+cd {workdir}/mavaia && \
+PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); \
+cat << 'EOF' > model_health_check.py
+{health_script}
+EOF
+PYTHONPATH=. $PYTHON_EXE model_health_check.py
+"""
 
     try:
         if proxy:
@@ -1641,13 +1717,8 @@ def get_artifacts(
 
     if proxy:
         scp_cmd = [
-            "rsync",
-            "-az",
-            "--info=stats2",
-            "--no-owner",
-            "--no-group",
-            "-e",
-            _ssh_e(ssh_key, "22"),
+            "rsync", "-rlptz",
+            "-e", _ssh_e(ssh_key, "22"),
             f"{proxy}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
             str(dest_dir) + "/",
         ]
@@ -1655,13 +1726,8 @@ def get_artifacts(
         return
 
     scp_cmd = [
-        "rsync",
-        "-az",
-        "--info=stats2",
-        "--no-owner",
-        "--no-group",
-        "-e",
-        _ssh_e(ssh_key, str(pod_port)),
+        "rsync", "-rlptz",
+        "-e", _ssh_e(ssh_key, str(pod_port)),
         f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
         str(dest_dir) + "/",
     ]
@@ -1682,13 +1748,15 @@ def get_artifacts(
                 progress=progress,
                 task_id=task_id,
             )
-            scp_cmd[4] = _ssh_e(ssh_key, "22")
-            scp_cmd[5] = (
-                f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/neural_text_generator/"
-            )
-            proc = subprocess.run(scp_cmd, check=False)
+            proxy_cmd = [
+                "rsync", "-rlptz",
+                "-e", _ssh_e(ssh_key, "22"),
+                f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
+                str(dest_dir) + "/",
+            ]
+            proc = subprocess.run(proxy_cmd, check=False)
             if proc.returncode != 0 and proc.returncode != 23:
-                raise subprocess.CalledProcessError(proc.returncode, scp_cmd)
+                raise subprocess.CalledProcessError(proc.returncode, proxy_cmd)
             elif proc.returncode == 23:
                 _rich_log(
                     "Rsync completed with status 23 (partial transfer) via proxy. Safe to proceed.",
@@ -1720,7 +1788,7 @@ def get_bench_results(
         ssh_cmd = _ssh_e(ssh_key, port_str)
         # 1. Pull root level JSON results
         sync_root_cmd = [
-            "rsync", "-az", "--info=stats2", "--no-owner", "--no-group",
+            "rsync", "-rlptz",
             "-e", ssh_cmd,
             "--include=livebench_results_*.json",
             "--include=mavaia_result.json",
@@ -1730,7 +1798,7 @@ def get_bench_results(
         ]
         # 2. Pull the entire data directory
         sync_data_cmd = [
-            "rsync", "-az", "--info=stats2", "--no-owner", "--no-group",
+            "rsync", "-rlptz",
             "-e", ssh_cmd,
             f"{host_str}:{remote_base}/data/",
             str(local_path / "data") + "/",
@@ -1778,25 +1846,17 @@ def get_internal_bench_results(
     def run_sync(host_str, port_str):
         ssh_cmd = _ssh_e(ssh_key, port_str)
         sync_cmd = [
-            "rsync",
-            "-az",
-            "--info=stats2",
-            "--no-owner",
-            "--no-group",
-            "-e",
-            ssh_cmd,
-            # Pull the entire results directory content accurately
+            "rsync", "-rlptz",
+            "-e", ssh_cmd,
             f"{host_str}:{workdir}/mavaia/mavaia_core/evaluation/results/",
             str(dest_dir) + "/",
         ]
-        # Also specifically ensure any root level report HTMLs are caught if they are outside
+        # Also ensure any root-level report HTMLs are caught
         sync_html_cmd = [
-            "rsync",
-            "-az",
+            "rsync", "-rlptz",
             "--include=report_*.html",
             "--exclude=*",
-            "-e",
-            ssh_cmd,
+            "-e", ssh_cmd,
             f"{host_str}:{workdir}/mavaia/mavaia_core/evaluation/results/",
             str(dest_dir) + "/",
         ]
@@ -1854,24 +1914,14 @@ def sync_training_data(
 
     if proxy:
         rsync_cmd = [
-            "rsync",
-            "-az",
-            "--info=stats2",
-            "--no-owner",
-            "--no-group",
-            "-e",
-            _ssh_e(ssh_key, "22"),
+            "rsync", "-rlptz",
+            "-e", _ssh_e(ssh_key, "22"),
             f"{proxy}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
             str(dest_dir / "models") + "/",
         ]
         cache_cmd = [
-            "rsync",
-            "-az",
-            "--info=stats2",
-            "--no-owner",
-            "--no-group",
-            "-e",
-            _ssh_e(ssh_key, "22"),
+            "rsync", "-rlptz",
+            "-e", _ssh_e(ssh_key, "22"),
             f"{proxy}:{workdir}/mavaia/mavaia_core/data/",
             str(dest_dir / "data_cache") + "/",
         ]
@@ -1888,24 +1938,14 @@ def sync_training_data(
         return
 
     rsync_cmd = [
-        "rsync",
-        "-az",
-        "--info=stats2",
-        "--no-owner",
-        "--no-group",
-        "-e",
-        _ssh_e(ssh_key, str(pod_port)),
+        "rsync", "-rlptz",
+        "-e", _ssh_e(ssh_key, str(pod_port)),
         f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
         str(dest_dir / "models") + "/",
     ]
     cache_cmd = [
-        "rsync",
-        "-az",
-        "--info=stats2",
-        "--no-owner",
-        "--no-group",
-        "-e",
-        _ssh_e(ssh_key, str(pod_port)),
+        "rsync", "-rlptz",
+        "-e", _ssh_e(ssh_key, str(pod_port)),
         f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/data/",
         str(dest_dir / "data_cache") + "/",
     ]
@@ -1929,13 +1969,19 @@ def sync_training_data(
                 progress=progress,
                 task_id=task_id,
             )
-            rsync_cmd[4] = _ssh_e(ssh_key, "22")
-            rsync_cmd[5] = (
-                f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/neural_text_generator/"
-            )
-            cache_cmd[4] = _ssh_e(ssh_key, "22")
-            cache_cmd[5] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/data/"
-            for cmd in (rsync_cmd, cache_cmd):
+            proxy_rsync_cmd = [
+                "rsync", "-rlptz",
+                "-e", _ssh_e(ssh_key, "22"),
+                f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
+                str(dest_dir / "models") + "/",
+            ]
+            proxy_cache_cmd = [
+                "rsync", "-rlptz",
+                "-e", _ssh_e(ssh_key, "22"),
+                f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/data/",
+                str(dest_dir / "data_cache") + "/",
+            ]
+            for cmd in (proxy_rsync_cmd, proxy_cache_cmd):
                 proc = subprocess.run(cmd, check=False)
                 if proc.returncode not in (0, 23):
                     raise subprocess.CalledProcessError(proc.returncode, cmd)
@@ -3418,26 +3464,14 @@ def main():
                 )
                 if latest_run_ptr.exists():
                     try:
-                        latest_path = Path(latest_run_ptr.read_text().strip())
-                        if latest_path.is_absolute():
-                            path_str = str(latest_path)
-                            # MAP LOCAL REMOTE-SYNC PATHS TO POD PATHS
-                            # Local: .../models/neural_text_generator_remote/curriculum/stage_x
-                            # Pod: /workspace/mavaia/mavaia_core/models/neural_text_generator/curriculum/stage_x
-                            if "models/neural_text_generator_remote" in path_str:
-                                rel = path_str.split("models/neural_text_generator_remote")[
-                                    -1
-                                ].lstrip("/")
-                                default_model = f"mavaia_core/models/neural_text_generator/{rel}"
-                            else:
-                                try:
-                                    default_model = str(latest_path.relative_to(REPO_ROOT))
-                                except ValueError:
-                                    if "mavaia_core/models" in path_str:
-                                        default_model = (
-                                            "mavaia_core/models"
-                                            + path_str.split("mavaia_core/models")[-1]
-                                        )
+                        raw = latest_run_ptr.read_text().strip()
+                        # File stores either:
+                        #   - Just the run ID: "20260226_213048"  (new format)
+                        #   - Full abs local path (old format, backward compat)
+                        # In both cases we want just the basename (run ID).
+                        run_id = Path(raw).name
+                        if run_id:
+                            default_model = f"mavaia_core/models/neural_text_generator/runs/{run_id}"
                     except Exception:
                         pass
 
