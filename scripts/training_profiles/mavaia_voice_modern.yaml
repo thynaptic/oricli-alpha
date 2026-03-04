@@ -5,16 +5,14 @@ description: >
   bookcorpus (modern sentence flow and conversational rhythm) to produce
   a neutral, intelligent, readable voice without dated cadence.
 
-# Modern, neutral sources
-sources:
+# Modern, neutral sources (comma-separated list — 'source' is the key the
+# training script reads; 'sources' is silently ignored)
+source:
   - wikipedia
   - huggingface
 
-# HuggingFace datasets — clean modern prose, not AI-conversation quirks
-search:
-  - "wikitext"
-  - "bookcorpus"
-  - "openwebtext"
+# HuggingFace dataset search — single string, space-separated terms
+search: "wikitext bookcorpus openwebtext"
 
 # Broad content categories for generalist fluency
 categories:
