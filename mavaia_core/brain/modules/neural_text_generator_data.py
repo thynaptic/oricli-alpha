@@ -586,6 +586,102 @@ class Registry:
             combined = combined[:max_text_size]
         return combined
 
+    # ── Character-level sequence helpers ─────────────────────────────────────
+
+    def build_character_vocabulary(self, text: str) -> Dict[str, int]:
+        """Build a character → index vocabulary from text."""
+        chars = sorted(set(text))
+        return {ch: i for i, ch in enumerate(chars)}
+
+    def create_character_sequences(
+        self,
+        text: str,
+        sequence_length: int = 100,
+    ) -> Tuple[List[str], List[str]]:
+        """Slide a window over text to create (input_seq, target_char) pairs."""
+        sequences: List[str] = []
+        targets: List[str] = []
+        for i in range(0, len(text) - sequence_length):
+            sequences.append(text[i : i + sequence_length])
+            targets.append(text[i + sequence_length])
+        return sequences, targets
+
+    def sequences_to_arrays_char(
+        self,
+        sequences: List[str],
+        targets: List[str],
+        vocab: Dict[str, int],
+    ) -> Tuple[Any, Any]:
+        """Convert character sequences to numpy one-hot arrays for Keras."""
+        import numpy as np
+        vocab_size = len(vocab)
+        seq_len = len(sequences[0]) if sequences else 1
+        n = len(sequences)
+        X = np.zeros((n, seq_len, vocab_size), dtype=np.float32)
+        y = np.zeros((n, vocab_size), dtype=np.float32)
+        for i, (seq, target) in enumerate(zip(sequences, targets)):
+            for t, ch in enumerate(seq):
+                if ch in vocab:
+                    X[i, t, vocab[ch]] = 1.0
+            if target in vocab:
+                y[i, vocab[target]] = 1.0
+        return X, y
+
+    # ── Word-level sequence helpers ───────────────────────────────────────────
+
+    def build_word_vocabulary(
+        self, text: str, min_frequency: int = 1
+    ) -> Tuple[Dict[str, int], Dict[int, str]]:
+        """Build word <-> index vocabularies."""
+        from collections import Counter
+        words = text.split()
+        counts = Counter(words)
+        vocab = {"<UNK>": 0}
+        for word, freq in counts.most_common():
+            if freq >= min_frequency:
+                if word not in vocab:
+                    vocab[word] = len(vocab)
+        vocab_reverse = {idx: word for word, idx in vocab.items()}
+        return vocab, vocab_reverse
+
+    def create_word_sequences(
+        self,
+        text: str,
+        sequence_length: int = 20,
+        vocab: Optional[Dict[str, int]] = None,
+    ) -> Tuple[List[List[int]], List[int]]:
+        """Slide a window over tokenised text to create (input_ids, target_id) pairs."""
+        words = text.split()
+        if vocab is None:
+            # Note: returns tuple, but we only need the first part for sequence creation
+            vocab, _ = self.build_word_vocabulary(text)
+        unk = vocab.get("<UNK>", 0)
+        ids = [vocab.get(w, unk) for w in words]
+        sequences: List[List[int]] = []
+        targets: List[int] = []
+        for i in range(0, len(ids) - sequence_length):
+            sequences.append(ids[i : i + sequence_length])
+            targets.append(ids[i + sequence_length])
+        return sequences, targets
+
+    def sequences_to_arrays_word(
+        self,
+        sequences: List[List[int]],
+        targets: List[int],
+        vocab: Dict[str, int],
+    ) -> Tuple[Any, Any]:
+        """Convert word sequences to arrays for training."""
+        import numpy as np
+        n = len(sequences)
+        seq_len = len(sequences[0]) if sequences else 1
+        vocab_size = len(vocab)
+        X = np.array(sequences, dtype=np.int32).reshape(n, seq_len)
+        y = np.zeros((n, vocab_size), dtype=np.float32)
+        for i, t in enumerate(targets):
+            if 0 <= t < vocab_size:
+                y[i, t] = 1.0
+        return X, y
+
     def preprocess_text(self, text: str, lowercase: bool = True, remove_special: bool = True) -> str:
         """Standard text preprocessing"""
         # Use GutenbergSource's implementation as a default

@@ -5,14 +5,15 @@ description: >
   bookcorpus (modern sentence flow and conversational rhythm) to produce
   a neutral, intelligent, readable voice without dated cadence.
 
-# Modern, neutral sources (comma-separated list — 'source' is the key the
-# training script reads; 'sources' is silently ignored)
-source:
-  - wikipedia
-  - huggingface
+# HuggingFace is the only reliably implemented source for modern prose.
+# (The Wikipedia source is a stub — it returns None; Gutenberg requires pre-cached .txt files)
+source: huggingface
 
-# HuggingFace dataset search — single string, space-separated terms
-search: "wikitext bookcorpus openwebtext"
+# Explicit dataset names on HuggingFace Hub —
+# wikitext-103-raw-v1 is confirmed Parquet-format and loads without issues.
+# It has 103M tokens of clean Wikipedia prose — more than enough for our 1M char cap.
+book_ids:
+  - "wikitext::wikitext-103-raw-v1"
 
 # Broad content categories for generalist fluency
 categories:
