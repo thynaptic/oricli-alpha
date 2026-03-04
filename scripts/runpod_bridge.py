@@ -1034,6 +1034,13 @@ def summarize_results(local_path: Path):
             if item.get("status") == "passed": passed[cat] += 1
         
         category_rates = {cat: passed[cat]/totals[cat] for cat in totals if totals[cat]}
+        
+        # Ensure ALL standard categories are shown even if not in results
+        all_categories = ["reasoning", "coding", "math", "knowledge", "language", "instruction_following"]
+        for cat in all_categories:
+            if cat not in category_rates:
+                category_rates[cat] = 0.0
+        
         gaps = [cat for cat, rate in category_rates.items() if rate < 0.5]
         
         # Recommendations mapping
@@ -1047,19 +1054,19 @@ def summarize_results(local_path: Path):
         }
 
         print("\n" + "="*60)
-        print("📊 MAVAIA COGNITIVE GAP ANALYSIS")
+        print("📊 MAVAIA COGNITIVE PERFORMANCE SUMMARY")
         print("="*60)
         
-        if not category_rates:
-            print("No category data found in results.")
-        else:
-            for cat, rate in sorted(category_rates.items()):
-                status = "[PASS]" if rate >= 0.5 else "[GAP]"
-                print(f"{cat:<25} {rate:>6.1%} {status}")
+        for cat in sorted(category_rates.keys()):
+            rate = category_rates[cat]
+            # Use totals if available, otherwise 0
+            count = totals.get(cat, 0)
+            status = "[PASS]" if rate >= 0.5 else "[GAP]"
+            print(f"{cat.capitalize():<25} {rate:>6.1%} {status} ({count} tests)")
         
         if gaps:
             print("\n💡 RECOMMENDED RETOUCH STAGES:")
-            for gap in gaps:
+            for gap in sorted(gaps):
                 gap_lower = gap.lower()
                 if gap_lower in recs:
                     stage, datasets = recs[gap_lower]
