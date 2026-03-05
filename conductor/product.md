@@ -14,6 +14,7 @@ Mavaia Core addresses the complexity of orchestrating modular AI systems while e
 ## Key Features
 - **Module Library**: A rich set of plug-and-play cognitive modules.
 - **Deep Curriculum**: A multi-stage sequential training pipeline progressing from basic tone to comprehensive world knowledge (Stage 9).
+- **Dynamic Dataset Discovery**: Automated search and integration of training data from Hugging Face, Wikipedia, and Internet Archive via simple CLI phrases.
 - **Smart Resume**: Intelligent curriculum resumption that automatically detects performance gaps and skips acquired knowledge to optimize compute.
 - **Curriculum Electives**: Ability to train specialized LoRA adapters (modes) for specific domains without model overbasing.
 - **Intelligent Resource Allocation**: Dynamic GPU matching logic that selects optimal hardware based on training size and VRAM requirements.

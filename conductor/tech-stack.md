@@ -21,6 +21,7 @@
 ## Data & Integration
 - **Hugging Face Datasets**: Used for loading and processing curriculum training data.
 - **Wikipedia API**: Integrated for external knowledge retrieval.
+- **Internet Archive API**: Integrated for discovering and retrieving public domain texts.
 - **HTTPX & Requests**: Used for robust synchronous and asynchronous network communication.
 
 ## Infrastructure & DevOps
