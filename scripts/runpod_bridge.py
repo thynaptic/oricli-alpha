@@ -12,8 +12,15 @@ import math
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
-# Add project root to path to allow importing mavaia_core
+# Add project root to path
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# BOOTSTRAP: Ensure we are running in the virtual environment
+VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python3"
+if VENV_PYTHON.exists() and sys.executable != str(VENV_PYTHON):
+    # Re-run the script using the venv python
+    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON)] + sys.argv)
+
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 

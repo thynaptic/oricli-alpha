@@ -32,7 +32,9 @@ class DatasetSearch:
             from huggingface_hub import HfApi
             self.hf_api = HfApi()
         except ImportError:
-            logger.warning("huggingface_hub not installed, HF search disabled")
+            logger.debug("huggingface_hub package missing, HF search disabled")
+        except Exception as e:
+            logger.warning(f"HF search disabled: failed to initialize HfApi: {e}")
 
     def _setup_kaggle(self):
         try:
@@ -41,9 +43,9 @@ class DatasetSearch:
             # This will look for ~/.kaggle/kaggle.json or KAGGLE_USERNAME/KAGGLE_KEY env vars
             self.kaggle_api.authenticate()
         except ImportError:
-            logger.warning("kaggle package not installed, Kaggle search disabled")
+            logger.debug("kaggle package missing, Kaggle search disabled")
         except Exception as e:
-            logger.warning(f"Kaggle authentication failed: {e}. Ensure KAGGLE_USERNAME and KAGGLE_KEY are set.")
+            logger.warning(f"Kaggle search disabled: authentication failed: {e}. Ensure KAGGLE_USERNAME and KAGGLE_KEY are set.")
             self.kaggle_api = None
 
     def search_huggingface(self, query: str, limit: int = 10) -> List[SearchResult]:

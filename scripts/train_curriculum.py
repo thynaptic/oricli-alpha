@@ -7,22 +7,17 @@ import argparse
 import json
 import os
 import sys
-import site
+from pathlib import Path
+
+# BOOTSTRAP: Ensure we are running in the virtual environment
+REPO_ROOT = Path(__file__).resolve().parent.parent
+VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python3"
+if VENV_PYTHON.exists() and sys.executable != str(VENV_PYTHON):
+    # Re-run the script using the venv python
+    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON)] + sys.argv)
 
 # Ensure project root is in path
-sys.path.insert(0, os.getcwd())
-sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
-
-# FORCE PATH RESOLUTION: Ensure we can see libraries installed via --user or system pip
-try:
-    user_site = site.getusersitepackages()
-    if user_site and user_site not in sys.path:
-        sys.path.append(user_site)
-    for p in ["/usr/local/lib/python3.11/dist-packages", "/usr/lib/python3/dist-packages"]:
-        if os.path.exists(p) and p not in sys.path:
-            sys.path.append(p)
-except Exception:
-    pass
+sys.path.insert(0, str(REPO_ROOT))
 
 import subprocess
 import time
