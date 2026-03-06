@@ -8,6 +8,7 @@
 - **JAX & Flax**: Used for optimized numerical computing and specific reasoning architectures.
 - **Transformers (Hugging Face)**: Core library for working with state-of-the-art LLM architectures and tokenizers.
 - **PEFT (Hugging Face)**: Utilized for Parameter-Efficient Fine-Tuning (LoRA) of specialized elective adapters.
+- **DPO (Direct Preference Optimization)**: Primary alignment algorithm used for RFAL-based self-correction and personality tuning.
 - **Semantic Intent Classification**: Independent embedding models (e.g., `all-MiniLM-L6-v2`) used for sub-100ms routing decisions.
 - **Proactive VRAM Management**: LRU-based adapter eviction strategy implemented to maintain performance within hardware constraints.
 - **TensorFlow**: Supported for specific module implementations and legacy compatibility.

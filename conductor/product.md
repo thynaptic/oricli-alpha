@@ -17,6 +17,7 @@ Mavaia Core addresses the complexity of orchestrating modular AI systems while e
 - **Dynamic Dataset Discovery**: Automated search and integration of training data from Hugging Face, Wikipedia, and Internet Archive via simple CLI phrases.
 - **Smart Resume**: Intelligent curriculum resumption that automatically detects performance gaps and skips acquired knowledge to optimize compute.
 - **Curriculum Electives**: Ability to train specialized LoRA adapters (modes) for specific domains without model overbasing.
+- **Conversational RFAL Alignment**: Autonomous self-correction loop that learns from organic user feedback and automated fact/tone checks to refine model weights via DPO.
 - **Asynchronous Multi-Adapter Orchestration**: Standalone module for zero-latency, on-the-fly switching between specialized adapters using background intent classification and LRU-based VRAM safety.
 - **Intelligent Resource Allocation**: Dynamic GPU matching logic that selects optimal hardware based on training size and VRAM requirements.
 - **Observability**: Built-in metrics, health monitoring, and introspection for cognitive state.
