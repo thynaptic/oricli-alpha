@@ -615,11 +615,11 @@ class RunPodBridge:
     ):
         """Create a new instant cluster."""
         input_data = {
-            "name": name,
+            "clusterName": name,
             "gpuTypeId": gpu_type_id,
             "gpuCountPerPod": gpu_count_per_pod,
             "podCount": pod_count,
-            "cloudType": "SECURE",
+            "type": "SECURE",
             "volumeInGb": 200,
             "containerDiskInGb": 200,
             "volumeMountPath": volume_mount_path,
@@ -649,7 +649,7 @@ class RunPodBridge:
         mutation createCluster($input: CreateClusterInput!) {
           createCluster(input: $input) {
             id
-            name
+            clusterName
             podCount
             pods {
               id

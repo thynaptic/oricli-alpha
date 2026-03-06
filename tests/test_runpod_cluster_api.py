@@ -67,9 +67,9 @@ def test_create_cluster():
         # Verify input structure
         args, kwargs = mock_query.call_args
         sent_input = kwargs["variables"]["input"]
-        assert sent_input["name"] == "mavaia-cluster"
+        assert sent_input["clusterName"] == "mavaia-cluster"
         assert sent_input["podCount"] == 2
-        assert sent_input["cloudType"] == "SECURE"
+        assert sent_input["type"] == "SECURE"
         print("✓ create_cluster verified")
 
 def test_delete_cluster():
