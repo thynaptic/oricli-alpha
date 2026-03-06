@@ -614,13 +614,12 @@ class RunPodBridge:
         env: Optional[Dict[str, str]] = None,
     ):
         """Create a new instant cluster."""
-        # Clean inputs based on RunPod GraphQL errors
         input_data = {
-            "clusterName": name,
+            "name": name,
             "gpuTypeId": gpu_type_id,
             "gpuCountPerPod": gpu_count_per_pod,
             "podCount": pod_count,
-            "type": "SECURE", # Required enum
+            "cloudType": "SECURE",
             "volumeInGb": 200,
             "containerDiskInGb": 200,
             "volumeMountPath": volume_mount_path,
@@ -650,7 +649,7 @@ class RunPodBridge:
         mutation createCluster($input: CreateClusterInput!) {
           createCluster(input: $input) {
             id
-            clusterName
+            name
             podCount
             pods {
               id
