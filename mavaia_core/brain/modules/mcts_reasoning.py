@@ -8,7 +8,7 @@ and backpropagation. Ported from Swift MCTSService.swift
 
 import time
 import math
-from typing import Any
+from typing import Any, Dict, List, Optional
 import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
@@ -38,12 +38,13 @@ class MCTSReasoning(BaseBrainModule):
         super().__init__()
         self._cognitive_generator = None
         self._memory_graph = None
+        self._text_engine = None
 
     @property
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="mcts_reasoning",
-            version="1.0.0",
+            version="1.0.1",
             description=(
                 "Monte-Carlo Thought Search reasoning orchestrator with "
                 "UCB1 selection and rollouts"
@@ -52,6 +53,7 @@ class MCTSReasoning(BaseBrainModule):
                 "execute_mcts",
                 "should_activate",
                 "format_reasoning_output",
+                "status",
             ],
             dependencies=[],
             enabled=True,
@@ -65,6 +67,12 @@ class MCTSReasoning(BaseBrainModule):
             self._cognitive_generator = ModuleRegistry.get_module(
                 "cognitive_generator"
             )
+            
+            # Lazy load text generation engine directly to avoid recursion
+            try:
+                self._text_engine = ModuleRegistry.get_module("text_generation_engine")
+            except Exception:
+                self._text_engine = None
 
             # Lazy load memory graph (optional)
             try:
@@ -86,8 +94,8 @@ class MCTSReasoning(BaseBrainModule):
             return False
 
     def execute(
-        self, operation: str, params: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, operation: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Execute MCTS operations.
 
@@ -95,19 +103,36 @@ class MCTSReasoning(BaseBrainModule):
         - execute_mcts: Full MCTS execution
         - should_activate: Activation decision
         - format_reasoning_output: Format path as text
+        - status: Check module health
         """
+        if operation == "status":
+            return {
+                "success": True,
+                "status": "active",
+                "initialized": True,
+                "version": self.metadata.version
+            }
+
         if operation == "execute_mcts":
-            return self._execute_mcts(params)
+            res = self._execute_mcts(params)
+            return {
+                "success": True,
+                "result": res,
+                "metadata": {
+                    "confidence": res.get("confidence", 0.0),
+                    "total_rollouts": res.get("total_rollouts", 0)
+                }
+            }
         elif operation == "should_activate":
-            return self._should_activate(params)
+            res = self._should_activate(params)
+            res["success"] = True
+            return res
         elif operation == "format_reasoning_output":
-            return self._format_reasoning_output(params)
+            res = self._format_reasoning_output(params)
+            res["success"] = True
+            return res
         else:
-            raise InvalidParameterError(
-                parameter="operation",
-                value=operation,
-                reason="Unknown operation for mcts_reasoning",
-            )
+            return {"success": False, "error": f"Unknown operation: {operation}"}
 
     def _execute_mcts(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -442,32 +467,39 @@ class MCTSReasoning(BaseBrainModule):
         configuration: MCTSConfiguration,
     ) -> list[ToTThoughtNode]:
         """Generate child thoughts from current node"""
-        if not self._cognitive_generator:
+        if not self._cognitive_generator and not getattr(self, "_text_engine", None):
             return []
 
-        prompt = f"""Generate {count} different reasoning steps or approaches to continue solving this problem.
-
-Original query: {query}
-{("Context: " + context) if context else ""}
-
-Current reasoning step: {current_node.thought}
-
-Depth: {current_node.depth}
-
-Generate {count} diverse next steps or alternative approaches. Each should be a distinct line of reasoning.
-"""
+        # Use an imperative prompt for the SLM to get real ideas
+        prompt = (
+            f"Instructions: Generate {count} diverse, next logical reasoning steps for the task below.\n"
+            f"Task: {query}\n"
+            f"Current state: {current_node.thought}\n"
+            f"Next Idea:"
+        )
 
         try:
-            response_result = self._cognitive_generator.execute(
-                "generate_response",
-                {
-                    "input_text": prompt,
-                    "context": context or "",
-                    "persona": "mavaia",
-                },
-            )
-
-            response_text = response_result.get("text", "")
+            # Prefer the text engine directly to avoid recursion and template-traps
+            if getattr(self, "_text_engine", None):
+                gen_res = self._text_engine.execute(
+                    "generate_with_neural",
+                    {
+                        "prompt": prompt,
+                        "temperature": 0.85,
+                        "max_length": 300,
+                    }
+                )
+                response_text = gen_res.get("text", "")
+            else:
+                response_result = self._cognitive_generator.execute(
+                    "generate_response",
+                    {
+                        "input_text": prompt,
+                        "context": context or "",
+                        "persona": "mavaia",
+                    },
+                )
+                response_text = response_result.get("text", "")
             if not response_text:
                 return []
 
@@ -713,4 +745,3 @@ Final Answer:
                 output_lines.append("")  # Blank line between steps
 
         return "\n".join(output_lines)
-

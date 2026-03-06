@@ -41,18 +41,25 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
         self.answer_agent = None
         self.analysis_agent = None
         self.research_agent = None
+        self.rl_agent = None
+        self.research_reasoning_agent = None
+        self.query_agent = None
+        self.reranker_agent = None
+        self.retriever_agent = None
+        self.verifier_agent = None
         self._modules_loaded = False
 
     @property
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="multi_agent_orchestrator",
-            version="1.0.0",
-            description="Main orchestrator for multi-agent pipeline execution",
+            version="1.0.1",
+            description="Main orchestrator for multi-agent pipeline execution with all discovered agents",
             operations=[
                 "orchestrate_agents",
                 "coordinate_agents",
                 "execute_pipeline",
+                "status",
             ],
             dependencies=[],
             model_required=False,
@@ -77,6 +84,12 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
             self.answer_agent = ModuleRegistry.get_module("answer_agent", auto_discover=True, wait_timeout=1.0)
             self.analysis_agent = ModuleRegistry.get_module("analysis_agent", auto_discover=True, wait_timeout=1.0)
             self.research_agent = ModuleRegistry.get_module("research_agent", auto_discover=True, wait_timeout=1.0)
+            self.rl_agent = ModuleRegistry.get_module("reinforcement_learning_agent", auto_discover=True, wait_timeout=1.0)
+            self.research_reasoning_agent = ModuleRegistry.get_module("research_reasoning_agent", auto_discover=True, wait_timeout=1.0)
+            self.query_agent = ModuleRegistry.get_module("query_agent", auto_discover=True, wait_timeout=1.0)
+            self.reranker_agent = ModuleRegistry.get_module("reranker_agent", auto_discover=True, wait_timeout=1.0)
+            self.retriever_agent = ModuleRegistry.get_module("retriever_agent", auto_discover=True, wait_timeout=1.0)
+            self.verifier_agent = ModuleRegistry.get_module("verifier_agent", auto_discover=True, wait_timeout=1.0)
 
             self._modules_loaded = True
         except Exception as e:
@@ -89,6 +102,9 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
+        if operation == "status":
+            return self._get_status()
+
         self._ensure_modules_loaded()
 
         if operation == "orchestrate_agents":
@@ -98,11 +114,21 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
         elif operation == "execute_pipeline":
             return self._execute_pipeline(params)
         else:
-            raise InvalidParameterError(
-                parameter="operation",
-                value=operation,
-                reason="Unknown operation for multi_agent_orchestrator",
-            )
+            return {"success": False, "error": f"Unknown operation: {operation}"}
+
+    def _get_status(self) -> Dict[str, Any]:
+        """Return module status"""
+        self._ensure_modules_loaded()
+        return {
+            "success": True,
+            "status": "active",
+            "version": self.metadata.version,
+            "modules_loaded": self._modules_loaded,
+            "search_agent_available": self.search_agent is not None,
+            "ranking_agent_available": self.ranking_agent is not None,
+            "synthesis_agent_available": self.synthesis_agent is not None,
+            "answer_agent_available": self.answer_agent is not None
+        }
 
     def _orchestrate_agents(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Orchestrate agents (alias for execute_pipeline)"""
@@ -114,7 +140,10 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
 
     def _execute_pipeline(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute multi-agent pipeline"""
-        query = params.get("query", "")
+        query = params.get("query", "") or params.get("input", "")
+        if not query:
+            return {"success": False, "error": "No query provided"}
+
         # Use string defaults if AgentType/DocumentSource not available
         default_agent_types = ["search", "ranking", "synthesis", "answer"]
         default_sources = ["web", "memory"]
@@ -243,4 +272,3 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
             "agent_results": all_results,
             "execution_time": execution_time,
         }
-

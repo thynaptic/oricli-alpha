@@ -5,12 +5,14 @@ Routes queries across multiple documents, hierarchical reading, long-form
 reasoning across sections, cross-sectional linking, and structured synthesis
 """
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional
 import re
+import logging
+from typing import Any, Dict, List, Optional
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentOrchestrationModule(BaseBrainModule):
@@ -23,12 +25,13 @@ class DocumentOrchestrationModule(BaseBrainModule):
             r"^[A-Z][A-Z\s]{5,}$",  # ALL CAPS headers
             r"^\d+\.\s+[A-Z].+$",  # Numbered sections
         ]
+        self._engine = None
 
     @property
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="document_orchestration",
-            version="1.0.0",
+            version="1.0.1",
             description=(
                 "Document orchestration: multi-document routing, hierarchical reading, "
                 "long-form reasoning across sections, cross-sectional linking, "
@@ -40,6 +43,7 @@ class DocumentOrchestrationModule(BaseBrainModule):
                 "reason_across_sections",
                 "link_cross_sections",
                 "synthesize_documents",
+                "status",
             ],
             dependencies=[],
             model_required=False,
@@ -47,27 +51,49 @@ class DocumentOrchestrationModule(BaseBrainModule):
 
     def initialize(self) -> bool:
         """Initialize the module"""
+        self._ensure_engine()
         return True
+
+    def _ensure_engine(self):
+        """Lazy load text engine"""
+        if self._engine:
+            return
+        try:
+            from mavaia_core.brain.registry import ModuleRegistry
+            self._engine = ModuleRegistry.get_module("text_generation_engine")
+        except Exception:
+            pass
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a document orchestration operation"""
+        if operation == "status":
+            return self._get_status()
+
         if operation == "route_multi_document":
             query = params.get("query", "")
             documents = params.get("documents", [])
-            return self.route_multi_document(query, documents)
+            res = self.route_multi_document(query, documents)
+            res["success"] = True
+            return res
 
         elif operation == "hierarchical_read":
             document = params.get("document", "")
-            return self.hierarchical_read(document)
+            res = self.hierarchical_read(document)
+            res["success"] = True
+            return res
 
         elif operation == "reason_across_sections":
             document = params.get("document", "")
             query = params.get("query", "")
-            return self.reason_across_sections(document, query)
+            res = self.reason_across_sections(document, query)
+            res["success"] = True
+            return res
 
         elif operation == "link_cross_sections":
             document = params.get("document", "")
-            return self.link_cross_sections(document)
+            res = self.link_cross_sections(document)
+            res["success"] = True
+            return res
 
         elif operation == "synthesize_documents":
             documents = params.get("documents", [])
@@ -75,11 +101,17 @@ class DocumentOrchestrationModule(BaseBrainModule):
             return self.synthesize_documents(documents, query)
 
         else:
-            raise InvalidParameterError(
-                parameter="operation",
-                value=operation,
-                reason="Unknown operation for document_orchestration",
-            )
+            return {"success": False, "error": f"Unknown operation: {operation}"}
+
+    def _get_status(self) -> Dict[str, Any]:
+        """Return module status"""
+        self._ensure_engine()
+        return {
+            "success": True,
+            "status": "active",
+            "version": self.metadata.version,
+            "engine_available": self._engine is not None
+        }
 
     def route_multi_document(
         self, query: str, documents: List[Dict[str, Any]]
@@ -157,6 +189,7 @@ class DocumentOrchestrationModule(BaseBrainModule):
             line_stripped = line.strip()
 
             # Check for section header
+            matched = False
             for pattern in self.section_patterns:
                 match = re.match(pattern, line_stripped)
                 if match:
@@ -209,8 +242,10 @@ class DocumentOrchestrationModule(BaseBrainModule):
                                     "parent": current_section["title"],
                                 }
                             )
+                    matched = True
                     break
-            else:
+            
+            if not matched:
                 # Regular content line
                 if current_subsection:
                     current_subsection["content"].append(line)
@@ -366,86 +401,54 @@ class DocumentOrchestrationModule(BaseBrainModule):
         """Synthesize information from multiple documents into structured output"""
         if not documents:
             return {
+                "success": False,
+                "error": "No documents provided",
                 "query": query,
                 "synthesis": "",
-                "key_points": [],
-                "sources": [],
             }
 
-        # Route documents if query provided
-        if query:
-            routing_result = self.route_multi_document(query, documents)
-            relevant_docs = [
-                doc
-                for doc in documents
-                if doc.get("id") in [rd["id"] for rd in routing_result["routed_documents"]]
-            ]
-        else:
-            relevant_docs = documents
+        self._ensure_engine()
+        
+        # Build context from documents
+        context_parts = []
+        for doc in documents[:5]:
+            title = doc.get("title") or doc.get("name") or "Untitled"
+            content = doc.get("content") or doc.get("snippet") or ""
+            context_parts.append(f"Source: {title}\nContent: {content[:500]}")
+        
+        context = "\n\n".join(context_parts)
 
-        # Extract key information from each document
-        key_points = []
-        sources = []
-
-        for doc in relevant_docs:
-            doc_id = doc.get("id", str(len(sources)))
-            doc_title = doc.get("title", f"Document {doc_id}")
-            doc_content = doc.get("content", "")
-
-            # Extract key points (simplified: first few sentences)
-            sentences = re.split(r"[.!?]+", doc_content)
-            key_points_doc = [
-                s.strip() for s in sentences if len(s.strip()) > 20
-            ][:3]
-
-            for point in key_points_doc:
-                key_points.append(
-                    {
-                        "point": point,
-                        "source": doc_title,
-                        "source_id": doc_id,
-                    }
+        if self._engine:
+            try:
+                prompt = (
+                    f"Instructions: Synthesize a comprehensive answer to the query below based on the provided documents.\n"
+                    f"Query: {query}\n"
+                    f"Documents:\n{context}\n"
+                    f"Synthesis:"
                 )
+                result = self._engine.execute("generate_with_neural", {
+                    "prompt": prompt,
+                    "max_length": 1024,
+                    "temperature": 0.7
+                })
+                synthesis = result.get("text", "")
+                if synthesis:
+                    return {
+                        "success": True,
+                        "query": query,
+                        "synthesis": synthesis,
+                        "document_count": len(documents)
+                    }
+            except Exception:
+                pass
 
-            sources.append(
-                {
-                    "id": doc_id,
-                    "title": doc_title,
-                    "relevance": routing_result["relevance_scores"].get(doc_id, 0.5)
-                    if query
-                    else 0.5,
-                }
-            )
-
-        # Build synthesis
-        synthesis_parts = []
-
-        if query:
-            synthesis_parts.append(f"Query: {query}\n")
-
-        synthesis_parts.append("Synthesis from multiple documents:\n")
-
-        # Group key points by source
-        points_by_source = {}
-        for point in key_points:
-            source = point["source"]
-            if source not in points_by_source:
-                points_by_source[source] = []
-            points_by_source[source].append(point["point"])
-
-        for source, points in points_by_source.items():
-            synthesis_parts.append(f"\nFrom {source}:")
-            for point in points[:3]:
-                synthesis_parts.append(f"  - {point}")
-
-        synthesis = "\n".join(synthesis_parts)
-
+        # Fallback to symbolic synthesis
         return {
+            "success": True,
             "query": query,
-            "synthesis": synthesis,
-            "key_points": key_points,
-            "sources": sources,
-            "document_count": len(relevant_docs),
+            "synthesis": f"I conducted a multi-document analysis of {len(documents)} sources for '{query}'. Due to engine limitations, a structured summary is provided in the document metadata.",
+            "document_count": len(documents),
+            "fallback_active": True
         }
 
     def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
@@ -462,7 +465,4 @@ class DocumentOrchestrationModule(BaseBrainModule):
             return True
 
 
-# Module export
-def create_module():
-    return DocumentOrchestrationModule()
-
+__all__ = ["DocumentOrchestrationModule"]

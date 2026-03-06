@@ -171,7 +171,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="neural_text_generator",
-            version="1.0.0",
+            version="1.0.1",
             description="Local RNN/LSTM text generation with character-level and word-level models. "
                         "Supports multiple data sources: Gutenberg, Wikipedia, LibriVox, OpenLibrary, Internet Archive, HuggingFace.",
             operations=[
@@ -181,6 +181,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 "load_model",
                 "save_model",
                 "get_model_info",
+                "status",
             ],
             dependencies=["tensorflow", "numpy"] if TENSORFLOW_AVAILABLE else [],
             model_required=False,
@@ -507,6 +508,9 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         # Operations that don't need heavy ML stacks
         if operation == "get_model_info":
             return self._get_model_info()
+        
+        if operation == "status":
+            return self._get_status()
 
         # Operations that might need specific dependencies
         if operation == "train_model":
@@ -528,6 +532,22 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         
         print(f"[DEBUG] NeuralTextGenerator: UNKNOWN OPERATION '{operation}'")
         return {"success": False, "error": f"Unknown operation: {operation}"}
+
+    def _get_status(self) -> Dict[str, Any]:
+        """Return detailed module status"""
+        return {
+            "success": True,
+            "status": "active",
+            "version": self.metadata.version,
+            "models_loaded": self._models_loaded,
+            "config_loaded": self._config_loaded,
+            "has_transformer": self.transformer_model is not None,
+            "has_character_model": self.char_model is not None,
+            "has_word_model": self.word_model is not None,
+            "tensorflow_available": TENSORFLOW_AVAILABLE,
+            "torch_available": is_torch_available(),
+            "transformers_available": is_transformers_available(),
+        }
 
 
     def _train_model(self, params: Dict[str, Any]) -> Dict[str, Any]:

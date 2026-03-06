@@ -108,13 +108,14 @@ class AgentCoordinatorModule(BaseBrainModule):
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="agent_coordinator",
-            version="1.0.0",
+            version="1.0.1",
             description="Agent coordinator for lifecycle management and result aggregation",
             operations=[
                 "execute_task",
                 "execute_parallel",
                 "get_result",
                 "get_all_results",
+                "status",
             ],
             dependencies=[],
             model_required=False,
@@ -126,30 +127,33 @@ class AgentCoordinatorModule(BaseBrainModule):
         return True
 
     def _register_agents(self):
-        """Register all agents"""
-        # In a real implementation, would load agents from registry
+        """Register all agents, including latent ones discovered on disk"""
         agent_types = [
-            AgentType.SEARCH,
-            AgentType.RANKING,
-            AgentType.SYNTHESIS,
-            AgentType.RESEARCH,
-            AgentType.ANALYSIS,
-            AgentType.ANSWER,
+            "search",
+            "ranking",
+            "synthesis",
+            "research",
+            "analysis",
+            "answer",
+            "reinforcement_learning",
+            "research_reasoning",
+            "query",
+            "reranker",
+            "retriever",
+            "verifier",
         ]
 
-        for agent_type_enum in agent_types:
-            # Convert enum to string for dictionary key
-            agent_type_str = agent_type_enum if isinstance(agent_type_enum, str) else str(agent_type_enum)
+        for agent_type in agent_types:
             try:
-                agent = ModuleRegistry.get_module(f"{agent_type_str}_agent", auto_discover=True, wait_timeout=10.0)
+                agent = ModuleRegistry.get_module(f"{agent_type}_agent", auto_discover=True, wait_timeout=5.0)
                 if agent:
-                    # Store with string key to ensure consistency
-                    self.agents[str(agent_type_str)] = agent
+                    self.agents[agent_type] = agent
+                    logger.info(f"AgentCoordinator: Registered agent '{agent_type}'")
             except Exception as e:
                 logger.debug(
-                    "Failed to register agent",
+                    f"AgentCoordinator: Optional agent '{agent_type}' unavailable",
                     exc_info=True,
-                    extra={"module_name": "agent_coordinator", "dependency": f"{agent_type_str}_agent", "error_type": type(e).__name__},
+                    extra={"module_name": "agent_coordinator", "dependency": f"{agent_type}_agent", "error_type": type(e).__name__},
                 )
 
     def _extract_documents_from_results(self, previous_results: List[AgentResult]) -> List[Dict[str, Any]]:
@@ -217,6 +221,9 @@ class AgentCoordinatorModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
+        if operation == "status":
+            return self._get_status()
+
         if operation == "execute_task":
             return self._execute_task(params)
         elif operation == "execute_parallel":
@@ -226,7 +233,18 @@ class AgentCoordinatorModule(BaseBrainModule):
         elif operation == "get_all_results":
             return self._get_all_results()
         else:
-            raise InvalidParameterError("operation", operation, "Unknown operation for agent_coordinator")
+            return {"success": False, "error": f"Unknown operation: {operation}"}
+
+    def _get_status(self) -> Dict[str, Any]:
+        """Return module status"""
+        return {
+            "success": True,
+            "status": "active",
+            "version": self.metadata.version,
+            "registered_agents_count": len(self.agents),
+            "registered_agents": list(self.agents.keys()),
+            "results_cache_size": len(self.results)
+        }
 
     def _execute_task(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a single task"""
@@ -409,4 +427,3 @@ class AgentCoordinatorModule(BaseBrainModule):
                 "count": len(self.results),
             },
         }
-

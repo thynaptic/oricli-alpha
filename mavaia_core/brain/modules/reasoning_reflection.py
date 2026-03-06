@@ -8,7 +8,7 @@ Ported from Swift ReasoningReflectionService.swift
 
 import re
 import uuid
-from typing import Any
+from typing import Any, Dict, List, Optional
 import logging
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
@@ -34,6 +34,7 @@ class ReasoningReflectionService(BaseBrainModule):
         """Initialize the module"""
         super().__init__()
         self._cognitive_generator = None
+        self._text_engine = None
         # Track reflection depth to prevent infinite loops
         self._reflection_depth: dict[str, int] = {}
         self._max_reflection_depth = 2
@@ -42,13 +43,14 @@ class ReasoningReflectionService(BaseBrainModule):
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="reasoning_reflection",
-            version="1.0.0",
+            version="1.0.1",
             description="Reflection service that reviews reasoning steps and generates corrections",
             operations=[
                 "reflect_on_reasoning",
                 "reflect_on_tot_path",
                 "reflect_on_mcts_path",
                 "clear_reflection_depth",
+                "status",
             ],
             dependencies=[],
             enabled=True,
@@ -59,6 +61,11 @@ class ReasoningReflectionService(BaseBrainModule):
         """Initialize dependent modules"""
         try:
             self._cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
+            # Lazy load text engine to avoid recursion
+            try:
+                self._text_engine = ModuleRegistry.get_module("text_generation_engine")
+            except Exception:
+                self._text_engine = None
             return True
         except Exception as e:
             logger.debug(
@@ -68,7 +75,7 @@ class ReasoningReflectionService(BaseBrainModule):
             )
             return False
 
-    def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
+    def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute reflection operations.
 
@@ -76,21 +83,46 @@ class ReasoningReflectionService(BaseBrainModule):
         - reflect_on_reasoning: Reflect on CoT reasoning steps
         - reflect_on_tot_path: Reflect on ToT path
         - clear_reflection_depth: Clear reflection depth for a session
+        - status: Check module health
         """
+        if not getattr(self, "_text_engine", None) and not self._cognitive_generator:
+            self.initialize()
+
+        if operation == "status":
+            return {
+                "success": True,
+                "status": "active",
+                "initialized": True,
+                "version": self.metadata.version
+            }
+
         if operation == "reflect_on_reasoning":
-            return self._reflect_on_reasoning(params)
+            res = self._reflect_on_reasoning(params)
+            return {
+                "success": True,
+                "result": res,
+                "metadata": {
+                    "reflection_depth": res.get("reflection_depth", 0)
+                }
+            }
         elif operation == "reflect_on_tot_path":
-            return self._reflect_on_tot_path(params)
+            res = self._reflect_on_tot_path(params)
+            return {
+                "success": True,
+                "result": res
+            }
         elif operation == "reflect_on_mcts_path":
-            return self._reflect_on_mcts_path(params)
+            res = self._reflect_on_mcts_path(params)
+            return {
+                "success": True,
+                "result": res
+            }
         elif operation == "clear_reflection_depth":
-            return self._clear_reflection_depth(params)
+            res = self._clear_reflection_depth(params)
+            res["success"] = True
+            return res
         else:
-            raise InvalidParameterError(
-                parameter="operation",
-                value=operation,
-                reason="Unknown operation for reasoning_reflection",
-            )
+            return {"success": False, "error": f"Unknown operation: {operation}"}
 
     def _reflect_on_reasoning(self, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -106,13 +138,13 @@ class ReasoningReflectionService(BaseBrainModule):
         Returns:
             ReflectionResult as dictionary
         """
-        if not self._cognitive_generator:
+        if not self._cognitive_generator and not getattr(self, "_text_engine", None):
             self.initialize()
-            if not self._cognitive_generator:
+            if not self._cognitive_generator and not getattr(self, "_text_engine", None):
                 raise ModuleOperationError(
                     module_name=self.metadata.name,
                     operation="reflect_on_reasoning",
-                    reason="Dependency 'cognitive_generator' not available",
+                    reason="No generation engine available for reflection",
                 )
 
         steps_dicts = params.get("steps", [])
@@ -318,35 +350,36 @@ class ReasoningReflectionService(BaseBrainModule):
             ]
         )
 
-        prompt = f"""Review the following reasoning steps and identify any issues or areas for improvement.
-Focus on logical consistency, completeness, and correctness.
-
-Reasoning Steps:
-{reasoning_summary}
-
-Final Answer: {final_answer}
-Overall Confidence: {confidence:.2f}
-
-Trigger Reason: {reason}
-
-Identify specific issues with step numbers and provide suggestions for improvement.
-Format as:
-Step X: [Issue description] - Suggestion: [How to improve]
-
-If no issues found, respond with "No issues found."
-"""
+        prompt = (
+            f"Instructions: Review the reasoning steps below for logical consistency. "
+            f"Identify any issues like 'echoing the question' or 'nonsense'.\n"
+            f"Reasoning Steps:\n{reasoning_summary}\n\n"
+            f"Final Answer: {final_answer}\n"
+            f"Issues found (Format: Step X: [Issue] - Suggestion: [Improvement]):"
+        )
 
         try:
-            response_result = self._cognitive_generator.execute(
-                "generate_response",
-                {
-                    "input": prompt,
-                    "context": "Reasoning Reflection",
-                    "persona": "mavaia",
-                },
-            )
+            if getattr(self, "_text_engine", None):
+                gen_res = self._text_engine.execute(
+                    "generate_with_neural",
+                    {
+                        "prompt": prompt,
+                        "temperature": 0.3, # Low temperature for reflection
+                        "max_length": 500,
+                    }
+                )
+                response_text = gen_res.get("text", "")
+            else:
+                response_result = self._cognitive_generator.execute(
+                    "generate_response",
+                    {
+                        "input": prompt,
+                        "context": "Reasoning Reflection",
+                        "persona": "mavaia",
+                    },
+                )
+                response_text = response_result.get("text", "")
 
-            response_text = response_result.get("text", "")
             issues = self._parse_reflection_issues(response_text, len(steps))
 
             return {"issues": issues, "summary": response_text}
@@ -447,5 +480,4 @@ Provide an improved version of this reasoning step:
         if session_id and session_id in self._reflection_depth:
             del self._reflection_depth[session_id]
 
-        return {"cleared": True}
-
+        return {"success": True, "cleared": True}

@@ -59,6 +59,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
         self.instruction_following = None
         self.system_prompt_builder = None
         self.tree_of_thought = None
+        self.query_complexity = None
+        self.multi_agent_orchestrator = None
         # Conversation tracking
         self._conversation_history = []
         self._last_responses = []
@@ -80,7 +82,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="cognitive_generator",
-            version="1.0.0",
+            version="1.0.1",
             description="Cognitive generation orchestrator that replaces LLM text generation with composable modules",
             operations=[
                 "generate_response",
@@ -89,6 +91,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 "convert_to_text",
                 "generate_response_with_tools",
                 "generate_response_streaming",
+                "status",
             ],
             dependencies=[],
             model_required=False,
@@ -237,6 +240,16 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 pass
             
             try:
+                self.query_complexity = ModuleRegistry.get_module("query_complexity")
+            except Exception:
+                pass
+            
+            try:
+                self.multi_agent_orchestrator = ModuleRegistry.get_module("multi_agent_orchestrator")
+            except Exception:
+                pass
+            
+            try:
                 self.web_search = ModuleRegistry.get_module("web_search")
             except Exception:
                 pass
@@ -310,6 +323,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
             except Exception:
                 pass
             
+            try:
+                self.reasoning = ModuleRegistry.get_module("reasoning")
+            except Exception:
+                pass
+
             self._modules_loaded = True
         except Exception:
             pass
@@ -362,6 +380,9 @@ class CognitiveGeneratorModule(BaseBrainModule):
         """Execute a cognitive generation operation"""
         self._ensure_modules_loaded()
         
+        if operation == "status":
+            return self._get_status()
+
         if operation == "preload_common_modules":
             self.preload_common_modules()
             return {"success": True, "message": "Common modules preloaded"}
@@ -477,6 +498,19 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 value=str(operation),
                 reason="Unknown operation for cognitive_generator",
             )
+
+    def _get_status(self) -> dict[str, Any]:
+        """Return detailed module status"""
+        return {
+            "success": True,
+            "status": "active",
+            "version": self.metadata.version,
+            "modules_loaded": self._modules_loaded,
+            "loaded_modules_count": len(self._loaded_modules),
+            "router_state": self._router_state,
+            "routing_success_rates": self._routing_success_rates,
+            "conversation_history_length": len(self._conversation_history)
+        }
 
     def _refresh_module_discovery(self) -> None:
         """
@@ -692,7 +726,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 intent_info["query_type"] = "definition"
                 intent_info["requires_reasoning"] = True
                 intent_info["requires_search"] = False
-                intent_info["recommended_modules"] = ["reasoning"]
+                # FULL MAST: Add multi_agent_orchestrator to the chain for grounded analytical depth
+                intent_info["recommended_modules"] = ["multi_agent_orchestrator", "research_agent", "mcts_reasoning", "reasoning"]
                 intent_info["confidence"] = 0.85
 
         # Text editing / proofreading (typos, misspellings) should not be routed as creative.
@@ -750,7 +785,8 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 intent_info["query_type"] = "analytical"
                 intent_info["requires_reasoning"] = True
                 # Keep reasoning lightweight/predictable; dynamic discovery often pulls in noisy orchestrators.
-                intent_info["recommended_modules"] = ["reasoning"]
+                # FULL MAST: Inject multi_agent_orchestrator for maximum intelligence
+                intent_info["recommended_modules"] = ["multi_agent_orchestrator", "research_agent", "mcts_reasoning", "reasoning"]
                 intent_info["confidence"] = 0.85  # Higher confidence for "why" questions
         
         # Math/logic queries
@@ -896,12 +932,19 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     continue
 
                 # Skip modules that require heavy/unstable ML stacks by default (can hang/crash on VPS).
+                # IMPORTANT: On a GPU pod with torch/transformers, we SHOULD allow these.
                 deps = getattr(metadata, "dependencies", None) or []
                 heavy_deps = {
                     "sentence-transformers", "transformers", "torch", "huggingface-hub", "huggingface_hub",
                     "jax", "jaxlib", "flax", "optax", "datasets",
                 }
-                if any(d in heavy_deps for d in deps):
+                
+                import os
+                import sys
+                has_torch = "torch" in sys.modules or os.path.exists(os.path.join(sys.prefix, "lib", "python" + sys.version[:3], "site-packages", "torch"))
+                enable_heavy = os.environ.get("MAVAIA_ENABLE_HEAVY_MODULES", "false").lower() == "true"
+                
+                if any(d in heavy_deps for d in deps) and not (enable_heavy or has_torch):
                     continue
 
                 # Find best matching operation from module's available operations
@@ -921,6 +964,16 @@ class CognitiveGeneratorModule(BaseBrainModule):
                             operation = metadata.operations[0]
                     else:
                         operation = "execute_cot"
+                elif module_name == "multi_agent_orchestrator":
+                    operation = "execute_pipeline"
+                elif module_name == "agent_coordinator":
+                    operation = "execute_parallel"
+                elif module_name == "mcts_reasoning":
+                    operation = "execute_mcts"
+                elif module_name == "research_agent":
+                    operation = "perform_research"
+                elif module_name == "reasoning_reflection":
+                    operation = "reflect_on_reasoning"
                 
                 # Try to match preferred operations first (if not already set)
                 if not operation:
@@ -1357,6 +1410,32 @@ class CognitiveGeneratorModule(BaseBrainModule):
             }
             if isinstance(chosen, dict):
                 response_text = chosen.get("text", "") or chosen.get("response", "")
+                
+                # FINAL REFLECTION SWEEP: If reflection module is available, do a logical sanity check
+                try:
+                    reflection = ModuleRegistry.get_module("reasoning_reflection")
+                    if reflection and response_text and len(response_text) > 10:
+                        # Convert simple result to CoT structure for reflection
+                        steps = [{"prompt": params.get("input", ""), "reasoning": response_text, "confidence": 0.8}]
+                        reflect_res = reflection.execute("reflect_on_reasoning", {
+                            "steps": steps,
+                            "final_answer": response_text,
+                            "confidence": 0.8
+                        })
+                        
+                        if reflect_res.get("should_reflect") and reflect_res.get("corrections"):
+                            # If issues found, flag for dynamic solve or return improved steps
+                            payload["reflection_issues"] = reflect_res.get("corrections")
+                            payload["dynamic_solve_triggered"] = True
+                            
+                            # If we have an improved version, use it
+                            if reflect_res.get("improved_steps"):
+                                improved_text = reflect_res["improved_steps"][0].get("reasoning")
+                                if improved_text:
+                                    response_text = improved_text
+                except Exception:
+                    pass
+
                 if response_text:
                     payload["text"] = response_text
                     payload["response"] = response_text
@@ -2930,6 +3009,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
                                 or (not verification_result.get("matches_intent", False))
                                 or (verification_result.get("confidence", 1.0) < 0.55)
                                 or module_result.get("dynamic_solve_triggered")
+                                or module_result.get("_dynamic_solve_triggered")
                             )
                             if needs_regeneration:
                                 try:
@@ -3130,6 +3210,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
             
             # Step 2: Build or use existing thought graph
             start = time.time()
+            dynamic_solve_triggered = False
             if mcts_result:
                 # Use MCTS result if provided (from Swift MCTS service)
                 thought_graph = self._extract_thoughts_from_mcts(mcts_result)
@@ -3142,6 +3223,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     input_text, enriched_context
                 )
                 thought_graph = thought_graph_result.get("thought_graph", {})
+                dynamic_solve_triggered = thought_graph_result.get("dynamic_solve_triggered", False)
             
             # Step 3: Select best thoughts
             start = time.time()
@@ -3159,6 +3241,12 @@ class CognitiveGeneratorModule(BaseBrainModule):
             # Ensure modules are loaded before trying to use them
             self._ensure_modules_loaded()
 
+            # Check if we need to force neural generation (dynamic solve)
+            force_neural = dynamic_solve_triggered or any(
+                str(t).startswith(("I will now analyze", "I will dynamically", "I will perform", "I will synthesize"))
+                for t in selected_thoughts
+            )
+
             # Use text_generation_engine for full response generation
             if self.text_generation_engine and selected_thoughts:
                 try:
@@ -3171,6 +3259,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
                             "voice_context": voice_context,
                             "context": enriched_context,
                             "original_input": input_text,
+                            "force_neural": force_neural,
                         }
                     )
                     if text_gen_result.get("success") and text_gen_result.get("text"):
@@ -3237,7 +3326,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
 
                     if not generated_text:
                         text_result = self.convert_to_text(
-                            selected_thoughts, voice_context, enriched_context, input_text
+                            selected_thoughts, 
+                            voice_context, 
+                            enriched_context, 
+                            input_text,
+                            force_neural=force_neural
                         )
                         candidate_text = text_result.get("text", "")
                         candidate_text = self._clean_reasoning_text(candidate_text)
@@ -3816,6 +3909,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         """Create reasoning structure from input"""
         thoughts = []
         
+        dynamic_solve_triggered = False
         try:
             # Try to use reasoning module if available
             if self.reasoning:
@@ -3837,6 +3931,9 @@ class CognitiveGeneratorModule(BaseBrainModule):
                             s.strip() for s in reasoning_text.split(".") if s.strip()
                         ]
                     
+                    if reasoning_result.get("_dynamic_solve_triggered"):
+                        dynamic_solve_triggered = True
+                    
                     # Clean up thoughts to remove internal reasoning markers
                     thoughts = [
                         self._clean_reasoning_text(t)
@@ -3844,8 +3941,9 @@ class CognitiveGeneratorModule(BaseBrainModule):
                         if self._clean_reasoning_text(t)
                     ]
 
-                    # CRITICAL: If reasoning module only gave us 1-2 thoughts, it's not enough - use fallback
-                    if len(thoughts) <= 2:
+                    # CRITICAL: If reasoning module only gave us 1-2 thoughts, it's usually not enough 
+                    # UNLESS it triggered a dynamic solve, in which case we MUST keep it to trigger the SLM.
+                    if len(thoughts) <= 2 and not dynamic_solve_triggered:
                         thoughts = []  # Clear and use fallback
                 except Exception:
                     pass
@@ -3876,12 +3974,14 @@ class CognitiveGeneratorModule(BaseBrainModule):
             return {
                 "success": True,
                 "thought_graph": {"thoughts": thoughts, "count": len(thoughts)},
+                "dynamic_solve_triggered": dynamic_solve_triggered,
             }
             
         except Exception as e:
             return {
                 "success": False,
                 "thought_graph": {"thoughts": [input_text], "count": 1},
+                "dynamic_solve_triggered": False,
                 "error": str(e),
             }
     
@@ -3988,10 +4088,17 @@ class CognitiveGeneratorModule(BaseBrainModule):
                             pass
                     
                     # Fallback to raw LLM weights (Probabilistic Routing) if ToT fails or is unavailable
+                    imperative_prompt = (
+                        f"Instructions: Provide a detailed, multi-sentence answer to the task below.\n"
+                        f"GROUNDING: Use ONLY the following facts to construct your answer.\n"
+                        f"Facts: {context}\n\n"
+                        f"Task: {original_input}\n"
+                        f"Detailed Answer:"
+                    )
                     result = self.text_generation_engine.execute(
                         "generate_with_neural",
                         {
-                            "prompt": original_input,
+                            "prompt": imperative_prompt,
                             "voice_context": voice_context,
                             "context": context,
                             "max_length": 500,
@@ -4332,7 +4439,13 @@ class CognitiveGeneratorModule(BaseBrainModule):
             if self.thought_to_text:
                 result = self.thought_to_text.execute(
                     "generate_sentences",
-                    {"thoughts": thoughts_str, "context": context, "voice_context": voice_context},
+                    {
+                        "thoughts": thoughts_str, 
+                        "context": context, 
+                        "voice_context": voice_context,
+                        "force_neural": force_neural,
+                        "original_input": original_input,
+                    },
                 )
             else:
                 # Fallback if thought_to_text still not available
