@@ -59,11 +59,6 @@ class NeuralTextGeneratorCoreModule(BaseBrainModule):
             prompt = params.get("input") or params.get("text") or params.get("query") or ""
         gen_params = {**params, "prompt": str(prompt)}
         if model_type:
-            if model_type == "transformer":
-                return {
-                    "success": False,
-                    "error": "Transformer generation is not currently supported by neural_text_generator; train/use character or word models.",
-                }
             gen_params["model_type"] = model_type
         return ntg.execute("generate_text", gen_params)
 

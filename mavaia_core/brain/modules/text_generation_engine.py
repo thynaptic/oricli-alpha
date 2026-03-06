@@ -57,6 +57,8 @@ class TextGenerationEngineModule(BaseBrainModule):
             return
 
         try:
+            from mavaia_core.brain.registry import ModuleRegistry
+            print(f"[DEBUG] TextGenerationEngine: Registered modules: {list(ModuleRegistry._modules.keys())}")
             try:
                 self.universal_voice_engine = ModuleRegistry.get_module(
                     "universal_voice_engine"
@@ -88,7 +90,7 @@ class TextGenerationEngineModule(BaseBrainModule):
 
             try:
                 self.neural_text_generator = ModuleRegistry.get_module(
-                    "neural_text_generator"
+                    "neural_text_generator_core"
                 )
             except Exception:
                 pass
@@ -192,7 +194,7 @@ class TextGenerationEngineModule(BaseBrainModule):
                 "confidence": 0.0,
             }
 
-        # Step 1: Convert thoughts to initial text
+        # Step 1: Convert thoughts to text with conversational enhancements
         initial_text = ""
         if self.thought_to_text:
             try:
@@ -202,6 +204,8 @@ class TextGenerationEngineModule(BaseBrainModule):
                         "thoughts": thoughts,
                         "voice_context": voice_context,
                         "context": context,
+                        "force_neural": params.get("force_neural", False),
+                        "original_input": original_input,
                     },
                 )
                 initial_text = result.get("text", "")
@@ -226,6 +230,9 @@ class TextGenerationEngineModule(BaseBrainModule):
             initial_text, final_text, len(thoughts), voice_context
         )
 
+        # Simple sentence count for metadata
+        sentence_count = len(self._split_into_sentences(final_text))
+
         return {
             "success": True,
             "text": final_text,
@@ -234,7 +241,7 @@ class TextGenerationEngineModule(BaseBrainModule):
             "metadata": {
                 "initial_length": len(initial_text),
                 "final_length": len(final_text),
-                "sentence_count": len(coherent_sentences),
+                "sentence_count": sentence_count,
                 "thought_count": len(thoughts),
             },
         }
@@ -575,7 +582,10 @@ class TextGenerationEngineModule(BaseBrainModule):
         Returns:
             Generated text
         """
+        self._ensure_modules_loaded()
+        
         if not self.neural_text_generator:
+            print(f"[DEBUG] TextGenerationEngine: neural_text_generator STILL not available after lazy load")
             return {
                 "success": False,
                 "error": "Neural text generator not available",
@@ -584,10 +594,21 @@ class TextGenerationEngineModule(BaseBrainModule):
 
         prompt = params.get("prompt", "")
         voice_context = params.get("voice_context", {})
-        max_length = params.get("max_length", 500)
+        max_length = params.get("max_length", 1024)
         temperature = params.get("temperature", 0.7)
 
         try:
+            print(f"[DEBUG] TextGenerationEngine: Checking self.neural_text_generator state: {self.neural_text_generator}")
+            if not self.neural_text_generator:
+                 from mavaia_core.brain.registry import ModuleRegistry
+                 self.neural_text_generator = ModuleRegistry.get_module("neural_text_generator_core")
+                 print(f"[DEBUG] TextGenerationEngine: After registry fetch: {self.neural_text_generator}")
+            
+            if not self.neural_text_generator:
+                print(f"[DEBUG] TextGenerationEngine: ERROR - neural_text_generator_core STILL not found in registry")
+                return {"success": False, "error": "neural_text_generator_core not found in registry"}
+
+            print(f"[DEBUG] TextGenerationEngine: Calling neural_text_generator.execute('generate_text')")
             result = self.neural_text_generator.execute(
                 "generate_text",
                 {
@@ -597,15 +618,25 @@ class TextGenerationEngineModule(BaseBrainModule):
                     "voice_context": voice_context,
                 },
             )
+            print(f"[DEBUG] TextGenerationEngine: Result success: {result.get('success')}")
+            if not result.get("success"):
+                print(f"[DEBUG] TextGenerationEngine: Error: {result.get('error')}")
 
             if result.get("success"):
                 generated_text = result.get("text", "")
                 
-                # Skip style application to retain raw SLM capabilities
+                # Aggressive Alpaca-style stop sequences (allow double newline for paragraph structure)
+                stop_sequences = ["Question:", "User:", "Task:", "Q:", "A:", "User Question:", "###", "Instruction:", "Response:", "Output:"]
+                for seq in stop_sequences:
+                    if seq in generated_text:
+                        parts = generated_text.split(seq)
+                        if len(parts[0].strip()) > 2:
+                            generated_text = parts[0]
+                            break
 
                 return {
                     "success": True,
-                    "text": generated_text,
+                    "text": generated_text.strip(),
                     "method": "neural",
                     "confidence": 0.8,
                 }
@@ -616,6 +647,7 @@ class TextGenerationEngineModule(BaseBrainModule):
                     "text": "",
                 }
         except Exception as e:
+            print(f"[DEBUG] TextGenerationEngine: Exception: {e}")
             return {
                 "success": False,
                 "error": f"Neural generation error: {str(e)}",

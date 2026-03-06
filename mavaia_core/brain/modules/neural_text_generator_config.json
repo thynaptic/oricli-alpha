@@ -22,10 +22,16 @@
   },
   "generation": {
     "temperature": 0.7,
-    "max_length": 500,
+    "max_length": 1024,
     "top_k": 50,
     "top_p": 0.9,
-    "default_model": "character"
+    "default_model": "transformer"
+  },
+  "transformer_model": {
+    "model_name": "models/neural_text_generator/transformer",
+    "max_length": 1024,
+    "batch_size": 8,
+    "learning_rate": 5e-5
   },
   "data": {
     "gutenberg_book_ids": [84, 1342, 11],

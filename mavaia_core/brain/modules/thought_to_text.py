@@ -145,6 +145,8 @@ class ThoughtToTextModule(BaseBrainModule):
                 thoughts=params.get("thoughts", []),
                 context=params.get("context", ""),
                 voice_context=params.get("voice_context", {}),
+                force_neural=params.get("force_neural", False),
+                original_input=params.get("original_input", ""),
             )
         elif operation == "apply_grammar_and_style":
             return self.apply_grammar_and_style(
@@ -263,7 +265,8 @@ class ThoughtToTextModule(BaseBrainModule):
             }
 
     def generate_sentences(
-        self, thoughts: List[str], context: str = "", voice_context: Dict[str, Any] = None
+        self, thoughts: List[str], context: str = "", voice_context: Dict[str, Any] = None, 
+        force_neural: bool = False, original_input: str = ""
     ) -> Dict[str, Any]:
         """Core conversion logic: generate natural sentences from thought list"""
         if not thoughts:
@@ -273,7 +276,56 @@ class ThoughtToTextModule(BaseBrainModule):
             voice_context = {}
 
         try:
-            # Step 0: Filter out any instruction-style thoughts BEFORE processing
+            # Step 0: Check if we should use neural generation
+            should_use_neural = force_neural or any(
+                str(t).startswith(("I will now analyze", "I will dynamically", "I will perform", "I will synthesize"))
+                for t in thoughts
+            )
+
+            if should_use_neural:
+                print(f"[DEBUG] ThoughtToText: Dynamic solve triggered. Engine: {self.text_generation_engine}")
+                if self.text_generation_engine:
+                    try:
+                        print(f"[DEBUG] ThoughtToText: Calling engine.generate_with_neural with prompt: {original_input[:50]}...")
+                        # Use a more imperative prompt format to discourage dataset generation
+                        imperative_prompt = (
+                            f"Instructions: Provide a detailed, multi-sentence answer to the task below.\n"
+                            f"GROUNDING: Use ONLY the following facts to construct your answer. Do not add outside information.\n"
+                            f"Facts: {context}\n\n"
+                            f"Task: {original_input}\n"
+                            f"Detailed Answer:"
+                        )
+                        neural_result = self.text_generation_engine.execute(
+                            "generate_with_neural",
+                            {
+                                "prompt": imperative_prompt,
+                                "voice_context": voice_context,
+                                "context": context,
+                            }
+                        )
+                        print(f"[DEBUG] ThoughtToText: Engine result success: {neural_result.get('success')}")
+                        if neural_result.get("success") and neural_result.get("text"):
+                            generated_text = neural_result["text"]
+                            
+                            # Truncate at double newline to avoid word salad
+                            if "\n\n" in generated_text:
+                                parts = generated_text.split("\n\n")
+                                if len(parts[0]) > 20:
+                                    generated_text = parts[0]
+                                else:
+                                    generated_text = "\n\n".join(parts[:2])
+
+                            print(f"[DEBUG] ThoughtToText: Returning neural text: {generated_text[:50]}...")
+                            return {
+                                "text": generated_text.strip(),
+                                "confidence": 0.8,
+                                "method": "neural_reconstruction",
+                            }
+                    except Exception as e:
+                        print(f"[DEBUG] ThoughtToText: Engine call failed: {e}")
+                        pass
+
+            # Step 1: Filter out any instruction-style thoughts BEFORE processing
             thoughts = self._filter_instructions_from_thoughts(thoughts)
             if not thoughts:
                 return {
@@ -646,137 +698,47 @@ class ThoughtToTextModule(BaseBrainModule):
         if not thoughts:
             return []
 
-        # Comprehensive instruction patterns - catch ALL instruction verbs
+        # Comprehensive instruction patterns - focus on SELF-INSTRUCTIONS and META-COMMENTARY
         instruction_patterns = [
-            # Direct instruction verbs
-            "respond",
-            "reply",
-            "answer",
-            "say",
-            "tell",
-            "ask",
-            "provide",
-            "give",
-            "offer",
-            "make",
-            "create",
-            "generate",
-            "produce",
-            "build",
-            "construct",
-            "form",
-            "consider",
-            "think about",
-            "reflect on",
-            "contemplate",
-            "ponder",
-            "understand",
-            "comprehend",
-            "grasp",
-            "realize",
-            "recognize",
-            "match",
-            "align",
-            "adjust",
-            "adapt",
-            "modify",
-            "change",
-            "alter",
-            "integrate",
-            "combine",
-            "merge",
-            "blend",
-            "synthesize",
-            "tailor",
-            "customize",
-            "personalize",
-            "adapt",
-            "connect",
-            "link",
-            "relate",
-            "associate",
-            "correlate",
-            "share",
-            "communicate",
-            "express",
-            "convey",
-            "transmit",
-            "break down",
-            "analyze",
-            "examine",
-            "investigate",
-            "explore",
-            "evaluate",
-            "assess",
-            "judge",
-            "appraise",
-            "rate",
-            "be",
-            "become",
-            "act",
-            "behave",
-            "perform",
-            # Instruction phrases
+            # First-person meta-commentary
+            "i will now",
+            "i will dynamically",
+            "i will perform",
+            "i will synthesize",
+            "i need to",
             "i should",
-            "i need",
             "i must",
-            "i will",
-            "i can",
-            "i want",
-            "i ought",
-            "should",
-            "need to",
-            "must",
-            "will",
-            "can",
-            "ought to",
-            "try to",
-            "attempt to",
-            "aim to",
-            "strive to",
-            "seek to",
-            "make sure",
-            "ensure",
-            "guarantee",
-            "verify",
-            "confirm",
-            "be sure",
-            "be certain",
-            "be careful",
-            "be aware",
-            # Meta-instruction markers
-            "needed",
-            "required",
-            "necessary",
-            "essential",
-            "important",
-            "focus on",
-            "concentrate on",
-            "pay attention to",
-            "remember to",
-            "don't forget",
-            "keep in mind",
+            "i want to",
+            "i am analyzing",
+            "i am dynamically",
+            "i will break down",
+            "i will explore",
+            "i will provide",
+            "i will generate",
+            "i will create",
+            "i will analyze",
+            "i will identify",
+            "let me",
+            "let's",
+            "starting to",
+            "starting by",
+            # Imperative instructions to the system itself (not the user)
+            "respond with",
+            "generate a",
+            "provide an",
+            "make sure to",
+            "ensure that",
         ]
 
         filtered = []
         for thought in thoughts:
             thought_lower = thought.lower().strip()
-            # Check if thought contains instruction patterns
-            is_instruction = any(
-                pattern in thought_lower for pattern in instruction_patterns
-            ) or any(
-                thought_lower.startswith(marker)
-                for marker in [
-                    "i should",
-                    "i need",
-                    "i must",
-                    "i will",
-                    "i can",
-                    "i want",
-                ]
+            # Only filter if it STARTS with a meta-commentary pattern
+            is_meta = any(
+                thought_lower.startswith(pattern) for pattern in instruction_patterns
             )
 
-            if not is_instruction:
+            if not is_meta:
                 filtered.append(thought)
 
         return filtered
@@ -786,117 +748,38 @@ class ThoughtToTextModule(BaseBrainModule):
         if not text:
             return text
 
-        # Same comprehensive instruction patterns
+        # Match the patterns used in _filter_instructions_from_thoughts
         instruction_patterns = [
-            "respond",
-            "reply",
-            "answer",
-            "say",
-            "tell",
-            "ask",
-            "provide",
-            "give",
-            "offer",
-            "make",
-            "create",
-            "generate",
-            "produce",
-            "build",
-            "construct",
-            "form",
-            "consider",
-            "think about",
-            "reflect on",
-            "contemplate",
-            "ponder",
-            "understand",
-            "comprehend",
-            "grasp",
-            "realize",
-            "recognize",
-            "match",
-            "align",
-            "adjust",
-            "adapt",
-            "modify",
-            "change",
-            "alter",
-            "integrate",
-            "combine",
-            "merge",
-            "blend",
-            "synthesize",
-            "tailor",
-            "customize",
-            "personalize",
-            "adapt",
-            "connect",
-            "link",
-            "relate",
-            "associate",
-            "correlate",
-            "share",
-            "communicate",
-            "express",
-            "convey",
-            "transmit",
-            "break down",
-            "analyze",
-            "examine",
-            "investigate",
-            "explore",
-            "evaluate",
-            "assess",
-            "judge",
-            "appraise",
-            "rate",
-            "be",
-            "become",
-            "act",
-            "behave",
-            "perform",
+            "i will now",
+            "i will dynamically",
+            "i will perform",
+            "i will synthesize",
+            "i need to",
             "i should",
-            "i need",
             "i must",
-            "i will",
-            "i can",
-            "i want",
-            "i ought",
-            "should",
-            "need to",
-            "must",
-            "will",
-            "can",
-            "ought to",
-            "try to",
-            "attempt to",
-            "aim to",
-            "strive to",
-            "seek to",
-            "make sure",
-            "ensure",
-            "guarantee",
-            "verify",
-            "confirm",
-            "be sure",
-            "be certain",
-            "be careful",
-            "be aware",
-            "needed",
-            "required",
-            "necessary",
-            "essential",
-            "important",
-            "focus on",
-            "concentrate on",
-            "pay attention to",
-            "remember to",
-            "don't forget",
-            "keep in mind",
+            "i want to",
+            "i am analyzing",
+            "i am dynamically",
+            "i will break down",
+            "i will explore",
+            "i will provide",
+            "i will generate",
+            "i will create",
+            "i will analyze",
+            "i will identify",
+            "let me",
+            "let's",
+            "starting to",
+            "starting by",
+            "respond with",
+            "generate a",
+            "provide an",
+            "make sure to",
+            "ensure that",
         ]
 
         # Split into sentences
-        sentences = re.split(r"[.!?]+", text)
+        sentences = re.split(r"(?<=[.!?])\s+", text)
         filtered_sentences = []
 
         for sentence in sentences:
@@ -907,7 +790,7 @@ class ThoughtToTextModule(BaseBrainModule):
             sentence_lower = sentence.lower()
             # Check if sentence is an instruction
             is_instruction = any(
-                pattern in sentence_lower for pattern in instruction_patterns
+                sentence_lower.startswith(pattern) for pattern in instruction_patterns
             )
 
             if not is_instruction:
@@ -915,11 +798,7 @@ class ThoughtToTextModule(BaseBrainModule):
 
         # Rejoin sentences
         if filtered_sentences:
-            # Add appropriate punctuation
-            result = ". ".join(filtered_sentences)
-            if not result.endswith((".", "!", "?")):
-                result += "."
-            return result
+            return " ".join(filtered_sentences)
 
         # If all sentences were filtered, return empty
         return ""

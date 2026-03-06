@@ -30,10 +30,18 @@ import random
 from datetime import datetime
 from pathlib import Path
 
+# Try to import DatasetSearch
+try:
+    from mavaia_core.data.search import DatasetSearch
+except ImportError:
+    DatasetSearch = None
+from pathlib import Path
+
 # Paths
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRAIN_SCRIPT = REPO_ROOT / "scripts" / "train_neural_text_generator.py"
 REPORT_SCRIPT = REPO_ROOT / "scripts" / "report_card.py"
+MANIFEST_FILE = REPO_ROOT / "mavaia_core" / "data" / "curriculum_manifest.json"
 
 # Determine Python executable
 VENV_PY = REPO_ROOT / ".venv" / "bin" / "python"
@@ -42,6 +50,95 @@ PYTHON_EXE = str(VENV_PY) if VENV_PY.exists() else sys.executable
 
 def _now_iso():
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def _load_manifest() -> list[dict]:
+    """Load the curriculum manifest from file or use defaults."""
+    if MANIFEST_FILE.exists():
+        try:
+            return json.loads(MANIFEST_FILE.read_text())
+        except Exception as e:
+            print(f"[WARN] Failed to load manifest: {e}. Using defaults.")
+    
+    # Defaults if no manifest exists
+    stages = [
+        {
+            "name": "tone_oh_dcft_gemini",
+            "title": "Stage 1: Tone Phase",
+            "age": "Age 7",
+            "school": "Elementary School",
+            "dataset": "mlfoundations-dev/oh-dcft-v3.1-gemini-1.5-pro",
+        },
+        {
+            "name": "logic_orca_math",
+            "title": "Stage 2: Logic Phase",
+            "age": "Age 12",
+            "school": "Middle School",
+            "dataset": "microsoft/orca-math-word-problems-200k",
+        },
+        {
+            "name": "prose_no_robots",
+            "title": "Stage 3: Prose Modernization",
+            "age": "Age 14",
+            "school": "Junior High",
+            "dataset": "HuggingFaceH4/no_robots",
+        },
+        {
+            "name": "capability_hotpot_qa",
+            "title": "Stage 4: Capability Phase",
+            "age": "Age 16",
+            "school": "High School",
+            "dataset": "hotpot_qa:distractor",
+        },
+        {
+            "name": "context_booksum",
+            "title": "Stage 5: Context Phase",
+            "age": "Age 19",
+            "school": "Undergraduate",
+            "dataset": "kmfoda/booksum:chapter",
+        },
+        {
+            "name": "knowledge_wikihop",
+            "title": "Stage 6: Knowledge Phase",
+            "age": "Age 23",
+            "school": "Graduate School",
+            "dataset": "kitsdk/wiki_hop",
+        },
+        {
+            "name": "coding_alpaca_python",
+            "title": "Stage 7: Coding Phase",
+            "age": "Age 27",
+            "school": "Doctoral Program",
+            "dataset": "iamtarun/python_code_instructions_18k_alpaca",
+        },
+        {
+            "name": "alignment_dpo",
+            "title": "Stage 8: Alignment Phase",
+            "age": "Post-Doc",
+            "school": "Sovereign Alignment",
+            "dataset": "Intel/orca_dpo_pairs",
+            "is_dpo": True,
+        },
+        {
+            "name": "knowledge_world_dense",
+            "title": "Stage 9: Comprehensive World Knowledge",
+            "age": "Age 30",
+            "school": "Deep Intelligence Integration",
+            "dataset": ["tau/commonsense_qa", "HuggingFaceFW/fineweb-edu", "wikimedia/wikipedia:20231101.en"],
+        },
+    ]
+    # Save initial manifest
+    _save_manifest(stages)
+    return stages
+
+
+def _save_manifest(stages: list[dict]):
+    """Save the curriculum manifest to file."""
+    try:
+        MANIFEST_FILE.parent.mkdir(parents=True, exist_ok=True)
+        MANIFEST_FILE.write_text(json.dumps(stages, indent=2))
+    except Exception as e:
+        print(f"[ERROR] Failed to save manifest: {e}")
 
 
 class SmartResumePolicy:
@@ -160,75 +257,15 @@ def _write_progress(path: Path, data: dict):
 
 
 def _stage_defs(common_epochs: int, data_pct: float, wikitext: bool):
-    stages = [
-        {
-            "name": "tone_oh_dcft_gemini",
-            "title": "Stage 1: Tone Phase",
-            "age": "Age 7",
-            "school": "Elementary School",
-            "dataset": "mlfoundations-dev/oh-dcft-v3.1-gemini-1.5-pro",
-        },
-        {
-            "name": "logic_orca_math",
-            "title": "Stage 2: Logic Phase",
-            "age": "Age 12",
-            "school": "Middle School",
-            "dataset": "microsoft/orca-math-word-problems-200k",
-        },
-        {
-            "name": "prose_no_robots",
-            "title": "Stage 3: Prose Modernization",
-            "age": "Age 14",
-            "school": "Junior High",
-            "dataset": "HuggingFaceH4/no_robots",
-        },
-        {
-            "name": "capability_hotpot_qa",
-            "title": "Stage 4: Capability Phase",
-            "age": "Age 16",
-            "school": "High School",
-            "dataset": "hotpot_qa:distractor",
-        },
-        {
-            "name": "context_booksum",
-            "title": "Stage 5: Context Phase",
-            "age": "Age 19",
-            "school": "Undergraduate",
-            "dataset": "kmfoda/booksum:chapter",
-        },
-        {
-            "name": "knowledge_wikihop",
-            "title": "Stage 6: Knowledge Phase",
-            "age": "Age 23",
-            "school": "Graduate School",
-            "dataset": "kitsdk/wiki_hop",
-        },
-        {
-            "name": "coding_alpaca_python",
-            "title": "Stage 7: Coding Phase",
-            "age": "Age 27",
-            "school": "Doctoral Program",
-            "dataset": "iamtarun/python_code_instructions_18k_alpaca",
-        },
-        {
-            "name": "alignment_dpo",
-            "title": "Stage 8: Alignment Phase",
-            "age": "Post-Doc",
-            "school": "Sovereign Alignment",
-            "dataset": "Intel/orca_dpo_pairs",
-            "is_dpo": True,
-        },
-        {
-            "name": "knowledge_world_dense",
-            "title": "Stage 9: Comprehensive World Knowledge",
-            "age": "Age 30",
-            "school": "Deep Intelligence Integration",
-            "dataset": ["tau/commonsense_qa", "HuggingFaceFW/fineweb-edu", "wikimedia/wikipedia:20231101.en"],
-        },
-    ]
+    stages = _load_manifest()
+    
+    # Apply global overrides
     for s in stages:
         s["epochs"] = common_epochs
         s["data_pct"] = data_pct
+        if wikitext and s["name"] == "knowledge_world_dense":
+             s["dataset"] = "wikitext:wikitext-103-raw-v1"
+             
     return stages
 
 
@@ -467,6 +504,68 @@ def _run_stage(stage, run_root: Path, extra_args, progress_path: Path, progress:
             pass
 
 
+def _interactive_select(results):
+    """Interactively select a dataset from search results."""
+    if not results:
+        print("[ERROR] No datasets found for the given query.")
+        return None
+
+    print("\n[Mavaia-Discovery] Top dataset matches found:")
+    print("-" * 90)
+    print(f"{'Idx':<5} {'Source':<15} {'Name':<40} {'Score':<10} {'Status'}")
+    print("-" * 90)
+    
+    for i, r in enumerate(results[:10]):
+        status = "[GATED]" if getattr(r, "gated", False) else "[PUBLIC]"
+        print(f"{i+1:<5} {r.source:<15} {r.name[:38]:<40} {r.combined_score:.2f}      {status}")
+        if r.description:
+            # Wrap description if long
+            desc = r.description.strip().replace("\n", " ")
+            if len(desc) > 80:
+                desc = desc[:77] + "..."
+            print(f"      {desc}")
+    
+    print("-" * 90)
+    try:
+        # Check if we're in a TTY
+        if not sys.stdin.isatty():
+            print("[INFO] Non-interactive environment detected. Auto-selecting top match.")
+            return results[0]
+            
+        choice = input("\nSelect a dataset index to train (or 'q' to cancel): ")
+        if choice.lower() == 'q':
+            return None
+        idx = int(choice) - 1
+        if 0 <= idx < len(results):
+            return results[idx]
+    except (ValueError, EOFError):
+        pass
+    
+    print("[WARN] Invalid selection. Cancelling discovery.")
+    return None
+
+def _auto_inject_stage(result, base_epochs=1, base_data_pct=0.2):
+    """Generate a curriculum stage from a search result."""
+    # Clean name for stage ID
+    clean_name = result.name.lower().replace("/", "_").replace("-", "_").replace(".", "_").replace(" ", "_")
+    
+    # Prefix source if needed
+    ds_id = result.id
+    source = result.source
+    
+    stage = {
+        "name": f"discovered_{clean_name}",
+        "title": f"Discovered Elective: {result.name}",
+        "school": "elective",
+        "age": "discovered",
+        "dataset": ds_id,
+        "epochs": base_epochs,
+        "data_pct": base_data_pct,
+        "is_elective": True,
+        "source": source
+    }
+    return stage
+
 def main():
     ap = argparse.ArgumentParser(description="Run curriculum-style training stages")
     ap.add_argument("--epochs", type=int, default=1, help="Epochs per stage (default: 1)")
@@ -486,13 +585,70 @@ def main():
     ap.add_argument("--retouch-threshold", type=float, default=0.15, help="Loss threshold for triggering a retouch pass")
     ap.add_argument("--elective", help="Specific stage indices or names to run as LoRA electives (e.g. 6,7 or coding,alignment)")
     ap.add_argument("--elective-base", help="Manual path to a base model for electives (defaults to last non-elective stage output)")
+    ap.add_argument("--find-elective", type=str, help="Search for a dataset based on a phrase/category and train it as an elective")
+    ap.add_argument("--add-stage", type=str, help="Search for a dataset and permanently add it as a new curriculum stage")
+    ap.add_argument("--auto-select", action="store_true", help="Auto-select the best match for --find-elective or --add-stage without interaction")
     ap.add_argument("--run-root", default=str(REPO_ROOT / "mavaia_core" / "models" / "neural_text_generator" / "curriculum"))
     ap.add_argument("extra_args", nargs=argparse.REMAINDER, help="Extra args passed to train_neural_text_generator.py")
 
     args = ap.parse_args()
     
+    # DATASET DISCOVERY FLOW
+    discovered_stage = None
+    if args.find_elective or args.add_stage:
+        if not DatasetSearch:
+            print("[ERROR] DatasetSearch service could not be initialized (missing dependencies).")
+            return 1
+        
+        query = args.find_elective or args.add_stage
+        print(f"[INFO] Searching for datasets matching: '{query}'...")
+        search_svc = DatasetSearch()
+        results = search_svc.search_all(query)
+        
+        # Filter for public datasets (non-gated)
+        public_results = [r for r in results if not getattr(r, "gated", False)]
+        if not public_results:
+            print(f"[ERROR] No public (non-gated) matches found for '{query}'.")
+            return 1
+            
+        selected = None
+        if args.auto_select:
+            selected = public_results[0]
+            print(f"[INFO] Auto-selected top public match: {selected.name} ({selected.source})")
+        else:
+            selected = _interactive_select(public_results)
+            
+        if not selected:
+            print("[INFO] No dataset selected. Exiting.")
+            return 0
+            
+        discovered_stage = _auto_inject_stage(selected, base_epochs=args.epochs, base_data_pct=args.data_percentage)
+        
+        # Permanent addition logic
+        if args.add_stage:
+            manifest = _load_manifest()
+            # Ensure name uniqueness
+            new_name = discovered_stage["name"]
+            existing_names = [s["name"] for s in manifest]
+            if new_name in existing_names:
+                new_name = f"{new_name}_{int(time.time())}"
+                discovered_stage["name"] = new_name
+            
+            manifest.append(discovered_stage)
+            _save_manifest(manifest)
+            print(f"[SUCCESS] Permanently added stage '{discovered_stage['title']}' to curriculum manifest.")
+            
+            # If --auto is provided, we set --stages to ONLY run this new stage
+            if args.auto:
+                args.stages = new_name
+                print(f"[INFO] --auto detected: Training will start for new stage '{new_name}' only.")
+
     if args.list_stages:
         stages = _stage_defs(1, 0.2, False)
+        if discovered_stage:
+            print(f"[INFO] Injecting discovered elective: {discovered_stage['title']}")
+            stages = [discovered_stage]
+        
         print("\nAvailable Curriculum Stages:")
         print("-" * 80)
         print(f"{'Idx':<5} {'Name':<25} {'Title':<30} {'Datasets'}")
@@ -511,6 +667,10 @@ def main():
     run_root.mkdir(parents=True, exist_ok=True)
 
     stages = _stage_defs(args.epochs, args.data_percentage, args.use_wikitext)
+    
+    if discovered_stage:
+        print(f"[INFO] Injecting discovered elective: {discovered_stage['title']}")
+        stages = [discovered_stage]
     
     # Identify elective stages
     elective_indices = set()

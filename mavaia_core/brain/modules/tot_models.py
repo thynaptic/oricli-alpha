@@ -79,7 +79,7 @@ class ToTTreeState:
     root_node: ToTThoughtNode
     all_nodes: dict[str, ToTThoughtNode] = field(default_factory=dict)
     current_depth: int = 0
-    max_depth: int = 4
+    max_depth: int = 8
 
     def __post_init__(self) -> None:
         """Initialize with root node"""
@@ -189,17 +189,17 @@ class EvaluationWeights:
 class ToTConfiguration:
     """Configuration parameters for Tree-of-Thought processing"""
 
-    max_depth: int = 4
-    base_thoughts_per_step: int = 3
+    max_depth: int = 8
+    base_thoughts_per_step: int = 5
     pruning_top_k: dict[int, int] = field(
-        default_factory=lambda: {0: 3, 1: 3, 2: 2, 3: 2, 4: 1}
+        default_factory=lambda: {0: 5, 1: 5, 2: 4, 3: 4, 4: 3, 5: 3, 6: 2, 7: 2, 8: 1}
     )
-    min_score_threshold: float = 0.3
+    min_score_threshold: float = 0.2
     evaluation_weights: EvaluationWeights = field(
-        default_factory=lambda: EvaluationWeights(llm=0.4, semantic=0.3, heuristic=0.3)
+        default_factory=lambda: EvaluationWeights(llm=0.5, semantic=0.3, heuristic=0.2)
     )
     search_strategy: str = "best_first"  # "best_first", "breadth_first", "depth_first"
-    max_search_time: float = 60.0
+    max_search_time: float = 120.0
     enable_early_termination: bool = True
 
     @classmethod

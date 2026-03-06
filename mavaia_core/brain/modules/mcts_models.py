@@ -122,7 +122,7 @@ class MCTSTreeState:
     root_node: MCTSNode
     all_nodes: dict[str, MCTSNode] = field(default_factory=dict)
     current_depth: int = 0
-    max_depth: int = 4
+    max_depth: int = 8
 
     def __post_init__(self) -> None:
         """Initialize with root node"""
@@ -218,22 +218,22 @@ class MCTSConfiguration:
     """Configuration parameters for Monte-Carlo Thought Search"""
 
     # Inherited from ToTConfiguration
-    max_depth: int = 4
-    base_thoughts_per_step: int = 3
+    max_depth: int = 8
+    base_thoughts_per_step: int = 5
     pruning_top_k: dict[int, int] = field(
-        default_factory=lambda: {0: 3, 1: 3, 2: 2, 3: 2, 4: 1}
+        default_factory=lambda: {0: 5, 1: 5, 2: 4, 3: 4, 4: 3, 5: 3, 6: 2, 7: 2, 8: 1}
     )
-    min_score_threshold: float = 0.3
+    min_score_threshold: float = 0.2
     evaluation_weights: EvaluationWeights = field(
-        default_factory=lambda: EvaluationWeights(llm=0.4, semantic=0.3, heuristic=0.3)
+        default_factory=lambda: EvaluationWeights(llm=0.5, semantic=0.3, heuristic=0.2)
     )
-    max_search_time: float = 60.0
+    max_search_time: float = 120.0
     enable_early_termination: bool = True
 
     # MCTS-specific parameters
     ucb1_constant: float = math.sqrt(2.0)  # ≈ 1.414, exploration vs exploitation balance
-    rollout_budget: int = 100  # Total rollouts per search
-    rollout_depth: int = 3  # Max depth for rollouts
+    rollout_budget: int = 250  # Total rollouts per search
+    rollout_depth: int = 5  # Max depth for rollouts
     min_visits_for_expansion: int = 5  # Visits before expanding children
     enable_adaptive_rollout: bool = True  # Use adaptive strategy
     heuristic_rollout_threshold: float = 0.6  # Switch to LLM if heuristic score > threshold

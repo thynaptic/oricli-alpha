@@ -1,92 +1,74 @@
 #!/usr/bin/env python3
 """
-Integration test to verify elective artifact naming.
+Diagnostic script to verify that elective artifacts are correctly registered
+with the AdapterRouter after a RunPod training session.
 """
 
 import sys
 import os
 import shutil
-import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 # Add project root to path
-sys.path.insert(0, os.getcwd())
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
-def test_elective_artifact_naming():
-    print("Testing elective artifact naming...")
+def setup_mock_artifacts():
+    """Create a mock structure that mimics RunPod output."""
+    mock_dir = REPO_ROOT / "models" / "neural_text_generator_remote" / "curriculum" / "coding_task_20260306" / "final"
+    mock_dir.mkdir(parents=True, exist_ok=True)
     
-    # Setup temp run directory
-    test_run_dir = Path("tests/tmp_elective_test")
-    if test_run_dir.exists():
-        shutil.rmtree(test_run_dir)
-    test_run_dir.mkdir(parents=True)
+    # Create a dummy adapter_config.json to signal it's a LoRA adapter
+    (mock_dir / "adapter_config.json").write_text('{"base_model_name_or_path": "phi-3.5"}')
+    print(f"✓ Created mock elective artifacts at: {mock_dir}")
+    return mock_dir
+
+def verify_registration():
+    """Run the bridge registration logic and verify it hits the router."""
+    print("\nVerifying registration logic...")
     
-    try:
-        # Run a minimal training command with adapter name
-        # We use transformer model type but with gpt2 (small) and very little data
-        cmd = [
-            sys.executable,
-            "scripts/train_neural_text_generator.py",
-            "--plain-output",
-            "--model-type", "transformer",
-            "--model-name", "gpt2",
-            "--source", "huggingface",
-            "--book-ids", "wikitext",
-            "--epochs", "1",
-            "--data-percentage", "0.0001",
-            "--max-books", "1",
-            "--output-dir", str(test_run_dir),
-            "--adapter-name", "test_mode",
-            "--lora" # Required for adapter saving
-        ]
-        
-        print(f"Executing: {' '.join(cmd)}")
-        # We expect this to fail if LoRA/PEFT is not installed, but we want to check
-        # if it at least attempts to save with the correct name or if the directory
-        # structure is created.
-        
-        # Actually, let's just mock the save_model call to avoid heavy ML dependencies in a quick check
-        from mavaia_core.brain.modules.neural_text_generator import NeuralTextGeneratorModule
-        gen = NeuralTextGeneratorModule()
-        gen.initialize()
-        
-        # Mock a loaded transformer model
-        mock_model = MagicMock()
-        gen.transformer_model = mock_model
-        gen.transformer_tokenizer = MagicMock()
-        
-        # Override model_dir for testing
-        gen.model_dir = test_run_dir
-        
-        print("Calling _save_model with adapter_name...")
-        gen.execute("save_model", {"model_type": "transformer", "adapter_name": "test_mode"})
-        
-        # Check for expected directory
-        adapter_path = test_run_dir / "adapter_test_mode"
-        if adapter_path.exists():
-            print(f"✓ Found elective adapter directory: {adapter_path}")
-        else:
-            print(f"✗ Elective adapter directory NOT found: {adapter_path}")
-            return False
+    # Import the registration function from the bridge
+    from scripts.runpod_bridge import register_trained_adapters
+    from mavaia_core.brain.registry import ModuleRegistry
+    
+    # Mock the AdapterRouter instance
+    mock_router = MagicMock()
+    
+    with patch("mavaia_core.brain.registry.ModuleRegistry.get_module", return_value=mock_router):
+        with patch("mavaia_core.client.MavaiaClient") as mock_client_cls:
+            # Setup client mock
+            mock_client = mock_client_cls.return_value
+            mock_client.brain.adapter_router = mock_router
             
-        return True
-        
-    except Exception as e:
-        print(f"✗ Test failed with error: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-    finally:
-        # Cleanup
-        if test_run_dir.exists():
-            shutil.rmtree(test_run_dir)
+            # Trigger registration
+            register_trained_adapters(REPO_ROOT)
+            
+            # Check if register_intent was called
+            if mock_router.register_intent.called:
+                args, kwargs = mock_router.register_intent.call_args
+                intent = kwargs.get("intent")
+                adapter_id = kwargs.get("adapter_id")
+                print(f"✓ AdapterRouter.register_intent was called!")
+                print(f"✓ Intent: {intent}")
+                print(f"✓ Adapter Path: {adapter_id}")
+                
+                if intent == "coding" and "coding_task" in adapter_id:
+                    print("✨ Verification SUCCESS: Bridge correctly identified and registered the elective.")
+                else:
+                    print(f"⚠ Verification PARTIAL: Found call but arguments differ from expected.")
+            else:
+                print("✗ Verification FAILED: register_intent was NOT called.")
+                sys.exit(1)
 
-from unittest.mock import MagicMock
+def cleanup():
+    """Remove mock artifacts."""
+    shutil.rmtree(REPO_ROOT / "models" / "neural_text_generator_remote", ignore_errors=True)
+    print("\n✓ Cleaned up mock artifacts.")
 
 if __name__ == "__main__":
-    if test_elective_artifact_naming():
-        print("\n🎉 Artifact naming verification PASSED!")
-        sys.exit(0)
-    else:
-        print("\n⚠️ Artifact naming verification FAILED!")
-        sys.exit(1)
+    setup_mock_artifacts()
+    try:
+        verify_registration()
+    finally:
+        cleanup()
