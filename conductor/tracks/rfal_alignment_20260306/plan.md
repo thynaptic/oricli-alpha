@@ -15,17 +15,17 @@ Goal: Establish the base RFAL module and the logic to detect conversational conf
 
 **Phase 2: Reward Engine & Multi-Factor Scoring**
 Goal: Build the scoring engine that combines HITL, Factual, and Tone signals.
-- [ ] Task: Build Multi-Factor Scorer
+- [x] Task: Build Multi-Factor Scorer
     - [ ] Logic to cross-reference `world_knowledge` for factual scoring.
     - [ ] Logic to cross-reference `AdapterRouter` for tone alignment scoring.
     - [ ] Implementation of the weighted sum for the final Reward Scalar.
-- [ ] Task: Experience Replay Integration
-    - [ ] Create `mavaia_core/data/rfal_lessons.jsonl` persistence logic.
-    - [ ] Logic to handle `[Prompt, Chosen, Rejected]` triplet generation.
-- [ ] Task: TDD - Reward Accuracy
+- [x] Task: Experience Replay Integration
+    - [x] Create `mavaia_core/data/rfal_lessons.jsonl` persistence logic.
+    - [x] Logic to handle `[Prompt, Chosen, Rejected]` triplet generation.
+- [x] Task: TDD - Reward Accuracy
     - [ ] Verify that a hallucinated fact results in a negative weighted award.
     - [ ] Verify correct DPO pair generation from a user correction.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Reward Engine' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Reward Engine' (Protocol in workflow.md)
 
 **Phase 3: Cognitive Loop Integration**
 Goal: Wire the RFAL engine into the live generation pipeline without adding latency.

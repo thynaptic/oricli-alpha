@@ -98,49 +98,53 @@ class RFALEngine(BaseBrainModule):
         user_input = params.get("user_input")
         last_response = params.get("last_response")
         prompt = params.get("prompt")
-        history = params.get("history", []) # List of strings or dicts
+        history = params.get("history", [])
+        intent = params.get("intent") # Optional, from AdapterRouter
         
         if not user_input or not last_response or not prompt:
             raise InvalidParameterError("Operation 'process_feedback' requires 'user_input', 'last_response', and 'prompt'")
             
-        # 1. Conflict Detection (Phase 1)
+        # 1. Conflict Detection
         conflict_signals = []
-        
-        # A. Keyword Matching
         if self._detect_keyword_conflict(user_input):
             conflict_signals.append("keyword_rejection")
-            
-        # B. Sentiment Analysis
         if self._detect_sentiment_conflict(user_input):
             conflict_signals.append("negative_sentiment")
-            
-        # C. Repetition Detection
         if self._detect_repetition_conflict(user_input, history):
             conflict_signals.append("task_repetition")
             
         is_conflict = len(conflict_signals) > 0
         
-        # Placeholder for Reward Calculation (Phase 2)
-        reward = -1.0 if is_conflict else 1.0
+        # 2. Multi-Factor Reward Calculation (Phase 2)
+        reward_res = self._calculate_reward({
+            "is_conflict": is_conflict,
+            "response": last_response,
+            "intent": intent,
+            "prompt": prompt
+        })
+        reward = reward_res.get("reward", 0.0)
         
-        # Create lesson if conflict detected
+        # 3. DPO Pair Generation
         lesson = None
-        if is_conflict:
+        if reward < 0: # Penalize and align
             lesson = {
                 "prompt": prompt,
                 "rejected": last_response,
                 "chosen": user_input, 
                 "reward": reward,
                 "signals": conflict_signals,
-                "timestamp": time.time()
+                "timestamp": time.time(),
+                "intent": intent
             }
             self._lesson_buffer.append(lesson)
+            self._persist_lesson(lesson)
             
         return {
             "success": True,
             "is_conflict": is_conflict,
             "conflict_signals": conflict_signals,
             "reward": reward,
+            "reward_breakdown": reward_res.get("breakdown"),
             "lesson_created": lesson is not None
         }
 
@@ -205,12 +209,94 @@ class RFALEngine(BaseBrainModule):
         return overlap > 0.8 # Highly similar re-prompt
 
     def _calculate_reward(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Weighted multi-factor reward scoring (Phase 2)."""
-        return {"success": True, "reward": 0.0, "info": "Implementation pending in Phase 2"}
+        """Weighted multi-factor reward scoring."""
+        is_conflict = params.get("is_conflict", False)
+        response = params.get("response", "")
+        intent = params.get("intent")
+        prompt = params.get("prompt", "")
+        
+        # Weights
+        W_HITL = 0.6
+        W_FACT = 0.3
+        W_TONE = 0.1
+        
+        scores = {}
+        
+        # 1. HITL Score
+        scores["hitl"] = -1.0 if is_conflict else 1.0
+        
+        # 2. Factual Score (cross-reference world_knowledge)
+        scores["fact"] = 0.0
+        try:
+            from mavaia_core.brain.registry import ModuleRegistry
+            wk = ModuleRegistry.get_module("world_knowledge")
+            if wk:
+                # Simple check: does it look like a factual claim?
+                # For Phase 2, we just ask WK to validate the response against the prompt
+                fact_res = wk.execute("validate_fact", {"text": response, "context": prompt})
+                # If valid=False, strong penalty
+                if fact_res.get("valid") is False:
+                    scores["fact"] = -1.0
+                elif fact_res.get("valid") is True:
+                    scores["fact"] = 1.0
+        except Exception as e:
+            logger.debug(f"Factual scoring skipped: {e}")
+            
+        # 3. Tone Score (cross-reference AdapterRouter)
+        scores["tone"] = 0.0
+        try:
+            from mavaia_core.brain.registry import ModuleRegistry
+            ar = ModuleRegistry.get_module("adapter_router")
+            if ar and response:
+                # Check if current response tone matches expected intent
+                tone_res = ar.execute("route_input", {"text": response})
+                detected_intent = tone_res.get("intent")
+                if intent and detected_intent:
+                    scores["tone"] = 1.0 if detected_intent == intent else -0.5
+        except Exception as e:
+            logger.debug(f"Tone scoring skipped: {e}")
+            
+        # Weighted sum
+        total_reward = (scores["hitl"] * W_HITL) + (scores["fact"] * W_FACT) + (scores["tone"] * W_TONE)
+        
+        return {
+            "success": True,
+            "reward": float(total_reward),
+            "breakdown": scores
+        }
+
+    def _persist_lesson(self, lesson: Dict[str, Any]):
+        """Append lesson to local JSONL file."""
+        import json
+        try:
+            with open(self._lesson_buffer_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(lesson) + "\n")
+        except Exception as e:
+            logger.error(f"Failed to persist RFAL lesson: {e}")
 
     def _generate_dpo_pair(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate Chosen/Rejected triplet (Phase 2)."""
-        return {"success": True, "info": "Implementation pending in Phase 2"}
+        """
+        Manually generate a Chosen/Rejected triplet if not from organic feedback.
+        """
+        prompt = params.get("prompt")
+        chosen = params.get("chosen")
+        rejected = params.get("rejected")
+        
+        if not all([prompt, chosen, rejected]):
+            raise InvalidParameterError("Operation 'generate_dpo_pair' requires 'prompt', 'chosen', and 'rejected'")
+            
+        lesson = {
+            "prompt": prompt,
+            "chosen": chosen,
+            "rejected": rejected,
+            "reward": -1.0,
+            "source": "manual",
+            "timestamp": time.time()
+        }
+        self._lesson_buffer.append(lesson)
+        self._persist_lesson(lesson)
+        
+        return {"success": True, "lesson": lesson}
 
     def _get_status(self) -> Dict[str, Any]:
         """Return module status and buffer info."""
