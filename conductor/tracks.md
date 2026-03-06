@@ -19,3 +19,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Fix persistent SSH 255 errors during pod stabilization in runpod_bridge.py (Regression/Unresolved).**
   *Link: [./tracks/ssh_stability_20260302/](./tracks/ssh_stability_20260302/)*
+
+---
+
+- [ ] **Track: Implement a fully functional, ready to train, Multi-adapter Routing module using LoRA adapters.**
+  *Link: [./tracks/adapter_router_20260306/](./tracks/adapter_router_20260306/)*
