@@ -9,7 +9,9 @@ based on semantic input analysis. Foundation for the Mavaia Model Family.
 from typing import Dict, Any, Optional, List
 import logging
 import time
+import threading
 from pathlib import Path
+from collections import OrderedDict
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import (
@@ -24,11 +26,12 @@ logger = logging.getLogger(__name__)
 torch = None
 nn = None
 peft = None
+PeftModel = None
 huggingface_hub = None
 
 def _lazy_import_ml():
     """Lazy import ML libraries only when needed"""
-    global torch, nn, peft, huggingface_hub
+    global torch, nn, peft, PeftModel, huggingface_hub
     if torch is None:
         try:
             import torch as t
@@ -41,7 +44,9 @@ def _lazy_import_ml():
     if peft is None:
         try:
             import peft as p
+            from peft import PeftModel as PM
             peft = p
+            PeftModel = PM
         except ImportError:
             logger.debug("peft not available")
 
@@ -83,21 +88,27 @@ class AdapterRouter(BaseBrainModule):
         super().__init__()
         self.config = {}
         self._initialized = False
-        self._active_adapters: Dict[str, Any] = {}
+        # Use OrderedDict for LRU adapter management
+        self._active_adapters: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self._routing_table: Dict[str, str] = {} # intent_id -> adapter_id
         self._intent_labels: List[str] = ["general", "math", "coding", "creative", "logic"]
         self._classifier: Optional[Any] = None
         self._embedding_dim = 384 # Default for all-MiniLM-L6-v2
+        
+        # VRAM Management: Max loaded adapters to keep warm
+        self._max_adapters = 3
+        self._lock = threading.Lock()
         
     @property
     def metadata(self) -> ModuleMetadata:
         """Return module metadata."""
         return ModuleMetadata(
             name="adapter_router",
-            version="1.0.0",
-            description="Dynamically routes inputs to specialized LoRA adapters",
+            version="1.1.0",
+            description="Dynamically routes inputs to specialized LoRA adapters with VRAM safety and async triggers",
             operations=[
                 "route_input",
+                "async_route",
                 "load_adapter",
                 "unload_adapter",
                 "status",
@@ -116,6 +127,8 @@ class AdapterRouter(BaseBrainModule):
         # Setup local cache directories
         cache_dir = Path(self.config.get("cache_dir", "models/adapter_cache"))
         cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        self._max_adapters = int(self.config.get("max_adapters", 3))
         
         # Initialize classifier if torch is available
         try:
@@ -152,6 +165,8 @@ class AdapterRouter(BaseBrainModule):
             
         if operation == "route_input":
             return self._route_input(params)
+        elif operation == "async_route":
+            return self._async_route(params)
         elif operation == "load_adapter":
             return self._load_adapter(params)
         elif operation == "unload_adapter":
@@ -215,12 +230,43 @@ class AdapterRouter(BaseBrainModule):
         # Log to experience replay
         self._log_routing_event(input_text, adapter_id, conf.item())
         
+        # Auto-load the adapter if requested (Hot-Swap)
+        if params.get("apply_routing", False) and adapter_id:
+            load_res = self._load_adapter({"adapter_id": adapter_id})
+            return {
+                "success": True,
+                "intent": intent,
+                "adapter_id": adapter_id,
+                "confidence": conf.item(),
+                "applied": load_res.get("success", False),
+                "metadata": {"probs": probs.tolist()[0]}
+            }
+        
         return {
             "success": True,
             "intent": intent,
             "adapter_id": adapter_id,
             "confidence": conf.item(),
             "metadata": {"probs": probs.tolist()[0]}
+        }
+
+    def _async_route(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Trigger routing asynchronously to prep for next task."""
+        # Use a thread to avoid blocking the main execution thread
+        def task():
+            try:
+                # We want to get embeddings and intent ready
+                self._route_input({**params, "apply_routing": True})
+            except Exception as e:
+                logger.error(f"Async pre-routing failed: {e}")
+
+        thread = threading.Thread(target=task, daemon=True)
+        thread.start()
+        
+        return {
+            "success": True,
+            "status": "triggered",
+            "message": "Async routing calculation started in background"
         }
 
     def _register_intent(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -270,60 +316,89 @@ class AdapterRouter(BaseBrainModule):
         return ModuleRegistry.get_module("neural_text_generator")
 
     def _load_adapter(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Load an adapter from HF or S3."""
+        """Load an adapter from HF or S3 using Hot-Swap set_adapter logic."""
         adapter_id = params.get("adapter_id")
         source = params.get("source", "hf") # "hf" or "s3"
         
         if not adapter_id:
             raise InvalidParameterError("Operation 'load_adapter' requires 'adapter_id'")
             
-        _lazy_import_ml()
-        ntg = self._get_base_model_module()
-        if not ntg:
-            raise ModuleOperationError("adapter_router", "Neural text generator module not found")
-            
-        # Get actual torch model from NTG
-        base_model = getattr(ntg, "transformer_model", None)
-        if base_model is None:
-            raise ModuleOperationError("adapter_router", "Base transformer model not loaded in NTG")
+        with self._lock:
+            # 1. PEFT Hot-Swap: Check if already active
+            if adapter_id in self._active_adapters:
+                # Move to end of OrderedDict (Mark as most recently used)
+                self._active_adapters.move_to_end(adapter_id)
+                
+                # Ensure it's active in the model
+                ntg = self._get_base_model_module()
+                if ntg and hasattr(ntg, "transformer_model"):
+                    base_model = ntg.transformer_model
+                    if hasattr(base_model, "set_adapter"):
+                        base_model.set_adapter(adapter_id)
+                
+                return {
+                    "success": True,
+                    "adapter_id": adapter_id,
+                    "status": "active",
+                    "info": "Hot-swapped to already loaded adapter"
+                }
 
-        try:
-            cache_dir = Path(self.config.get("cache_dir", "models/adapter_cache"))
-            
-            if source == "s3":
-                # S3 integration placeholder
-                logger.info(f"Fetching adapter {adapter_id} from S3...")
-                pass
-            
-            # Use PEFT to load adapter
-            if hasattr(base_model, "load_adapter"):
-                base_model.load_adapter(adapter_id, adapter_name=adapter_id)
-                base_model.set_adapter(adapter_id)
-            else:
-                from peft import PeftModel
-                # Wrap model if it isn't already a PeftModel
+            _lazy_import_ml()
+            ntg = self._get_base_model_module()
+            if not ntg:
+                raise ModuleOperationError("adapter_router", "Neural text generator module not found")
+                
+            base_model = getattr(ntg, "transformer_model", None)
+            if base_model is None:
+                raise ModuleOperationError("adapter_router", "Base transformer model not loaded in NTG")
+
+            # 2. VRAM Management: Ensure capacity before loading new
+            self._ensure_adapter_capacity(base_model)
+
+            try:
+                # Use PEFT to load adapter
+                if PeftModel is None:
+                    raise ImportError("PEFT not available")
+                    
                 if not isinstance(base_model, PeftModel):
+                    # Initial wrap of base model
                     base_model = PeftModel.from_pretrained(base_model, adapter_id, adapter_name=adapter_id)
-                    # Update NTG's reference
                     ntg.transformer_model = base_model
                 else:
+                    # Model already a PeftModel, just add new adapter
                     base_model.load_adapter(adapter_id, adapter_name=adapter_id)
                     base_model.set_adapter(adapter_id)
+                
+                self._active_adapters[adapter_id] = {
+                    "source": source,
+                    "loaded_at": time.time()
+                }
+                
+                return {
+                    "success": True,
+                    "adapter_id": adapter_id,
+                    "status": "active"
+                }
+                
+            except Exception as e:
+                logger.error(f"Failed to load adapter {adapter_id}: {e}")
+                return {"success": False, "error": str(e)}
+
+    def _ensure_adapter_capacity(self, base_model: Any):
+        """Unload oldest adapters if limit is reached to prevent VRAM Ghosting."""
+        while len(self._active_adapters) >= self._max_adapters:
+            # Pop the oldest (first) item from OrderedDict
+            old_adapter_id, info = self._active_adapters.popitem(last=False)
             
-            self._active_adapters[adapter_id] = {
-                "source": source,
-                "loaded_at": time.time()
-            }
-            
-            return {
-                "success": True,
-                "adapter_id": adapter_id,
-                "status": "active"
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to load adapter {adapter_id}: {e}")
-            return {"success": False, "error": str(e)}
+            try:
+                if hasattr(base_model, "delete_adapter"):
+                    base_model.delete_adapter(old_adapter_id)
+                    logger.info(f"Unloaded adapter '{old_adapter_id}' to free VRAM")
+                elif hasattr(base_model, "unload_adapter"):
+                    # Fallback for older versions
+                    base_model.unload_adapter(old_adapter_id)
+            except Exception as e:
+                logger.warning(f"Could not properly delete adapter '{old_adapter_id}': {e}")
 
     def _unload_adapter(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Unload an active adapter or switch to base."""
@@ -336,12 +411,15 @@ class AdapterRouter(BaseBrainModule):
         base_model = ntg.transformer_model
         
         try:
-            if adapter_id and adapter_id in self._active_adapters:
-                del self._active_adapters[adapter_id]
-            
-            # Switch back to base (disable all adapters)
-            if hasattr(base_model, "disable_adapter"):
-                base_model.disable_adapter()
+            with self._lock:
+                if adapter_id and adapter_id in self._active_adapters:
+                    if hasattr(base_model, "delete_adapter"):
+                        base_model.delete_adapter(adapter_id)
+                    del self._active_adapters[adapter_id]
+                
+                # Switch back to base (disable all adapters)
+                if hasattr(base_model, "disable_adapter"):
+                    base_model.disable_adapter()
                 
             return {"success": True, "active_adapters": list(self._active_adapters.keys())}
         except Exception as e:
@@ -352,6 +430,7 @@ class AdapterRouter(BaseBrainModule):
         return {
             "success": True,
             "active_adapters": list(self._active_adapters.keys()),
+            "max_adapters": self._max_adapters,
             "routing_table": self._routing_table,
             "intents": self._intent_labels,
             "classifier_ready": self._classifier is not None,

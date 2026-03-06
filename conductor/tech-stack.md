@@ -9,6 +9,7 @@
 - **Transformers (Hugging Face)**: Core library for working with state-of-the-art LLM architectures and tokenizers.
 - **PEFT (Hugging Face)**: Utilized for Parameter-Efficient Fine-Tuning (LoRA) of specialized elective adapters.
 - **Semantic Intent Classification**: Independent embedding models (e.g., `all-MiniLM-L6-v2`) used for sub-100ms routing decisions.
+- **Proactive VRAM Management**: LRU-based adapter eviction strategy implemented to maintain performance within hardware constraints.
 - **TensorFlow**: Supported for specific module implementations and legacy compatibility.
 
 ## API & Backend
