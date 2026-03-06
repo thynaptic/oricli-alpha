@@ -619,7 +619,7 @@ class RunPodBridge:
             "gpuTypeId": gpu_type_id,
             "gpuCountPerPod": gpu_count_per_pod,
             "podCount": pod_count,
-            "type": "SECURE",
+            "type": "SLURM",
             "volumeInGb": 200,
             "containerDiskInGb": 200,
             "volumeMountPath": volume_mount_path,
@@ -649,7 +649,7 @@ class RunPodBridge:
         mutation createCluster($input: CreateClusterInput!) {
           createCluster(input: $input) {
             id
-            clusterName
+            name
             podCount
             pods {
               id

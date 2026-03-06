@@ -52,6 +52,7 @@ def test_create_cluster():
             }
         }
     }
+
     
     with patch.object(bridge, "_query", return_value=mock_response) as mock_query:
         cluster = bridge.create_cluster(
@@ -69,7 +70,7 @@ def test_create_cluster():
         sent_input = kwargs["variables"]["input"]
         assert sent_input["clusterName"] == "mavaia-cluster"
         assert sent_input["podCount"] == 2
-        assert sent_input["type"] == "SECURE"
+        assert sent_input["type"] == "SLURM"
         print("✓ create_cluster verified")
 
 def test_delete_cluster():
