@@ -4046,6 +4046,21 @@ def main():
                 train_args.extend(["--time-limit", str(args.time_limit)])
             if args.dynamic_threshold:
                 train_args.append("--dynamic-threshold")
+            
+            # Forward Cluster Networking details if applicable
+            if args.cluster_size > 1:
+                # The master pod needs to know how many nodes are in the cluster
+                # and its own internal address for coordination.
+                if "--nnodes" not in train_args:
+                    train_args.extend(["--nnodes", str(args.cluster_size)])
+                
+                # Internal DNS for RunPod VPC is usually <pod_id>.runpod.internal
+                master_internal_addr = f"{pods[0]['id']}.runpod.internal"
+                if "--master-addr" not in train_args:
+                    train_args.extend(["--master-addr", master_internal_addr])
+                
+                _rich_log(f"Cluster Config: Nodes={args.cluster_size}, Master={master_internal_addr}", "dim", "🌐")
+
             if args.train_rfal:
                 _rich_log("RFAL Alignment Pass: Training on collected lessons", "bold cyan", "🎓")
                 train_args.append("--dpo")
