@@ -4251,10 +4251,10 @@ def main():
                         # Remove any global discovery flags and replace with topic-specific
                         g_args = [a for a in group_args if a not in ["--find-elective", "--add-stage", "--stages"]]
                         # Use --find-elective for this specific topic to trigger discovery on pod
-                        g_args.extend(["--find-elective", topic, "--auto-select"])
+                        # Always use --auto to trigger training after discovery in this mode
+                        g_args.extend(["--find-elective", topic, "--auto-select", "--auto"])
                         # Use unique adapter name for this topic
                         g_args.extend(["--adapter-name", f"topic_{topic.replace(' ', '_')}"])
-                        
                         _rich_log(f"Group '{topic}': Launching on pod {m_id} with dataset discovery...", "green", "🚀")
                         remote_train(m_ip, m_port, args.ssh_key, g_args, args.volume_mount_path, m_id, m_ssh_proxy, script_rel="scripts/train_curriculum.py")
                     else:

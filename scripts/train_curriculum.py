@@ -673,6 +673,11 @@ def main():
             if args.auto:
                 args.stages = new_name
                 print(f"[INFO] --auto detected: Training will start for new stage '{new_name}' only.")
+        elif args.find_elective:
+            # Temporary addition for this run
+            if args.auto:
+                args.stages = discovered_stage["name"]
+                print(f"[INFO] --auto detected: Training will start for discovered elective '{discovered_stage['title']}'")
 
         if args.discover_only:
             print(f"[SUCCESS] Discovery complete. Stage injected: {discovered_stage['title']}")
