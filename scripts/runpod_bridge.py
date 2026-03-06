@@ -601,21 +601,20 @@ class RunPodBridge:
         template_id: Optional[str] = None,
         volume_mount_path: str = "/workspace",
         ssh_key_value: Optional[str] = None,
-        global_network: bool = True,
         volume_id: Optional[str] = None,
         env: Optional[Dict[str, str]] = None,
     ):
         """Create a new instant cluster."""
+        # Clean inputs based on RunPod GraphQL errors
         input_data = {
-            "name": name,
+            "clusterName": name,
             "gpuTypeId": gpu_type_id,
             "gpuCountPerPod": gpu_count_per_pod,
             "podCount": pod_count,
+            "type": "SECURE", # Required enum
             "volumeInGb": 200,
             "containerDiskInGb": 200,
             "volumeMountPath": volume_mount_path,
-            "globalNetwork": global_network,
-            "cloudType": "SECURE"
         }
 
         env_vars = []
@@ -624,7 +623,6 @@ class RunPodBridge:
                 if v:
                     env_vars.append({"key": k, "value": str(v)})
         if ssh_key_value:
-            # Add various keys for compatibility
             for k in ["PUBLIC_KEY", "SSH_PUBLIC_KEY", "RUNPOD_PUBLIC_KEY", "TCP_PORT_22", "SSH_KEY"]:
                 env_vars.append({"key": k, "value": ssh_key_value})
 
@@ -643,7 +641,7 @@ class RunPodBridge:
         mutation createCluster($input: CreateClusterInput!) {
           createCluster(input: $input) {
             id
-            name
+            clusterName
             podCount
             pods {
               id
@@ -2783,11 +2781,15 @@ def remote_snapshot(
 def _resolve_topic_datasets(topics: List[str]) -> Dict[str, str]:
     """Search for best-matching datasets for a list of topics."""
     _rich_log(f"Resolving datasets for {len(topics)} topics...", "cyan", "🔍")
-    from mavaia_core.data.search import DatasetSearch
     
-    search_service = DatasetSearch()
+    try:
+        from mavaia_core.data.search import DatasetSearch
+        search_service = DatasetSearch()
+    except ImportError:
+        _rich_log("Local discovery dependencies missing. Run: pip install huggingface_hub wikipedia internetarchive", "yellow", "⚠")
+        return {t: "wikitext:wikitext-103-raw-v1" for t in topics}
+    
     topic_map = {}
-    
     for topic in topics:
         _rich_log(f"Searching for '{topic}'...", "dim", "🔎")
         results = search_service.search_all(topic, limit_per_source=3)
@@ -3656,7 +3658,6 @@ def main():
                             template_id=args.template,
                             image=current_image,
                             ssh_key_value=args.ssh_key_value,
-                            global_network=args.vpc,
                             volume_id=args.volume_id,
                             volume_mount_path=args.volume_mount_path,
                             env=pod_env,
