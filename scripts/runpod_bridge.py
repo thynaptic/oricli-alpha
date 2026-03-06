@@ -2768,6 +2768,31 @@ def remote_snapshot(
             raise
 
 
+def _resolve_topic_datasets(topics: List[str]) -> Dict[str, str]:
+    """Search for best-matching datasets for a list of topics."""
+    _rich_log(f"Resolving datasets for {len(topics)} topics...", "cyan", "🔍")
+    from mavaia_core.data.search import DatasetSearch
+    
+    search_service = DatasetSearch()
+    topic_map = {}
+    
+    for topic in topics:
+        _rich_log(f"Searching for '{topic}'...", "dim", "🔎")
+        results = search_service.search_all(topic, limit_per_source=3)
+        # Filter out gated datasets for now
+        public_results = [r for r in results if not r.gated]
+        
+        if public_results:
+            best_match = public_results[0]
+            topic_map[topic] = best_match.id
+            _rich_log(f"Topic '{topic}' -> {best_match.source}:{best_match.name}", "green", "💎")
+        else:
+            _rich_log(f"Warning: No public datasets found for topic '{topic}'. Using fallback.", "yellow", "⚠")
+            topic_map[topic] = "wikitext:wikitext-103-raw-v1" # Sensible fallback
+            
+    return topic_map
+
+
 def register_trained_adapters(local_path: Path):
     """Scan for trained adapters and register them with the AdapterRouter."""
     _rich_log("Scanning for new adapters to register with Mavaia Core...", "cyan", "🛰")
@@ -2886,6 +2911,18 @@ def main():
         action="store_true",
         default=True,
         help="Enable Global Networking (VPC) for cluster pods (default: True)",
+    )
+    parser.add_argument(
+        "--topics",
+        type=str,
+        nargs="+",
+        help="List of training topics for smart cluster allocation (e.g. 'cybersecurity' 'biology')",
+    )
+    parser.add_argument(
+        "--pods-per-topic",
+        type=int,
+        default=1,
+        help="Number of pods to assign to each topic in the cluster (default: 1)",
     )
     parser.add_argument(
         "--auto",
@@ -3259,6 +3296,20 @@ def main():
             "dim",
             "⚖",
         )
+
+    # TOPIC RESOLUTION & CLUSTER SCALING
+    topic_dataset_map = {}
+    if args.topics:
+        topic_dataset_map = _resolve_topic_datasets(args.topics)
+        # Automatic cluster sizing based on topics
+        required_pods = len(args.topics) * args.pods_per_topic
+        if args.cluster_size < required_pods:
+            _rich_log(f"Auto-Scaling Cluster: {len(args.topics)} topics x {args.pods_per_topic} pods = {required_pods} pods.", "cyan", "📈")
+            args.cluster_size = required_pods
+        
+        # Topic-based allocation requires auto mode or cluster mode
+        if not args.pod_id and not args.fleet:
+            args.auto = True
 
     pod = None
     auto_candidate_gpus = None
@@ -4161,39 +4212,101 @@ def main():
                         )
                     train_args = cleaned
 
-            remote_train(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                train_args,
-                args.volume_mount_path,
-                pod["id"],
-                args.ssh_proxy,
-                script_rel=script_rel,
-            )
-            get_artifacts(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                REPO_ROOT,
-                args.volume_mount_path,
-                pod["id"],
-                args.ssh_proxy,
-            )
-            sync_training_data(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                REPO_ROOT,
-                args.volume_mount_path,
-                pod["id"],
-                args.ssh_proxy,
-            )
+            # SMART ALLOCATION: Partition cluster by topic
+            if args.topics and len(pods) >= len(args.topics):
+                _rich_log(f"Partitioning cluster into {len(args.topics)} groups...", "cyan", "✂")
+                
+                # Use ThreadPool to launch group-specific tasks
+                def _launch_topic_group(topic_idx, topic):
+                    dataset = topic_dataset_map.get(topic)
+                    # Assign pods to this topic
+                    start_pod_idx = topic_idx * args.pods_per_topic
+                    group_pods = pods[start_pod_idx : start_pod_idx + args.pods_per_topic]
+                    if not group_pods: return
+                    
+                    # Master pod for this group
+                    master_pod = group_pods[0]
+                    m_id = master_pod["id"]
+                    
+                    # Setup group-specific training args
+                    group_args = list(train_args)
+                    
+                    # Find SSH details for this group master
+                    m_runtime = master_pod.get("runtime") or {}
+                    m_ports = m_runtime.get("ports") or []
+                    m_ssh_port_info = next((pt for pt in m_ports if (pt.get("isIpPublic") or not any(pt.get("ip", "").startswith(pref) for pref in ["10.", "172.", "192."])) and pt.get("privatePort") == 22), None)
+                    
+                    m_ssh_proxy = None
+                    if not m_ssh_port_info:
+                        m_ssh_proxy = f"{m_id}-22@ssh.runpod.io"
+                        m_ip = "ssh.runpod.io"
+                        m_port = 22
+                    else:
+                        m_ip = m_ssh_port_info["ip"]
+                        m_port = m_ssh_port_info["publicPort"]
+                    
+                    # Inject topic-specific data
+                    # If using train_curriculum, we'll try to find a stage or use --find-elective
+                    if is_curriculum_task:
+                        # Remove any global discovery flags and replace with topic-specific
+                        g_args = [a for a in group_args if a not in ["--find-elective", "--add-stage", "--stages"]]
+                        # Use --find-elective for this specific topic to trigger discovery on pod
+                        g_args.extend(["--find-elective", topic, "--auto-select"])
+                        # Use unique adapter name for this topic
+                        g_args.extend(["--adapter-name", f"topic_{topic.replace(' ', '_')}"])
+                        
+                        _rich_log(f"Group '{topic}': Launching on pod {m_id} with dataset discovery...", "green", "🚀")
+                        remote_train(m_ip, m_port, args.ssh_key, g_args, args.volume_mount_path, m_id, m_ssh_proxy, script_rel="scripts/train_curriculum.py")
+                    else:
+                        # standard NTG training
+                        group_args.extend(["--book-ids", dataset, "--adapter-name", f"topic_{topic.replace(' ', '_')}"])
+                        _rich_log(f"Group '{topic}': Launching on pod {m_id} using {dataset}...", "green", "🚀")
+                        remote_train(m_ip, m_port, args.ssh_key, group_args, args.volume_mount_path, m_id, m_ssh_proxy, script_rel="scripts/train_neural_text_generator.py")
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=len(args.topics)) as group_executor:
+                    group_futures = [group_executor.submit(_launch_topic_group, i, t) for i, t in enumerate(args.topics)]
+                    concurrent.futures.wait(group_futures)
+                
+                _rich_log("All topic groups finished execution.", "bold green", "✨")
+                
+            else:
+                # Standard single-task execution (Existing logic)
+                remote_train(
+                    pod_ip,
+                    pod_port,
+                    args.ssh_key,
+                    train_args,
+                    args.volume_mount_path,
+                    pod["id"],
+                    args.ssh_proxy,
+                    script_rel=script_rel,
+                )
+            
+            # Artifact Collection (Unified path)
+            _rich_log("Starting cluster-wide artifact synchronization...", "cyan", "📥")
+            for p in pods:
+                p_id = p["id"]
+                p_runtime = p.get("runtime") or {}
+                p_ports = p_runtime.get("ports") or []
+                p_ssh_port_info = next((pt for pt in p_ports if (pt.get("isIpPublic") or not any(pt.get("ip", "").startswith(pref) for pref in ["10.", "172.", "192."])) and pt.get("privatePort") == 22), None)
+                
+                p_ssh_proxy = None
+                if not p_ssh_port_info:
+                    p_ssh_proxy = f"{p_id}-22@ssh.runpod.io"
+                    p_ip = "ssh.runpod.io"
+                    p_port = 22
+                else:
+                    p_ip = p_ssh_port_info["ip"]
+                    p_port = p_ssh_port_info["publicPort"]
+
+                get_artifacts(p_ip, p_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, p_id, p_ssh_proxy)
+                sync_training_data(p_ip, p_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, p_id, p_ssh_proxy)
             
             # Register newly trained adapters with the AdapterRouter
             register_trained_adapters(REPO_ROOT)
 
             if args.use_s3:
+                # Sync master pod to S3
                 s3_sync_pod(
                     pod_ip,
                     pod_port,
@@ -4207,21 +4320,24 @@ def main():
                     args.ssh_proxy,
                     src=f"{args.volume_mount_path}/mavaia",
                 )
-                s3_sync_pod(
-                    pod_ip,
-                    pod_port,
-                    args.ssh_key,
-                    args.s3_bucket,
-                    args.s3_ollama_prefix,
-                    args.s3_region,
-                    args.s3_endpoint,
-                    "push",
-                    pod["id"],
-                    args.ssh_proxy,
-                    src=f"{args.volume_mount_path}/ollama",
-                )
+                try:
+                    s3_sync_pod(
+                        pod_ip,
+                        pod_port,
+                        args.ssh_key,
+                        args.s3_bucket,
+                        args.s3_ollama_prefix,
+                        args.s3_region,
+                        args.s3_endpoint,
+                        "push",
+                        pod["id"],
+                        args.ssh_proxy,
+                        src=f"{args.volume_mount_path}/ollama",
+                    )
+                except Exception as ollama_e:
+                    _rich_log(f"Ollama S3 push skipped: {ollama_e}", "yellow", "⚠")
 
-            _rich_log("Remote training successful! Artifacts retrieved.", "bold green", "✓")
+            _rich_log("Cluster training successful! All artifacts retrieved.", "bold green", "✓")
 
     except KeyboardInterrupt:
         interrupted = True
