@@ -63,6 +63,8 @@ class RFALEngine(BaseBrainModule):
         self._lesson_buffer_path = Path(self.config.get("lesson_buffer_path", "mavaia_core/data/rfal_lessons.jsonl"))
         self._lesson_buffer_path.parent.mkdir(parents=True, exist_ok=True)
         
+        self._sync_threshold = int(self.config.get("sync_threshold", 50))
+        
         # Load custom keywords if any
         custom_keywords = self.config.get("rejection_keywords", [])
         if custom_keywords:
@@ -139,13 +141,18 @@ class RFALEngine(BaseBrainModule):
             self._lesson_buffer.append(lesson)
             self._persist_lesson(lesson)
             
+        # Check if threshold reached
+        sync_needed = len(self._lesson_buffer) >= self._sync_threshold
+        
         return {
             "success": True,
             "is_conflict": is_conflict,
             "conflict_signals": conflict_signals,
             "reward": reward,
             "reward_breakdown": reward_res.get("breakdown"),
-            "lesson_created": lesson is not None
+            "lesson_created": lesson is not None,
+            "sync_needed": sync_needed,
+            "buffer_size": len(self._lesson_buffer)
         }
 
     def _detect_keyword_conflict(self, text: str) -> bool:

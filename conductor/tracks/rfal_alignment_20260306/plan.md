@@ -29,16 +29,16 @@ Goal: Build the scoring engine that combines HITL, Factual, and Tone signals.
 
 **Phase 3: Cognitive Loop Integration**
 Goal: Wire the RFAL engine into the live generation pipeline without adding latency.
-- [ ] Task: Background Processing Hook
-    - [ ] Implement asynchronous hook in `cognitive_generator.py` or `MavaiaClient`.
-    - [ ] Logic to send response + user feedback to `RFALEngine` in a background thread.
-- [ ] Task: Interaction Buffer Management
-    - [ ] Logic to track "Lesson Buffer" size.
+- [x] Task: Background Processing Hook
+    - [x] Implement asynchronous hook in `cognitive_generator.py` or `MavaiaClient`.
+    - [x] Logic to send response + user feedback to `RFALEngine` in a background thread.
+- [x] Task: Interaction Buffer Management
+    - [x] Logic to track "Lesson Buffer" size.
     - [ ] CLI/API support for manually triggering a sync.
-- [ ] Task: TDD - Loop Integration
-    - [ ] Verify that RFAL processing does not block user response time.
-    - [ ] Verify buffer increments after conflict interactions.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Loop Integration' (Protocol in workflow.md)
+- [x] Task: TDD - Loop Integration
+    - [x] Verify that RFAL processing does not block user response time.
+    - [x] Verify buffer increments after conflict interactions.
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Loop Integration' (Protocol in workflow.md)
 
 **Phase 4: Bridge Sync & DPO Training**
 Goal: Update the RunPod bridge to consume RFAL lessons and update weights.

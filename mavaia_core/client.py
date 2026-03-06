@@ -5,6 +5,7 @@ Mavaia Core Client - Unified interface for all Mavaia capabilities
 
 import time
 import uuid
+import threading
 from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
 
@@ -2145,7 +2146,6 @@ class PythonLLM:
             "new_style": new_style,
         })
 
-
 class Chat:
     """Chat API namespace"""
     
@@ -2215,6 +2215,21 @@ class MavaiaClient:
             traceback.print_exc(file=sys.stderr)
             sys.stderr.flush()
             raise
+            
+    def _process_rfal_async(self, **kwargs: Any) -> None:
+        """Trigger RFAL processing in a background thread."""
+        def run():
+            try:
+                from mavaia_core.brain.registry import ModuleRegistry
+                rfal = ModuleRegistry.get_module("rfal_engine")
+                if rfal:
+                    rfal.execute("process_feedback", kwargs)
+            except Exception:
+                # Silently fail in background to avoid disrupting main flow
+                pass
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
     
     def _expand_tool_references(self, tools: Optional[List[ToolDefinition]]) -> Optional[List[Dict[str, Any]]]:
         """
@@ -2330,6 +2345,20 @@ class MavaiaClient:
             {"role": msg.role, "content": msg.get_text_content()}
             for msg in request.messages
         ]
+        
+        # Trigger RFAL background analysis if we have history (User correcting Assistant)
+        if len(messages_payload) >= 3:
+            last_msg = messages_payload[-1]
+            prev_msg = messages_payload[-2]
+            prompt_msg = messages_payload[-3]
+            
+            if last_msg["role"] == "user" and prev_msg["role"] == "assistant":
+                self._process_rfal_async(
+                    user_input=last_msg["content"],
+                    last_response=prev_msg["content"],
+                    prompt=prompt_msg["content"],
+                    history=messages_payload[:-1]
+                )
         
         # Build context including URL content
         context_parts = []
