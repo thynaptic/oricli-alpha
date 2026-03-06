@@ -29,7 +29,7 @@
 
 ## Infrastructure & DevOps
 - **Docker**: Used for containerization and consistent execution environments.
-- **RunPod**: The primary platform for GPU-accelerated remote training, with custom dynamic matching for hardware efficiency.
+- **RunPod**: The primary platform for GPU-accelerated remote training, supporting custom dynamic hardware matching and multi-pod VPC clusters.
 - **AWS S3 / RunPod S3**: Used for persistent storage of models, checkpoints, and code archives.
 
 ## Development Tools

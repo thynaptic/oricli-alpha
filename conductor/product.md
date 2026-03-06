@@ -20,6 +20,7 @@ Mavaia Core addresses the complexity of orchestrating modular AI systems while e
 - **Conversational RFAL Alignment**: Autonomous self-correction loop that learns from organic user feedback and automated fact/tone checks to refine model weights via DPO.
 - **Asynchronous Multi-Adapter Orchestration**: Standalone module for zero-latency, on-the-fly switching between specialized adapters using background intent classification and LRU-based VRAM safety.
 - **Intelligent Resource Allocation**: Dynamic GPU matching logic that selects optimal hardware based on training size and VRAM requirements.
+- **Instant Cluster Orchestration**: Support for multi-pod "Instant Clusters" with parallel initialization and private VPC networking for high-throughput fleets or distributed training.
 - **Observability & Diagnostics**: Built-in metrics, automated health diagnostics, and full introspection for cognitive state and module compliance.
 - **Remote Validation & Benchmarking**: Dedicated bridge mode for high-performance evaluation on remote GPUs (e.g., LiveBench integration) with automated result synchronization.
 - **Hot-Swappable Cognitive Adapters**: The ability to swap reasoning engines and models at runtime without service interruption.
