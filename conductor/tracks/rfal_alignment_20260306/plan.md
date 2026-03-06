@@ -2,16 +2,16 @@
 
 **Phase 1: RFAL Module & Conflict Detection**
 Goal: Establish the base RFAL module and the logic to detect conversational conflicts.
-- [ ] Task: Scaffold RFAL Module
+- [x] Task: Scaffold RFAL Module
     - [ ] Create `mavaia_core/brain/modules/rfal_engine.py`.
     - [ ] Implement `RFALEngine` class with `process_feedback`, `calculate_reward`, and `generate_dpo_pair` operations.
-- [ ] Task: Implement Conflict Detection
+- [x] Task: Implement Conflict Detection
     - [ ] Logic for keyword-based rejection detection.
     - [ ] Integration with basic sentiment analysis for frustration triggers.
     - [ ] Repetition detection logic in conversation history.
-- [ ] Task: TDD - Conflict Logic
+- [x] Task: TDD - Conflict Logic
     - [ ] Write unit tests to verify conflict detection on synthetic conversation strings.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Conflict Detection' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Conflict Detection' (Protocol in workflow.md)
 
 **Phase 2: Reward Engine & Multi-Factor Scoring**
 Goal: Build the scoring engine that combines HITL, Factual, and Tone signals.
