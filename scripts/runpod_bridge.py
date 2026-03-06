@@ -2781,15 +2781,11 @@ def remote_snapshot(
 def _resolve_topic_datasets(topics: List[str]) -> Dict[str, str]:
     """Search for best-matching datasets for a list of topics."""
     _rich_log(f"Resolving datasets for {len(topics)} topics...", "cyan", "🔍")
+    from mavaia_core.data.search import DatasetSearch
     
-    try:
-        from mavaia_core.data.search import DatasetSearch
-        search_service = DatasetSearch()
-    except ImportError:
-        _rich_log("Local discovery dependencies missing. Run: pip install huggingface_hub wikipedia internetarchive", "yellow", "⚠")
-        return {t: "wikitext:wikitext-103-raw-v1" for t in topics}
-    
+    search_service = DatasetSearch()
     topic_map = {}
+    
     for topic in topics:
         _rich_log(f"Searching for '{topic}'...", "dim", "🔎")
         results = search_service.search_all(topic, limit_per_source=3)
@@ -2801,8 +2797,8 @@ def _resolve_topic_datasets(topics: List[str]) -> Dict[str, str]:
             topic_map[topic] = best_match.id
             _rich_log(f"Topic '{topic}' -> {best_match.source}:{best_match.name}", "green", "💎")
         else:
-            _rich_log(f"Warning: No public datasets found for topic '{topic}'. Using fallback.", "yellow", "⚠")
-            topic_map[topic] = "wikitext:wikitext-103-raw-v1" # Sensible fallback
+            _rich_log(f"Error: No public datasets found for topic '{topic}'.", "red", "✗")
+            sys.exit(1)
             
     return topic_map
 
