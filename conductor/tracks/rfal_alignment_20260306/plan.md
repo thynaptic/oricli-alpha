@@ -50,3 +50,6 @@ Goal: Update the RunPod bridge to consume RFAL lessons and update weights.
 - [x] Task: TDD - Training Sync
     - [x] Verify successful remote training job initiation using RFAL lessons.
 - [x] Task: Conductor - User Manual Verification 'Phase 4: Bridge & Training' (Protocol in workflow.md)
+
+## Phase: Review Fixes
+- [x] Task: Apply review suggestions 510e22d
