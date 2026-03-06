@@ -551,6 +551,108 @@ class RunPodBridge:
         """
         return self._query(query, variables={"input": {"podId": pod_id}})
 
+    def get_clusters(self) -> List[Dict]:
+        """List all active clusters."""
+        query = """
+        query {
+          clusters {
+            id
+            name
+            status
+            clusterType
+            nodeCount
+            pods {
+              id
+              name
+              runtime {
+                ports {
+                  ip
+                  isIpPublic
+                  privatePort
+                  publicPort
+                }
+              }
+            }
+          }
+        }
+        """
+        result = self._query(query)
+        return result.get("data", {}).get("clusters", [])
+
+    def create_cluster(
+        self,
+        name: str,
+        gpu_type_id: str,
+        pod_count: int,
+        gpu_count_per_pod: int = 1,
+        image: Optional[str] = None,
+        template_id: Optional[str] = None,
+        volume_mount_path: str = "/workspace",
+        ssh_key_value: Optional[str] = None,
+        global_network: bool = True,
+        volume_id: Optional[str] = None,
+        env: Optional[Dict[str, str]] = None,
+    ):
+        """Create a new instant cluster."""
+        input_data = {
+            "name": name,
+            "gpuTypeId": gpu_type_id,
+            "gpuCountPerPod": gpu_count_per_pod,
+            "podCount": pod_count,
+            "volumeInGb": 200,
+            "containerDiskInGb": 200,
+            "volumeMountPath": volume_mount_path,
+            "globalNetwork": global_network,
+            "cloudType": "SECURE"
+        }
+
+        env_vars = []
+        if env:
+            for k, v in env.items():
+                if v:
+                    env_vars.append({"key": k, "value": str(v)})
+        if ssh_key_value:
+            # Add various keys for compatibility
+            for k in ["PUBLIC_KEY", "SSH_PUBLIC_KEY", "RUNPOD_PUBLIC_KEY", "TCP_PORT_22", "SSH_KEY"]:
+                env_vars.append({"key": k, "value": ssh_key_value})
+
+        if env_vars:
+            input_data["env"] = env_vars
+
+        if volume_id:
+            input_data["networkVolumeId"] = volume_id
+
+        if template_id:
+            input_data["templateId"] = template_id
+        elif image:
+            input_data["imageName"] = image
+
+        query = """
+        mutation createCluster($input: CreateClusterInput!) {
+          createCluster(input: $input) {
+            id
+            name
+            podCount
+            pods {
+              id
+              name
+            }
+          }
+        }
+        """
+        result = self._query(query, variables={"input": input_data})
+        return result.get("data", {}).get("createCluster")
+
+    def delete_cluster(self, cluster_id: str):
+        """Delete an entire cluster."""
+        query = """
+        mutation deleteCluster($input: DeleteClusterInput!) {
+          deleteCluster(input: $input)
+        }
+        """
+        result = self._query(query, variables={"input": {"clusterId": cluster_id}})
+        return result.get("data", {}).get("deleteCluster")
+
 
 def setup_pod_env(
     pod_ip: str,
@@ -1491,6 +1593,109 @@ def summarize_results(local_path: Path):
 
     except Exception as e:
         _rich_log(f"Failed to summarize results: {e}", "red", "✗")
+
+
+def _display_cluster_status(pods: List[Dict]):
+    """Display real-time status of all pods in the cluster."""
+    if not USE_RICH:
+        print("\n--- Cluster Status ---")
+        for p in pods:
+            print(f"Pod {p['id']}: {p.get('desiredStatus', 'UNKNOWN')}")
+        return
+
+    table = Table(title="Mavaia Cluster Orchestration Status", box=box.ROUNDED, border_style="cyan")
+    table.add_column("Pod ID", style="magenta")
+    table.add_column("Type", style="blue")
+    table.add_column("IP Address", style="green")
+    table.add_column("SSH Port", style="yellow")
+    table.add_column("Status", style="bold")
+
+    for i, p in enumerate(pods):
+        role = "Master" if i == 0 else f"Worker-{i}"
+        p_id = p["id"]
+        runtime = p.get("runtime") or {}
+        ports = runtime.get("ports") or []
+        
+        # Extract IP/Port for display
+        ssh_port_info = next(
+            (
+                pt
+                for pt in ports
+                if (
+                    pt.get("isIpPublic")
+                    or not any(pt.get("ip", "").startswith(pref) for pref in ["10.", "172.", "192."])
+                )
+                and pt.get("privatePort") == 22
+            ),
+            None,
+        )
+        
+        ip_str = "ssh.runpod.io" if not ssh_port_info else ssh_port_info["ip"]
+        port_str = "22 (Proxy)" if not ssh_port_info else str(ssh_port_info["publicPort"])
+        status = p.get("desiredStatus", "RUNNING")
+        
+        table.add_row(p_id, role, ip_str, port_str, status)
+
+    console.print()
+    console.print(table)
+    console.print()
+
+
+def _init_pod_worker(p, bridge, args):
+    """Worker function to initialize a single pod in parallel."""
+    p_id = p["id"]
+    p_runtime = p.get("runtime") or {}
+    p_ports = p_runtime.get("ports") or []
+    
+    # Find SSH port
+    p_ssh_port_info = next(
+        (
+            pt
+            for pt in p_ports
+            if (
+                pt.get("isIpPublic")
+                or not any(pt.get("ip", "").startswith(pref) for pref in ["10.", "172.", "192."])
+            )
+            and pt.get("privatePort") == 22
+        ),
+        None,
+    )
+    
+    p_ssh_proxy = f"{p_id}-22@ssh.runpod.io"
+    if not p_ssh_port_info:
+        p_ip = "ssh.runpod.io"
+        p_port = 22
+    else:
+        p_ip = p_ssh_port_info["ip"]
+        p_port = p_ssh_port_info["publicPort"]
+        # If we have a direct IP, we only use proxy as a fallback if the user didn't provide one
+        if args.ssh_proxy:
+            p_ssh_proxy = args.ssh_proxy
+    
+    # Run initialization steps
+    setup_pod_env(p_ip, p_port, args.ssh_key, p_id, p_ssh_proxy, bridge=bridge)
+    pre_sync_cleanup(p_ip, p_port, args.ssh_key, args.volume_mount_path, p_id, p_ssh_proxy)
+    sync_code(p_ip, p_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, p_id, p_ssh_proxy)
+    
+    if args.benchmark or args.internal_bench:
+        sync_models_to_pod(p_ip, p_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, p_id, p_ssh_proxy)
+        
+    ensure_mavaia_installed(
+        p_ip, p_port, args.ssh_key, args.volume_mount_path, p_id, p_ssh_proxy,
+        s3_bucket=args.s3_bucket if args.use_s3 else None,
+        s3_prefix=args.s3_prefix if args.use_s3 else None,
+        s3_region=args.s3_region if args.use_s3 else None,
+        s3_endpoint=args.s3_endpoint if args.use_s3 else None,
+        force_reinstall=args.force_refresh,
+        pip_debug=args.pip_debug,
+        pip_stream=args.pip_stream,
+        editable_install=args.editable_install
+    )
+    
+    if not args.no_ollama:
+        setup_ollama(p_ip, p_port, args.ssh_key, args.teacher_model, args.ollama_model_dir, p_id, p_ssh_proxy)
+    
+    return p_id
 
 
 def remote_train(
@@ -2671,6 +2876,18 @@ def main():
         "--fleet", action="store_true", help="Enable parallel fleet mode (3 pods max)"
     )
     parser.add_argument(
+        "--cluster-size",
+        type=int,
+        default=1,
+        help="Number of pods to launch in an Instant Cluster (max 10)",
+    )
+    parser.add_argument(
+        "--vpc",
+        action="store_true",
+        default=True,
+        help="Enable Global Networking (VPC) for cluster pods (default: True)",
+    )
+    parser.add_argument(
         "--auto",
         action="store_true",
         help="Auto-manage: terminate active pods, pick best GPU under $0.50/hr, and train",
@@ -3355,82 +3572,117 @@ def main():
                         pod_env.pop("HSA_OVERRIDE_GFX_VERSION", None)
 
                     pod_name = args.alias or "mavaia_train"
-                    if args.dry_run:
+                    if args.cluster_size > 1:
+                        _rich_log(f"Creating Instant Cluster of {args.cluster_size} pods...", "cyan", "🏗")
+                        cluster_result = bridge.create_cluster(
+                            name=pod_name,
+                            gpu_type_id=candidate_id,
+                            pod_count=args.cluster_size,
+                            template_id=args.template,
+                            image=current_image,
+                            ssh_key_value=args.ssh_key_value,
+                            global_network=args.vpc,
+                            volume_id=args.volume_id,
+                            volume_mount_path=args.volume_mount_path,
+                            env=pod_env,
+                        )
+                        if not cluster_result:
+                            continue
+                        
+                        cluster_id = cluster_result["id"]
+                        _rich_log(f"Cluster {cluster_id} created! Waiting for constituent pods...", "cyan", "⏳")
+                        
+                        # Wait for all pods in cluster to be ready
+                        while True:
+                            active_clusters = bridge.get_clusters()
+                            this_cluster = next((c for c in active_clusters if c["id"] == cluster_id), None)
+                            if not this_cluster:
+                                _rich_log(f"Cluster {cluster_id} not found in listing.", "yellow", "⚠")
+                                break
+                            
+                            cluster_pods = this_cluster.get("pods", [])
+                            if len(cluster_pods) == args.cluster_size:
+                                all_ready = True
+                                for cp in cluster_pods:
+                                    runtime = cp.get("runtime")
+                                    if not runtime or not runtime.get("ports") or not runtime.get("uptimeInSeconds", 0) > 0:
+                                        all_ready = False
+                                        break
+                                if all_ready:
+                                    pods = cluster_pods
+                                    _rich_log(f"All {args.cluster_size} pods in cluster {cluster_id} are ready!", "bold green", "✓")
+                                    break
+                            
+                            time.sleep(10)
+                        if pods:
+                            # Set first pod as 'pod' for any remaining single-pod logic
+                            pod = pods[0]
+                            break
+                    else:
+                        # Single pod logic (existing)
+                        pod_result = bridge.create_pod(
+                            name=pod_name,
+                            gpu_type_id=candidate_id,
+                            template_id=args.template,
+                            image=current_image,
+                            ssh_key_value=args.ssh_key_value,
+                            data_center_id=args.data_center,
+                            volume_id=args.volume_id,
+                            volume_mount_path=args.volume_mount_path,
+                            env=pod_env,
+                        )
+                        if not pod_result:
+                            continue
+
+                        pod_id = pod_result["id"]
+                        progress.update(pod_task, description=f"Found pod {pod_id}! Launching...")
+
+                        poll_start = time.time()
+                        while True:
+                            all_pods = bridge.get_pods()
+                            pod = next((p for p in all_pods if p["id"] == pod_id), None)
+                            runtime = pod.get("runtime") if pod else None
+                            uptime = runtime.get("uptimeInSeconds", 0) if runtime else 0
+                            ports = runtime.get("ports", []) if runtime else []
+
+                            # Wait for both uptime AND ports to be assigned
+                            if uptime > 0 and len(ports) > 0:
+                                progress.update(pod_task, completed=wait_limit)
+                                break
+
+                            elapsed = time.time() - poll_start
+                            status = (
+                                "Waiting for runtime..."
+                                if uptime == 0
+                                else "Waiting for network assignment..."
+                            )
+                            progress.update(
+                                pod_task,
+                                completed=min(wait_limit - 1, int(elapsed_wait + elapsed)),
+                                description=f"Launching pod {pod_id}: {status}",
+                            )
+
+                            if elapsed > 300:
+                                _rich_log(
+                                    "Safety timeout reached. Attempting to proceed...",
+                                    "yellow",
+                                    "⚠",
+                                    progress=progress,
+                                    task_id=pod_task,
+                                )
+                                break
+                            time.sleep(5)
+
                         _rich_log(
-                            f"[DRY-RUN] Would launch {candidate_display} pod",
-                            "dim",
+                            f"Pod {pod_id} landed on {candidate_display}!",
+                            "bold green",
+                            "✓",
                             progress=progress,
                             task_id=pod_task,
                         )
-                        pod = {
-                            "id": "dry-run-id",
-                            "runtime": {
-                                "ports": [{"ip": "1.2.3.4", "publicPort": 1234, "isIpPublic": True}]
-                            },
-                        }
+                        if pod:
+                            pods = [pod]
                         break
-
-                    pod_result = bridge.create_pod(
-                        name=pod_name,
-                        gpu_type_id=candidate_id,
-                        template_id=args.template,
-                        image=current_image,
-                        ssh_key_value=args.ssh_key_value,
-                        data_center_id=args.data_center,
-                        volume_id=args.volume_id,
-                        volume_mount_path=args.volume_mount_path,
-                        env=pod_env,
-                    )
-                    if not pod_result:
-                        continue
-
-                    pod_id = pod_result["id"]
-                    progress.update(pod_task, description=f"Found pod {pod_id}! Launching...")
-
-                    poll_start = time.time()
-                    while True:
-                        pods = bridge.get_pods()
-                        pod = next((p for p in pods if p["id"] == pod_id), None)
-                        runtime = pod.get("runtime") if pod else None
-                        uptime = runtime.get("uptimeInSeconds", 0) if runtime else 0
-                        ports = runtime.get("ports", []) if runtime else []
-
-                        # Wait for both uptime AND ports to be assigned
-                        if uptime > 0 and len(ports) > 0:
-                            progress.update(pod_task, completed=wait_limit)
-                            break
-
-                        elapsed = time.time() - poll_start
-                        status = (
-                            "Waiting for runtime..."
-                            if uptime == 0
-                            else "Waiting for network assignment..."
-                        )
-                        progress.update(
-                            pod_task,
-                            completed=min(wait_limit - 1, int(elapsed_wait + elapsed)),
-                            description=f"Launching pod {pod_id}: {status}",
-                        )
-
-                        if elapsed > 300:
-                            _rich_log(
-                                "Safety timeout reached. Attempting to proceed...",
-                                "yellow",
-                                "⚠",
-                                progress=progress,
-                                task_id=pod_task,
-                            )
-                            break
-                        time.sleep(5)
-
-                    _rich_log(
-                        f"Pod {pod_id} landed on {candidate_display}!",
-                        "bold green",
-                        "✓",
-                        progress=progress,
-                        task_id=pod_task,
-                    )
-                    break
 
                 if pod:
                     break
@@ -3501,155 +3753,60 @@ def main():
     watchdog_thread = None
 
     try:
-        # Initialization phase (single line progress)
-        with Progress(
-            SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
-        ) as progress:
-            pod_task = progress.add_task(description="Initializing pod...", total=None)
+        # Initialization phase (parallel across all pods in cluster)
+        import concurrent.futures
 
-            if args.dry_run:
-                _rich_log(
-                    f"[DRY-RUN] Would sync to {pod_ip}:{pod_port} and start training.",
-                    "dim",
-                    progress=progress,
-                    task_id=pod_task,
-                )
-                return
-
-            # Instead of a hard 60s sleep, we let setup_pod_env's loop handle the service startup patience
-            setup_pod_env(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                pod["id"],
-                args.ssh_proxy,
-                progress=progress,
-                task_id=pod_task,
-                bridge=bridge,
-            )
-            # Pre-sync cleanup to free disk space
-            pre_sync_cleanup(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                args.volume_mount_path,
-                pod["id"],
-                args.ssh_proxy,
-                progress=progress,
-                task_id=pod_task,
-            )
-
-            sync_code(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                REPO_ROOT,
-                args.volume_mount_path,
-                pod["id"],
-                args.ssh_proxy,
-                progress=progress,
-                task_id=pod_task,
-            )
-
-            # For benchmarking/internal testing, we must push the weights if they are not already there
-            if args.benchmark or args.internal_bench:
-                sync_models_to_pod(
-                    pod_ip,
-                    pod_port,
-                    args.ssh_key,
-                    REPO_ROOT,
-                    args.volume_mount_path,
-                    pod["id"],
-                    args.ssh_proxy,
-                    progress=progress,
-                    task_id=pod_task,
-                )
-
-            ensure_mavaia_installed(
-                pod_ip,
-                pod_port,
-                args.ssh_key,
-                args.volume_mount_path,
-                pod["id"],
-                args.ssh_proxy,
-                s3_bucket=args.s3_bucket if args.use_s3 else None,
-                s3_prefix=args.s3_prefix if args.use_s3 else None,
-                s3_region=args.s3_region if args.use_s3 else None,
-                s3_endpoint=args.s3_endpoint if args.use_s3 else None,
-                force_reinstall=args.force_refresh,
-                pip_debug=args.pip_debug,
-                pip_stream=args.pip_stream,
-                editable_install=args.editable_install,
-                progress=progress,
-                task_id=pod_task,
-            )
-
-            ollama_cache_pull_failed = False
-            if args.use_s3:
+        _rich_log(f"Initializing {len(pods)} pod(s) in parallel...", "cyan", "⚡")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(pods)) as executor:
+            futures = [executor.submit(_init_pod_worker, p, bridge, args) for p in pods]
+            for future in concurrent.futures.as_completed(futures):
                 try:
-                    s3_sync_pod(
-                        pod_ip,
-                        pod_port,
-                        args.ssh_key,
-                        args.s3_bucket,
-                        args.s3_ollama_prefix,
-                        args.s3_region,
-                        args.s3_endpoint,
-                        "pull",
-                        pod["id"],
-                        args.ssh_proxy,
-                        src=f"{args.volume_mount_path}/ollama",
-                        progress=progress,
-                        task_id=pod_task,
-                    )
+                    p_id = future.result()
+                    _rich_log(f"Pod {p_id} fully initialized.", "green", "✓")
                 except Exception as e:
-                    ollama_cache_pull_failed = True
-                    _rich_log(
-                        f"Ollama S3 cache pull failed fresh. ({_redact_secrets(str(e))})",
-                        "yellow",
-                        "⚠",
-                        progress=progress,
-                        task_id=pod_task,
-                    )
+                    _rich_log(f"Pod initialization failed: {e}", "red", "✗")
+                    failed = True
 
-            if not args.no_ollama:
-                setup_ollama(
-                    pod_ip,
-                    pod_port,
-                    args.ssh_key,
-                    args.teacher_model,
-                    args.ollama_model_dir,
-                    pod["id"],
-                    args.ssh_proxy,
-                    progress=progress,
-                    task_id=pod_task,
+        if failed:
+            _rich_log("One or more pods failed to initialize. Terminating...", "red", "✗")
+            if args.cluster_size > 1 and 'cluster_id' in locals():
+                bridge.delete_cluster(cluster_id)
+            else:
+                for p in pods:
+                    bridge.terminate_pod(p["id"])
+            sys.exit(1)
+
+        # Re-fetch fresh pod info to ensure we have final runtime/port data for all pods
+        final_pods_data = bridge.get_pods()
+        pods = [next(p for p in final_pods_data if p["id"] == orig_p["id"]) for p in pods]
+        
+        # Display final cluster state
+        _display_cluster_status(pods)
+        
+        # Designate master pod (first in list)
+        pod = pods[0]
+        runtime_info = pod.get("runtime") or {}
+        ports_info = runtime_info.get("ports") or []
+        ssh_port_info = next(
+            (
+                pt
+                for pt in ports_info
+                if (
+                    pt.get("isIpPublic")
+                    or not any(pt.get("ip", "").startswith(pref) for pref in ["10.", "172.", "192."])
                 )
-                if args.use_s3 and ollama_cache_pull_failed:
-                    _rich_log(
-                        "Uploading Ollama cache for future runs...",
-                        "cyan",
-                        "📤",
-                        progress=progress,
-                        task_id=pod_task,
-                    )
-                    s3_sync_pod(
-                        pod_ip,
-                        pod_port,
-                        args.ssh_key,
-                        args.s3_bucket,
-                        args.s3_ollama_prefix,
-                        args.s3_region,
-                        args.s3_endpoint,
-                        "push",
-                        pod["id"],
-                        args.ssh_proxy,
-                        src=f"{args.volume_mount_path}/ollama",
-                        progress=progress,
-                        task_id=pod_task,
-                    )
-
-            progress.update(pod_task, description=f"Pod {pod['id']} ready!")
-            time.sleep(1)
+                and pt.get("privatePort") == 22
+            ),
+            None,
+        )
+        
+        if not ssh_port_info:
+            pod_ip = "ssh.runpod.io"
+            pod_port = 22
+            args.ssh_proxy = f"{pod['id']}-22@ssh.runpod.io"
+        else:
+            pod_ip = ssh_port_info["ip"]
+            pod_port = ssh_port_info["publicPort"]
 
         # After initialization, we exit the Progress block and resume normal scrolling logs for training
         if not args.no_watchdog:
@@ -3661,7 +3818,18 @@ def main():
                     interval_s = max(60.0, interval_minutes * 60.0)
                     while not watchdog_stop.wait(interval_s):
                         try:
-                            _rich_log("Watchdog: snapshot + sync", "cyan", "🐕")
+                            # 1. Cluster Health Check
+                            current_active_pods = bridge.get_pods()
+                            active_ids = {p["id"] for p in current_active_pods}
+                            
+                            for p in pods:
+                                if p["id"] not in active_ids:
+                                    _rich_log(f"Watchdog: Pod {p['id']} is missing! Triggering emergency exit.", "red", "🚨")
+                                    os.kill(os.getpid(), signal.SIGINT)
+                                    return
+
+                            # 2. Master Node Sync (Existing logic)
+                            _rich_log("Watchdog: snapshot + sync (Master)", "cyan", "🐕")
                             remote_snapshot(
                                 pod_ip,
                                 pod_port,
@@ -4148,7 +4316,12 @@ def main():
     finally:
         if watchdog_stop is not None:
             watchdog_stop.set()
-        if pod and pod.get("id") and pod["id"] != "dry-run-id":
+        
+        # Determine if we need to clean up a cluster or a single pod
+        if 'cluster_id' in locals() and cluster_id:
+            _rich_log(f"Terminating entire cluster {cluster_id}...", "red", "💥")
+            bridge.delete_cluster(cluster_id)
+        elif pod and pod.get("id") and pod["id"] != "dry-run-id":
             if args.terminate:
                 _rich_log(f"Terminating pod {pod['id']}...", "red", "💥")
                 bridge.terminate_pod(pod["id"])
