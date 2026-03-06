@@ -10,7 +10,7 @@
 
 ## Technical Standards
 - **Strict Python Standards**: Adhere to Black, Ruff, and strict type hints across the codebase.
-- **Plug-and-Play Architecture**: Ensure all modules are auto-discoverable and follow the standardized cognitive module interface.
+- **Validated Plug-and-Play Architecture**: Every cognitive capability must strictly inherit from `BaseBrainModule` and pass automated interface validation during discovery.
 - **Modular Introspection Tracing**: Every cognitive step should be traceable and introspectable to enable debugging and auditing of reasoning chains.
 
 ## User Experience Guidelines
