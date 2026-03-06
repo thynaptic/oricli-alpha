@@ -139,8 +139,16 @@ def _redact_secrets(text: str) -> str:
     return text
 
 
+import yaml
+
+
 def calculate_required_vram(
-    model_type: str, dataset_size_chars: int = 0, batch_size: int = 4, sequence_length: int = 512
+    model_type: str,
+    dataset_size_chars: int = 0,
+    batch_size: int = 4,
+    sequence_length: int = 512,
+    model_name: Optional[str] = None,
+    is_quantized: bool = False,
 ) -> int:
     """
     Estimate minimum VRAM required for a training task.
@@ -151,9 +159,29 @@ def calculate_required_vram(
     if model_type in ("character", "word"):
         base_gb = 4
     else:
-        # Transformer defaults to GPT-2 (124M) or DistilGPT-2 (82M)
-        # Training GPT-2 with Adam needs ~10-12GB for stability
-        base_gb = 12
+        # Check for 3B+ models
+        is_large_model = False
+        if model_name:
+            name_lower = model_name.lower()
+            if "3b" in name_lower or "phi-3.5" in name_lower or "llama-3.2" in name_lower:
+                is_large_model = True
+            elif "7b" in name_lower or "8b" in name_lower:
+                is_large_model = True
+                # Force at least 40GB for 7B+ even with LoRA/Quant
+                return 40
+
+        if is_large_model:
+            # 3B models: ~6GB weights (16-bit), ~2GB (4-bit)
+            # LoRA + Optimizer: ~2-4GB
+            # Activations: ~4-8GB (depends on seq_len)
+            if is_quantized:
+                base_gb = 16  # Safe floor for 3B quantized LoRA
+            else:
+                base_gb = 24  # Floor for 3B 16-bit LoRA
+        else:
+            # Transformer defaults to GPT-2 (124M) or DistilGPT-2 (82M)
+            # Training GPT-2 with Adam needs ~10-12GB for stability
+            base_gb = 12
 
     # 2. Dataset Scaling (Data loading buffer, shuffling, caching)
     # Add ~1GB for every 200M characters of data
@@ -162,7 +190,9 @@ def calculate_required_vram(
     # 3. Hyperparameter Scaling
     # Batch size: linear scaling
     # Sequence length: quadratic scaling for self-attention
-    hp_multiplier = (batch_size / 4) * ((sequence_length / 512) ** 2)
+    # Scaling factor increases for larger models
+    hp_scale = 2.0 if (model_name and "3b" in model_name.lower()) else 1.0
+    hp_multiplier = (batch_size / 4) * ((sequence_length / 512) ** 2) * hp_scale
 
     # Total calculation
     estimated = base_gb + data_gb + (2 * hp_multiplier)
@@ -170,21 +200,58 @@ def calculate_required_vram(
     # Add a safety headroom (20%)
     total_with_headroom = math.ceil(estimated * 1.2)
 
-    # Floor at 8GB for modern torch/transformers stability
+    # Absolute floors based on model size
+    if model_name and ("3b" in model_name.lower() or "phi-3.5" in model_name.lower()):
+        return max(24, total_with_headroom)
+
     return max(8, total_with_headroom)
 
 
 def get_task_details(args) -> Dict[str, Any]:
     """
-    Extract model type, dataset size (est), batch size, and sequence length from args or curriculum.
+    Extract model details from args, curriculum, or profile YAML.
     """
     model_type = "transformer"  # default
+    model_name = None
     dataset_size = 0
     batch_size = 4  # default
     seq_len = 512  # default
+    is_quantized = False
 
-    # 1. Check if we're in curriculum mode
-    if args.curriculum:
+    # 1. Check if we have a profile YAML in train_args
+    profile_path = None
+    if hasattr(args, "train_args") and args.train_args:
+        for i, arg in enumerate(args.train_args):
+            if arg == "--profile" and i + 1 < len(args.train_args):
+                profile_path = Path(args.train_args[i + 1])
+                break
+    
+    if profile_path and profile_path.exists():
+        try:
+            with open(profile_path, "r") as f:
+                profile = yaml.safe_load(f)
+                model_type = profile.get("model_type", model_type)
+                
+                t_config = profile.get("transformer_config", {})
+                if t_config:
+                    model_name = t_config.get("model_name")
+                    seq_len = t_config.get("max_length", seq_len)
+                    batch_size = t_config.get("batch_size", batch_size)
+                    if t_config.get("_load_4bit") or t_config.get("_load_8bit"):
+                        is_quantized = True
+                
+                # Use top-level overrides if present
+                if profile.get("batch_size"):
+                    batch_size = profile.get("batch_size")
+                
+                # Estimate dataset size from books
+                book_ids = profile.get("book_ids", [])
+                dataset_size = len(book_ids) * 50_000_000 # Heuristic: 50MB per book
+        except Exception as e:
+            _rich_log(f"Warning: Failed to parse profile for VRAM estimation: {e}", "yellow", "⚠")
+
+    # 2. Check if we're in curriculum mode (if profile didn't already set things)
+    if args.curriculum and not model_name:
         try:
             # Import stage defs to see what's coming
             sys.path.insert(0, str(REPO_ROOT))
@@ -259,8 +326,8 @@ def get_task_details(args) -> Dict[str, Any]:
         except Exception:
             pass
 
-    # 2. Extract from train_args if provided
-    if args.train_args:
+    # 3. Extract/Override from train_args if provided
+    if hasattr(args, "train_args") and args.train_args:
         # Simple parser for forwarded args
         for i, arg in enumerate(args.train_args):
             if arg == "--batch-size" and i + 1 < len(args.train_args):
@@ -270,16 +337,20 @@ def get_task_details(args) -> Dict[str, Any]:
                     pass
             elif arg == "--model-type" and i + 1 < len(args.train_args):
                 model_type = args.train_args[i + 1]
+            elif arg == "--model-name" and i + 1 < len(args.train_args):
+                model_name = args.train_args[i + 1]
 
-    # 3. Explicit args on bridge take precedence
+    # 4. Explicit args on bridge take precedence
     if args.batch_size:
         batch_size = args.batch_size
 
     return {
         "model_type": model_type,
+        "model_name": model_name,
         "dataset_size": dataset_size,
         "batch_size": batch_size,
         "sequence_length": seq_len,
+        "is_quantized": is_quantized,
     }
 
 
@@ -707,7 +778,7 @@ def ensure_mavaia_installed(
         "rm -rf datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy PIL torch torchvision torchaudio xxhash multiprocess dill fsspec aiohttp requests tqdm yaml safetensors 2>/dev/null || true; "
         "find . -maxdepth 1 -name '*.so' -delete; "
         "echo '[INFO] Installing core ML libraries (this may take a few minutes)...'; "
-        '"$VENV_PY" -m pip install --upgrade datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash shortuuid libtmux python-dotenv uvicorn fastapi pydantic beautifulsoup4 PyPDF2 PyYAML tensorflow keras -q || true; '
+        '"$VENV_PY" -m pip install --upgrade bitsandbytes scipy datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash shortuuid libtmux python-dotenv uvicorn fastapi pydantic beautifulsoup4 PyPDF2 PyYAML tensorflow keras -q || true; '
         "if [ -d LiveBench ]; then "
         "  echo '[INFO] LiveBench detected. Installing in editable mode...'; "
         '  "$VENV_PY" -m pip install -e LiveBench/ -q || true; '
@@ -864,7 +935,7 @@ def s3_sync_local_to_bucket(
     s3_key = f"s3://{bucket}/{prefix}/mavaia.tar"
     tar_cmd = [
         "tar",
-        "-cf",
+        "-chf",
         "-",
         "--exclude=.git",
         "--exclude=__pycache__",
@@ -872,8 +943,6 @@ def s3_sync_local_to_bucket(
         "--exclude=*.pyc",
         "--exclude=*.tmp",
         "--exclude=.cursor",
-        "--exclude=./models",
-        "--exclude=./models/*",
         "--exclude=build",
         "--exclude=*.egg-info",
         "--exclude=runs",
@@ -1098,6 +1167,35 @@ def s3_sync_pod(
     _run_ssh(ssh_key, pod_ip, pod_port, pod_id, proxy, cmd, progress=progress, task_id=task_id)
 
 
+def pre_sync_cleanup(
+    pod_ip: str,
+    pod_port: int,
+    ssh_key: str,
+    workdir: str,
+    pod_id: str = None,
+    proxy: str = None,
+    progress=None,
+    task_id=None,
+):
+    _rich_log("Performing pre-sync disk cleanup on pod...", "cyan", "🧹", progress=progress, task_id=task_id)
+    
+    # Aggressive cleanup of logs, snapshots, and temporary files in the workspace
+    cleanup_cmd = (
+        f"find {workdir} -name '*.log' -delete 2>/dev/null || true; "
+        f"find {workdir} -name '*.tmp' -delete 2>/dev/null || true; "
+        f"rm -rf {workdir}/mavaia/mavaia_core/models/neural_text_generator/snapshots/* 2>/dev/null || true; "
+        f"rm -rf {workdir}/mavaia/mavaia_core/models/neural_text_generator/checkpoints/* 2>/dev/null || true; "
+        f"rm -rf {workdir}/mavaia/mavaia_core/models/neural_text_generator/runs/* 2>/dev/null || true; "
+        f"rm -rf {workdir}/mavaia/runs/* 2>/dev/null || true; "
+        f"rm -rf {workdir}/mavaia/build/* 2>/dev/null || true; "
+        f"rm -rf /root/.cache/pip/* 2>/dev/null || true; "
+        f"rm -rf /root/.cache/huggingface/* 2>/dev/null || true; "
+        f"rm -rf /tmp/* 2>/dev/null || true; "
+        "df -h /workspace"
+    )
+    
+    _run_ssh(ssh_key, pod_ip, pod_port, pod_id, proxy, cleanup_cmd, progress=progress, task_id=task_id)
+
 def sync_code(
     pod_ip: str,
     pod_port: int,
@@ -1131,8 +1229,8 @@ def sync_code(
         "tmp",
         "--exclude",
         "models",
-        "--exclude",
-        "mavaia_core/models",
+        "--include",
+        "mavaia_core/data/rfal_lessons.jsonl",
         "--exclude",
         "mavaia_core/data",
         "--exclude",
@@ -1157,7 +1255,7 @@ def sync_code(
         rsync_cmd = (
             [
                 "rsync",
-                "-rlptz",
+                "-rlptzL",
                 "--human-readable",
                 "--no-perms",
                 "-e",
@@ -1174,7 +1272,7 @@ def sync_code(
     rsync_cmd = (
         [
             "rsync",
-            "-rlptz",
+            "-rlptzL",
             "--human-readable",
             "--no-perms",
             "-e",
@@ -1204,12 +1302,12 @@ def sync_code(
                 progress=progress,
                 task_id=task_id,
             )
-            # Find the index of the SSH command (-e flag value)
-            for idx, item in enumerate(rsync_cmd):
-                if item == "-e":
-                    rsync_cmd[idx + 1] = _ssh_e(ssh_key, "22")
+            # Find and replace the remote target (it's the one that starts with root@ or contains :)
+            for i, arg in enumerate(rsync_cmd):
+                if isinstance(arg, str) and (arg.startswith("root@") or (":" in arg and not arg.startswith("-"))):
+                    rsync_cmd[i] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia"
                     break
-            rsync_cmd[-1] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia"
+            
             proc = subprocess.run(rsync_cmd, check=False)
             if proc.returncode != 0 and proc.returncode != 23:
                 raise subprocess.CalledProcessError(proc.returncode, rsync_cmd)
@@ -1245,7 +1343,7 @@ def sync_models_to_pod(
 
     common_args = [
         "rsync",
-        "-rlptz",
+        "-rlptzL",
         "--exclude", "runs",
         "--exclude", "checkpoints",
         "--exclude", "*.log",
@@ -1402,8 +1500,8 @@ def remote_train(
     _rich_log(
         "Starting training on remote pod...", "bold green", "🏋", progress=progress, task_id=task_id
     )
-    if train_args and train_args[0] == "--":
-        train_args = train_args[1:]
+    # Filter out any double-dash separators that might be caught in the middle of train_args
+    train_args = [a for a in train_args if a != "--"]
     args_str = " ".join(train_args)
     env_prefix = "PYTHONUNBUFFERED=1 "
     if "--plain-output" in train_args:
@@ -1417,13 +1515,13 @@ def remote_train(
 
     if proxy:
         ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [
-            f"cd {workdir}/mavaia && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
+            f"cd {workdir}/mavaia && export PYTHONPATH=. && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
         ]
         subprocess.run(ssh_cmd, check=True)
         return
 
     ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [
-        f"cd {workdir}/mavaia && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
+        f"cd {workdir}/mavaia && export PYTHONPATH=. && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
     ]
     try:
         subprocess.run(ssh_cmd, check=True)
@@ -1597,9 +1695,9 @@ def remote_benchmark(
         progress=progress,
         task_id=task_id,
     )
-    if bench_args and bench_args[0] == "--":
-        bench_args = bench_args[1:]
-
+    # Filter out any double-dash separators that might be caught in the middle of bench_args
+    bench_args = [a for a in bench_args if a != "--"]
+    
     # Extract model path to pass to API server
     model_path = None
     for i, arg in enumerate(bench_args):
@@ -1621,6 +1719,13 @@ def remote_benchmark(
     # Build a robust single script to run on the pod
     remote_script = f"""
 set -e
+export MAVAIA_ENABLE_HEAVY_MODULES=true
+
+# Cleanup old logs and temporary data to save disk space
+echo "[DEBUG] Cleaning up old logs and snapshots..."
+find {workdir}/mavaia -name "*.log" -type f -mtime +1 -delete 2>/dev/null || true
+rm -rf {workdir}/mavaia/mavaia_core/models/neural_text_generator/snapshots/* 2>/dev/null || true
+
 PYTHON_EXE=$(if [ -f {workdir}/mavaia/.venv/bin/python ]; then echo {workdir}/mavaia/.venv/bin/python; else echo python3; fi)
 echo "[DEBUG] Using Python: $PYTHON_EXE"
 
@@ -2448,6 +2553,56 @@ def remote_snapshot(
             raise
 
 
+def register_trained_adapters(local_path: Path):
+    """Scan for trained adapters and register them with the AdapterRouter."""
+    _rich_log("Scanning for new adapters to register with Mavaia Core...", "cyan", "🛰")
+    
+    # Standard location for remote model weights
+    remote_models_dir = local_path / "models" / "neural_text_generator_remote"
+    if not remote_models_dir.exists():
+        return
+
+    # Try to get MavaiaClient
+    try:
+        from mavaia_core.client import MavaiaClient
+        client = MavaiaClient()
+    except Exception as e:
+        _rich_log(f"Could not initialize MavaiaClient for registration: {e}", "yellow", "⚠")
+        return
+
+    # Check for adapters in the models directory (where NTG saves them)
+    # They are named f"adapter_{adapter_name}" by mavaia_core/brain/modules/neural_text_generator.py
+    for adapter_path in remote_models_dir.iterdir():
+        if adapter_path.is_dir() and adapter_path.name.startswith("adapter_"):
+            # Check if it has LoRA weights
+            if (adapter_path / "adapter_config.json").exists():
+                adapter_name = adapter_path.name.replace("adapter_", "")
+                _rich_log(f"Found new specialized adapter: {adapter_name}", "bold green", "💎")
+                
+                try:
+                    # Register with router (using the name as intent)
+                    client.brain.adapter_router.register_intent(
+                        intent=adapter_name,
+                        adapter_id=str(adapter_path.absolute())
+                    )
+                    _rich_log(f"Successfully registered adapter '{adapter_name}' with router.", "green", "✓")
+                except Exception as e:
+                    _rich_log(f"Failed to register adapter {adapter_name}: {e}", "red", "✗")
+
+    # Also check the main transformer checkpoint dir (base LoRA if not named)
+    transformer_dir = remote_models_dir / "transformer"
+    if transformer_dir.exists() and (transformer_dir / "adapter_config.json").exists():
+        _rich_log("Found main LoRA adapter output.", "bold green", "💎")
+        try:
+            client.brain.adapter_router.register_intent(
+                intent="primary_lora",
+                adapter_id=str(transformer_dir.absolute())
+            )
+            _rich_log("Registered primary_lora adapter with router.", "green", "✓")
+        except Exception as e:
+            _rich_log(f"Failed to register primary adapter: {e}", "red", "✗")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Mavaia RunPod Training Bridge")
     parser.add_argument("--pod-id", help="Existing pod ID to use")
@@ -2634,6 +2789,36 @@ def main():
         "--list-stages",
         action="store_true",
         help="List all available curriculum stages and exit",
+    )
+    parser.add_argument(
+        "--find-elective",
+        type=str,
+        help="Search for a dataset based on a phrase/category and train it as an elective",
+    )
+    parser.add_argument(
+        "--add-stage",
+        type=str,
+        help="Search for a dataset and permanently add it as a new curriculum stage",
+    )
+    parser.add_argument(
+        "--auto-select",
+        action="store_true",
+        help="Auto-select the best match for --find-elective without interaction",
+    )
+    parser.add_argument(
+        "--lora",
+        action="store_true",
+        help="Enable LoRA fine-tuning for non-curriculum training",
+    )
+    parser.add_argument(
+        "--adapter-name",
+        type=str,
+        help="Custom name for the trained LoRA adapter (elective name)",
+    )
+    parser.add_argument(
+        "--train-rfal",
+        action="store_true",
+        help="Run RFAL DPO alignment training using collected rfal_lessons.jsonl",
     )
     parser.add_argument(
         "--fleet-curriculum",
@@ -3280,6 +3465,18 @@ def main():
                 task_id=pod_task,
                 bridge=bridge,
             )
+            # Pre-sync cleanup to free disk space
+            pre_sync_cleanup(
+                pod_ip,
+                pod_port,
+                args.ssh_key,
+                args.volume_mount_path,
+                pod["id"],
+                args.ssh_proxy,
+                progress=progress,
+                task_id=pod_task,
+            )
+
             sync_code(
                 pod_ip,
                 pod_port,
@@ -3611,6 +3808,16 @@ def main():
                 train_args.extend(["--batch-size", str(args.batch_size)])
             if args.gradient_checkpointing:
                 train_args.append("--gradient-checkpointing")
+            if args.lora:
+                train_args.append("--lora")
+            if args.adapter_name:
+                train_args.extend(["--adapter-name", args.adapter_name])
+            if args.train_rfal:
+                _rich_log("RFAL Alignment Pass: Training on collected lessons", "bold cyan", "🎓")
+                train_args.append("--dpo")
+                train_args.extend(["--dpo-data", "mavaia_core/data/rfal_lessons.jsonl"])
+                if "--adapter-name" not in train_args and not args.adapter_name:
+                    train_args.extend(["--adapter-name", "rfal_alignment"])
 
             script_rel = args.script or "scripts/train_neural_text_generator.py"
             if args.curriculum:
@@ -3619,7 +3826,20 @@ def main():
                     _rich_log(f"Targeting curriculum stages: {args.stage}", "cyan", "🎯")
                     if "--stages" not in train_args:
                         train_args.extend(["--stages", args.stage])
-                else:
+                
+                if args.find_elective:
+                    _rich_log(f"Dynamic discovery elective: '{args.find_elective}'", "cyan", "🔍")
+                    train_args.extend(["--find-elective", args.find_elective])
+                    if args.auto_select:
+                        train_args.append("--auto-select")
+                
+                if args.add_stage:
+                    _rich_log(f"Permanently adding stage: '{args.add_stage}'", "cyan", "➕")
+                    train_args.extend(["--add-stage", args.add_stage])
+                    if args.auto_select:
+                        train_args.append("--auto-select")
+                
+                if not args.stage and not args.find_elective and not args.add_stage:
                     _rich_log("Running full curriculum sequence", "cyan", "📚")
             else:
                 if (
@@ -3704,6 +3924,9 @@ def main():
                 pod["id"],
                 args.ssh_proxy,
             )
+            
+            # Register newly trained adapters with the AdapterRouter
+            register_trained_adapters(REPO_ROOT)
 
             if args.use_s3:
                 s3_sync_pod(
@@ -3768,6 +3991,8 @@ def main():
                     pod["id"],
                     args.ssh_proxy,
                 )
+                # Register any synchronized adapters
+                register_trained_adapters(REPO_ROOT)
                 _rich_log("Sync successful!", "bold green", "✓")
                 break
             except Exception as e:
@@ -3777,13 +4002,13 @@ def main():
 
     except Exception as e:
         failed = True
-        _rich_log(f"Error detected: {_redact_secrets(str(e))}. Saving snapshot...", "red", "✗")
-        try:
-            remote_snapshot(
-                pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod["id"], args.ssh_proxy
-            )
-        except Exception as snap_e:
-            _rich_log(f"Snapshot failed: {snap_e}", "red", "✗")
+        _rich_log(f"Error detected: {_redact_secrets(str(e))}. Skipping snapshot to save disk space.", "red", "✗")
+        # try:
+        #     remote_snapshot(
+        #         pod_ip, pod_port, args.ssh_key, args.volume_mount_path, pod["id"], args.ssh_proxy
+        #     )
+        # except Exception as snap_e:
+        #     _rich_log(f"Snapshot failed: {snap_e}", "red", "✗")
         try:
             get_artifacts(
                 pod_ip,
@@ -3803,6 +4028,8 @@ def main():
                 pod["id"],
                 args.ssh_proxy,
             )
+            # Register any synchronized adapters
+            register_trained_adapters(REPO_ROOT)
             if args.use_s3:
                 s3_sync_pod(
                     pod_ip,

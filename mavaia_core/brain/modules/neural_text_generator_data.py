@@ -543,6 +543,38 @@ class Registry:
                 
         return all_preferences
 
+    def load_jsonl_preferences(self, file_path: str, max_items: int = 1000) -> List[Dict[str, str]]:
+        """Load preference data from a JSONL file."""
+        path = Path(file_path)
+        if not path.exists():
+            logger.warning(f"DPO data file not found: {file_path}")
+            return []
+            
+        preferences = []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if len(preferences) >= max_items:
+                        break
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        # Expecting prompt, chosen, rejected
+                        if all(k in data for k in ["prompt", "chosen", "rejected"]):
+                            preferences.append({
+                                "prompt": data["prompt"],
+                                "chosen": data["chosen"],
+                                "rejected": data["rejected"]
+                            })
+                    except Exception:
+                        continue
+        except Exception as e:
+            logger.error(f"Failed to load JSONL preferences from {file_path}: {e}")
+            
+        return preferences
+
     def load_data(
         self,
         source: Union[str, List[str]] = "gutenberg",
@@ -612,17 +644,17 @@ class Registry:
         targets: List[str],
         vocab: Dict[str, int],
     ) -> Tuple[Any, Any]:
-        """Convert character sequences to numpy one-hot arrays for Keras."""
+        """Convert character sequences to numpy integer arrays for Keras."""
         import numpy as np
         vocab_size = len(vocab)
         seq_len = len(sequences[0]) if sequences else 1
         n = len(sequences)
-        X = np.zeros((n, seq_len, vocab_size), dtype=np.float32)
+        X = np.zeros((n, seq_len), dtype=np.int32)
         y = np.zeros((n, vocab_size), dtype=np.float32)
         for i, (seq, target) in enumerate(zip(sequences, targets)):
             for t, ch in enumerate(seq):
                 if ch in vocab:
-                    X[i, t, vocab[ch]] = 1.0
+                    X[i, t] = vocab[ch]
             if target in vocab:
                 y[i, vocab[target]] = 1.0
         return X, y
@@ -674,12 +706,8 @@ class Registry:
         import numpy as np
         n = len(sequences)
         seq_len = len(sequences[0]) if sequences else 1
-        vocab_size = len(vocab)
         X = np.array(sequences, dtype=np.int32).reshape(n, seq_len)
-        y = np.zeros((n, vocab_size), dtype=np.float32)
-        for i, t in enumerate(targets):
-            if 0 <= t < vocab_size:
-                y[i, t] = 1.0
+        y = np.array(targets, dtype=np.int32)
         return X, y
 
     def preprocess_text(self, text: str, lowercase: bool = True, remove_special: bool = True) -> str:

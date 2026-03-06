@@ -42,11 +42,11 @@ Goal: Wire the RFAL engine into the live generation pipeline without adding late
 
 **Phase 4: Bridge Sync & DPO Training**
 Goal: Update the RunPod bridge to consume RFAL lessons and update weights.
-- [ ] Task: Bridge DPO Extension
-    - [ ] Add `--train-rfal` flag to `scripts/runpod_bridge.py`.
-    - [ ] Logic to sync `rfal_lessons.jsonl` to the remote pod.
-- [ ] Task: Training Script Update
-    - [ ] Update `scripts/train_neural_text_generator.py` to support a DPO training head for RFAL data.
-- [ ] Task: TDD - Training Sync
-    - [ ] Verify successful remote training job initiation using RFAL lessons.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Bridge & Training' (Protocol in workflow.md)
+- [x] Task: Bridge DPO Extension
+    - [x] Add `--train-rfal` flag to `scripts/runpod_bridge.py`.
+    - [x] Logic to sync `rfal_lessons.jsonl` to the remote pod.
+- [x] Task: Training Script Update
+    - [x] Update `scripts/train_neural_text_generator.py` to support a DPO training head for RFAL data.
+- [x] Task: TDD - Training Sync
+    - [x] Verify successful remote training job initiation using RFAL lessons.
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Bridge & Training' (Protocol in workflow.md)

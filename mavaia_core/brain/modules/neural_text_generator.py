@@ -184,6 +184,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
     def initialize(self) -> bool:
         """Initialize the module"""
+        print("[DEBUG] NeuralTextGenerator: Initializing module (Strict 1024-token limit version)")
         self._load_config()
         self._setup_model_directory()
         return True
@@ -498,6 +499,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation"""
+        # print(f"[DEBUG] NeuralTextGenerator: Executing operation '{operation}'")
         # Operations that don't need heavy ML stacks
         if operation == "get_model_info":
             return self._get_model_info()
@@ -509,7 +511,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if operation == "train_dpo":
             return self._train_dpo_model(params)
         elif operation == "generate_text":
-            return self._generate_text(params)
+            result = self._generate_text(params)
+            if not result.get("success"):
+                print(f"[DEBUG] NeuralTextGenerator: generate_text FAILED: {result.get('error')}")
+            return result
         elif operation == "generate_continuation":
             return self._generate_continuation(params)
         elif operation == "load_model":
@@ -517,6 +522,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         elif operation == "save_model":
             return self._save_model(params)
         
+        print(f"[DEBUG] NeuralTextGenerator: UNKNOWN OPERATION '{operation}'")
         return {"success": False, "error": f"Unknown operation: {operation}"}
 
 
@@ -576,13 +582,41 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         source = params.get("source", "gutenberg")  # Default to gutenberg for backward compatibility
         book_ids = params.get("book_ids")
         categories = params.get("categories")
-        epochs = params.get("epochs", self.config.get("training", {}).get("epochs", 10))
+        
+        try:
+            epochs = int(params.get("epochs", self.config.get("training", {}).get("epochs", 10)))
+        except (ValueError, TypeError):
+            epochs = 10
+            
         continue_training = params.get("continue_training", False)
-        train_for_minutes = params.get("train_for_minutes")
-        train_for_hours = params.get("train_for_hours")
+        
+        try:
+            train_for_minutes = float(params.get("train_for_minutes")) if params.get("train_for_minutes") is not None else None
+        except (ValueError, TypeError):
+            train_for_minutes = None
+            
+        try:
+            train_for_hours = float(params.get("train_for_hours")) if params.get("train_for_hours") is not None else None
+        except (ValueError, TypeError):
+            train_for_hours = None
+            
         max_text_size = params.get("max_text_size")
-        max_books = params.get("max_books", self.config.get("data", {}).get("max_books", 3))
-        data_percentage = params.get("data_percentage", 1.0)
+        if max_text_size is not None:
+            try:
+                max_text_size = int(max_text_size)
+            except (ValueError, TypeError):
+                max_text_size = None
+                
+        try:
+            max_books = int(params.get("max_books", self.config.get("data", {}).get("max_books", 3)))
+        except (ValueError, TypeError):
+            max_books = 3
+            
+        try:
+            data_percentage = float(params.get("data_percentage", 1.0))
+        except (ValueError, TypeError):
+            data_percentage = 1.0
+            
         search = params.get("search")
         transformer_config = params.get("transformer_config")
         model_name = params.get("model_name")
@@ -592,6 +626,14 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         batch_size = params.get("batch_size")
         learning_rate = params.get("learning_rate")
         sequence_length = params.get("sequence_length")
+        
+        # Ensure threshold parameters are floats
+        stop_at_loss = params.get("stop_at_loss")
+        if stop_at_loss is not None:
+            try:
+                stop_at_loss = float(stop_at_loss)
+            except (ValueError, TypeError):
+                stop_at_loss = None
 
         # Calculate time limit in seconds
         time_limit_seconds = None
@@ -734,14 +776,27 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 params = self._apply_adaptive_policy(params, policy)
                 
                 # Re-extract values from merged params after policy application
-                epochs = params.get("epochs", epochs)
+                try:
+                    epochs = int(params.get("epochs", epochs))
+                except (ValueError, TypeError):
+                    pass
+                    
                 # Update batch_size, learning_rate, sequence_length if provided by policy
                 if params.get("batch_size") is not None:
-                    batch_size = params.get("batch_size")
+                    try:
+                        batch_size = int(params.get("batch_size"))
+                    except (ValueError, TypeError):
+                        pass
                 if params.get("learning_rate") is not None:
-                    learning_rate = params.get("learning_rate")
+                    try:
+                        learning_rate = float(params.get("learning_rate"))
+                    except (ValueError, TypeError):
+                        pass
                 if params.get("sequence_length") is not None:
-                    sequence_length = params.get("sequence_length")
+                    try:
+                        sequence_length = int(params.get("sequence_length"))
+                    except (ValueError, TypeError):
+                        pass
                 transformer_config = params.get("transformer_config", transformer_config)
                 model_name = params.get("model_name", model_name)
 
@@ -749,17 +804,44 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     transformer_config = {}
                 
                 # Sentinel parameters
-                transformer_config["_stop_at_loss"] = params.get("stop_at_loss")
-                transformer_config["_plateau_steps"] = params.get("plateau_steps", 50)
-                transformer_config["_plateau_patience"] = params.get("plateau_patience", 3)
-                transformer_config["_min_improvement"] = params.get("min_improvement", 0.01)
+                try:
+                    transformer_config["_stop_at_loss"] = float(stop_at_loss) if stop_at_loss is not None else None
+                except (ValueError, TypeError):
+                    transformer_config["_stop_at_loss"] = None
+                    
+                try:
+                    transformer_config["_plateau_steps"] = int(params.get("plateau_steps", 50))
+                except (ValueError, TypeError):
+                    transformer_config["_plateau_steps"] = 50
+                    
+                try:
+                    transformer_config["_plateau_patience"] = int(params.get("plateau_patience", 3))
+                except (ValueError, TypeError):
+                    transformer_config["_plateau_patience"] = 3
+                    
+                try:
+                    transformer_config["_min_improvement"] = float(params.get("min_improvement", 0.01))
+                except (ValueError, TypeError):
+                    transformer_config["_min_improvement"] = 0.01
 
                 if params.get("distill"):
                     transformer_config["_distill"] = True
                     transformer_config["_teacher_model"] = params.get("teacher_model", "phi4:latest")
-                    transformer_config["_distill_alpha"] = params.get("distill_alpha", 0.7)
-                    transformer_config["_distill_temperature"] = params.get("distill_temperature", 2.0)
-                    transformer_config["_distill_top_k"] = params.get("distill_top_k", 20)
+                    try:
+                        transformer_config["_distill_alpha"] = float(params.get("distill_alpha", 0.7))
+                    except (ValueError, TypeError):
+                        transformer_config["_distill_alpha"] = 0.7
+                        
+                    try:
+                        transformer_config["_distill_temperature"] = float(params.get("distill_temperature", 2.0))
+                    except (ValueError, TypeError):
+                        transformer_config["_distill_temperature"] = 2.0
+                        
+                    try:
+                        transformer_config["_distill_top_k"] = int(params.get("distill_top_k", 20))
+                    except (ValueError, TypeError):
+                        transformer_config["_distill_top_k"] = 20
+                        
                     transformer_config["_ollama_url"] = params.get("ollama_url", "http://localhost:11434")
                     if params.get("run_dir"):
                         transformer_config["_run_dir"] = params.get("run_dir")
@@ -769,7 +851,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if params.get("teacher_cache_dir"):
                     transformer_config["_teacher_cache_dir"] = params.get("teacher_cache_dir")
                 if params.get("distill_precompute_minutes") is not None:
-                    transformer_config["_distill_precompute_minutes"] = params.get("distill_precompute_minutes")
+                    try:
+                        transformer_config["_distill_precompute_minutes"] = float(params.get("distill_precompute_minutes"))
+                    except (ValueError, TypeError):
+                        transformer_config["_distill_precompute_minutes"] = None
             
             # Store training params for policy saving (after policy application)
             training_params_for_policy = {
@@ -819,7 +904,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             extra={"module_name": "neural_text_generator"},
                         )
                     char_result = self._train_character_model(
-                        text, epochs, continue_training, time_limit_seconds, batch_size
+                        text, epochs, continue_training, time_limit_seconds, batch_size,
+                        stop_at_loss=stop_at_loss
                     )
                     results["character"] = char_result
                     if char_result.get("success"):
@@ -840,7 +926,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             extra={"module_name": "neural_text_generator"},
                         )
                     word_result = self._train_word_model(
-                        text, epochs, continue_training, time_limit_seconds, batch_size
+                        text, epochs, continue_training, time_limit_seconds, batch_size,
+                        stop_at_loss=stop_at_loss
                     )
                     results["word"] = word_result
                     if word_result.get("success"):
@@ -864,7 +951,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 transformer_config["_categories"] = categories
                 
                 # Sentinel parameters
-                transformer_config["_stop_at_loss"] = params.get("stop_at_loss")
+                transformer_config["_stop_at_loss"] = stop_at_loss
                 transformer_config["_plateau_steps"] = params.get("plateau_steps", 50)
                 transformer_config["_plateau_patience"] = params.get("plateau_patience", 3)
                 transformer_config["_min_improvement"] = params.get("min_improvement", 0.01)
@@ -1048,6 +1135,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         continue_training: bool,
         time_limit_seconds: Optional[float] = None,
         batch_size: Optional[int] = None,
+        stop_at_loss: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Train character-level model
@@ -1130,16 +1218,37 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         
         # Custom callback for time-based training and checkpoint saving
         class TrainingCallback(keras.callbacks.Callback):
-            def __init__(self, time_limit: Optional[float], start_time: float, model_dir: Path, model_type: str):
+            def __init__(self, time_limit: Optional[float], start_time: float, model_dir: Path, model_type: str, stop_at_loss: Optional[float] = None):
                 self.time_limit = time_limit
                 self.start_time = start_time
                 self.should_stop = False
                 self.model_dir = model_dir
                 self.model_type = model_type
+                try:
+                    self.stop_at_loss = float(stop_at_loss) if stop_at_loss is not None else None
+                except (ValueError, TypeError):
+                    self.stop_at_loss = None
 
             def on_epoch_end(self, epoch, logs=None):
+                logs = logs or {}
+                current_loss = logs.get("loss")
+                
+                # Check target loss floor (Early Stopping)
+                if self.stop_at_loss is not None and current_loss is not None:
+                    # Nuclear cast: force both to float right here
+                    try:
+                        f_current = float(current_loss)
+                        f_stop = float(self.stop_at_loss)
+                        if f_current <= f_stop:
+                            if model_type != "transformer": # Keras models
+                                 _trainer_log(f"[bold green][Mavaia-Sentinel][/bold green] Loss floor reached ({f_current:.4f} <= {f_stop:.4f}). Ending training early.")
+                            self.model.stop_training = True
+                            self.should_stop = True
+                    except (ValueError, TypeError):
+                        pass
+
                 # Check time limit
-                if self.time_limit:
+                if not self.should_stop and self.time_limit:
                     elapsed = time.time() - self.start_time
                     if elapsed >= self.time_limit:
                         logger.info(
@@ -1186,7 +1295,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     )
 
         callbacks = []
-        callbacks.append(TrainingCallback(time_limit_seconds, start_time, self.model_dir, "char"))
+        callbacks.append(TrainingCallback(time_limit_seconds, start_time, self.model_dir, "char", stop_at_loss=stop_at_loss))
         
         # Adjust epochs if time limit is very short
         effective_epochs = epochs
@@ -1239,6 +1348,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         continue_training: bool,
         time_limit_seconds: Optional[float] = None,
         batch_size: Optional[int] = None,
+        stop_at_loss: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Train word-level model
@@ -1323,16 +1433,37 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         
         # Custom callback for time-based training and checkpoint saving
         class TrainingCallback(keras.callbacks.Callback):
-            def __init__(self, time_limit: Optional[float], start_time: float, model_dir: Path, model_type: str):
+            def __init__(self, time_limit: Optional[float], start_time: float, model_dir: Path, model_type: str, stop_at_loss: Optional[float] = None):
                 self.time_limit = time_limit
                 self.start_time = start_time
                 self.should_stop = False
                 self.model_dir = model_dir
                 self.model_type = model_type
+                try:
+                    self.stop_at_loss = float(stop_at_loss) if stop_at_loss is not None else None
+                except (ValueError, TypeError):
+                    self.stop_at_loss = None
 
             def on_epoch_end(self, epoch, logs=None):
+                logs = logs or {}
+                current_loss = logs.get("loss")
+                
+                # Check target loss floor (Early Stopping)
+                if self.stop_at_loss is not None and current_loss is not None:
+                    # Nuclear cast: force both to float right here
+                    try:
+                        f_current = float(current_loss)
+                        f_stop = float(self.stop_at_loss)
+                        if f_current <= f_stop:
+                            if model_type != "transformer": # Keras models
+                                 _trainer_log(f"[bold green][Mavaia-Sentinel][/bold green] Loss floor reached ({f_current:.4f} <= {f_stop:.4f}). Ending training early.")
+                            self.model.stop_training = True
+                            self.should_stop = True
+                    except (ValueError, TypeError):
+                        pass
+
                 # Check time limit
-                if self.time_limit:
+                if not self.should_stop and self.time_limit:
                     elapsed = time.time() - self.start_time
                     if elapsed >= self.time_limit:
                         logger.info(
@@ -1379,7 +1510,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     )
 
         callbacks = []
-        callbacks.append(TrainingCallback(time_limit_seconds, start_time, self.model_dir, "word"))
+        callbacks.append(TrainingCallback(time_limit_seconds, start_time, self.model_dir, "word", stop_at_loss=stop_at_loss))
         
         # Adjust epochs if time limit is very short
         effective_epochs = epochs
@@ -2086,10 +2217,18 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         # 1. Load Preference Data
         print("[INFO] Loading preference data for DPO...")
         from mavaia_core.brain.modules.neural_text_generator_data import NeuralTextGeneratorData
-        preferences = NeuralTextGeneratorData.load_preferences(
-            book_ids=params.get("book_ids"),
-            max_items=params.get("max_text_size", 1000) # Re-use max_text_size as item limit
-        )
+        
+        dpo_data_path = params.get("dpo_data")
+        if dpo_data_path:
+            preferences = NeuralTextGeneratorData.load_jsonl_preferences(
+                dpo_data_path,
+                max_items=params.get("max_text_size", 1000)
+            )
+        else:
+            preferences = NeuralTextGeneratorData.load_preferences(
+                book_ids=params.get("book_ids"),
+                max_items=params.get("max_text_size", 1000) # Re-use max_text_size as item limit
+            )
         
         if not preferences:
             return {"success": False, "error": "No preference data loaded for DPO"}
@@ -2147,6 +2286,71 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             "items_processed": len(dataset)
         }
 
+    def _load_transformer_model(
+        self,
+        model_name_or_path: str,
+        device: str,
+        transformer_config: Dict[str, Any],
+    ) -> Any:
+        """
+        Helper to load transformer model with support for quantization and proper dtypes.
+        """
+        from transformers import AutoModelForCausalLM, AutoConfig
+        import torch
+
+        # Determine best dtype for device
+        if device == "cuda":
+            if torch.cuda.is_bf16_supported():
+                torch_dtype = torch.bfloat16
+            else:
+                torch_dtype = torch.float16
+        elif device == "mps":
+            torch_dtype = torch.bfloat16
+        else:
+            torch_dtype = torch.float32
+
+        # Override dtype if specified in config
+        if transformer_config.get("fp16"):
+            torch_dtype = torch.float16
+        elif transformer_config.get("bf16"):
+            torch_dtype = torch.bfloat16
+
+        # BitsAndBytes quantization config
+        quantization_config = None
+        if device == "cuda":
+            if transformer_config.get("_load_4bit"):
+                try:
+                    from transformers import BitsAndBytesConfig
+                    quantization_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_compute_dtype=torch_dtype,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_use_double_quant=True,
+                    )
+                    if RICH_AVAILABLE:
+                        _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] [lock] Loading model in [yellow]4-bit[/yellow] quantization")
+                except ImportError:
+                    logger.warning("bitsandbytes not installed, skipping 4-bit quantization")
+            elif transformer_config.get("_load_8bit"):
+                try:
+                    from transformers import BitsAndBytesConfig
+                    quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+                    if RICH_AVAILABLE:
+                        _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] [lock] Loading model in [yellow]8-bit[/yellow] quantization")
+                except ImportError:
+                    logger.warning("bitsandbytes not installed, skipping 8-bit quantization")
+
+        # Load model
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            torch_dtype=torch_dtype,
+            quantization_config=quantization_config,
+            trust_remote_code=True,
+            device_map="auto" if quantization_config or device == "cuda" else None,
+        )
+        
+        return model
+
     def _train_transformer_model(
         self,
         text: str,
@@ -2178,9 +2382,9 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         
         try:
             from transformers import (
-                GPT2LMHeadModel,
-                GPT2Tokenizer,
-                GPT2Config,
+                AutoModelForCausalLM,
+                AutoTokenizer,
+                AutoConfig,
                 Trainer,
                 TrainingArguments,
                 DataCollatorForLanguageModeling,
@@ -2273,7 +2477,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         
         # Adjust block_size for MPS (smaller to fit memory)
         default_block_size = 256 if use_mps else 512
-        block_size = transformer_config.get("block_size", default_block_size)
+        try:
+            block_size = int(transformer_config.get("block_size", default_block_size))
+        except (ValueError, TypeError):
+            block_size = default_block_size
+
         if use_mps and block_size > 256:
             block_size = 256
             if RICH_AVAILABLE:
@@ -2287,7 +2495,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         
         # Adjust batch size for MPS (must be 1 for memory constraints)
         default_batch_size = 1 if use_mps else self.config.get("training", {}).get("batch_size", 4)
-        batch_size = transformer_config.get("batch_size", default_batch_size)
+        try:
+            batch_size = int(transformer_config.get("batch_size", default_batch_size))
+        except (ValueError, TypeError):
+            batch_size = default_batch_size
+
         if use_mps and batch_size > 1:
             batch_size = 1
             if RICH_AVAILABLE:
@@ -2300,7 +2512,13 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 )
         
         # Use gradient accumulation to maintain effective batch size
-        gradient_accumulation_steps = transformer_config.get("gradient_accumulation_steps")
+        try:
+            gradient_accumulation_steps = transformer_config.get("gradient_accumulation_steps")
+            if gradient_accumulation_steps is not None:
+                gradient_accumulation_steps = int(gradient_accumulation_steps)
+        except (ValueError, TypeError):
+            gradient_accumulation_steps = None
+
         if use_mps and gradient_accumulation_steps is None:
             # Default to 4 steps to maintain effective batch size of 4
             gradient_accumulation_steps = 4
@@ -2316,7 +2534,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     },
                 )
         
-        learning_rate = transformer_config.get("learning_rate", self.config.get("training", {}).get("learning_rate", 5e-5))
+        try:
+            learning_rate = float(transformer_config.get("learning_rate", self.config.get("training", {}).get("learning_rate", 5e-5)))
+        except (ValueError, TypeError):
+            learning_rate = 5e-5
         
         # Prepare model directory
         transformer_model_dir = self.model_dir / "transformer"
@@ -2330,11 +2551,11 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 # Try to load existing tokenizer
                 tokenizer_path = transformer_model_dir / "tokenizer"
                 if tokenizer_path.exists():
-                    self.transformer_tokenizer = GPT2Tokenizer.from_pretrained(str(tokenizer_path))
+                    self.transformer_tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_path))
                 else:
-                    self.transformer_tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+                    self.transformer_tokenizer = AutoTokenizer.from_pretrained(model_name)
             else:
-                self.transformer_tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+                self.transformer_tokenizer = AutoTokenizer.from_pretrained(model_name)
             
             # Add padding token if it doesn't exist
             if self.transformer_tokenizer.pad_token is None:
@@ -2671,54 +2892,88 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         # Load or create model with device-aware error handling
         model_loaded = False
         try:
+            model_to_load = model_name
             if continue_training:
                 model_path = transformer_model_dir / "model"
                 if model_path.exists():
-                    try:
-                        self.transformer_model = GPT2LMHeadModel.from_pretrained(str(model_path))
-                        model_loaded = True
-                    except Exception:
-                        # If loading fails, create new model
-                        self.transformer_model = GPT2LMHeadModel.from_pretrained(model_name)
-                        model_loaded = True
-                else:
-                    self.transformer_model = GPT2LMHeadModel.from_pretrained(model_name)
-                    model_loaded = True
-            else:
-                self.transformer_model = GPT2LMHeadModel.from_pretrained(model_name)
-                model_loaded = True
-            
+                    model_to_load = str(model_path)
+
+            self.transformer_model = self._load_transformer_model(
+                model_to_load,
+                device,
+                transformer_config
+            )
+            model_loaded = True
+
             # Resize token embeddings if needed
             self.transformer_model.resize_token_embeddings(len(self.transformer_tokenizer))
-            
+
             # PEFT / LoRA INTEGRATION
-            if transformer_config.get("_enable_lora"):
+            enable_lora = transformer_config.get("_enable_lora")
+            if isinstance(enable_lora, str):
+                enable_lora = enable_lora.lower() == "true"
+
+            load_4bit = transformer_config.get("_load_4bit")
+            if isinstance(load_4bit, str):
+                load_4bit = load_4bit.lower() == "true"
+
+            load_8bit = transformer_config.get("_load_8bit")
+            if isinstance(load_8bit, str):
+                load_8bit = load_8bit.lower() == "true"
+
+            # Automatically enable LoRA if model is quantized (required for fine-tuning)
+            is_quantized = getattr(self.transformer_model, "is_quantized", False) or \
+                           getattr(self.transformer_model, "is_loaded_in_4bit", False) or \
+                           getattr(self.transformer_model, "is_loaded_in_8bit", False)
+
+            if is_quantized and not enable_lora:
+                enable_lora = True
+                if RICH_AVAILABLE:
+                    _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] [rocket] Automatically enabling LoRA for quantized model")
+
+            if enable_lora:
                 try:
-                    from peft import LoraConfig, get_peft_model, TaskType
-                    
+                    from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
+
+                    # Prepare for kbit training if quantized
+                    if is_quantized:
+                        self.transformer_model = prepare_model_for_kbit_training(self.transformer_model)
+
+                    # Better default target modules for modern models (Llama, Phi, etc.)
+                    default_targets = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+                    if "gpt2" in model_name:
+                        default_targets = ["c_attn", "c_proj"]
+
                     lora_config = LoraConfig(
-                        r=transformer_config.get("_lora_r", 16),
-                        lora_alpha=transformer_config.get("_lora_alpha", 32),
-                        target_modules=transformer_config.get("_lora_target_modules", ["c_attn", "c_proj", "q_proj", "v_proj"]),
-                        lora_dropout=transformer_config.get("_lora_dropout", 0.05),
+                        r=int(transformer_config.get("_lora_r", 16)),
+                        lora_alpha=int(transformer_config.get("_lora_alpha", 32)),
+                        target_modules=transformer_config.get("_lora_target_modules", default_targets),
+                        lora_dropout=float(transformer_config.get("_lora_dropout", 0.05)),
                         bias="none",
                         task_type=TaskType.CAUSAL_LM
                     )
-                    
+
                     if RICH_AVAILABLE:
                         _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] [rocket] Initializing LoRA fine-tuning (r={lora_config.r})")
                     else:
                         logger.info(f"Enabling LoRA fine-tuning: r={lora_config.r}")
-                        
+
                     self.transformer_model = get_peft_model(self.transformer_model, lora_config)
                     self.transformer_model.print_trainable_parameters()
-                    
-                    # Enable gradient checkpointing for VRAM efficiency when using LoRA
+
+                    # Enable gradient checkpointing for VRAM efficiency
                     self.transformer_model.gradient_checkpointing_enable()
                     training_args_dict["gradient_checkpointing"] = True
+
                     # Re-build args with checkpointing enabled
-                    training_args = _build_training_args(training_args_dict)
-                    
+                    try:
+                        training_args = TrainingArguments(**training_args_dict)
+                    except TypeError:
+                        if "eval_strategy" in training_args_dict:
+                            old_value = training_args_dict.pop("eval_strategy")
+                            training_args_dict["evaluation_strategy"] = old_value
+                        training_args = TrainingArguments(**training_args_dict)
+
                 except ImportError:
                     logger.warning("PEFT library not found. Falling back to full fine-tuning.")
                 except Exception as e:
@@ -2727,7 +2982,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # Suppress loss_type warning by setting it explicitly
             if hasattr(self.transformer_model.config, 'loss_type'):
                 self.transformer_model.config.loss_type = "ForCausalLMLoss"
-            
+
             # MINI-TRANSFORMER HEAD INJECTION for tiny-data mode
             if tiny_data_mode:
                 self._inject_mini_transformer_head(
@@ -2735,33 +2990,35 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     len(self.transformer_tokenizer),
                     device
                 )
-            
-            # Move model to device
-            self.transformer_model = self.transformer_model.to(device)
-            
+
+            # Move model to device (if not already handled by device_map)
+            if not getattr(self.transformer_model, "is_quantized", False):
+                self.transformer_model = self.transformer_model.to(device)
+
         except RuntimeError as e:
-            # Handle MPS out-of-memory errors
-            if "mps" in str(e).lower() or "out of memory" in str(e).lower():
-                if use_mps:
+            # Handle MPS/CUDA out-of-memory errors
+            if "out of memory" in str(e).lower() or "mps" in str(e).lower() or "cuda" in str(e).lower():
+                if device != "cpu":
                     if RICH_AVAILABLE:
                         console = Console(stderr=True)
-                        _trainer_log("[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] MPS out of memory, falling back to CPU")
+                        _trainer_log(f"[bold yellow][Mavaia-Trainer][/bold yellow] [yellow]⚠[/yellow] {device.upper()} out of memory, falling back to CPU")
                     else:
                         logger.warning(
-                            "MPS out of memory; falling back to CPU",
+                            f"{device.upper()} out of memory; falling back to CPU",
                             extra={"module_name": "neural_text_generator"},
                         )
                     device = "cpu"
                     use_mps = False
                     # Retry with CPU
                     if not model_loaded:
-                        self.transformer_model = GPT2LMHeadModel.from_pretrained(model_name)
+                        self.transformer_model = AutoModelForCausalLM.from_pretrained(model_name)
                         self.transformer_model.resize_token_embeddings(len(self.transformer_tokenizer))
                     self.transformer_model = self.transformer_model.to(device)
                 else:
                     raise
             else:
                 raise
+
         
         # Check for existing checkpoint to resume training
         resume_from_checkpoint = None
@@ -3108,7 +3365,10 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 min_improvement: float = 0.01
             ):
                 super().__init__()
-                self.loss_floor = loss_floor
+                try:
+                    self.loss_floor = float(loss_floor) if loss_floor is not None else None
+                except (ValueError, TypeError):
+                    self.loss_floor = None
                 self.plateau_steps = plateau_steps
                 self.patience = patience
                 self.min_improvement = min_improvement
@@ -3126,10 +3386,16 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 
                 if current_loss is not None:
                     # 1. Check Loss Floor
-                    if self.loss_floor is not None and current_loss < self.loss_floor:
-                        print(f"\n[Mavaia-Sentinel] 🚀 Loss floor reached ({current_loss:.4f} < {self.loss_floor}). Ending stage early.")
-                        control.should_training_stop = True
-                        return control
+                    if self.loss_floor is not None:
+                        try:
+                            f_current = float(current_loss)
+                            f_floor = float(self.loss_floor)
+                            if f_current < f_floor:
+                                print(f"\n[Mavaia-Sentinel] 🚀 Loss floor reached ({f_current:.4f} < {f_floor}). Ending stage early.")
+                                control.should_training_stop = True
+                                return control
+                        except (ValueError, TypeError):
+                            pass
 
                     # 2. Check for Plateau
                     self.history.append(current_loss)
@@ -4326,7 +4592,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             extra={"module_name": "neural_text_generator"},
                         )
                     
-                    self.transformer_model = GPT2LMHeadModel.from_pretrained(str(best_model_path))
+                    self.transformer_model = AutoModelForCausalLM.from_pretrained(str(best_model_path))
                     self.transformer_model = self.transformer_model.to(device)
                 except Exception as e:
                     if RICH_AVAILABLE:
@@ -4936,8 +5202,6 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 model_type = "word"
             # 2. Check filesystem if model_dir is set
             elif self.model_dir:
-                # DEBUG LOGGING for remote troubleshooting
-                logger.info(f"[DEBUG] Detecting model type at {self.model_dir}", extra={"module_name": "neural_text_generator"})
                 if (self.model_dir / "transformer").exists() or (self.model_dir / "model.safetensors").exists() or (self.model_dir / "config.json").exists():
                     model_type = "transformer"
                 elif (self.model_dir / "char_model.keras").exists() or (self.model_dir / "char_model.json").exists():
@@ -4947,7 +5211,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if not model_type:
                 model_type = self.config.get("generation", {}).get("default_model", "character")
         
-        logger.info(f"[DEBUG] Selected model_type: {model_type}", extra={"module_name": "neural_text_generator"})
+        # print(f"[DEBUG] NeuralTextGenerator: Selected model_type: {model_type}")
 
         max_length = params.get(
             "max_length",
@@ -4976,6 +5240,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 return {"success": False, "error": "NumPy not available for word generation. Install with: pip install numpy"}
             return self._generate_word_text(prompt, max_length, temperature)
         elif model_type == "transformer":
+            # print(f"[DEBUG] NeuralTextGenerator: Calling _generate_transformer_text")
             return self._generate_transformer_text(prompt, max_length, temperature)
         else:
             return {"success": False, "error": f"Unknown model type: {model_type}"}
@@ -5111,33 +5376,55 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
         if not hasattr(self, 'transformer_model') or self.transformer_model is None:
             # Try to load model
+            print(f"[DEBUG] NeuralTextGenerator: Transformer model not loaded. Attempting to load from {self.model_dir}...")
             load_result = self._load_model({"model_type": "transformer"})
             if not load_result.get("success"):
+                print(f"[DEBUG] NeuralTextGenerator: Load failed: {load_result.get('error')}")
                 return {
                     "success": False,
                     "error": f"Transformer model not available: {load_result.get('error')}",
                 }
+            print(f"[DEBUG] NeuralTextGenerator: Load successful.")
 
         try:
+            print(f"[DEBUG] NeuralTextGenerator: Tokenizing prompt...")
             # Tokenize prompt
             inputs = self.transformer_tokenizer(prompt, return_tensors="pt")
 
+            # STRICT 1024 LIMIT: Truncate prompt if it's too long
+            max_pos = 1024
+            if inputs["input_ids"].shape[1] > max_pos - 10:
+                print(f"[DEBUG] NeuralTextGenerator: Prompt too long ({inputs['input_ids'].shape[1]}), truncating to {max_pos - 100}")
+                inputs["input_ids"] = inputs["input_ids"][:, -(max_pos - 100):]
+                if "attention_mask" in inputs:
+                    inputs["attention_mask"] = inputs["attention_mask"][:, -(max_pos - 100):]
+
             # Move inputs to same device as model
             device = next(self.transformer_model.parameters()).device
+            print(f"[DEBUG] NeuralTextGenerator: Using device: {device}")
 
             # SAFETY CHECK: If prompt is empty after tokenization, use a default token
             if inputs["input_ids"].shape[1] == 0:
                 bos_token = self.transformer_tokenizer.bos_token or self.transformer_tokenizer.eos_token or " "
                 inputs = self.transformer_tokenizer(bos_token, return_tensors="pt")
 
+            # CLAMP INPUT IDS: Ensure all tokens are within the model's vocab range
+            # This is critical for preventing CUDA asserts if the tokenizer outputs an OOB index
+            vocab_size = self.transformer_model.config.vocab_size
+            inputs["input_ids"] = torch.clamp(inputs["input_ids"], 0, vocab_size - 1)
+
             inputs = {k: v.to(device) for k, v in inputs.items()}
             
+            # Calculate safe max_new_tokens
+            safe_max_new = min(max_length, max_pos - inputs["input_ids"].shape[1])
+            
             # Generate
+            print(f"[DEBUG] NeuralTextGenerator: Calling model.generate (max_new={safe_max_new})...")
             with torch.no_grad():
                 input_len = inputs["input_ids"].shape[1]
                 output_tokens = self.transformer_model.generate(
                     **inputs,
-                    max_new_tokens=max_length,
+                    max_new_tokens=safe_max_new,
                     temperature=temperature,
                     do_sample=temperature > 0,
                     pad_token_id=self.transformer_tokenizer.pad_token_id,
@@ -5153,13 +5440,47 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             else:
                 generated_text = self.transformer_tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
+            # CLEANUP: Prevent base models from generating "dataset" style word salad
+            # 1. Stop at common headers that indicate the model started a new example
+            for stop_seq in ["\nQuestion:", "\nUser:", "\nTask:", "Q:", "A:", "User Question:"]:
+                if stop_seq in generated_text:
+                    parts = generated_text.split(stop_seq)
+                    if len(parts[0].strip()) > 5:
+                        generated_text = parts[0]
+                        break
+
+            # 2. Heuristic: If we see more than 2 question marks, it's likely generating a list of questions
+            if generated_text.count("?") > 2:
+                print(f"[DEBUG] NeuralTextGenerator: Dataset generation detected (multiple questions), truncating.")
+                # Keep only the first sentence
+                q_parts = re.split(r"(?<=[.!?])\s+", generated_text)
+                if q_parts:
+                    generated_text = q_parts[0]
+
+            # 3. Repetitive sentence detection
+            s_parts = re.split(r"(?<=[.!?])\s+", generated_text)
+            if len(s_parts) > 3:
+                seen_sentences = set()
+                unique_sentences = []
+                for s in s_parts:
+                    s_clean = s.lower().strip()
+                    if s_clean and s_clean not in seen_sentences:
+                        unique_sentences.append(s)
+                        seen_sentences.add(s_clean)
+                    elif s_clean:
+                        # Stop as soon as we see a duplicate
+                        break
+                generated_text = " ".join(unique_sentences)
+
+            print(f"[DEBUG] NeuralTextGenerator: Generation complete. Text length: {len(generated_text)}")
             return {
                 "success": True,
-                "text": generated_text,
+                "text": generated_text.strip(),
                 "model_type": "transformer",
                 "length": len(generated_text),
             }
         except Exception as e:
+            print(f"[DEBUG] NeuralTextGenerator: Generation exception: {e}")
             return {"success": False, "error": f"Transformer generation failed: {str(e)}"}
 
 
@@ -5415,15 +5736,39 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 else:
                     try:
                         from transformers import AutoModelForCausalLM, AutoTokenizer
-                        self.transformer_model = AutoModelForCausalLM.from_pretrained(str(transformer_model_path))
+                        import torch
                         
+                        # Load tokenizer first to get the true vocab size
                         if transformer_tokenizer_path.exists() and (transformer_tokenizer_path / "tokenizer_config.json").exists():
                              self.transformer_tokenizer = AutoTokenizer.from_pretrained(str(transformer_tokenizer_path))
                         else:
-                             # Fallback to loading from same dir or model name if we could infer it
                              self.transformer_tokenizer = AutoTokenizer.from_pretrained(str(transformer_model_path))
+                        
+                        tokenizer_vocab_size = len(self.transformer_tokenizer)
+
+                        # Load model
+                        self.transformer_model = AutoModelForCausalLM.from_pretrained(
+                            str(transformer_model_path),
+                            ignore_mismatched_sizes=True
+                        )
+                        
+                        # Fix vocab mismatch if needed
+                        model_vocab_size = self.transformer_model.config.vocab_size
+                        if tokenizer_vocab_size != model_vocab_size:
+                            print(f"[DEBUG] NeuralTextGenerator: Resizing model embeddings from {model_vocab_size} to {tokenizer_vocab_size}")
+                            self.transformer_model.resize_token_embeddings(tokenizer_vocab_size)
+
+                        # Move model to GPU if available
+                        device = "cuda" if torch.cuda.is_available() else "cpu"
+                        try:
+                            print(f"[DEBUG] NeuralTextGenerator: Moving model to {device}...")
+                            self.transformer_model = self.transformer_model.to(device)
+                        except Exception as e:
+                            print(f"[DEBUG] NeuralTextGenerator: Failed to move to GPU ({e}), falling back to CPU")
+                            device = "cpu"
+                            self.transformer_model = self.transformer_model.to(device)
                              
-                        results["transformer"] = {"success": True}
+                        results["transformer"] = {"success": True, "device": device}
                         self._models_loaded = True
                     except Exception as e:
                         results["transformer"] = {"success": False, "error": str(e)}
