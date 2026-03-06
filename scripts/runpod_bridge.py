@@ -2779,6 +2779,16 @@ def main():
         help="Auto-inject distillation args for transformer training",
     )
     parser.add_argument(
+        "--time-limit",
+        type=int,
+        help="Maximum training time in SECONDS (Sentinel hard-stop)",
+    )
+    parser.add_argument(
+        "--dynamic-threshold",
+        action="store_true",
+        help="Enable adaptive plateau detection (Sentinel)",
+    )
+    parser.add_argument(
         "--distill-alpha", type=float, default=0.7, help="Hard loss weight for distillation"
     )
     parser.add_argument("--distill-temp", type=float, default=2.0, help="Distillation temperature")
@@ -3864,6 +3874,10 @@ def main():
                 train_args.append("--lora")
             if args.adapter_name:
                 train_args.extend(["--adapter-name", args.adapter_name])
+            if args.time_limit:
+                train_args.extend(["--time-limit", str(args.time_limit)])
+            if args.dynamic_threshold:
+                train_args.append("--dynamic-threshold")
             if args.train_rfal:
                 _rich_log("RFAL Alignment Pass: Training on collected lessons", "bold cyan", "🎓")
                 train_args.append("--dpo")

@@ -1512,6 +1512,42 @@ def main():
         default=1.0,
         help="Percentage of data to use (0.0-1.0, default: 1.0)",
     )
+    # SENTINEL / STOPPING CRITERIA
+    parser.add_argument(
+        "--stop-at-loss",
+        type=float,
+        default=None,
+        help="Target loss floor (Sentinel: stops training early if reached)",
+    )
+    parser.add_argument(
+        "--plateau-steps",
+        type=int,
+        default=50,
+        help="Steps to monitor for no improvement (Sentinel plateau detection)",
+    )
+    parser.add_argument(
+        "--plateau-patience",
+        type=int,
+        default=3,
+        help="Number of plateau detections to wait before stopping (Sentinel)",
+    )
+    parser.add_argument(
+        "--min-improvement",
+        type=float,
+        default=0.01,
+        help="Minimum loss improvement to reset plateau counter (Sentinel)",
+    )
+    parser.add_argument(
+        "--time-limit",
+        type=int,
+        default=None,
+        help="Maximum training time in SECONDS (Sentinel hard-stop)",
+    )
+    parser.add_argument(
+        "--dynamic-threshold",
+        action="store_true",
+        help="Enable adaptive plateau detection: reduces improvement threshold as loss gets lower (Sentinel)",
+    )
     parser.add_argument(
         "--continue-training",
         action="store_true",
@@ -2244,6 +2280,10 @@ def main():
         train_params["plateau_steps"] = args.plateau_steps
         train_params["plateau_patience"] = args.plateau_patience
         train_params["min_improvement"] = args.min_improvement
+        if args.time_limit is not None:
+            train_params["time_limit"] = args.time_limit
+        if args.dynamic_threshold:
+            train_params["dynamic_threshold"] = True
 
         # LoRA settings
         if args.lora:
@@ -2382,6 +2422,18 @@ def main():
                 config_lines.append(f"[bold]Training time:[/bold] [cyan]{train_params['train_for_minutes']} minutes[/cyan]")
             if train_params.get("epochs"):
                 config_lines.append(f"[bold]Epochs:[/bold] [cyan]{train_params['epochs']}[/cyan]")
+            
+            # Sentinel Summary
+            sentinel_parts = []
+            if train_params.get("stop_at_loss"):
+                sentinel_parts.append(f"LossFloor: {train_params['stop_at_loss']}")
+            if train_params.get("time_limit"):
+                sentinel_parts.append(f"TimeLimit: {train_params['time_limit']}s")
+            if train_params.get("dynamic_threshold"):
+                sentinel_parts.append("DynamicThreshold: ON")
+            if sentinel_parts:
+                config_lines.append(f"[bold]Sentinel:[/bold] [magenta]{', '.join(sentinel_parts)}[/magenta]")
+            
             if train_params.get("batch_size"):
                 config_lines.append(f"[bold]Batch size:[/bold] [cyan]{train_params['batch_size']}[/cyan]")
             if train_params.get("gradient_checkpointing"):
@@ -2436,6 +2488,15 @@ def main():
                 print(f"Training time: {train_params['train_for_minutes']} minutes")
             elif train_params.get("epochs"):
                 print(f"Epochs: {train_params['epochs']}")
+            
+            # Sentinel Summary (Plain)
+            if any(train_params.get(k) for k in ["stop_at_loss", "time_limit", "dynamic_threshold"]):
+                s_parts = []
+                if train_params.get("stop_at_loss"): s_parts.append(f"LossFloor: {train_params['stop_at_loss']}")
+                if train_params.get("time_limit"): s_parts.append(f"TimeLimit: {train_params['time_limit']}s")
+                if train_params.get("dynamic_threshold"): s_parts.append("DynamicThreshold: ON")
+                print(f"Sentinel: {', '.join(s_parts)}")
+
             if train_params.get("batch_size"):
                 print(f"Batch size: {train_params['batch_size']}")
             if train_params.get("gradient_checkpointing"):

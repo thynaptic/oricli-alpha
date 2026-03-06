@@ -350,7 +350,21 @@ def _extract_loss_from_run(run_dir: Path) -> float | None:
     return None
 
 
-def _run_stage(stage, run_root: Path, extra_args, progress_path: Path, progress: dict, stop_at_loss: float = 0.05, min_improvement: float = 0.01, anchor_text: str = "", batch_size: int = 4, gradient_checkpointing: bool = True, elective_base: str = None):
+def _run_stage(
+    stage, 
+    run_root: Path, 
+    extra_args, 
+    progress_path: Path, 
+    progress: dict, 
+    stop_at_loss: float = 0.05, 
+    min_improvement: float = 0.01, 
+    anchor_text: str = "", 
+    batch_size: int = 4, 
+    gradient_checkpointing: bool = True, 
+    elective_base: str = None,
+    time_limit: Optional[int] = None,
+    dynamic_threshold: bool = False
+):
     run_dir = run_root / f"{stage['name']}_{time.strftime('%Y%m%d_%H%M%S')}"
     
     # Handle anchor data (Experience Replay)
@@ -429,6 +443,11 @@ def _run_stage(stage, run_root: Path, extra_args, progress_path: Path, progress:
         "--batch-size",
         str(batch_size),
     ]
+    
+    if time_limit:
+        cmd.extend(["--time-limit", str(time_limit)])
+    if dynamic_threshold:
+        cmd.append("--dynamic-threshold")
     
     # Add all datasets
     cmd.extend(["--book-ids"] + datasets)
@@ -587,6 +606,8 @@ def main():
     ap.add_argument("--replay-pct", type=float, default=0.1, help="Percentage of anchor data to carry forward (0.0 to 1.0)")
     ap.add_argument("--stop-at-loss", type=float, default=0.05, help="Stop stage if loss falls below this value")
     ap.add_argument("--min-improvement", type=float, default=0.01, help="Min improvement to avoid plateau stop")
+    ap.add_argument("--time-limit", type=int, default=None, help="Maximum training time per stage in SECONDS")
+    ap.add_argument("--dynamic-threshold", action="store_true", help="Enable adaptive plateau detection (Sentinel)")
     ap.add_argument("--batch-size", type=int, default=4, help="Batch size for training stages (default: 4)")
     ap.add_argument("--gradient-checkpointing", action="store_false", dest="no_gradient_checkpointing", help="Disable gradient checkpointing")
     ap.add_argument("--smart-resume", action="store_true", help="Skip stages already acquired or retouch weak ones")
@@ -838,7 +859,9 @@ def main():
                 anchor_text=accumulated_anchor_text,
                 batch_size=args.batch_size,
                 gradient_checkpointing=not args.no_gradient_checkpointing,
-                elective_base=args.elective_base
+                elective_base=args.elective_base,
+                time_limit=args.time_limit,
+                dynamic_threshold=args.dynamic_threshold
             )
         
         # Accumulate anchor data for the next stage (Experience Replay)

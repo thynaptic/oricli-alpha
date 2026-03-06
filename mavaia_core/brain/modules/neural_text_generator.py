@@ -3430,27 +3430,35 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 
                 return control
         
-        # Curriculum Sentinel Callback (The "Overfit Watcher")
+        # Curriculum Sentinel Callback (The "Smart Watcher")
         class CurriculumSentinelCallback(TrainerCallback):
-            """Monitors training metrics to detect overfitting, loss floors, and plateaus"""
+            """Monitors training metrics to detect overfitting, loss floors, plateaus, and time limits."""
             def __init__(
                 self, 
                 loss_floor: Optional[float] = None, 
                 plateau_steps: int = 50, 
                 patience: int = 3,
-                min_improvement: float = 0.01
+                min_improvement: float = 0.01,
+                time_limit: Optional[float] = None,
+                dynamic_threshold: bool = False
             ):
                 super().__init__()
                 try:
                     self.loss_floor = float(loss_floor) if loss_floor is not None else None
                 except (ValueError, TypeError):
                     self.loss_floor = None
+                
                 self.plateau_steps = plateau_steps
                 self.patience = patience
                 self.min_improvement = min_improvement
+                self.time_limit = time_limit # In seconds
+                self.dynamic_threshold = dynamic_threshold
+                self.start_time = time.time()
+                
                 self.best_loss = float('inf')
                 self.stagnant_count = 0
                 self.history = []
+                self.initial_loss = None
 
             def on_step_end(self, args, state, control, **kwargs):
                 # Check metrics every step for absolute precision
@@ -3461,7 +3469,18 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 current_loss = latest_logs.get("loss")
                 
                 if current_loss is not None:
-                    # 1. Check Loss Floor
+                    if self.initial_loss is None:
+                        self.initial_loss = current_loss
+
+                    # 1. Check Time Limit
+                    if self.time_limit:
+                        elapsed = time.time() - self.start_time
+                        if elapsed >= self.time_limit:
+                            print(f"\n[Mavaia-Sentinel] ⏱ Time limit reached ({elapsed:.0f}s). Stopping training.")
+                            control.should_training_stop = True
+                            return control
+
+                    # 2. Check Loss Floor
                     if self.loss_floor is not None:
                         try:
                             f_current = float(current_loss)
@@ -3473,11 +3492,24 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         except (ValueError, TypeError):
                             pass
 
-                    # 2. Check for Plateau
+                    # 3. Check for Plateau
                     self.history.append(current_loss)
+                    
+                    # Update best loss
+                    if current_loss < self.best_loss:
+                        self.best_loss = current_loss
+                        self.stagnant_count = 0
+                    
                     if len(self.history) > self.plateau_steps:
+                        # DYNAMIC THRESHOLD: As loss gets lower, we require smaller improvements
+                        # to avoid stopping too early on high-quality late-stage training
+                        effective_min_improvement = self.min_improvement
+                        if self.dynamic_threshold and current_loss < 1.0:
+                            # Scalar reduction: 0.01 at loss 1.0 -> 0.001 at loss 0.1
+                            effective_min_improvement = self.min_improvement * max(0.1, current_loss)
+
                         avg_recent = sum(self.history[-self.plateau_steps:]) / self.plateau_steps
-                        if current_loss > (avg_recent * (1.0 - self.min_improvement)):
+                        if current_loss > (avg_recent * (1.0 - effective_min_improvement)):
                             self.stagnant_count += 1
                         else:
                             self.stagnant_count = 0
@@ -3936,12 +3968,14 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         csv_logging_callback = CSVLoggingCallback(checkpoint_dir)
         trainer.add_callback(csv_logging_callback)
         
-        # Add Sentinel Callback (The "Overfit Watcher")
+        # Add Sentinel Callback (The "Smart Watcher")
         sentinel_callback = CurriculumSentinelCallback(
             loss_floor=transformer_config.get("_stop_at_loss"),
             plateau_steps=transformer_config.get("_plateau_steps", 50),
             patience=transformer_config.get("_plateau_patience", 3),
-            min_improvement=transformer_config.get("_min_improvement", 0.01)
+            min_improvement=transformer_config.get("_min_improvement", 0.01),
+            time_limit=transformer_config.get("_time_limit"),
+            dynamic_threshold=transformer_config.get("_dynamic_threshold", False)
         )
         trainer.add_callback(sentinel_callback)
         
