@@ -782,7 +782,7 @@ def ensure_mavaia_installed(
         "rm -rf datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy PIL torch torchvision torchaudio xxhash multiprocess dill fsspec aiohttp requests tqdm yaml safetensors 2>/dev/null || true; "
         "find . -maxdepth 1 -name '*.so' -delete; "
         "echo '[INFO] Installing core ML libraries (this may take a few minutes)...'; "
-        '"$VENV_PY" -m pip install --upgrade "bitsandbytes>=0.46.1" scipy datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash shortuuid libtmux python-dotenv uvicorn fastapi pydantic beautifulsoup4 PyPDF2 PyYAML tensorflow keras -q || true; '
+        '"$VENV_PY" -m pip install --upgrade "bitsandbytes>=0.46.1" scipy datasets transformers accelerate huggingface_hub pyarrow wikipedia internetarchive regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash shortuuid libtmux python-dotenv uvicorn fastapi pydantic beautifulsoup4 PyPDF2 PyYAML tensorflow keras -q || true; '
         "if [ -d LiveBench ]; then "
         "  echo '[INFO] LiveBench detected. Installing in editable mode...'; "
         '  "$VENV_PY" -m pip install -e LiveBench/ -q || true; '
@@ -1235,6 +1235,8 @@ def sync_code(
         "models",
         "--include",
         "mavaia_core/data/rfal_lessons.jsonl",
+        "--include",
+        "mavaia_core/data/search.py",
         "--exclude",
         "mavaia_core/data",
         "--exclude",

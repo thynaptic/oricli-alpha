@@ -33,8 +33,17 @@ from pathlib import Path
 # Try to import DatasetSearch
 try:
     from mavaia_core.data.search import DatasetSearch
-except ImportError:
+except ImportError as e:
     DatasetSearch = None
+    print(f"[DEBUG] DatasetSearch import failed: {e}")
+    # Check if dependencies are actually there
+    try:
+        import huggingface_hub
+        import wikipedia
+        import internetarchive
+        print("[DEBUG] Core search dependencies are available, but mavaia_core.data.search failed.")
+    except ImportError as de:
+        print(f"[DEBUG] Search dependency missing: {de}")
 from pathlib import Path
 
 # Paths
