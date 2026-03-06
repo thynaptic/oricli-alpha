@@ -16,10 +16,12 @@ from typing import Dict, Any, Optional, List
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # BOOTSTRAP: Ensure we are running in the virtual environment
-VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python3"
-if VENV_PYTHON.exists() and Path(sys.executable).resolve() != VENV_PYTHON.resolve():
-    # Re-run the script using the venv python with absolute path
-    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), str(Path(__file__).resolve())] + sys.argv[1:])
+VENV_DIR = REPO_ROOT / ".venv"
+if VENV_DIR.exists() and sys.prefix != str(VENV_DIR.resolve()):
+    VENV_PYTHON = VENV_DIR / "bin" / "python3"
+    if VENV_PYTHON.exists():
+        # Re-run the script using the venv python
+        os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), str(Path(__file__).resolve())] + sys.argv[1:])
 
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
