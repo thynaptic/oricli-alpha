@@ -2,13 +2,13 @@
 
 **Phase 1: Diagnostics & Baseline**
 Goal: Establish a baseline of current module health and identify discrepancies.
-- [ ] Task: Create Module Health Diagnostic Script
-    - [ ] Implement `scripts/module_health_diagnostics.py` to scan `mavaia_core/brain/modules/`.
-    - [ ] Check for `BaseBrainModule` inheritance, `initialize`, and `execute` implementation.
-    - [ ] Validate return structures of common operations against a standard schema.
-- [ ] Task: Run Baseline Diagnostic
-    - [ ] Execute script and record all failures/discrepancies.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Diagnostics & Baseline' (Protocol in workflow.md)
+- [x] Task: Create Module Health Diagnostic Script
+    - [x] Implement `scripts/module_health_diagnostics.py` to scan `mavaia_core/brain/modules/`.
+    - [x] Check for `BaseBrainModule` inheritance, `initialize`, and `execute` implementation.
+    - [x] Validate return structures of common operations against a standard schema.
+- [x] Task: Run Baseline Diagnostic
+    - [x] Execute script and record all failures/discrepancies.
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Diagnostics & Baseline' (Protocol in workflow.md)
 
 **Phase 2: Interface & Registry Refinement**
 Goal: Harden the base classes and registry to prevent future synchronization drift.
