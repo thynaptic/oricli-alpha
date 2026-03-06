@@ -302,6 +302,9 @@ def discover_profiles() -> Dict[str, Dict[str, Any]]:
         )
         return profiles
     
+    # DEBUG: Print found files
+    print(f"[DEBUG] Found {len(yaml_files)} potential profile files in {PROFILES_DIR}", file=sys.stderr)
+    
     for yaml_file in sorted(yaml_files):
         profile_name = yaml_file.stem  # Filename without extension
         
@@ -319,13 +322,11 @@ def discover_profiles() -> Dict[str, Dict[str, Any]]:
             
             # Validate required fields
             if "description" not in profile_data:
-                print(
-                    f"Warning: Profile {profile_name} missing 'description' field, skipping",
-                    file=sys.stderr
-                )
+                print(f"[DEBUG] Skipping {profile_name}: missing 'description'", file=sys.stderr)
                 continue
             
             profiles[profile_name] = profile_data
+            print(f"[DEBUG] Loaded profile: {profile_name}", file=sys.stderr)
             
         except yaml.YAMLError as e:
             print(

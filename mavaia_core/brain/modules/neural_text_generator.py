@@ -30,7 +30,11 @@ warnings.filterwarnings("ignore", message=".*ResourceTracker.*")
 warnings.filterwarnings("ignore", message=".*_recursion_count.*")
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mavaia_core.exceptions import InvalidParameterError
+from mavaia_core.exceptions import (
+    InvalidParameterError,
+    ModuleInitializationError,
+    ModuleOperationError,
+)
 
 logger = logging.getLogger(__name__)
 _RICH_MARKUP_RE = re.compile(r"\[/?[^\]]+\]")
@@ -2238,14 +2242,46 @@ class NeuralTextGeneratorModule(BaseBrainModule):
 
         # 2. Setup Models
         model_name = params.get("model_name", "gpt2")
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
         
-        print(f"[INFO] Loading model for DPO: {model_name}")
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        ref_model = AutoModelForCausalLM.from_pretrained(model_name)
+        # Use common transformer config for consistent loading
+        transformer_config = params.get("transformer_config", {})
+        
+        print(f"[INFO] Loading policy model for DPO: {model_name}")
+        model = self._load_transformer_model(model_name, device, transformer_config)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
+
+        # Apply LoRA to policy model
+        is_quantized = getattr(model, "is_quantized", False) or \
+                       getattr(model, "is_loaded_in_4bit", False) or \
+                       getattr(model, "is_loaded_in_8bit", False)
+        
+        enable_lora = transformer_config.get("_enable_lora", True) # Default to true for DPO
+        if is_quantized:
+            enable_lora = True # Required
+            
+        if enable_lora:
+            from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
+            if is_quantized:
+                model = prepare_model_for_kbit_training(model)
+            
+            default_targets = [
+                "q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj",
+                "query_key_value", "project_in", "project_out", "Wqkv"
+            ]
+            
+            lora_config = LoraConfig(
+                r=int(transformer_config.get("_lora_r", 16)),
+                lora_alpha=int(transformer_config.get("_lora_alpha", 32)),
+                target_modules=transformer_config.get("_lora_target_modules", default_targets),
+                lora_dropout=float(transformer_config.get("_lora_dropout", 0.05)),
+                bias="none",
+                task_type=TaskType.CAUSAL_LM
+            )
+            model = get_peft_model(model, lora_config)
+            print("[INFO] LoRA applied to policy model for DPO.")
 
         # 3. Configure DPO
         output_dir = params.get("run_dir", str(self.model_dir / "dpo_run"))
@@ -2259,14 +2295,16 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             logging_steps=10,
             save_steps=100,
             report_to=[],
-            remove_unused_columns=False
+            remove_unused_columns=False,
+            gradient_checkpointing=transformer_config.get("_enable_lora", False)
         )
 
         # 4. Train
         print("[INFO] Initializing DPOTrainer...")
+        # When model is a PeftModel, DPOTrainer handles reference model automatically if ref_model is None
         trainer = DPOTrainer(
             model,
-            ref_model,
+            ref_model=None, 
             args=training_args,
             train_dataset=dataset,
             tokenizer=tokenizer,
@@ -2908,77 +2946,6 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # Resize token embeddings if needed
             self.transformer_model.resize_token_embeddings(len(self.transformer_tokenizer))
 
-            # PEFT / LoRA INTEGRATION
-            enable_lora = transformer_config.get("_enable_lora")
-            if isinstance(enable_lora, str):
-                enable_lora = enable_lora.lower() == "true"
-
-            load_4bit = transformer_config.get("_load_4bit")
-            if isinstance(load_4bit, str):
-                load_4bit = load_4bit.lower() == "true"
-
-            load_8bit = transformer_config.get("_load_8bit")
-            if isinstance(load_8bit, str):
-                load_8bit = load_8bit.lower() == "true"
-
-            # Automatically enable LoRA if model is quantized (required for fine-tuning)
-            is_quantized = getattr(self.transformer_model, "is_quantized", False) or \
-                           getattr(self.transformer_model, "is_loaded_in_4bit", False) or \
-                           getattr(self.transformer_model, "is_loaded_in_8bit", False)
-
-            if is_quantized and not enable_lora:
-                enable_lora = True
-                if RICH_AVAILABLE:
-                    _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] [rocket] Automatically enabling LoRA for quantized model")
-
-            if enable_lora:
-                try:
-                    from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
-
-                    # Prepare for kbit training if quantized
-                    if is_quantized:
-                        self.transformer_model = prepare_model_for_kbit_training(self.transformer_model)
-
-                    # Better default target modules for modern models (Llama, Phi, etc.)
-                    default_targets = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
-                    if "gpt2" in model_name:
-                        default_targets = ["c_attn", "c_proj"]
-
-                    lora_config = LoraConfig(
-                        r=int(transformer_config.get("_lora_r", 16)),
-                        lora_alpha=int(transformer_config.get("_lora_alpha", 32)),
-                        target_modules=transformer_config.get("_lora_target_modules", default_targets),
-                        lora_dropout=float(transformer_config.get("_lora_dropout", 0.05)),
-                        bias="none",
-                        task_type=TaskType.CAUSAL_LM
-                    )
-
-                    if RICH_AVAILABLE:
-                        _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] [rocket] Initializing LoRA fine-tuning (r={lora_config.r})")
-                    else:
-                        logger.info(f"Enabling LoRA fine-tuning: r={lora_config.r}")
-
-                    self.transformer_model = get_peft_model(self.transformer_model, lora_config)
-                    self.transformer_model.print_trainable_parameters()
-
-                    # Enable gradient checkpointing for VRAM efficiency
-                    self.transformer_model.gradient_checkpointing_enable()
-                    training_args_dict["gradient_checkpointing"] = True
-
-                    # Re-build args with checkpointing enabled
-                    try:
-                        training_args = TrainingArguments(**training_args_dict)
-                    except TypeError:
-                        if "eval_strategy" in training_args_dict:
-                            old_value = training_args_dict.pop("eval_strategy")
-                            training_args_dict["evaluation_strategy"] = old_value
-                        training_args = TrainingArguments(**training_args_dict)
-
-                except ImportError:
-                    logger.warning("PEFT library not found. Falling back to full fine-tuning.")
-                except Exception as e:
-                    logger.error(f"Failed to initialize LoRA: {e}. Falling back to full fine-tuning.")
-
             # Suppress loss_type warning by setting it explicitly
             if hasattr(self.transformer_model.config, 'loss_type'):
                 self.transformer_model.config.loss_type = "ForCausalLMLoss"
@@ -3171,6 +3138,95 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 raise
         
         training_args = _build_training_args(training_args_dict)
+
+        # PEFT / LoRA INTEGRATION
+        enable_lora = transformer_config.get("_enable_lora")
+        if isinstance(enable_lora, str):
+            enable_lora = enable_lora.lower() == "true"
+
+        # Automatically enable LoRA if model is quantized (required for fine-tuning)
+        is_quantized = getattr(self.transformer_model, "is_quantized", False) or \
+                       getattr(self.transformer_model, "is_loaded_in_4bit", False) or \
+                       getattr(self.transformer_model, "is_loaded_in_8bit", False) or \
+                       (hasattr(self.transformer_model, "config") and getattr(self.transformer_model.config, "quantization_config", None) is not None)
+
+        if RICH_AVAILABLE:
+            _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] Model quantization status: [yellow]{is_quantized}[/yellow]")
+
+        if is_quantized and not enable_lora:
+            enable_lora = True
+            if RICH_AVAILABLE:
+                _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] [rocket] Automatically enabling LoRA for quantized model")
+
+        if enable_lora:
+            try:
+                from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
+
+                # Prepare for kbit training if quantized
+                if is_quantized:
+                    if RICH_AVAILABLE:
+                        _trainer_log("[bold cyan][Mavaia-Trainer][/bold cyan] Preparing quantized model for kbit training...")
+                    self.transformer_model = prepare_model_for_kbit_training(self.transformer_model)
+
+                # Better default target modules for modern models
+                provided_targets = transformer_config.get("_lora_target_modules")
+                if provided_targets:
+                    target_modules = provided_targets
+                else:
+                    target_modules = [
+                        "q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj",
+                        "query_key_value", "project_in", "project_out", "Wqkv", "fc1", "fc2"
+                    ]
+                    if "gpt2" in model_name:
+                        target_modules = ["c_attn", "c_proj"]
+
+                if RICH_AVAILABLE:
+                    _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] [rocket] Initializing LoRA fine-tuning (r={int(transformer_config.get('_lora_r', 16))})")
+                    _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] Target modules: [yellow]{target_modules}[/yellow]")
+
+                lora_config = LoraConfig(
+                    r=int(transformer_config.get("_lora_r", 16)),
+                    lora_alpha=int(transformer_config.get("_lora_alpha", 32)),
+                    target_modules=target_modules,
+                    lora_dropout=float(transformer_config.get("_lora_dropout", 0.05)),
+                    bias="none",
+                    task_type=TaskType.CAUSAL_LM
+                )
+
+                self.transformer_model = get_peft_model(self.transformer_model, lora_config)
+
+                # Verify we actually have trainable parameters
+                trainable_params = sum(p.numel() for p in self.transformer_model.parameters() if p.requires_grad)
+                if trainable_params == 0:
+                    if RICH_AVAILABLE:
+                        _trainer_log("[bold red][Mavaia-Trainer][/bold red] ✗ LoRA failed to find any matching modules! Retrying with all-linear layers...")
+
+                    # Fallback: target all linear layers
+                    lora_config.target_modules = "all-linear"
+                    self.transformer_model = get_peft_model(self.transformer_model, lora_config)
+                    trainable_params = sum(p.numel() for p in self.transformer_model.parameters() if p.requires_grad)
+
+                if RICH_AVAILABLE:
+                    _trainer_log(f"[bold cyan][Mavaia-Trainer][/bold cyan] Trainable parameters: [green]{trainable_params:,}[/green]")
+
+                if trainable_params == 0 and is_quantized:
+                    raise ModuleOperationError("neural_text_generator", "fine-tuning", "LoRA failed to attach to any modules. Fine-tuning a quantized model requires LoRA adapters.")
+                
+                # Enable gradient checkpointing for VRAM efficiency
+                self.transformer_model.gradient_checkpointing_enable()
+                training_args_dict["gradient_checkpointing"] = True
+
+                # Re-build args with checkpointing enabled
+                training_args = _build_training_args(training_args_dict)
+
+            except ImportError:
+                if is_quantized:
+                    raise ModuleOperationError("neural_text_generator", "fine-tuning", "PEFT library required for fine-tuning quantized models but not found.")
+                logger.warning("PEFT library not found. Falling back to full fine-tuning.")
+            except Exception as e:
+                if is_quantized:
+                    raise ModuleOperationError("neural_text_generator", "fine-tuning", f"Failed to initialize LoRA for quantized model: {e}")
+                logger.error(f"Failed to initialize LoRA: {e}. Falling back to full fine-tuning.")
         
         # Data collator
         base_collator = DataCollatorForLanguageModeling(
@@ -5735,8 +5791,13 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     }
                 else:
                     try:
-                        from transformers import AutoModelForCausalLM, AutoTokenizer
+                        from transformers import AutoTokenizer
                         import torch
+                        
+                        device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+                        
+                        # Use common transformer config for consistent loading
+                        transformer_config = params.get("transformer_config", {})
                         
                         # Load tokenizer first to get the true vocab size
                         if transformer_tokenizer_path.exists() and (transformer_tokenizer_path / "tokenizer_config.json").exists():
@@ -5746,10 +5807,12 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         
                         tokenizer_vocab_size = len(self.transformer_tokenizer)
 
-                        # Load model
-                        self.transformer_model = AutoModelForCausalLM.from_pretrained(
+                        # Load model using helper (supports quantization)
+                        print(f"[DEBUG] NeuralTextGenerator: Loading transformer model from {transformer_model_path}...")
+                        self.transformer_model = self._load_transformer_model(
                             str(transformer_model_path),
-                            ignore_mismatched_sizes=True
+                            device,
+                            transformer_config
                         )
                         
                         # Fix vocab mismatch if needed
@@ -5758,16 +5821,6 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             print(f"[DEBUG] NeuralTextGenerator: Resizing model embeddings from {model_vocab_size} to {tokenizer_vocab_size}")
                             self.transformer_model.resize_token_embeddings(tokenizer_vocab_size)
 
-                        # Move model to GPU if available
-                        device = "cuda" if torch.cuda.is_available() else "cpu"
-                        try:
-                            print(f"[DEBUG] NeuralTextGenerator: Moving model to {device}...")
-                            self.transformer_model = self.transformer_model.to(device)
-                        except Exception as e:
-                            print(f"[DEBUG] NeuralTextGenerator: Failed to move to GPU ({e}), falling back to CPU")
-                            device = "cpu"
-                            self.transformer_model = self.transformer_model.to(device)
-                             
                         results["transformer"] = {"success": True, "device": device}
                         self._models_loaded = True
                     except Exception as e:

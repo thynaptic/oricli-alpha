@@ -172,39 +172,43 @@ def calculate_required_vram(
 
         if is_large_model:
             # 3B models: ~6GB weights (16-bit), ~2GB (4-bit)
-            # LoRA + Optimizer: ~2-4GB
-            # Activations: ~4-8GB (depends on seq_len)
+            # LoRA + Optimizer: ~4-8GB (DPO doubles this)
+            # Activations: ~4-12GB (depends on seq_len and depth)
             if is_quantized:
-                base_gb = 16  # Safe floor for 3B quantized LoRA
+                base_gb = 24  # Floor for 3B quantized LoRA/DPO with headroom
             else:
-                base_gb = 24  # Floor for 3B 16-bit LoRA
+                base_gb = 32  # Floor for 3B 16-bit LoRA/DPO
         else:
             # Transformer defaults to GPT-2 (124M) or DistilGPT-2 (82M)
             # Training GPT-2 with Adam needs ~10-12GB for stability
             base_gb = 12
 
     # 2. Dataset Scaling (Data loading buffer, shuffling, caching)
-    # Add ~1GB for every 200M characters of data
-    data_gb = math.ceil(dataset_size_chars / 200_000_000)
+    # Add ~1GB for every 150M characters of data (more aggressive)
+    data_gb = math.ceil(dataset_size_chars / 150_000_000)
 
     # 3. Hyperparameter Scaling
     # Batch size: linear scaling
     # Sequence length: quadratic scaling for self-attention
-    # Scaling factor increases for larger models
-    hp_scale = 2.0 if (model_name and "3b" in model_name.lower()) else 1.0
+    # Scaling factor increases for larger models due to hidden dimension size
+    hp_scale = 3.0 if (model_name and "3b" in model_name.lower()) else 1.0
     hp_multiplier = (batch_size / 4) * ((sequence_length / 512) ** 2) * hp_scale
 
     # Total calculation
-    estimated = base_gb + data_gb + (2 * hp_multiplier)
+    estimated = base_gb + data_gb + (4 * hp_multiplier) # Increased multiplier for activations
 
-    # Add a safety headroom (20%)
-    total_with_headroom = math.ceil(estimated * 1.2)
+    # Add a safety headroom (25%)
+    total_with_headroom = math.ceil(estimated * 1.25)
 
     # Absolute floors based on model size
-    if model_name and ("3b" in model_name.lower() or "phi-3.5" in model_name.lower()):
-        return max(24, total_with_headroom)
+    if model_name:
+        name_lower = model_name.lower()
+        if "3b" in name_lower or "phi-3.5" in name_lower or "llama-3.2" in name_lower:
+            return max(30, total_with_headroom) # Aim for at least 30GB (triggers 40GB+ pods)
+        elif "7b" in name_lower or "8b" in name_lower:
+            return max(48, total_with_headroom)
 
-    return max(8, total_with_headroom)
+    return max(12, total_with_headroom)
 
 
 def get_task_details(args) -> Dict[str, Any]:
@@ -778,7 +782,7 @@ def ensure_mavaia_installed(
         "rm -rf datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy PIL torch torchvision torchaudio xxhash multiprocess dill fsspec aiohttp requests tqdm yaml safetensors 2>/dev/null || true; "
         "find . -maxdepth 1 -name '*.so' -delete; "
         "echo '[INFO] Installing core ML libraries (this may take a few minutes)...'; "
-        '"$VENV_PY" -m pip install --upgrade bitsandbytes scipy datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash shortuuid libtmux python-dotenv uvicorn fastapi pydantic beautifulsoup4 PyPDF2 PyYAML tensorflow keras -q || true; '
+        '"$VENV_PY" -m pip install --upgrade "bitsandbytes>=0.46.1" scipy datasets transformers accelerate huggingface_hub pyarrow wikipedia regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash shortuuid libtmux python-dotenv uvicorn fastapi pydantic beautifulsoup4 PyPDF2 PyYAML tensorflow keras -q || true; '
         "if [ -d LiveBench ]; then "
         "  echo '[INFO] LiveBench detected. Installing in editable mode...'; "
         '  "$VENV_PY" -m pip install -e LiveBench/ -q || true; '
@@ -2122,12 +2126,14 @@ def _select_candidate_gpus(
         and not any(kw in g.get("displayName", "") for kw in incompatible_keywords)
     ]
 
-    # BALANCED HEADROOM SCORING: Prioritize high-VRAM low-cost options
+    # BALANCED HEADROOM SCORING: Prioritize high-VRAM options with reasonable cost
     def _score(gpu):
         price = gpu["securePrice"] + storage_overhead
         vram = gpu["memoryInGb"]
-        # VRAM per dollar - simple but effective for balancing headroom and cost
-        return vram / price
+        # Bias towards VRAM: (VRAM^1.5) / Price
+        # This makes an 80GB card significantly more attractive than a 24GB card 
+        # even if it costs more per GB, prioritizing stability for large models.
+        return (vram ** 1.5) / price
 
     filtered_gpus.sort(key=_score, reverse=True)
     return filtered_gpus
@@ -2966,6 +2972,8 @@ def main():
         dataset_size_chars=details["dataset_size"],
         batch_size=details["batch_size"],
         sequence_length=details["sequence_length"],
+        model_name=details.get("model_name"),
+        is_quantized=details.get("is_quantized", False),
     )
     if vram_floor > args.min_vram:
         _rich_log(

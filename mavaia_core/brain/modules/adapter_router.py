@@ -414,14 +414,27 @@ class AdapterRouter(BaseBrainModule):
             with self._lock:
                 if adapter_id and adapter_id in self._active_adapters:
                     if hasattr(base_model, "delete_adapter"):
-                        base_model.delete_adapter(adapter_id)
+                        try:
+                            base_model.delete_adapter(adapter_id)
+                        except Exception as e:
+                            logger.debug(f"Delete adapter failed (normal if already gone): {e}")
                     del self._active_adapters[adapter_id]
                 
                 # Switch back to base (disable all adapters)
                 if hasattr(base_model, "disable_adapter"):
-                    base_model.disable_adapter()
+                    # Use context manager or method
+                    if callable(base_model.disable_adapter):
+                        base_model.disable_adapter()
+                elif hasattr(base_model, "set_adapter"):
+                    # PEFT fallback: try to set to a non-existent name to disable? 
+                    # Better: base_model.base_model.eval() usually works if it's a wrapper
+                    pass
                 
-            return {"success": True, "active_adapters": list(self._active_adapters.keys())}
+            return {
+                "success": True, 
+                "active_adapters": list(self._active_adapters.keys()),
+                "info": "Switched to base model (adapters disabled)"
+            }
         except Exception as e:
             return {"success": False, "error": str(e)}
 

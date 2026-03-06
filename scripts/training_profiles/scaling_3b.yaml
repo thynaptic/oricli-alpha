@@ -1,0 +1,28 @@
+# Scaling 3B Model Training Profile
+# Fine-tune a 3B parameter model using LoRA for maximum local intelligence
+description: "High-intelligence local brain scaling using Qwen2.5-3B-Instruct"
+model_type: transformer
+source: huggingface
+# Using wikitext for high-quality grounded data
+book_ids: ["wikitext:wikitext-103-raw-v1"]
+transformer_config:
+  model_name: Qwen/Qwen2.5-3B-Instruct
+  max_length: 1024
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 1e-4
+  warmup_steps: 100
+  fp16: true
+  use_cache: false
+  # Internal flags for LoRA/PEFT
+  _enable_lora: true
+  _load_4bit: true
+  _lora_r: 16
+  _lora_alpha: 32
+  _lora_dropout: 0.05
+  _lora_target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+epochs: 3
+stop_at_loss: 0.8
+max_books: 10
+max_text_size: 5000000
+data_percentage: 1.0
