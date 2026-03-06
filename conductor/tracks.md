@@ -19,3 +19,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Fix persistent SSH 255 errors during pod stabilization in runpod_bridge.py (Regression/Unresolved).**
   *Link: [./tracks/ssh_stability_20260302/](./tracks/ssh_stability_20260302/)*
+
+---
+
+- [ ] **Track: I need you to thoroughly comb through all of Mavaia's reasoning modules, and otherwise. We need to make sure ALL brain modules are synchronized and working together as they're intended to.**
+  *Link: [./tracks/brain_sync_20260306/](./tracks/brain_sync_20260306/)*
