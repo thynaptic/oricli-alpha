@@ -23,7 +23,9 @@ class DatasetSearch:
 
     def __init__(self):
         self.hf_api = None
+        self.kaggle_api = None
         self._setup_hf()
+        self._setup_kaggle()
 
     def _setup_hf(self):
         try:
@@ -31,6 +33,18 @@ class DatasetSearch:
             self.hf_api = HfApi()
         except ImportError:
             logger.warning("huggingface_hub not installed, HF search disabled")
+
+    def _setup_kaggle(self):
+        try:
+            from kaggle.api.kaggle_api_extended import KaggleApi
+            self.kaggle_api = KaggleApi()
+            # This will look for ~/.kaggle/kaggle.json or KAGGLE_USERNAME/KAGGLE_KEY env vars
+            self.kaggle_api.authenticate()
+        except ImportError:
+            logger.warning("kaggle package not installed, Kaggle search disabled")
+        except Exception as e:
+            logger.warning(f"Kaggle authentication failed: {e}. Ensure KAGGLE_USERNAME and KAGGLE_KEY are set.")
+            self.kaggle_api = None
 
     def search_huggingface(self, query: str, limit: int = 10) -> List[SearchResult]:
         """Search Hugging Face for datasets."""
@@ -63,6 +77,30 @@ class DatasetSearch:
                 ))
         except Exception as e:
             logger.error(f"HF search failed: {e}")
+
+        return results
+
+    def search_kaggle(self, query: str, limit: int = 5) -> List[SearchResult]:
+        """Search Kaggle for datasets."""
+        results = []
+        if not self.kaggle_api:
+            return results
+
+        try:
+            # Search datasets
+            datasets = self.kaggle_api.dataset_list(search=query)
+            
+            for ds in datasets[:limit]:
+                results.append(SearchResult(
+                    id=f"kaggle::{ds.ref}",
+                    name=ds.title,
+                    source="kaggle",
+                    description=f"Kaggle Dataset: {ds.title} by {ds.creatorName}",
+                    popularity_score=float(getattr(ds, "downloadCount", 0)),
+                    size_bytes=getattr(ds, "totalBytes", None)
+                ))
+        except Exception as e:
+            logger.error(f"Kaggle search failed: {e}")
 
         return results
 
@@ -122,6 +160,7 @@ class DatasetSearch:
         """Search all sources and combine results with ranking."""
         all_results = []
         all_results.extend(self.search_huggingface(query, limit=limit_per_source))
+        all_results.extend(self.search_kaggle(query, limit=limit_per_source))
         all_results.extend(self.search_wikipedia(query, limit=limit_per_source))
         all_results.extend(self.search_internet_archive(query, limit=limit_per_source))
         
