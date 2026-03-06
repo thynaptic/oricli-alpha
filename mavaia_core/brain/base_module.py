@@ -5,8 +5,8 @@ Enables plug-and-play architecture for easy module addition/removal
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
-from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field
 import time
 
 @dataclass
@@ -27,8 +27,8 @@ class ModuleMetadata:
     name: str
     version: str
     description: str
-    operations: list[str]
-    dependencies: list[str]
+    operations: List[str] = field(default_factory=list)
+    dependencies: List[str] = field(default_factory=list)
     enabled: bool = True
     model_required: bool = False
 
@@ -54,7 +54,7 @@ class BaseBrainModule(ABC):
         pass
 
     @abstractmethod
-    def execute(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
+    def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute an operation supported by this module
 
@@ -63,7 +63,10 @@ class BaseBrainModule(ABC):
             params: Operation parameters
 
         Returns:
-            Result dictionary containing the operation result
+            Dict[str, Any]: Result dictionary. MUST contain:
+                - success: bool (True if operation succeeded)
+                - error: Optional[str] (Error message if success is False)
+                - metadata: Optional[Dict[str, Any]] (Additional execution metadata)
 
         Raises:
             ValueError: If the operation is not supported by this module
@@ -75,8 +78,8 @@ class BaseBrainModule(ABC):
     def _execute_with_metrics(
         self,
         operation: str,
-        params: dict[str, Any]
-    ) -> dict[str, Any]:
+        params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Execute operation with automatic metrics tracking
         
@@ -127,7 +130,7 @@ class BaseBrainModule(ABC):
                 # initialized or there's a circular import issue.
                 pass
 
-    def validate_params(self, operation: str, params: dict[str, Any]) -> bool:
+    def validate_params(self, operation: str, params: Dict[str, Any]) -> bool:
         """
         Validate parameters for an operation (optional override)
         
@@ -144,7 +147,7 @@ class BaseBrainModule(ABC):
             params: Operation parameters to validate
         
         Returns:
-            True if parameters are valid, False otherwise
+            bool: True if parameters are valid, False otherwise
         
         Raises:
             InvalidParameterError: Recommended approach - raise this exception
@@ -165,7 +168,7 @@ class BaseBrainModule(ABC):
         more context about initialization failures.
         
         Returns:
-            True if initialization succeeded, False otherwise
+            bool: True if initialization succeeded, False otherwise
         
         Raises:
             ModuleInitializationError: Recommended approach - raise this
@@ -186,4 +189,3 @@ class BaseBrainModule(ABC):
         should be logged but not propagated to avoid disrupting shutdown.
         """
         pass
-

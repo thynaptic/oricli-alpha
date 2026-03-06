@@ -383,8 +383,39 @@ class ModuleRegistry:
         metadata: ModuleMetadata
     ) -> None:
         """Manually register a module"""
+        # Validate module interface
+        cls._validate_module_interface(name, module_class, metadata)
         cls._modules[name] = module_class
         cls._metadata[name] = metadata
+
+    @classmethod
+    def _validate_module_interface(
+        cls,
+        name: str,
+        module_class: Type[BaseBrainModule],
+        metadata: ModuleMetadata
+    ) -> None:
+        """Validate that a module strictly follows the required interface"""
+        if not issubclass(module_class, BaseBrainModule):
+            raise ModuleDiscoveryError(
+                name,
+                f"Module class {module_class.__name__} does not inherit from BaseBrainModule"
+            )
+            
+        if metadata.name != name:
+            raise ModuleDiscoveryError(
+                name,
+                f"Metadata name mismatch: '{metadata.name}' in metadata vs '{name}' in registration"
+            )
+            
+        # Check for required methods
+        required_methods = ["execute", "initialize"]
+        for method in required_methods:
+            if not hasattr(module_class, method):
+                raise ModuleDiscoveryError(
+                    name,
+                    f"Module class {module_class.__name__} is missing required method: {method}"
+                )
 
     @classmethod
     def get_module(
