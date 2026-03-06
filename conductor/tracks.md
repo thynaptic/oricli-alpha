@@ -22,5 +22,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement a fully functional, ready to train, Multi-adapter Routing module using LoRA adapters.**
+- [x] **Track: Implement a fully functional, ready to train, Multi-adapter Routing module using LoRA adapters.**
   *Link: [./tracks/adapter_router_20260306/](./tracks/adapter_router_20260306/)*
