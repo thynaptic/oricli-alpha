@@ -2568,45 +2568,78 @@ def register_trained_adapters(local_path: Path):
     if not remote_models_dir.exists():
         return
 
-    # Try to get MavaiaClient
-    try:
-        from mavaia_core.client import MavaiaClient
-        client = MavaiaClient()
-    except Exception as e:
-        _rich_log(f"Could not initialize MavaiaClient for registration: {e}", "yellow", "⚠")
-        return
-
-    # Check for adapters in the models directory (where NTG saves them)
-    # They are named f"adapter_{adapter_name}" by mavaia_core/brain/modules/neural_text_generator.py
+    # 1. Collect adapters to register
+    new_adapters = {} # adapter_name -> full_path
+    
     for adapter_path in remote_models_dir.iterdir():
         if adapter_path.is_dir() and adapter_path.name.startswith("adapter_"):
             # Check if it has LoRA weights
             if (adapter_path / "adapter_config.json").exists():
                 adapter_name = adapter_path.name.replace("adapter_", "")
-                _rich_log(f"Found new specialized adapter: {adapter_name}", "bold green", "💎")
-                
-                try:
-                    # Register with router (using the name as intent)
-                    client.brain.adapter_router.register_intent(
-                        intent=adapter_name,
-                        adapter_id=str(adapter_path.absolute())
-                    )
-                    _rich_log(f"Successfully registered adapter '{adapter_name}' with router.", "green", "✓")
-                except Exception as e:
-                    _rich_log(f"Failed to register adapter {adapter_name}: {e}", "red", "✗")
+                new_adapters[adapter_name] = str(adapter_path.absolute())
 
     # Also check the main transformer checkpoint dir (base LoRA if not named)
     transformer_dir = remote_models_dir / "transformer"
     if transformer_dir.exists() and (transformer_dir / "adapter_config.json").exists():
-        _rich_log("Found main LoRA adapter output.", "bold green", "💎")
-        try:
-            client.brain.adapter_router.register_intent(
-                intent="primary_lora",
-                adapter_id=str(transformer_dir.absolute())
-            )
-            _rich_log("Registered primary_lora adapter with router.", "green", "✓")
-        except Exception as e:
-            _rich_log(f"Failed to register primary adapter: {e}", "red", "✗")
+        new_adapters["primary_lora"] = str(transformer_dir.absolute())
+
+    if not new_adapters:
+        _rich_log("No new adapters found to register.", "dim", "ℹ")
+        return
+
+    # 2. Try to register via MavaiaClient (Preferred)
+    try:
+        from mavaia_core.client import MavaiaClient
+        client = MavaiaClient()
+        
+        for name, path in new_adapters.items():
+            _rich_log(f"Registering adapter '{name}' via client...", "dim", "🛰")
+            try:
+                client.brain.adapter_router.register_intent(
+                    intent=name,
+                    adapter_id=path
+                )
+                _rich_log(f"Successfully registered adapter '{name}' via client.", "green", "✓")
+            except Exception as e:
+                _rich_log(f"Failed to register adapter {name} via client: {e}", "yellow", "⚠")
+        return
+    except Exception as e:
+        _rich_log(f"MavaiaClient unavailable for registration ({e}). Falling back to direct config update.", "yellow", "⚠")
+
+    # 3. Direct JSON Fallback (Resilient Path)
+    config_path = local_path / "mavaia_core" / "brain" / "modules" / "adapter_router_config.json"
+    
+    try:
+        # Load existing or create new
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {"routing_table": {}, "intent_labels": ["general", "math", "coding", "creative", "logic"], "config": {}}
+            
+        routing_table = data.get("routing_table", {})
+        intent_labels = data.get("intent_labels", [])
+        
+        updated = False
+        for name, path in new_adapters.items():
+            if routing_table.get(name) != path:
+                routing_table[name] = path
+                if name not in intent_labels:
+                    intent_labels.append(name)
+                updated = True
+                _rich_log(f"Registered adapter '{name}' in config file.", "green", "✓")
+        
+        if updated:
+            data["routing_table"] = routing_table
+            data["intent_labels"] = intent_labels
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            _rich_log(f"Updated AdapterRouter config file at {config_path.name}", "bold green", "✨")
+        else:
+            _rich_log("No changes needed to config file.", "dim", "ℹ")
+            
+    except Exception as e:
+        _rich_log(f"CRITICAL: Failed to update AdapterRouter config directly: {e}", "red", "✗")
 
 
 def main():

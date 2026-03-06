@@ -6,6 +6,7 @@ Standalone module for dynamically selecting and loading specialized LoRA adapter
 based on semantic input analysis. Foundation for the Mavaia Model Family.
 """
 
+import json
 from typing import Dict, Any, Optional, List
 import logging
 import time
@@ -104,7 +105,7 @@ class AdapterRouter(BaseBrainModule):
         """Return module metadata."""
         return ModuleMetadata(
             name="adapter_router",
-            version="1.1.0",
+            version="1.1.1",
             description="Dynamically routes inputs to specialized LoRA adapters with VRAM safety and async triggers",
             operations=[
                 "route_input",
@@ -128,6 +129,9 @@ class AdapterRouter(BaseBrainModule):
         cache_dir = Path(self.config.get("cache_dir", "models/adapter_cache"))
         cache_dir.mkdir(parents=True, exist_ok=True)
         
+        # Load persisted config if available
+        self._load_config()
+        
         self._max_adapters = int(self.config.get("max_adapters", 3))
         
         # Initialize classifier if torch is available
@@ -148,6 +152,35 @@ class AdapterRouter(BaseBrainModule):
         
         self._initialized = True
         return True
+
+    def _load_config(self):
+        """Load persistent configuration from JSON."""
+        config_path = Path(__file__).parent / "adapter_router_config.json"
+        if config_path.exists():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self._routing_table = data.get("routing_table", {})
+                    self._intent_labels = data.get("intent_labels", self._intent_labels)
+                    self.config.update(data.get("config", {}))
+                logger.info(f"Loaded AdapterRouter config from {config_path}")
+            except Exception as e:
+                logger.error(f"Failed to load AdapterRouter config: {e}")
+
+    def _save_config(self):
+        """Save configuration to JSON."""
+        config_path = Path(__file__).parent / "adapter_router_config.json"
+        try:
+            data = {
+                "routing_table": self._routing_table,
+                "intent_labels": self._intent_labels,
+                "config": self.config
+            }
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            logger.info(f"Saved AdapterRouter config to {config_path}")
+        except Exception as e:
+            logger.error(f"Failed to save AdapterRouter config: {e}")
     
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -284,6 +317,9 @@ class AdapterRouter(BaseBrainModule):
             
         self._routing_table[intent] = adapter_id
         
+        # Persist change
+        self._save_config()
+        
         return {
             "success": True,
             "intent": intent,
@@ -299,6 +335,8 @@ class AdapterRouter(BaseBrainModule):
             
         if intent in self._routing_table:
             del self._routing_table[intent]
+            # Persist change
+            self._save_config()
             
         return {"success": True, "intent": intent}
 
