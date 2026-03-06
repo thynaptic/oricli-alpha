@@ -59,6 +59,7 @@ def test_create_cluster():
             name="mavaia-cluster",
             gpu_type_id="NVIDIA RTX A6000",
             pod_count=2,
+            bid_per_gpu=0.50,
             image="runpod/pytorch"
         )
         
@@ -71,6 +72,7 @@ def test_create_cluster():
         assert sent_input["clusterName"] == "mavaia-cluster"
         assert sent_input["podCount"] == 2
         assert sent_input["type"] == "SLURM"
+        assert sent_input["bidPerGpu"] == 0.50
         print("✓ create_cluster verified")
 
 def test_delete_cluster():

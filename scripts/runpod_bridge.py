@@ -606,6 +606,7 @@ class RunPodBridge:
         gpu_type_id: str,
         pod_count: int,
         gpu_count_per_pod: int = 1,
+        bid_per_gpu: Optional[float] = None,
         image: Optional[str] = None,
         template_id: Optional[str] = None,
         volume_mount_path: str = "/workspace",
@@ -624,6 +625,9 @@ class RunPodBridge:
             "containerDiskInGb": 200,
             "volumeMountPath": volume_mount_path,
         }
+        
+        if bid_per_gpu:
+            input_data["bidPerGpu"] = float(bid_per_gpu)
 
         env_vars = []
         if env:
@@ -3661,6 +3665,7 @@ def main():
                             name=pod_name,
                             gpu_type_id=candidate_id,
                             pod_count=args.cluster_size,
+                            bid_per_gpu=candidate.get("securePrice"),
                             template_id=args.template,
                             image=current_image,
                             ssh_key_value=args.ssh_key_value,
