@@ -17,12 +17,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # BOOTSTRAP: Ensure we are running in the virtual environment
 VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python3"
-if VENV_PYTHON.exists() and sys.executable != str(VENV_PYTHON):
-    # Re-run the script using the venv python
-    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON)] + sys.argv)
+if VENV_PYTHON.exists() and Path(sys.executable).resolve() != VENV_PYTHON.resolve():
+    # Re-run the script using the venv python with absolute path
+    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), str(Path(__file__).resolve())] + sys.argv[1:])
 
 if str(REPO_ROOT) not in sys.path:
-    sys.path.append(str(REPO_ROOT))
+    sys.path.insert(0, str(REPO_ROOT))
 
 # Try to import Mavaia parser
 try:

@@ -12,9 +12,9 @@ from pathlib import Path
 # BOOTSTRAP: Ensure we are running in the virtual environment
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python3"
-if VENV_PYTHON.exists() and sys.executable != str(VENV_PYTHON):
-    # Re-run the script using the venv python
-    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON)] + sys.argv)
+if VENV_PYTHON.exists() and Path(sys.executable).resolve() != VENV_PYTHON.resolve():
+    # Re-run the script using the venv python with absolute paths
+    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), str(Path(__file__).resolve())] + sys.argv[1:])
 
 # Ensure project root is in path
 sys.path.insert(0, str(REPO_ROOT))
