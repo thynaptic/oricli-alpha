@@ -587,6 +587,7 @@ def main():
     ap.add_argument("--elective-base", help="Manual path to a base model for electives (defaults to last non-elective stage output)")
     ap.add_argument("--find-elective", type=str, help="Search for a dataset based on a phrase/category and train it as an elective")
     ap.add_argument("--add-stage", type=str, help="Search for a dataset and permanently add it as a new curriculum stage")
+    ap.add_argument("--discover-only", action="store_true", help="Perform dataset discovery or stage addition without starting training")
     ap.add_argument("--auto-select", action="store_true", help="Auto-select the best match for --find-elective or --add-stage without interaction")
     ap.add_argument("--run-root", default=str(REPO_ROOT / "mavaia_core" / "models" / "neural_text_generator" / "curriculum"))
     ap.add_argument("extra_args", nargs=argparse.REMAINDER, help="Extra args passed to train_neural_text_generator.py")
@@ -642,6 +643,10 @@ def main():
             if args.auto:
                 args.stages = new_name
                 print(f"[INFO] --auto detected: Training will start for new stage '{new_name}' only.")
+
+        if args.discover_only:
+            print(f"[SUCCESS] Discovery complete. Stage injected: {discovered_stage['title']}")
+            return 0
 
     if args.list_stages:
         stages = _stage_defs(1, 0.2, False)

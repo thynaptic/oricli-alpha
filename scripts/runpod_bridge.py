@@ -2831,8 +2831,15 @@ def main():
     )
     parser.add_argument(
         "--find-elective",
+        "--find-stage",
         type=str,
+        dest="find_elective",
         help="Search for a dataset based on a phrase/category and train it as an elective",
+    )
+    parser.add_argument(
+        "--discover-only",
+        action="store_true",
+        help="Perform dataset discovery or stage addition without starting training",
     )
     parser.add_argument(
         "--add-stage",
@@ -3861,7 +3868,11 @@ def main():
                     train_args.extend(["--adapter-name", "rfal_alignment"])
 
             script_rel = args.script or "scripts/train_neural_text_generator.py"
-            if args.curriculum:
+            
+            # Auto-detect curriculum mode from flags
+            is_curriculum_task = args.curriculum or args.find_elective or args.add_stage or args.list_stages or args.discover_only
+            
+            if is_curriculum_task:
                 script_rel = "scripts/train_curriculum.py"
                 if args.stage:
                     _rich_log(f"Targeting curriculum stages: {args.stage}", "cyan", "🎯")
@@ -3869,18 +3880,30 @@ def main():
                         train_args.extend(["--stages", args.stage])
                 
                 if args.find_elective:
-                    _rich_log(f"Dynamic discovery elective: '{args.find_elective}'", "cyan", "🔍")
-                    train_args.extend(["--find-elective", args.find_elective])
-                    if args.auto_select:
+                    _rich_log(f"Dynamic discovery: '{args.find_elective}'", "cyan", "🔍")
+                    if "--find-elective" not in train_args:
+                        train_args.extend(["--find-elective", args.find_elective])
+                    if args.auto_select and "--auto-select" not in train_args:
                         train_args.append("--auto-select")
                 
                 if args.add_stage:
                     _rich_log(f"Permanently adding stage: '{args.add_stage}'", "cyan", "➕")
-                    train_args.extend(["--add-stage", args.add_stage])
-                    if args.auto_select:
+                    if "--add-stage" not in train_args:
+                        train_args.extend(["--add-stage", args.add_stage])
+                    if args.auto_select and "--auto-select" not in train_args:
                         train_args.append("--auto-select")
                 
-                if not args.stage and not args.find_elective and not args.add_stage:
+                if args.list_stages:
+                    _rich_log("Requesting curriculum stage listing", "cyan", "📋")
+                    if "--list-stages" not in train_args:
+                        train_args.append("--list-stages")
+
+                if args.discover_only:
+                    _rich_log("Discovery-only mode active", "cyan", "🔎")
+                    if "--discover-only" not in train_args:
+                        train_args.append("--discover-only")
+                
+                if not any([args.stage, args.find_elective, args.add_stage, args.list_stages, args.discover_only]):
                     _rich_log("Running full curriculum sequence", "cyan", "📚")
             else:
                 if (
