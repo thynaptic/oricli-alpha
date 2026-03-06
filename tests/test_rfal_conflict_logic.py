@@ -68,7 +68,7 @@ def test_sentiment_conflict():
         mock_get.side_effect = side_effect
         
         # Test 1: Frustrated user
-        mock_ei.execute.return_value = {"dominant_emotion": "frustrated", "confidence": 0.8}
+        mock_ei.execute.return_value = {"emotion_score": {"emotion": "frustrated", "confidence": 0.8}}
         res = rfal.execute("process_feedback", {
             "user_input": "I am so tired of this not working.",
             "last_response": "output",
@@ -81,7 +81,7 @@ def test_sentiment_conflict():
             sys.exit(1)
             
         # Test 2: Happy user
-        mock_ei.execute.return_value = {"dominant_emotion": "happy", "confidence": 0.9}
+        mock_ei.execute.return_value = {"emotion_score": {"emotion": "happy", "confidence": 0.9}}
         res = rfal.execute("process_feedback", {
             "user_input": "This is amazing!",
             "last_response": "output",

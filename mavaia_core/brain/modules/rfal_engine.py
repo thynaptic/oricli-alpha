@@ -173,8 +173,9 @@ class RFALEngine(BaseBrainModule):
                 
             res = ei.execute("infer_emotion", {"text": text})
             # If dominant emotion is negative and high confidence
-            emotion = res.get("dominant_emotion", "")
-            confidence = res.get("confidence", 0.0)
+            score = res.get("emotion_score", {})
+            emotion = score.get("emotion", "")
+            confidence = score.get("confidence", 0.0)
             
             negative_emotions = ["angry", "frustrated", "disappointed", "upset"]
             if emotion in negative_emotions and confidence > 0.6:
@@ -240,7 +241,7 @@ class RFALEngine(BaseBrainModule):
             if wk:
                 # Simple check: does it look like a factual claim?
                 # For Phase 2, we just ask WK to validate the response against the prompt
-                fact_res = wk.execute("validate_fact", {"text": response, "context": prompt})
+                fact_res = wk.execute("validate_fact", {"fact": response, "context": prompt})
                 # If valid=False, strong penalty
                 if fact_res.get("valid") is False:
                     scores["fact"] = -1.0
