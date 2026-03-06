@@ -407,6 +407,8 @@ class RunPodBridge:
             "id displayName memoryInGb securePrice communityPrice",
         ]
         for fields in field_sets:
+            # Note: stockStatus is often nested in lowestPrice in newer API versions
+            # but legacy flat field is often still supported.
             query = f"query {{ gpuTypes {{ {fields} }} }}"
             data = self._query(query, log_errors=False, allow_http_error=True)
             if "errors" in data:
@@ -415,10 +417,19 @@ class RunPodBridge:
         return []
 
     @staticmethod
-    def gpu_is_available(gpu: Dict) -> bool:
+    def gpu_is_available(gpu: Dict, required_count: int = 1) -> bool:
+        """Check if GPU has enough stock for the request."""
+        # 1. Check stockStatus (The most accurate)
         if "stockStatus" in gpu and gpu.get("stockStatus") is not None:
             status = str(gpu.get("stockStatus")).lower()
-            return status in ("available", "in_stock", "ok", "true", "ready")
+            if status == "out_of_stock":
+                return False
+            # If requesting a cluster (>3 pods), we ideally want 'high' stock
+            if required_count > 3 and status == "low":
+                return False
+            return True
+            
+        # 2. Check legacy availability boolean/number
         if "availability" in gpu and gpu.get("availability") is not None:
             avail = gpu.get("availability")
             if isinstance(avail, bool):
@@ -427,7 +438,8 @@ class RunPodBridge:
                 return avail > 0
             status = str(avail).lower()
             return status in ("available", "in_stock", "ok", "true", "ready")
-        # Unknown; assume available to avoid false negatives.
+            
+        # Unknown; assume available
         return True
 
     def get_pods(self) -> List[Dict]:
@@ -3599,14 +3611,26 @@ def main():
                         pod_task, description=f"Attempting {candidate_display} ({rationale})..."
                     )
 
-                    # Re-verify availability one last time before mutation
+                    # 1. AVAILABILITY PRE-CHECK (STOCK SENSITIVE)
                     availability_snapshot = bridge.get_gpu_types_with_availability()
                     candidate_info = next(
                         (g for g in availability_snapshot if g.get("id") == candidate_id), None
                     )
-                    if candidate_info is not None and not bridge.gpu_is_available(candidate_info):
-                        continue
+                    
+                    if candidate_info is not None:
+                        # Check for enough stock for the whole cluster
+                        if not bridge.gpu_is_available(candidate_info, required_count=args.cluster_size):
+                            stock_status = candidate_info.get("stockStatus", "UNKNOWN")
+                            _rich_log(
+                                f"Skipping {candidate_display}: Insufficient stock for {args.cluster_size} pods (Status: {stock_status}).",
+                                "yellow",
+                                "⏳",
+                                progress=progress,
+                                task_id=pod_task,
+                            )
+                            continue
 
+                    # 2. PROCEED TO CREATION
                     # Auto-switch image for AMD ROCm
                     current_image = args.image
                     if "AMD" in candidate_display or "MI" in candidate_display:
