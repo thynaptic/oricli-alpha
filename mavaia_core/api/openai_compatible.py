@@ -160,6 +160,41 @@ class OpenAICompatibleAPI:
                 detail=str(e)
             ) from e
         
+        # 1. PRE-COG CACHE CHECK (New Step)
+        # Try to deliver an instant speculative answer
+        try:
+            from mavaia_core.services.precog_service import PreCogService
+            precog = PreCogService()
+            last_message = request.messages[-1].get_text_content() if request.messages else ""
+            if last_message:
+                cached = precog.get_cached_response(last_message)
+                if cached:
+                    # deliver instantly (must be formatted as ChatCompletionResponse)
+                    # For now, we assume the cache stores the full response object or enough to reconstruct it
+                    if isinstance(cached, ChatCompletionResponse):
+                        return cached
+                    elif isinstance(cached, dict):
+                        # Reconstruct if it's a dict from pipeline result
+                        # Note: This is a simplified reconstruction
+                        from mavaia_core.types.models import ChatCompletionChoice, ChatCompletionMessage
+                        content = cached.get("answer") or cached.get("text") or ""
+                        if content:
+                            return ChatCompletionResponse(
+                                id=f"precog-{int(time.time())}",
+                                object="chat.completion",
+                                created=int(time.time()),
+                                model=request.model,
+                                choices=[ChatCompletionChoice(
+                                    index=0,
+                                    message=ChatCompletionMessage(role="assistant", content=content),
+                                    finish_reason="stop"
+                                )],
+                                usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+                            )
+        except Exception as e:
+            # Pre-cog failure is non-blocking
+            pass
+
         try:
             # Expand tool references if present
             expanded_tools = None
@@ -187,6 +222,20 @@ class OpenAICompatibleAPI:
                 tools=[tool.dict() for tool in expanded_tools] if expanded_tools else None,
             )
             
+            # 2. TRIGGER SPECULATION (New Step)
+            # While the user is reading, anticipate the next question
+            try:
+                from mavaia_core.brain.registry import ModuleRegistry
+                speculator = ModuleRegistry.get_module("speculator")
+                if speculator and response.choices:
+                    speculator.execute("speculate", {
+                        "conversation_history": [m.dict() for m in request.messages],
+                        "last_input": request.messages[-1].get_text_content() if request.messages else "",
+                        "last_output": response.choices[0].message.content
+                    })
+            except Exception:
+                pass
+
             return response
         
         except HTTPException:

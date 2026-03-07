@@ -17,7 +17,19 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement Dynamic ToolBench Framework (Efficacy & Self-Correction).**
+- [ ] **Track: Implement Pre-Cog Cache (Predictive Speculation).**
+  *Link: [./tracks/precog_cache_20260306/](./tracks/precog_cache_20260306/)*
+
+---\n\n- [ ] **Track: Implement Autonomic Self-Modification (Codebase Metacognition).**
+  *Link: [./tracks/autonomic_self_mod_20260306/](./tracks/autonomic_self_mod_20260306/)*
+
+---\n\n- [ ] **Track: Implement Synthetic Dream State (Cognitive Consolidation).**
+  *Link: [./tracks/synthetic_dream_20260306/](./tracks/synthetic_dream_20260306/)*
+
+---\n\n- [ ] **Track: Implement Sovereign Goal Execution (Proactive Multi-Day Persistence).**
+  *Link: [./tracks/sovereign_goals_20260306/](./tracks/sovereign_goals_20260306/)*
+
+---\n\n- [ ] **Track: Implement Dynamic ToolBench Framework (Efficacy & Self-Correction).**
   *Link: [./tracks/tool_bench_20260306/](./tracks/tool_bench_20260306/)*
 
 ---\n\n- [ ] **Track: Implement Just-In-Time (JIT) Knowledge Absorption (Autonomous Learning).**

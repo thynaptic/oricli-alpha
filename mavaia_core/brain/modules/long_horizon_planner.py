@@ -22,18 +22,21 @@ class LongHorizonPlannerModule(BaseBrainModule):
         self.mcts_service = None
         self.complexity_detector = None
         self.cognitive_generator = None
+        self._goal_service = None
         self._modules_loaded = False
 
     @property
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="long_horizon_planner",
-            version="1.0.0",
-            description="Long-horizon planning for multi-step goal-based reasoning",
+            version="1.1.0",
+            description="Persistent long-horizon planning for multi-step sovereign goals",
             operations=[
                 "create_long_plan",
                 "execute_plan",
                 "create_plan",
+                "resume_plan",
+                "save_current_state",
             ],
             dependencies=[],
             model_required=False,
@@ -52,6 +55,13 @@ class LongHorizonPlannerModule(BaseBrainModule):
             self.mcts_service = ModuleRegistry.get_module("mcts_service")
             self.complexity_detector = ModuleRegistry.get_module("cot_complexity_detector")
             self.cognitive_generator = ModuleRegistry.get_module("cognitive_generator")
+            
+            # Lazy load goal service
+            try:
+                from mavaia_core.services.goal_service import GoalService
+                self._goal_service = GoalService()
+            except ImportError:
+                logger.warning("GoalService not available.")
 
             self._modules_loaded = True
         except Exception as e:
@@ -72,12 +82,37 @@ class LongHorizonPlannerModule(BaseBrainModule):
             return self._execute_plan(params)
         elif operation == "create_plan":
             return self._create_plan(params)
+        elif operation == "resume_plan":
+            return self._resume_plan(params)
+        elif operation == "save_current_state":
+            return self._save_current_state(params)
         else:
             raise InvalidParameterError(
                 parameter="operation",
                 value=operation,
                 reason="Unknown operation for long_horizon_planner",
             )
+
+    def _resume_plan(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Load and continue an existing persistent plan."""
+        goal_id = params.get("goal_id")
+        if not goal_id or not self._goal_service:
+            return {"success": False, "error": "Goal ID or GoalService missing"}
+            
+        plan_state = self._goal_service.load_plan_state(goal_id)
+        if not plan_state:
+            return {"success": False, "error": f"No persistent plan found for {goal_id}"}
+            
+        return self._execute_plan({"plan": plan_state, "goal_id": goal_id})
+
+    def _save_current_state(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Manually save the current state of a plan."""
+        goal_id = params.get("goal_id")
+        plan_data = params.get("plan_data")
+        if goal_id and plan_data and self._goal_service:
+            self._goal_service.save_plan_state(goal_id, plan_data)
+            return {"success": True}
+        return {"success": False}
 
     def _create_long_plan(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Create a long-horizon plan for a goal"""
@@ -142,19 +177,38 @@ class LongHorizonPlannerModule(BaseBrainModule):
     def _execute_plan(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a long-horizon plan"""
         plan = params.get("plan", {})
+        goal_id = params.get("goal_id")
         steps = plan.get("steps", [])
 
-        executed_steps = []
+        executed_steps = plan.get("executed_steps", [])
         failures = []
 
-        for index, step in enumerate(steps):
+        # Start from the first unexecuted step
+        start_index = len(executed_steps)
+
+        for index in range(start_index, len(steps)):
+            step = steps[index]
             step_result = self._execute_step(step, executed_steps)
 
-            executed_steps.append({
+            executed_step = {
                 **step,
                 "result": step_result.get("result"),
                 "success": step_result.get("success", False),
-            })
+                "completed_at": str(datetime.now())
+            }
+            executed_steps.append(executed_step)
+
+            # PERSISTENCE: Save state after every step
+            if goal_id and self._goal_service:
+                current_plan_state = {
+                    "steps": steps,
+                    "executed_steps": executed_steps,
+                    "last_updated": str(datetime.now())
+                }
+                self._goal_service.save_plan_state(goal_id, current_plan_state)
+                # Update objective progress
+                progress = len(executed_steps) / len(steps) if steps else 0.0
+                self._goal_service.update_objective(goal_id, {"progress": progress, "status": "active"})
 
             if not step_result.get("success", False):
                 failures.append({
@@ -162,21 +216,17 @@ class LongHorizonPlannerModule(BaseBrainModule):
                     "step": step,
                     "error": step_result.get("error", "Unknown error"),
                 })
-
-                # Attempt recovery
-                recovery_plan = self._attempt_recovery(step, executed_steps, plan)
-                if recovery_plan:
-                    recovery_result = self._execute_plan({"plan": recovery_plan})
-                    if recovery_result.get("success", False):
-                        executed_steps.extend(recovery_result.get("executed_steps", []))
-                        continue
-                    else:
-                        break
+                if goal_id and self._goal_service:
+                    self._goal_service.update_objective(goal_id, {"status": "failed"})
+                break
 
         success = len(failures) == 0 and len(executed_steps) == len(steps)
+        if success and goal_id and self._goal_service:
+            self._goal_service.update_objective(goal_id, {"status": "completed", "progress": 1.0})
 
         return {
             "success": success,
+            "goal_id": goal_id,
             "plan": plan,
             "executed_steps": executed_steps,
             "failures": failures,

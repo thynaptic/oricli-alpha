@@ -3256,6 +3256,11 @@ def main():
         help="Run Tool-Efficacy training using collected corrections",
     )
     parser.add_argument(
+        "--execute-goal",
+        type=str,
+        help="Execute a specific sovereign goal by ID (Long Horizon Persistence)",
+    )
+    parser.add_argument(
         "--fleet-curriculum",
         action="store_true",
         help="In fleet mode, run curriculum training for the normal role instead of standard training.",
@@ -4390,6 +4395,12 @@ def main():
                 train_args.extend(["--dpo-data", "mavaia_core/data/tool_corrections.jsonl"])
                 if "--adapter-name" not in train_args and not args.adapter_name:
                     train_args.extend(["--adapter-name", "tool_efficacy_v1"])
+
+            if args.execute_goal:
+                _rich_log(f"Sovereign Goal Execution: Orchestrating Goal {args.execute_goal}", "bold cyan", "🎯")
+                # Redirect bridge to use the long_horizon_planner on the pod
+                script_rel = "scripts/execute_sovereign_goal.py" # New script we'll create
+                train_args = ["--goal-id", args.execute_goal]
 
             script_rel = args.script or "scripts/train_neural_text_generator.py"
             
