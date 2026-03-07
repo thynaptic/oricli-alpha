@@ -1716,29 +1716,30 @@ def main():
         help="Maximum prompt length for DPO.",
     )
     
-    # Curriculum Sentinel (Overfit Watcher) arguments
+    # DISTRIBUTED / CLUSTER arguments
     parser.add_argument(
-        "--stop-at-loss",
-        type=float,
-        help="Target loss floor. If training loss falls below this, end stage early.",
-    )
-    parser.add_argument(
-        "--plateau-steps",
+        "--nnodes",
         type=int,
-        default=50,
-        help="Number of steps to monitor for a plateau (no improvement).",
+        default=1,
+        help="Number of nodes in the training cluster.",
     )
     parser.add_argument(
-        "--plateau-patience",
+        "--master-addr",
+        type=str,
+        default="127.0.0.1",
+        help="Address of the master node.",
+    )
+    parser.add_argument(
+        "--master-port",
         type=int,
-        default=3,
-        help="Number of times a plateau must be detected before stopping.",
+        default=29500,
+        help="Port of the master node.",
     )
     parser.add_argument(
-        "--min-improvement",
-        type=float,
-        default=0.01,
-        help="Minimum percentage improvement (0.01 = 1%) required to NOT be considered a plateau.",
+        "--node-rank",
+        type=int,
+        default=0,
+        help="Rank of the current node.",
     )
 
     # Parse arguments normally (help was already handled above)
@@ -2324,7 +2325,12 @@ def main():
         else:
             # Default: per-run directory under the module's model folder
             ts = __import__("datetime").datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            final_run_dir = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator" / "runs" / ts
+            # Append unique node identifier to prevent collisions in virtual clusters
+            import socket
+            hostname = socket.gethostname()
+            # Clean hostname for path use
+            safe_host = "".join(c if c.isalnum() else "_" for c in hostname)
+            final_run_dir = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator" / "runs" / f"{ts}_{safe_host}"
         
         final_run_dir.mkdir(parents=True, exist_ok=True)
         (final_run_dir / "checkpoints").mkdir(exist_ok=True)

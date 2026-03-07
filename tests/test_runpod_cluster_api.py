@@ -16,7 +16,6 @@ from scripts.runpod_bridge import RunPodBridge
 def test_get_clusters():
     """Verify get_clusters query."""
     bridge = RunPodBridge(api_key="mock-key")
-    
     mock_response = {
         "data": {
             "clusters": [
@@ -24,14 +23,15 @@ def test_get_clusters():
                     "id": "cluster-1",
                     "name": "test-cluster",
                     "status": "RUNNING",
+                    "clusterType": "SLURM",
                     "nodeCount": 2,
-                    "pods": [{"id": "pod-1"}, {"id": "pod-2"}]
+                    "pods": [{"id": "p1"}, {"id": "p2"}]
                 }
             ]
         }
     }
     
-    with patch.object(bridge, "_query", return_value=mock_response):
+    with patch.object(bridge, "_query", return_value=mock_response) as mock_query:
         clusters = bridge.get_clusters()
         assert len(clusters) == 1
         assert clusters[0]["id"] == "cluster-1"
@@ -46,33 +46,30 @@ def test_create_cluster():
         "data": {
             "createCluster": {
                 "id": "new-cluster-id",
-                "name": "mavaia-cluster",
-                "podCount": 2,
-                "pods": [{"id": "p1"}, {"id": "p2"}]
+                "name": "mavaia-cluster"
             }
         }
     }
 
-    
     with patch.object(bridge, "_query", return_value=mock_response) as mock_query:
         cluster = bridge.create_cluster(
             name="mavaia-cluster",
-            gpu_type_id="NVIDIA RTX A6000",
+            gpu_type_id="gpu-nvidia-rtx-6000-ada",
             pod_count=2,
-            bid_per_gpu=0.50,
             image="runpod/pytorch"
         )
         
         assert cluster["id"] == "new-cluster-id"
-        assert cluster["podCount"] == 2
+        assert cluster["name"] == "mavaia-cluster"
         
         # Verify input structure
         args, kwargs = mock_query.call_args
         sent_input = kwargs["variables"]["input"]
         assert sent_input["clusterName"] == "mavaia-cluster"
-        assert sent_input["podCount"] == 2
+        assert "nodeGroups" in sent_input
+        assert sent_input["nodeGroups"][0]["gpuTypeId"] == "gpu-nvidia-rtx-6000-ada"
+        assert sent_input["nodeGroups"][0]["podCount"] == 2
         assert sent_input["type"] == "SLURM"
-        assert sent_input["bidPerGpu"] == 0.50
         print("✓ create_cluster verified")
 
 def test_delete_cluster():
@@ -83,12 +80,12 @@ def test_delete_cluster():
     
     with patch.object(bridge, "_query", return_value=mock_response) as mock_query:
         res = bridge.delete_cluster("cluster-to-delete")
-        
         assert res is True
         
-        # Verify input
+        # Verify input structure
         args, kwargs = mock_query.call_args
-        assert kwargs["variables"]["input"]["clusterId"] == "cluster-to-delete"
+        sent_input = kwargs["variables"]["input"]
+        assert sent_input["clusterId"] == "cluster-to-delete"
         print("✓ delete_cluster verified")
 
 if __name__ == "__main__":
@@ -99,4 +96,6 @@ if __name__ == "__main__":
         print("\n✨ All Cluster API tests passed!")
     except Exception as e:
         print(f"✗ Tests failed: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)

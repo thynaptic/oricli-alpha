@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class AgentPipelineModule(BaseBrainModule):
-    """Runs the canonical agent pipeline for Q&A."""
+    """Runs the canonical agent pipeline for Q&A with JIT absorption."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -24,6 +24,8 @@ class AgentPipelineModule(BaseBrainModule):
         self.ranking = None
         self.synthesis = None
         self.answer = None
+        self.verifier = None
+        self._absorption_service = None
         self._ensure_modules()
 
     def _ensure_modules(self) -> None:
@@ -63,13 +65,25 @@ class AgentPipelineModule(BaseBrainModule):
                 extra={"module_name": "agent_pipeline", "dependency": "answer_agent", "error_type": type(e).__name__},
             )
             self.answer = None
+        try:
+            self.verifier = ModuleRegistry.get_module("verifier_agent", auto_discover=True, wait_timeout=1.0)
+        except Exception as e:
+            logger.debug("VerifierAgent not found, JIT absorption will be limited.")
+            self.verifier = None
+        
+        # Lazy load absorption service
+        try:
+            from mavaia_core.services.absorption_service import AbsorptionService
+            self._absorption_service = AbsorptionService()
+        except ImportError:
+            logger.warning("AbsorptionService not available.")
 
     @property
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="agent_pipeline",
-            version="1.0.0",
-            description="End-to-end Q&A pipeline (search->rank->synthesize->answer)",
+            version="1.1.0",
+            description="End-to-end Q&A pipeline (search->rank->synthesize->verify->absorb->answer)",
             operations=["run_pipeline"],
             dependencies=[],
             model_required=False,
@@ -93,6 +107,30 @@ class AgentPipelineModule(BaseBrainModule):
         documents = self._run_search(query, limit=limit * 2, sources=sources)
         ranked = self._run_ranking(query, documents)
         answer = self._run_synthesis(query, ranked)
+        
+        # 1. VERIFICATION (New Step)
+        is_verified = False
+        verification_feedback = ""
+        if self.verifier and answer:
+            v_res = self._run_verification(query, answer, ranked)
+            is_verified = v_res.get("is_verified", False)
+            verification_feedback = v_res.get("feedback", "")
+            if is_verified and v_res.get("corrected_answer"):
+                answer = v_res.get("corrected_answer")
+
+        # 2. ABSORPTION (New Step)
+        # If the result is high quality and verified, record it for JIT learning
+        if is_verified and self._absorption_service:
+            self._absorption_service.record_lesson(
+                prompt=query, 
+                response=answer,
+                metadata={
+                    "source": "web_search_jit",
+                    "verification": verification_feedback,
+                    "confidence": "high"
+                }
+            )
+
         formatted = self._run_answer(query, answer, ranked)
 
         return {
@@ -100,6 +138,7 @@ class AgentPipelineModule(BaseBrainModule):
             "query": query,
             "documents": ranked,
             "answer": formatted,
+            "verified": is_verified
         }
 
     # ------------------------------------------------------------------ #
@@ -122,6 +161,16 @@ class AgentPipelineModule(BaseBrainModule):
         if result.get("success"):
             return result.get("answer") or result.get("synthesis") or ""
         return ""
+
+    def _run_verification(self, query: str, answer: str, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Perform factual verification of the synthesized answer."""
+        if not self.verifier:
+            return {"is_verified": False}
+        return self.verifier.execute("verify_answer", {
+            "query": query, 
+            "answer": answer, 
+            "documents": documents
+        })
 
     def _run_answer(self, query: str, answer: str, documents: List[Dict[str, Any]]) -> str:
         if not self.answer:

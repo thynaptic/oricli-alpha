@@ -1188,20 +1188,36 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         vocab_size = len(self.char_vocab)
         
         # Save vocabulary immediately so it's available even if training is interrupted
-        try:
-            char_meta_path = self.model_dir / "char_model.json"
-            metadata = {
-                "vocab": self.char_vocab,
-                "config": self.config.get("character_model", {}),
-            }
-            with open(char_meta_path, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, indent=2)
-        except Exception as e:
-            logger.warning(
-                "Could not save character vocabulary metadata",
-                exc_info=True,
-                extra={"module_name": "neural_text_generator", "error_type": type(e).__name__},
-            )
+        # Use retries to handle transient race conditions on shared volumes
+        for attempt in range(3):
+            try:
+                self.model_dir.mkdir(parents=True, exist_ok=True)
+                char_meta_path = self.model_dir / "char_model.json"
+                
+                # Robust overwrite
+                if char_meta_path.exists():
+                    if char_meta_path.is_dir():
+                        import shutil
+                        shutil.rmtree(char_meta_path)
+                    else:
+                        char_meta_path.unlink()
+                        
+                metadata = {
+                    "vocab": self.char_vocab,
+                    "config": self.config.get("character_model", {}),
+                }
+                with open(char_meta_path, "w", encoding="utf-8") as f:
+                    json.dump(metadata, f, indent=2)
+                break # Success
+            except Exception as e:
+                if attempt < 2:
+                    time.sleep(1)
+                    continue
+                logger.warning(
+                    "Could not save character vocabulary metadata after retries",
+                    exc_info=True,
+                    extra={"module_name": "neural_text_generator", "error_type": type(e).__name__},
+                )
 
         # Convert to arrays
         X, y = NeuralTextGeneratorData.sequences_to_arrays_char(
@@ -3440,7 +3456,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 patience: int = 3,
                 min_improvement: float = 0.01,
                 time_limit: Optional[float] = None,
-                dynamic_threshold: bool = False
+                dynamic_threshold: bool = False,
+                cluster_sync: bool = False
             ):
                 super().__init__()
                 try:
@@ -3453,6 +3470,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 self.min_improvement = min_improvement
                 self.time_limit = time_limit # In seconds
                 self.dynamic_threshold = dynamic_threshold
+                self.cluster_sync = cluster_sync
                 self.start_time = time.time()
                 
                 self.best_loss = float('inf')
@@ -3501,12 +3519,78 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         self.stagnant_count = 0
                     
                     if len(self.history) > self.plateau_steps:
-                        # DYNAMIC THRESHOLD: As loss gets lower, we require smaller improvements
-                        # to avoid stopping too early on high-quality late-stage training
+                        # SMARTER DYNAMIC THRESHOLD
                         effective_min_improvement = self.min_improvement
+                        
+                        # A. Loss-based scaling
                         if self.dynamic_threshold and current_loss < 1.0:
                             # Scalar reduction: 0.01 at loss 1.0 -> 0.001 at loss 0.1
-                            effective_min_improvement = self.min_improvement * max(0.1, current_loss)
+                            effective_min_improvement = self.min_improvement * max(0.05, current_loss)
+
+                        # B. Learning Rate Scaling
+                        # As LR drops, we expect smaller improvements
+                        current_lr = None
+                        if state.log_history:
+                            for log in reversed(state.log_history):
+                                if "learning_rate" in log:
+                                    current_lr = log["learning_rate"]
+                                    break
+                        
+                        if current_lr and current_lr < 1e-5:
+                            # Lower threshold for fine-tuning phases
+                            effective_min_improvement *= 0.5
+                            if current_lr < 1e-6:
+                                effective_min_improvement *= 0.2
+
+                        # C. GLOBAL SYNC (For Clusters)
+                        # Coordinate best loss across all virtual cluster nodes via S3
+                        if getattr(self, "cluster_sync", False) and state.global_step % 50 == 0:
+                            try:
+                                s3_bucket = os.environ.get("AWS_BUCKET_NAME")
+                                if s3_bucket:
+                                    region = os.environ.get("AWS_DEFAULT_REGION", "eu-ro-1")
+                                    prefix = os.environ.get("MAVAIA_S3_PREFIX", "mavaia")
+                                    endpoint = os.environ.get("MAVAIA_S3_ENDPOINT")
+                                    
+                                    # Use a shared file for the 'best global loss'
+                                    global_file = f"s3://{s3_bucket}/{prefix}/global_best_loss.json"
+                                    local_best_path = "/tmp/local_best.json"
+                                    global_best_path = "/tmp/global_best.json"
+                                    
+                                    aws_cmd_base = ["aws", "s3"]
+                                    if endpoint:
+                                        aws_cmd_base.extend(["--endpoint-url", endpoint])
+                                    aws_cmd_base.extend(["--region", region])
+
+                                    # 1. Pull Global Best
+                                    pull_cmd = aws_cmd_base + ["cp", global_file, global_best_path]
+                                    pull_proc = subprocess.run(pull_cmd, capture_output=True, timeout=5)
+                                    
+                                    if pull_proc.returncode == 0:
+                                        with open(global_best_path, "r") as f:
+                                            g_data = json.load(f)
+                                            g_best = float(g_data.get("loss", 999.0))
+                                            # If our local best is significantly better, we update the global record
+                                            if self.best_loss < (g_best * 0.99):
+                                                _update_global = True
+                                            # If global is much better, we update our local patience
+                                            if g_best < self.best_loss:
+                                                self.best_loss = g_best
+                                                self.stagnant_count = 0 
+                                    else:
+                                        # File doesn't exist yet, we are the first to create it
+                                        _update_global = True
+
+                                    # 2. Push Local Best (if we are the new leader)
+                                    if locals().get("_update_global", False):
+                                        with open(local_best_path, "w") as f:
+                                            json.dump({"loss": self.best_loss, "pod": os.uname()[1], "step": state.global_step}, f)
+                                        push_cmd = aws_cmd_base + ["cp", local_best_path, global_file]
+                                        subprocess.run(push_cmd, capture_output=True, timeout=5)
+
+                            except Exception as e:
+                                # Non-critical failure for sync
+                                pass
 
                         avg_recent = sum(self.history[-self.plateau_steps:]) / self.plateau_steps
                         if current_loss > (avg_recent * (1.0 - effective_min_improvement)):
@@ -3975,7 +4059,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             patience=transformer_config.get("_plateau_patience", 3),
             min_improvement=transformer_config.get("_min_improvement", 0.01),
             time_limit=transformer_config.get("_time_limit"),
-            dynamic_threshold=transformer_config.get("_dynamic_threshold", False)
+            dynamic_threshold=transformer_config.get("_dynamic_threshold", False),
+            cluster_sync=transformer_config.get("_nnodes", 1) > 1 or os.environ.get("MAVAIA_CLUSTER_SYNC") == "true"
         )
         trainer.add_callback(sentinel_callback)
         

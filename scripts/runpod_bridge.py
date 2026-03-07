@@ -100,15 +100,55 @@ def load_dotenv(path: Path):
     if not path.exists():
         return
     for line in path.read_text().splitlines():
-        if line.strip() and not line.startswith("#"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        # Handle 'export ' prefix
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        
+        if "=" in line:
             key, _, value = line.partition("=")
-            os.environ[key.strip()] = value.strip()
+            # Handle trailing comments
+            if "#" in value:
+                value, _, _ = value.partition("#")
+            if "|" in value:
+                value, _, _ = value.partition("|")
+                
+            # Strip quotes if present
+            value = value.strip().strip("'").strip('"')
+            k = key.strip()
+            os.environ[k] = value
 
 
-load_dotenv(REPO_ROOT / ".env")
+def check_s3_credentials():
+    """Verify S3 credentials exist and are valid before starting."""
+    id_val = os.environ.get("AWS_ACCESS_KEY_ID")
+    secret_val = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    
+    if not id_val or not secret_val:
+        _rich_log("ERROR: AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY not found in environment.", "red", "✗")
+        return False
+        
+    _rich_log(f"AWS Credentials found (ID: {id_val[:5]}...)", "dim", "ℹ")
+    
+    # Optional: Quick check with s3 ls
+    try:
+        bucket = os.environ.get("AWS_BUCKET_NAME", "")
+        endpoint_url = os.environ.get("MAVAIA_S3_ENDPOINT", "")
+        cmd = ["aws", "s3", "ls"]
+        if endpoint_url:
+            cmd.extend(["--endpoint-url", endpoint_url])
+        if bucket:
+            cmd.append(f"s3://{bucket}")
+            
+        subprocess.run(cmd, check=True, capture_output=True, timeout=10)
+        _rich_log("S3 credentials verified via bucket access.", "green", "✓")
+        return True
+    except Exception as e:
+        _rich_log(f"Warning: Could not verify S3 access: {e}. Proceeding anyway...", "yellow", "⚠")
+        return True
 
-# RunPod API configuration
-RUNPOD_API_KEY = os.environ.get("Mavaia_Key")
 RUNPOD_ENDPOINT = "https://api.runpod.io/graphql"
 
 
@@ -127,6 +167,13 @@ def _rich_log(message: str, style: str = "white", icon: str = "", progress=None,
         console.print(f"[{style}]{icon_str}{message}[/{style}]")
     else:
         print(f"{icon} {message}" if icon else message)
+
+
+load_dotenv(REPO_ROOT / ".env")
+load_dotenv(Path.cwd() / ".env")
+
+# RunPod API configuration
+RUNPOD_API_KEY = os.environ.get("Mavaia_Key")
 
 
 def _redact_secrets(text: str) -> str:
@@ -410,19 +457,55 @@ class RunPodBridge:
         return data
 
     def get_gpu_types_with_availability(self) -> List[Dict]:
+        # 1. ATTEMPT GRAPHQL (Primary)
         field_sets = [
-            "id displayName memoryInGb securePrice communityPrice stockStatus",
-            "id displayName memoryInGb securePrice communityPrice availability",
+            "id name displayName memoryInGb securePrice communityPrice availability",
+            "id name displayName memoryInGb securePrice communityPrice",
             "id displayName memoryInGb securePrice communityPrice",
         ]
         for fields in field_sets:
-            # Note: stockStatus is often nested in lowestPrice in newer API versions
-            # but legacy flat field is often still supported.
             query = f"query {{ gpuTypes {{ {fields} }} }}"
             data = self._query(query, log_errors=False, allow_http_error=True)
+            
             if "errors" in data:
+                # Catch internal server error specifically
+                is_internal = any("INTERNAL_SERVER_ERROR" in str(e) for e in data["errors"])
+                if is_internal:
+                    _rich_log("RunPod GraphQL internal error. Pausing 30s before retry...", "yellow", "⏳")
+                    time.sleep(30)
                 continue
-            return data.get("data", {}).get("gpuTypes", [])
+                
+            res = data.get("data", {}).get("gpuTypes", [])
+            if res:
+                return res
+        
+        # 2. FALLBACK TO REST API (If GraphQL fails or returns empty)
+        _rich_log("Attempting REST API fallback for GPU inventory...", "cyan", "🌐")
+        try:
+            # RunPod has a semi-public REST endpoint for gpu-types
+            rest_url = "https://api.runpod.io/utility/v1/gpu-types"
+            resp = requests.get(rest_url, timeout=10)
+            if resp.status_code == 200:
+                rest_data = resp.json()
+                # The REST schema is slightly different, we need to map it to our internal Dict structure
+                gpus = []
+                for g in rest_data.get("gpuTypes", []):
+                    gpus.append({
+                        "id": g.get("id"),
+                        "name": g.get("name"),
+                        "displayName": g.get("displayName"),
+                        "memoryInGb": g.get("memoryInGb"),
+                        "securePrice": g.get("securePrice"),
+                        "communityPrice": g.get("communityPrice"),
+                        "availability": True # REST doesn't always show status, assume true and let creation fail if wrong
+                    })
+                if gpus:
+                    _rich_log(f"REST Fallback successful: Found {len(gpus)} GPU types.", "green", "✓")
+                    return gpus
+        except Exception as e:
+            _rich_log(f"REST Fallback failed: {e}", "dim")
+
+        _rich_log("Warning: All GPU inventory queries failed. Check API Key or RunPod Status.", "red", "✗")
         return []
 
     @staticmethod
@@ -477,14 +560,14 @@ class RunPodBridge:
 
     def get_balance(self) -> Optional[float]:
         queries = [
-            "query { myself { balance } }",
-            "query { myself { creditBalance } }",
-            "query { myself { credits } }",
+            "query { myself { clientBalance } }",
+            "query { myself { hostBalance } }",
+            "query { myself { balance } }", # Fallback for old versions
         ]
         for q in queries:
             data = self._query(q, log_errors=False, allow_http_error=True)
             myself = data.get("data", {}).get("myself", {}) if isinstance(data, dict) else {}
-            for key in ("balance", "creditBalance", "credits"):
+            for key in ("clientBalance", "hostBalance", "balance"):
                 val = myself.get(key)
                 if val is not None:
                     try:
@@ -504,11 +587,13 @@ class RunPodBridge:
         data_center_id: Optional[str] = None,
         volume_id: Optional[str] = None,
         env: Optional[Dict[str, str]] = None,
+        cloud_type: str = "SECURE",
     ):
         input_data = {
             "name": name,
             "gpuTypeId": gpu_type_id,
             "gpuCount": 1,
+            "cloudType": cloud_type,
             "volumeInGb": 200,
             "containerDiskInGb": 200,
             "volumeMountPath": volume_mount_path,
@@ -552,7 +637,9 @@ class RunPodBridge:
         }
         """
         result = self._query(query, variables={"input": input_data})
-        return result.get("data", {}).get("podFindAndDeployOnDemand")
+        if result and "data" in result and result["data"]:
+            return result["data"].get("podFindAndDeployOnDemand")
+        return None
 
     def stop_pod(self, pod_id: str):
         query = """
@@ -614,7 +701,10 @@ class RunPodBridge:
         volume_id: Optional[str] = None,
         env: Optional[Dict[str, str]] = None,
     ):
-        """Create a new instant cluster."""
+        """Create a new instant cluster using nodeGroups."""
+        if bid_per_gpu:
+            _rich_log("Warning: bid_per_gpu is not supported for clusters and will be ignored.", "yellow", "⚠")
+
         input_data = {
             "clusterName": name,
             "gpuTypeId": gpu_type_id,
@@ -625,9 +715,6 @@ class RunPodBridge:
             "containerDiskInGb": 200,
             "volumeMountPath": volume_mount_path,
         }
-        
-        if bid_per_gpu:
-            input_data["bidPerGpu"] = float(bid_per_gpu)
 
         env_vars = []
         if env:
@@ -648,22 +735,22 @@ class RunPodBridge:
             input_data["templateId"] = template_id
         elif image:
             input_data["imageName"] = image
+        else:
+            # Fallback to default if somehow neither is set
+            input_data["imageName"] = "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04"
 
         query = """
         mutation createCluster($input: CreateClusterInput!) {
           createCluster(input: $input) {
             id
             name
-            podCount
-            pods {
-              id
-              name
-            }
           }
         }
         """
         result = self._query(query, variables={"input": input_data})
-        return result.get("data", {}).get("createCluster")
+        if result and "data" in result and result["data"]:
+            return result["data"].get("createCluster")
+        return None
 
     def delete_cluster(self, cluster_id: str):
         """Delete an entire cluster."""
@@ -836,6 +923,8 @@ def ensure_mavaia_installed(
     pip_debug: bool = False,
     pip_stream: bool = False,
     editable_install: bool = False,
+    benchmark: bool = False,
+    internal_bench: bool = False,
     progress=None,
     task_id=None,
 ):
@@ -848,7 +937,7 @@ def ensure_mavaia_installed(
     )
 
     # Build S3 vars for injection into remote script
-    s3_key = f"s3://{s3_bucket}/{s3_prefix}/mavaia.tar" if s3_bucket else ""
+    s3_key = f"s3://{s3_bucket}/{s3_prefix}.tar" if s3_bucket else ""
     region_flag = f"--region {s3_region}" if s3_region else ""
     endpoint_flag = f"--endpoint-url {s3_endpoint}" if s3_endpoint else ""
     aws_flags = f"{region_flag} {endpoint_flag}".strip()
@@ -862,19 +951,26 @@ def ensure_mavaia_installed(
     if hf_token:
         cred_export += f"export HF_TOKEN='{hf_token}'; "
 
-    # S3 restore logic: pull if forced or directory missing
+    # S3 restore logic: pull to a unique temp dir then atomic swap
     s3_restore = ""
     if s3_key:
         s3_restore = (
             f'if [ ! -d {workdir}/mavaia ] || [ "{force_reinstall}" = "True" ] || [ "{force_reinstall}" = "1" ]; then '
             f"  echo '[*] Syncing latest code from S3...'; "
-            f"  mkdir -p {workdir}/mavaia; "
-            f"  {cred_export} aws s3 cp {s3_key} - {aws_flags} | tar -xf - --no-same-owner -C {workdir}/mavaia; "
+            f"  rm -rf {workdir}/mavaia; " # Pre-clean to ensure no weird FS locks
+            f"  CUR_TIME=$(date +%s); "
+            f"  EXTRACT_DIR={workdir}/mavaia_$CUR_TIME; "
+            f"  mkdir -p $EXTRACT_DIR; "
+            f"  {cred_export} aws s3 cp {s3_key} - {aws_flags} | tar -xf - --no-same-owner -C $EXTRACT_DIR; "
+            f"  if [ -d $EXTRACT_DIR ]; then mv $EXTRACT_DIR {workdir}/mavaia; else echo '[ERROR] S3 extraction failed'; exit 1; fi; "
             f"fi; "
         )
 
     install_cmd = (
         "set -e; "
+        f"benchmark='{benchmark}'; "
+        f"internal_bench='{internal_bench}'; "
+        f"force_reinstall='{force_reinstall}'; "
         f"{cred_export}"
         f"{s3_restore}"
         f"cd {workdir}/mavaia; "
@@ -907,8 +1003,8 @@ def ensure_mavaia_installed(
         "find . -maxdepth 1 -name '*.so' -delete; "
         "echo '[INFO] Installing core ML libraries (this may take a few minutes)...'; "
         '"$VENV_PY" -m pip install --upgrade "bitsandbytes>=0.46.1" scipy datasets transformers accelerate huggingface_hub pyarrow wikipedia internetarchive kaggle regex pandas peft trl numpy Pillow torch torchvision torchaudio xxhash shortuuid libtmux python-dotenv uvicorn fastapi pydantic beautifulsoup4 PyPDF2 PyYAML tensorflow keras -q || true; '
-        "if [ -d LiveBench ]; then "
-        "  echo '[INFO] LiveBench detected. Installing in editable mode...'; "
+        'if [ -d LiveBench ] && ([ "$benchmark" = "True" ] || [ "$internal_bench" = "True" ]); then '
+        "  echo '[INFO] LiveBench detected and requested. Installing in editable mode...'; "
         '  "$VENV_PY" -m pip install -e LiveBench/ -q || true; '
         "fi; "
         "# 3. Final verification"
@@ -954,33 +1050,13 @@ def setup_ollama(
         "  curl -fsSL https://ollama.com/install.sh | sh; "
         "fi; "
         "nohup ollama serve > /var/log/ollama.log 2>&1 & "
-        "sleep 2; "
+        "sleep 5; "
         "ollama list >/dev/null 2>&1 || true; "
         f"ollama pull {model_name}; "
         "echo ollama_ready"
     )
 
-    if proxy:
-        ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [ollama_cmd]
-        subprocess.run(ssh_cmd, check=True)
-        return
-
-    ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [ollama_cmd]
-    try:
-        subprocess.run(ssh_cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        if pod_id and e.returncode == 255:
-            _rich_log(
-                "Direct SSH failed (255); retrying via proxy.",
-                "yellow",
-                "⚠",
-                progress=progress,
-                task_id=task_id,
-            )
-            ssh_cmd = _ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [ollama_cmd]
-            subprocess.run(ssh_cmd, check=True)
-        else:
-            raise e
+    _run_ssh(ssh_key, pod_ip, pod_port, pod_id, proxy, ollama_cmd, progress=progress, task_id=task_id)
 
 
 def _aws_env_flags(region: str, endpoint_url: str) -> str:
@@ -1004,10 +1080,11 @@ def _aws_cli_flags(region: str, endpoint_url: str) -> list:
 
 def _aws_configure_fast(region: str, endpoint_url: str):
     """Tune AWS CLI for high-throughput multipart uploads."""
+    # Scale back concurrency to avoid 524 (Timeout) errors on Cloudflare/RunPod
     for key, val in [
-        ("default.s3.max_concurrent_requests", "100"),
-        ("default.s3.multipart_chunksize", "50MB"),
-        ("default.s3.multipart_threshold", "50MB"),
+        ("default.s3.max_concurrent_requests", "20"),
+        ("default.s3.multipart_chunksize", "64MB"),
+        ("default.s3.multipart_threshold", "64MB"),
     ]:
         subprocess.run(["aws", "configure", "set", key, val], check=False)
 
@@ -1056,64 +1133,66 @@ def s3_sync_local_to_bucket(
     region: str,
     endpoint_url: str,
 ):
-    """Stream-archive local repo → S3 as a single tar (fast, no per-file overhead)."""
-    _rich_log("Packing and streaming local repo → S3 (tar pipe)...", "cyan", "📦")
-    _aws_configure_fast(region, endpoint_url)
-    _s3_abort_zombies(bucket, prefix, region, endpoint_url)
-    s3_key = f"s3://{bucket}/{prefix}/mavaia.tar"
-    tar_cmd = [
-        "tar",
-        "-chf",
-        "-",
-        "--exclude=.git",
-        "--exclude=__pycache__",
-        "--exclude=.venv",
-        "--exclude=*.pyc",
-        "--exclude=*.tmp",
-        "--exclude=.cursor",
-        "--exclude=build",
-        "--exclude=*.egg-info",
-        "--exclude=runs",
-        "--exclude=checkpoints",
-        "--exclude=snapshots",
-        "--exclude=numpy",
-        "--exclude=PIL",
-        "--exclude=torch",
-        "--exclude=transformers",
-        "--exclude=datasets",
-        "--exclude=accelerate",
-        "-C",
-        str(local_path),
-        ".",
-    ]
-    # Use mbuffer if available for a smooth 128M in-memory buffer; otherwise pass directly
-    use_mbuffer = shutil.which("mbuffer") is not None
-    aws_cmd = ["aws", "s3", "cp", "-", s3_key] + _aws_cli_flags(region, endpoint_url)
-    _rich_log(
-        f"Uploading to {s3_key} {'(mbuffer)' if use_mbuffer else '(direct pipe)'}...", "cyan", "📤"
-    )
-    tar_proc = subprocess.Popen(tar_cmd, stdout=subprocess.PIPE)
-    if use_mbuffer:
-        buf_proc = subprocess.Popen(
-            ["mbuffer", "-m", "128M", "-q"],
-            stdin=tar_proc.stdout,
-            stdout=subprocess.PIPE,
-        )
-        tar_proc.stdout.close()
-        aws_proc = subprocess.Popen(aws_cmd, stdin=buf_proc.stdout)
-        buf_proc.stdout.close()
-        aws_proc.communicate()
-        buf_proc.wait()
-    else:
-        aws_proc = subprocess.Popen(aws_cmd, stdin=tar_proc.stdout)
-        tar_proc.stdout.close()
-        aws_proc.communicate()
-    tar_proc.wait()
-    if tar_proc.returncode not in (0, None) or aws_proc.returncode != 0:
-        raise RuntimeError(
-            f"S3 tar upload failed (tar={tar_proc.returncode}, aws={aws_proc.returncode})"
-        )
-    _rich_log("Repo archive uploaded to S3.", "bold green", "✓")
+    """Archive local repo to a temp file then upload to S3 (more reliable for S3-compatible providers)."""
+    import tempfile
+    
+    # Create a temporary file for the archive
+    with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+        
+    try:
+        _rich_log(f"Archiving local repo to {tmp_path.name}...", "cyan", "📦")
+        tar_cmd = [
+            "tar",
+            "-chf",
+            str(tmp_path),
+            "--exclude=.git",
+            "--exclude=__pycache__",
+            "--exclude=.venv",
+            "--exclude=*.pyc",
+            "--exclude=*.tmp",
+            "--exclude=.cursor",
+            "--exclude=conductor",
+            "--exclude=plans",
+            "--exclude=tests",
+            "--exclude=docs",
+            "--exclude=build",
+            "--exclude=*.egg-info",
+            "--exclude=runs",
+            "--exclude=checkpoints",
+            "--exclude=snapshots",
+            "--exclude=*.log",
+            "--exclude=models",
+            "--exclude=numpy",
+            "--exclude=PIL",
+            "--exclude=torch",
+            "--exclude=transformers",
+            "--exclude=datasets",
+            "--exclude=accelerate",
+            "-C",
+            str(local_path),
+            ".",
+        ]
+        
+        # Run tar
+        subprocess.run(tar_cmd, check=True)
+        archive_size_mb = tmp_path.stat().st_size / (1024 * 1024)
+        _rich_log(f"Archive created ({archive_size_mb:.1f} MB). Uploading to S3...", "cyan", "📤")
+        
+        _aws_configure_fast(region, endpoint_url)
+        _s3_abort_zombies(bucket, prefix, region, endpoint_url)
+        s3_key = f"s3://{bucket}/{prefix}.tar"
+        
+        aws_cmd = ["aws", "s3", "cp", str(tmp_path), s3_key] + _aws_cli_flags(region, endpoint_url)
+        
+        # Run upload with progress visibility
+        subprocess.run(aws_cmd, check=True)
+        _rich_log("Repo archive uploaded to S3.", "bold green", "✓")
+        
+    finally:
+        # Cleanup temp file
+        if tmp_path.exists():
+            tmp_path.unlink()
 
 
 def _ssh_base(ssh_key: str, port: str, host: str, log_level: str = "ERROR") -> list:
@@ -1183,29 +1262,38 @@ def _run_ssh(
         attempt = 0
         while True:
             try:
+                # Use capture_output if progress is provided to keep the console clean
                 subprocess.run(cmd_list, check=check, capture_output=bool(progress))
                 return
             except subprocess.CalledProcessError as e:
-                attempt += 1
-                if attempt > retries:
-                    raise e
-                time.sleep(retry_delay_s)
+                # 255 usually means SSH connection failed
+                if e.returncode == 255:
+                    attempt += 1
+                    if attempt > retries:
+                        raise e
+                    _rich_log(f"SSH 255 (Connection lost). Retry {attempt}/{retries} in {retry_delay_s}s...", "dim", "⏳")
+                    time.sleep(retry_delay_s)
+                    continue
+                raise e
 
-    if proxy:
-        _try(_ssh_base(ssh_key, "22", proxy) + [cmd])
-        return
-
+    # ALWAYS try the proxy fallback if it's available and we are hitting 255s
+    # Direct IP can often drop during heavy disk I/O cleanup
     try:
-        _try(_ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [cmd])
+        if pod_ip and str(pod_ip) != "ssh.runpod.io":
+            _try(_ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [cmd])
+        else:
+            # Fallback/Direct Proxy
+            _try(_ssh_base(ssh_key, "22", proxy or f"{pod_id}-22@ssh.runpod.io") + [cmd])
     except subprocess.CalledProcessError as e:
         if pod_id and e.returncode == 255:
             _rich_log(
-                "Direct SSH failed (255); retrying via proxy.",
+                "Direct SSH failed (255); forcing proxy fallback.",
                 "yellow",
                 "⚠",
                 progress=progress,
                 task_id=task_id,
             )
+            # Use the global proxy pattern
             _try(_ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [cmd])
         else:
             raise
@@ -1260,13 +1348,13 @@ def s3_sync_pod(
         "--exclude=numpy --exclude=PIL --exclude=torch --exclude=transformers --exclude=datasets --exclude=accelerate "
         "-C {src} . "
     )
-    s3_key = f"s3://{bucket}/{prefix}/mavaia.tar"
+    s3_key = f"s3://{bucket}/{prefix}.tar"
 
     if direction == "push":
         cmd = (
             f"{cred_export}{aws_cfg}{abort_zombies}"
             f"if command -v mbuffer > /dev/null 2>&1; then "
-            f"  {tar_pipe_push.format(src=src)} | mbuffer -m 128M -q | aws s3 cp - {s3_key} {aws_flags}; "
+            f"  {tar_pipe_push.format(src=src)} | mbuffer -m 256M -P 80 | aws s3 cp - {s3_key} {aws_flags}; "
             f"else "
             f"  {tar_pipe_push.format(src=src)} | aws s3 cp - {s3_key} {aws_flags}; "
             f"fi"
@@ -1307,10 +1395,10 @@ def pre_sync_cleanup(
 ):
     _rich_log("Performing pre-sync disk cleanup on pod...", "cyan", "🧹", progress=progress, task_id=task_id)
     
-    # Aggressive cleanup of logs, snapshots, and temporary files in the workspace
+    # Aggressive but shallow cleanup of logs and temporary files
     cleanup_cmd = (
-        f"find {workdir} -name '*.log' -delete 2>/dev/null || true; "
-        f"find {workdir} -name '*.tmp' -delete 2>/dev/null || true; "
+        f"find {workdir} -maxdepth 2 -name '*.log' -delete 2>/dev/null || true; "
+        f"find {workdir} -maxdepth 2 -name '*.tmp' -delete 2>/dev/null || true; "
         f"rm -rf {workdir}/mavaia/mavaia_core/models/neural_text_generator/snapshots/* 2>/dev/null || true; "
         f"rm -rf {workdir}/mavaia/mavaia_core/models/neural_text_generator/checkpoints/* 2>/dev/null || true; "
         f"rm -rf {workdir}/mavaia/mavaia_core/models/neural_text_generator/runs/* 2>/dev/null || true; "
@@ -1383,74 +1471,40 @@ def sync_code(
         "accelerate",
     ]
 
-    if proxy:
-        rsync_cmd = (
-            [
-                "rsync",
-                "-rlptzL",
-                "--human-readable",
-                "--no-perms",
-                "-e",
-                _ssh_e(ssh_key, "22"),
-                str(local_path) + "/",
-                f"{proxy}:{workdir}/mavaia",
-            ]
-            + common_excludes
-            + rsync_info
-        )
-        subprocess.run(rsync_cmd, check=True)
-        return
-
-    rsync_cmd = (
-        [
+    def _run_rsync(target_host, target_port):
+        cmd = [
             "rsync",
             "-rlptzL",
             "--human-readable",
             "--no-perms",
             "-e",
-            _ssh_e(ssh_key, str(pod_port)),
+            _ssh_e(ssh_key, str(target_port)),
             str(local_path) + "/",
-            f"root@{pod_ip}:{workdir}/mavaia",
-        ]
-        + common_excludes
-        + rsync_info
-    )
-    try:
-        proc = subprocess.run(rsync_cmd, check=False)
-        if proc.returncode != 0 and proc.returncode != 23:
-            # 23 means partial transfer (often harmless for locked local files)
-            raise subprocess.CalledProcessError(proc.returncode, rsync_cmd)
-        elif proc.returncode == 23:
-            _rich_log(
-                "Rsync completed with status 23 (partial transfer). Safe to proceed.", "dim", "ℹ"
-            )
+            f"{target_host}:{workdir}/mavaia",
+        ] + common_excludes + rsync_info
+        
+        proc = subprocess.run(cmd, check=False, capture_output=bool(progress))
+        return proc
 
-    except subprocess.CalledProcessError:
-        if pod_id:
-            _rich_log(
-                "Direct rsync failed; retrying via proxy.",
-                "yellow",
-                "⚠",
-                progress=progress,
-                task_id=task_id,
-            )
-            # Find and replace the remote target (it's the one that starts with root@ or contains :)
-            for i, arg in enumerate(rsync_cmd):
-                if isinstance(arg, str) and (arg.startswith("root@") or (":" in arg and not arg.startswith("-"))):
-                    rsync_cmd[i] = f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia"
-                    break
-            
-            proc = subprocess.run(rsync_cmd, check=False)
-            if proc.returncode != 0 and proc.returncode != 23:
-                raise subprocess.CalledProcessError(proc.returncode, rsync_cmd)
-            elif proc.returncode == 23:
-                _rich_log(
-                    "Rsync completed with status 23 (partial transfer) via proxy. Safe to proceed.",
-                    "dim",
-                    "ℹ",
-                    progress=progress,
-                    task_id=task_id,
-                )
+    # Determine initial target
+    if pod_ip and str(pod_ip) != "ssh.runpod.io":
+        host = f"root@{pod_ip}"
+        port = pod_port
+    else:
+        host = proxy or f"{pod_id}-22@ssh.runpod.io"
+        port = 22
+
+    proc = _run_rsync(host, port)
+    
+    # Handle retry/fallback
+    if proc.returncode == 255 and pod_id and host != f"{pod_id}-22@ssh.runpod.io":
+        _rich_log("Direct rsync failed (255); retrying via proxy.", "yellow", "⚠", progress=progress, task_id=task_id)
+        proc = _run_rsync(f"{pod_id}-22@ssh.runpod.io", 22)
+
+    if proc.returncode != 0 and proc.returncode != 23:
+        raise subprocess.CalledProcessError(proc.returncode, "rsync")
+    elif proc.returncode == 23:
+        _rich_log("Rsync partial transfer (23). Safe to proceed.", "dim", "ℹ", progress=progress, task_id=task_id)
 
 
 def sync_models_to_pod(
@@ -1694,30 +1748,57 @@ def _init_pod_worker(p, bridge, args):
         if args.ssh_proxy:
             p_ssh_proxy = args.ssh_proxy
     
-    # Run initialization steps
+    # Run initialization steps with high resilience
+    # 1. Stabilize SSH
     setup_pod_env(p_ip, p_port, args.ssh_key, p_id, p_ssh_proxy, bridge=bridge)
-    pre_sync_cleanup(p_ip, p_port, args.ssh_key, args.volume_mount_path, p_id, p_ssh_proxy)
-    sync_code(p_ip, p_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, p_id, p_ssh_proxy)
     
-    if args.benchmark or args.internal_bench:
-        sync_models_to_pod(p_ip, p_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, p_id, p_ssh_proxy)
-        
-    ensure_mavaia_installed(
-        p_ip, p_port, args.ssh_key, args.volume_mount_path, p_id, p_ssh_proxy,
-        s3_bucket=args.s3_bucket if args.use_s3 else None,
-        s3_prefix=args.s3_prefix if args.use_s3 else None,
-        s3_region=args.s3_region if args.use_s3 else None,
-        s3_endpoint=args.s3_endpoint if args.use_s3 else None,
-        force_reinstall=args.force_refresh,
-        pip_debug=args.pip_debug,
-        pip_stream=args.pip_stream,
-        editable_install=args.editable_install
-    )
-    
-    if not args.no_ollama:
-        setup_ollama(p_ip, p_port, args.ssh_key, args.teacher_model, args.ollama_model_dir, p_id, p_ssh_proxy)
-    
-    return p_id
+    # 2. Cleanup & Sync (Wrap in internal retry for flaky proxy moments)
+    max_init_retries = 3
+    for attempt in range(max_init_retries):
+        try:
+            pre_sync_cleanup(p_ip, p_port, args.ssh_key, args.volume_mount_path, p_id, p_ssh_proxy)
+            
+            # If S3 is enabled, skip the fragile SSH-based rsync for code and models.
+            # The 'ensure_mavaia_installed' step will pull everything reliably from AWS.
+            if not args.use_s3:
+                sync_code(p_ip, p_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, p_id, p_ssh_proxy)
+                
+                if args.benchmark or args.internal_bench:
+                    sync_models_to_pod(p_ip, p_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, p_id, p_ssh_proxy)
+            else:
+                _rich_log(f"Pod {p_id}: Skipping rsync (S3 strategy active).", "dim", "☁")
+                
+            ensure_mavaia_installed(
+                p_ip, p_port, args.ssh_key, args.volume_mount_path, p_id, p_ssh_proxy,
+                s3_bucket=args.s3_bucket if args.use_s3 else None,
+                s3_prefix=args.s3_prefix if args.use_s3 else None,
+                s3_region=args.s3_region if args.use_s3 else None,
+                s3_endpoint=args.s3_endpoint if args.use_s3 else None,
+                force_reinstall=args.force_refresh,
+                pip_debug=args.pip_debug,
+                pip_stream=args.pip_stream,
+                editable_install=args.editable_install,
+                benchmark=args.benchmark,
+                internal_bench=args.internal_bench
+            )
+            
+            if args.auto_distill or (args.teacher_model and args.teacher_model != "phi4:latest") or not args.no_ollama:
+                # Actually, let's make it even stricter: only install if distillation is active
+                # or if specifically requested via NOT having --no-ollama.
+                # But wait, --no-ollama defaults to False, so it currently ALWAYS runs.
+                # Let's flip the logic to be more efficient.
+                should_setup_ollama = args.auto_distill or (args.teacher_model and args.teacher_model != "phi4:latest")
+                if should_setup_ollama:
+                    setup_ollama(p_ip, p_port, args.ssh_key, args.teacher_model, args.ollama_model_dir, p_id, p_ssh_proxy)
+                else:
+                    _rich_log(f"Pod {p_id}: Skipping Ollama (no distillation active).", "dim", "ℹ")
+            return p_id
+        except Exception as e:
+            if attempt < max_init_retries - 1:
+                _rich_log(f"Pod {p_id} init attempt {attempt+1} failed ({e}). Retrying in 10s...", "yellow", "⚠")
+                time.sleep(10)
+            else:
+                raise e
 
 
 def remote_train(
@@ -1733,13 +1814,14 @@ def remote_train(
     task_id=None,
 ):
     _rich_log(
-        "Starting training on remote pod...", "bold green", "🏋", progress=progress, task_id=task_id
+        f"Starting training on pod {pod_id}...", "bold green", "🏋", progress=progress, task_id=task_id
     )
     # Filter out any double-dash separators that might be caught in the middle of train_args
     train_args = [a for a in train_args if a != "--"]
     args_str = " ".join(train_args)
     env_prefix = "PYTHONUNBUFFERED=1 "
-    if "--plain-output" in train_args:
+    # Force plain output for clusters to avoid interwoven progress bar mess
+    if "--plain-output" in train_args or (args.cluster_size and args.cluster_size > 1):
         env_prefix += "MAVAIA_PLAIN_OUTPUT=1 "
     hf_token = os.environ.get("HF_TOKEN")
     if hf_token:
@@ -1748,31 +1830,48 @@ def remote_train(
     if "run_tests.py" in script_rel or "train" in script_rel:
         env_prefix += "MAVAIA_ENABLE_HEAVY_MODULES=true "
 
-    if proxy:
-        ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [
-            f"cd {workdir}/mavaia && export PYTHONPATH=. && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
-        ]
-        subprocess.run(ssh_cmd, check=True)
-        return
+    python_cmd = f"cd {workdir}/mavaia && export PYTHONPATH=. && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
 
-    ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [
-        f"cd {workdir}/mavaia && export PYTHONPATH=. && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
-    ]
+    if proxy:
+        ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [python_cmd]
+    else:
+        ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [python_cmd]
+
+    # REAL-TIME PREFIXED OUTPUT
+    # We use a subshell to prefix every line with the pod ID
     try:
-        subprocess.run(ssh_cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        if pod_id and e.returncode == 255:
-            _rich_log(
-                "Direct SSH failed (255); retrying via proxy.",
-                "yellow",
-                "⚠",
-                progress=progress,
-                task_id=task_id,
-            )
-            ssh_cmd = _ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [
-                f"cd {workdir}/mavaia && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
-            ]
-            subprocess.run(ssh_cmd, check=True)
+        # Use a short version of pod ID for cleaner logs
+        short_id = pod_id[:6] if pod_id else "node"
+        color = "cyan" # Default
+        
+        # We can alternate colors for nodes if we want to be really fancy
+        # but for now, simple prefixing is best
+        prefix = f"[{short_id}] "
+        
+        process = subprocess.Popen(
+            ssh_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+        
+        for line in process.stdout:
+            # Print with the prefix
+            if USE_RICH:
+                # Handle potentially rich-formatted lines from the pod
+                console.print(f"[bold {color}]{prefix}[/] {line.strip()}")
+            else:
+                print(f"{prefix}{line.strip()}")
+                
+        process.wait()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, ssh_cmd)
+            
+    except Exception as e:
+        if pod_id and "255" in str(e):
+            _rich_log(f"Pod {pod_id}: Connection dropped (255).", "yellow", "⚠")
         else:
             raise e
 
@@ -2250,7 +2349,8 @@ def sync_training_data(
     )
 
     dest_dir = local_path / "models" / "neural_text_generator_remote" / "training_data"
-    dest_dir.mkdir(parents=True, exist_ok=True)
+    (dest_dir / "models").mkdir(parents=True, exist_ok=True)
+    (dest_dir / "data_cache").mkdir(parents=True, exist_ok=True)
 
     if proxy:
         rsync_cmd = [
@@ -2342,8 +2442,8 @@ def _select_candidate_gpus(
     # Estimate storage cost (~$0.01 per 10GB per hour as a rough safe buffer)
     storage_overhead = 0.20  # 200GB vol + 200GB disk
 
-    # BLACKWELL EXCLUSION: These cards require sm_120 kernels not present in our stable image
-    incompatible_keywords = ["Blackwell", "PRO 4500", "PRO 5000"]
+    # BLACKWELL EXCLUSION: Only excluding smaller PRO cards that definitely lack VRAM headroom
+    incompatible_keywords = ["PRO 4500", "PRO 5000"]
 
     filtered_gpus = [
         g
@@ -2767,27 +2867,10 @@ def remote_snapshot(
     ).format(ts=timestamp)
 
     if proxy:
-        ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [snapshot_cmd]
-        subprocess.run(ssh_cmd, check=True)
+        _run_ssh(ssh_key, None, 22, pod_id, proxy, snapshot_cmd, progress=progress, task_id=task_id)
         return
 
-    ssh_cmd = _ssh_base(ssh_key, str(pod_port), f"root@{pod_ip}") + [snapshot_cmd]
-    try:
-        subprocess.run(ssh_cmd, check=True)
-    except subprocess.CalledProcessError:
-        if pod_id:
-            _rich_log(
-                "Direct SSH failed (255); retrying via proxy.",
-                "yellow",
-                "⚠",
-                progress=progress,
-                task_id=task_id,
-            )
-            # Swap to RunPod SSH proxy (update port + host entries)
-            ssh_cmd = _ssh_base(ssh_key, "22", f"{pod_id}-22@ssh.runpod.io") + [snapshot_cmd]
-            subprocess.run(ssh_cmd, check=True)
-        else:
-            raise
+    _run_ssh(ssh_key, pod_ip, pod_port, pod_id, proxy, snapshot_cmd, progress=progress, task_id=task_id)
 
 
 def _resolve_topic_datasets(topics: List[str]) -> Dict[str, str]:
@@ -2901,7 +2984,7 @@ def register_trained_adapters(local_path: Path):
 def main():
     parser = argparse.ArgumentParser(description="Mavaia RunPod Training Bridge")
     parser.add_argument("--pod-id", help="Existing pod ID to use")
-    parser.add_argument("--gpu", default="NVIDIA RTX A6000", help="GPU type for new pod")
+    parser.add_argument("--gpu", default=None, help="GPU type for new pod (defaults to auto-selection)")
     parser.add_argument(
         "--image",
         default="runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04",
@@ -2949,10 +3032,10 @@ def main():
     parser.add_argument(
         "--auto",
         action="store_true",
-        help="Auto-manage: terminate active pods, pick best GPU under $0.50/hr, and train",
+        help="Auto-manage: terminate active pods, pick best GPU within price range, and train",
     )
     parser.add_argument(
-        "--max-price", type=float, default=1.50, help="Max hourly price for auto GPU selection"
+        "--max-price", type=float, default=2.50, help="Max hourly price for auto GPU selection"
     )
     parser.add_argument(
         "--min-price", type=float, default=0.50, help="Min hourly price for auto GPU selection"
@@ -3012,21 +3095,27 @@ def main():
     parser.add_argument(
         "--data-center", default="EU-RO-1", help="RunPod data center ID (default: EU-RO-1)"
     )
-    parser.add_argument("--s3-bucket", default="sxzm7zw9w9", help="RunPod S3 bucket name")
-    parser.add_argument("--s3-region", default="eu-ro-1", help="RunPod S3 region")
+    parser.add_argument("--s3-bucket", default=os.environ.get("AWS_BUCKET_NAME", "sxzm7zw9w9"), help="S3 bucket name")
+    parser.add_argument("--s3-region", default=os.environ.get("AWS_REGION", "eu-ro-1"), help="S3 region")
     parser.add_argument(
-        "--s3-endpoint", default="https://s3api-eu-ro-1.runpod.io", help="RunPod S3 endpoint URL"
+        "--s3-endpoint", 
+        default=os.environ.get("MAVAIA_S3_ENDPOINT", "https://s3api-eu-ro-1.runpod.io"), 
+        help="S3 endpoint URL"
     )
     parser.add_argument("--s3-prefix", default="mavaia", help="S3 prefix for repo/workspace sync")
     parser.add_argument(
         "--s3-ollama-prefix", default="ollama", help="S3 prefix for Ollama model storage"
     )
     parser.add_argument(
+        "--upload-to-s3",
+        action="store_true",
+        help="Upload local project root to S3 before cluster creation (Local+S3 strategy)",
+    )
+    parser.add_argument(
         "--use-s3",
-        action="store_false",
-        dest="use_s3",
-        default=True,
-        help="Disable S3 sync (enabled by default)",
+        action="store_true",
+        default=False,
+        help="Use S3 for project synchronization (mandatory for Local+S3 strategy)",
     )
     parser.add_argument(
         "--no-refresh-code",
@@ -3041,7 +3130,7 @@ def main():
     parser.add_argument(
         "--volume-id",
         default=os.environ.get("RUNPOD_VOLUME_ID", ""),
-        help="Attach an existing RunPod network volume by ID (default: RUNPOD_VOLUME_ID or empty)",
+        help="Attach an existing RunPod network volume by ID (optional if using --upload-to-s3)",
     )
     parser.add_argument(
         "--alias", default="mavaia_train", help="Alias for pod name (default: mavaia_train)"
@@ -3157,6 +3246,16 @@ def main():
         help="Run RFAL DPO alignment training using collected rfal_lessons.jsonl",
     )
     parser.add_argument(
+        "--train-jit",
+        action="store_true",
+        help="Run JIT knowledge absorption training using verified search facts",
+    )
+    parser.add_argument(
+        "--train-tool-bench",
+        action="store_true",
+        help="Run Tool-Efficacy training using collected corrections",
+    )
+    parser.add_argument(
         "--fleet-curriculum",
         action="store_true",
         help="In fleet mode, run curriculum training for the normal role instead of standard training.",
@@ -3198,15 +3297,38 @@ def main():
     if not args.no_pip_stream:
         args.pip_stream = True
 
+    # Pre-initialize price range for use in auto-selection fallbacks
+    min_price = float(args.min_price)
+    max_price = float(args.max_price)
+    if args.auto_price_range:
+        try:
+            min_str, max_str = args.auto_price_range.split("-", 1)
+            min_price = float(min_str.strip())
+            max_price = float(max_str.strip())
+        except Exception:
+            pass
+
     if args.list_stages:
         subprocess.run([sys.executable, "scripts/train_curriculum.py", "--list-stages"])
         return 0
+
+    # Refresh API Key from environment (after load_dotenv)
+    global RUNPOD_API_KEY
+    RUNPOD_API_KEY = os.environ.get("Mavaia_Key")
 
     if not RUNPOD_API_KEY:
         _rich_log("Error: Mavaia_Key not found in .env", "red", "✗")
         sys.exit(1)
 
+    _rich_log(f"Initializing RunPod Bridge (API: {RUNPOD_ENDPOINT})...", "cyan", "🚀")
     bridge = RunPodBridge(RUNPOD_API_KEY)
+    
+    # Pre-flight auth check
+    balance = bridge.get_balance()
+    if balance is None:
+        _rich_log("CRITICAL: Failed to authorize with RunPod API. Check your Mavaia_Key in .env", "red", "✗")
+        sys.exit(1)
+    _rich_log(f"Authorized! Account Balance: ${balance:.2f}", "green", "✓")
 
     def _balance_watchdog():
         while True:
@@ -3258,6 +3380,10 @@ def main():
         "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
         "AWS_SESSION_TOKEN": os.environ.get("AWS_SESSION_TOKEN"),
         "AWS_DEFAULT_REGION": args.s3_region,
+        "AWS_BUCKET_NAME": args.s3_bucket,
+        "MAVAIA_S3_ENDPOINT": args.s3_endpoint,
+        "MAVAIA_S3_PREFIX": args.s3_prefix,
+        "MAVAIA_CLUSTER_SYNC": "true" if args.cluster_size > 1 else "false",
         "KAGGLE_USERNAME": os.environ.get("KAGGLE_USERNAME"),
         "KAGGLE_KEY": os.environ.get("KAGGLE_KEY"),
         "HF_TOKEN": os.environ.get("HF_TOKEN"),
@@ -3370,6 +3496,11 @@ def main():
                 stop_event.set()
         return 0
 
+    # Determine if we should use auto-selection or specific GPU
+    # If the user passed --auto, it ALWAYS takes precedence.
+    # If they passed --gpu AND NOT --auto, we use their specific GPU.
+    # Otherwise, if --gpu is the default (None) and --auto is False, we might need a default or error.
+    
     if args.auto:
         threading.Thread(target=_balance_watchdog, daemon=True).start()
 
@@ -3390,17 +3521,6 @@ def main():
             if str(p.get("name", "")).startswith("mavaia_"):
                 _rich_log(f"Terminating existing pod {p['id']} ({p.get('name')})", "yellow", "💥")
                 bridge.terminate_pod(p["id"])
-
-        # Build price steps from range
-        min_price = float(args.min_price)
-        max_price = float(args.max_price)
-        if args.auto_price_range:
-            try:
-                min_str, max_str = args.auto_price_range.split("-", 1)
-                min_price = float(min_str.strip())
-                max_price = float(max_str.strip())
-            except Exception:
-                pass
 
         # Use the central selection logic to find valid GPUs
         with Progress(
@@ -3443,16 +3563,9 @@ def main():
                 console.print(gpu_table)
 
             best_gpu = filtered_gpus[0]
-            gpu_id = best_gpu["id"]
+            gpu_id = best_gpu.get("name") or best_gpu.get("id")
             auto_candidate_gpus = filtered_gpus
-
-            storage_overhead = 0.20
-            total_estimated = round(best_gpu["securePrice"] + storage_overhead, 2)
-            _rich_log(
-                f"Best current option: {best_gpu['displayName']} (${total_estimated}/hr total)",
-                "bold green",
-                "✓",
-            )
+            _rich_log(f"Auto-selected best match: {best_gpu['displayName']}", "green", "✓")
     elif args.pod_id:
         # Resume existing pod flow
         pods = bridge.get_pods()
@@ -3490,8 +3603,8 @@ def main():
         gpu_types = bridge.get_gpu_types_with_availability()
 
         # Safety Check for manual GPU selection
-        incompatible_keywords = ["Blackwell", "PRO 4500", "PRO 5000"]
-        if any(kw in args.gpu for kw in incompatible_keywords):
+        incompatible_keywords = ["PRO 4500", "PRO 5000"]
+        if args.gpu and any(kw in args.gpu for kw in incompatible_keywords):
             _rich_log(
                 f"GPU '{args.gpu}' is known to be incompatible with our current software stack.",
                 "red",
@@ -3500,25 +3613,58 @@ def main():
             sys.exit(1)
 
         gpu_ids = [g["id"] for g in gpu_types]
+        gpu_names = [g.get("name") for g in gpu_types if g.get("name")]
 
         gpu_id = None
-        if args.gpu in gpu_ids:
+        if args.gpu and args.gpu in gpu_ids:
             gpu_id = args.gpu
-        else:
+        elif args.gpu and args.gpu in gpu_names:
+            gpu_id = args.gpu
+        elif args.gpu:
             # Fallback mapping
-            gpu_id = args.gpu.lower().replace(" ", "_").replace("nvidia_", "")
-            if gpu_id not in gpu_ids:
-                # Try one more: 'gpu_' prefix
-                if f"gpu_{gpu_id}" in gpu_ids:
-                    gpu_id = f"gpu_{gpu_id}"
+            mapped_id = args.gpu.lower().replace(" ", "_").replace("nvidia_", "")
+            if mapped_id in gpu_ids:
+                gpu_id = mapped_id
+            elif f"gpu_{mapped_id}" in gpu_ids:
+                gpu_id = f"gpu_{mapped_id}"
+            else:
+                _rich_log(
+                    f"Warning: GPU '{args.gpu}' not found in available inventory. Falling back to --auto selection...",
+                    "yellow",
+                    "⚠",
+                )
+                # FORCE AUTO MODE
+                args.auto = True
+                filtered_gpus = _select_candidate_gpus(bridge, min_price, max_price, args.min_vram)
+                if filtered_gpus:
+                    best_gpu = filtered_gpus[0]
+                    gpu_id = best_gpu.get("name") or best_gpu.get("id")
+                    auto_candidate_gpus = filtered_gpus
+                    _rich_log(f"Auto-selected replacement: {best_gpu['displayName']}", "green", "✓")
                 else:
-                    _rich_log(
-                        f"Warning: GPU '{args.gpu}' (mapped to '{gpu_id}') not found in available IDs: {gpu_ids[:5]}...",
-                        "yellow",
-                        "⚠",
-                    )
+                    _rich_log(f"Auto-selection failed: No available GPUs matching {args.min_vram}GB VRAM / ${max_price}/hr", "red", "✗")
+                    sys.exit(1)
+        else:
+            # No GPU requested and not in auto mode? 
+            # This should ideally not happen due to the logic above, but let's be safe.
+            _rich_log("No GPU specified and auto-selection not triggered correctly. Forcing auto-selection...", "yellow", "⚠")
+            args.auto = True
+            filtered_gpus = _select_candidate_gpus(bridge, min_price, max_price, args.min_vram)
+            if filtered_gpus:
+                best_gpu = filtered_gpus[0]
+                gpu_id = best_gpu.get("name") or best_gpu.get("id")
+                auto_candidate_gpus = filtered_gpus
+                _rich_log(f"Auto-selected best match: {best_gpu['displayName']}", "green", "✓")
+            else:
+                _rich_log(f"Auto-selection failed: No available GPUs matching requirements.", "red", "✗")
+                sys.exit(1)
 
-    if args.use_s3:
+    if args.upload_to_s3 or args.use_s3:
+        if not check_s3_credentials():
+            sys.exit(1)
+
+    if args.upload_to_s3:
+        _rich_log("Upload to S3 requested. Syncing local project root...", "cyan", "📦")
         s3_sync_local_to_bucket(
             REPO_ROOT,
             args.s3_bucket,
@@ -3526,6 +3672,13 @@ def main():
             args.s3_region,
             args.s3_endpoint,
         )
+        # Ensure use_s3 is True for subsequent pod initialization
+        args.use_s3 = True
+
+    elif args.use_s3:
+        # If use_s3 is manually set without upload, we assume data is already there 
+        # but we might still want to refresh it if it's the first run
+        _rich_log("S3 sync enabled. Using existing S3 archive for pod initialization.", "cyan", "☁")
 
     if not pod and gpu_id:
         # Enforce minimum VRAM requirement for teacher + training
@@ -3603,12 +3756,13 @@ def main():
                         )
                         time.sleep(min(60, retry_sleep))
                         continue
-                    candidate_id = candidate.get("id") if isinstance(candidate, dict) else candidate
-                    candidate_display = (
-                        candidate.get("displayName")
-                        if isinstance(candidate, dict)
-                        else candidate_id
-                    )
+                    if isinstance(candidate, dict):
+                        # For clusters, the 'name' field typically holds the short slug (e.g. gpu-nvidia-rtx-6000-ada)
+                        candidate_id = candidate.get("name") or candidate.get("id")
+                        candidate_display = candidate.get("displayName") or candidate_id
+                    else:
+                        candidate_id = candidate
+                        candidate_display = candidate
 
                     # Rationale for selection
                     vram_val = (
@@ -3626,7 +3780,7 @@ def main():
                     # 1. AVAILABILITY PRE-CHECK (STOCK SENSITIVE)
                     availability_snapshot = bridge.get_gpu_types_with_availability()
                     candidate_info = next(
-                        (g for g in availability_snapshot if g.get("id") == candidate_id), None
+                        (g for g in availability_snapshot if g.get("id") == candidate_id or g.get("name") == candidate_id), None
                     )
                     
                     if candidate_info is not None:
@@ -3660,48 +3814,83 @@ def main():
 
                     pod_name = args.alias or "mavaia_train"
                     if args.cluster_size > 1:
-                        _rich_log(f"Creating Instant Cluster of {args.cluster_size} pods...", "cyan", "🏗")
-                        cluster_result = bridge.create_cluster(
-                            name=pod_name,
-                            gpu_type_id=candidate_id,
-                            pod_count=args.cluster_size,
-                            bid_per_gpu=candidate.get("securePrice"),
-                            template_id=args.template,
-                            image=current_image,
-                            ssh_key_value=args.ssh_key_value,
-                            volume_id=args.volume_id,
-                            volume_mount_path=args.volume_mount_path,
-                            env=pod_env,
-                        )
-                        if not cluster_result:
+                        _rich_log(f"Orchestrating Virtual Cluster of {args.cluster_size} pods...", "cyan", "🪄")
+                        
+                        pods = []
+                        import concurrent.futures
+                        
+                        def _launch_single_pod(idx):
+                            suffix = f"_{idx+1}"
+                            member_name = pod_name + suffix
+                            
+                            _rich_log(f"Launching virtual cluster member {idx+1}/{args.cluster_size}: {member_name}", "dim", "🚀")
+                            
+                            # Determine cloud type based on GPU candidate
+                            c_type = "SECURE" if candidate.get("securePrice") else "COMMUNITY"
+                            
+                            res = bridge.create_pod(
+                                name=member_name,
+                                gpu_type_id=candidate_id,
+                                template_id=args.template,
+                                image=current_image,
+                                ssh_key_value=args.ssh_key_value,
+                                data_center_id=args.data_center,
+                                volume_id=args.volume_id if args.volume_id else None,
+                                volume_mount_path=args.volume_mount_path,
+                                env=pod_env,
+                                cloud_type=c_type
+                            )
+                            return res
+
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=args.cluster_size) as executor:
+                            launch_futures = [executor.submit(_launch_single_pod, i) for i in range(args.cluster_size)]
+                            for f in concurrent.futures.as_completed(launch_futures):
+                                try:
+                                    p_res = f.result()
+                                    if p_res:
+                                        pods.append(p_res)
+                                except Exception as e:
+                                    _rich_log(f"Virtual cluster member launch failed: {e}", "red", "✗")
+
+                        if len(pods) < args.cluster_size:
+                            _rich_log(f"Only {len(pods)}/{args.cluster_size} pods launched. Retrying next candidate...", "yellow", "⚠")
+                            # Cleanup partial cluster
+                            for p in pods:
+                                try:
+                                    bridge.terminate_pod(p["id"])
+                                except Exception:
+                                    pass
                             continue
                         
-                        cluster_id = cluster_result["id"]
-                        _rich_log(f"Cluster {cluster_id} created! Waiting for constituent pods...", "cyan", "⏳")
+                        _rich_log(f"Virtual Cluster of {len(pods)} pods provisioned! Waiting for constituent pods...", "cyan", "⏳")
                         
-                        # Wait for all pods in cluster to be ready
+                        # Wait for all pods to have runtime data
+                        cluster_ready = False
                         while True:
-                            active_clusters = bridge.get_clusters()
-                            this_cluster = next((c for c in active_clusters if c["id"] == cluster_id), None)
-                            if not this_cluster:
-                                _rich_log(f"Cluster {cluster_id} not found in listing.", "yellow", "⚠")
-                                break
+                            all_ready = True
+                            fresh_pods = bridge.get_pods()
+                            cluster_ids = {p["id"] for p in pods}
                             
-                            cluster_pods = this_cluster.get("pods", [])
-                            if len(cluster_pods) == args.cluster_size:
-                                all_ready = True
-                                for cp in cluster_pods:
+                            current_cluster_pods = [p for p in fresh_pods if p["id"] in cluster_ids]
+                            
+                            if len(current_cluster_pods) < args.cluster_size:
+                                all_ready = False
+                            else:
+                                for cp in current_cluster_pods:
                                     runtime = cp.get("runtime")
                                     if not runtime or not runtime.get("ports") or not runtime.get("uptimeInSeconds", 0) > 0:
                                         all_ready = False
                                         break
-                                if all_ready:
-                                    pods = cluster_pods
-                                    _rich_log(f"All {args.cluster_size} pods in cluster {cluster_id} are ready!", "bold green", "✓")
-                                    break
+                            
+                            if all_ready and len(current_cluster_pods) == args.cluster_size:
+                                pods = current_cluster_pods
+                                _rich_log(f"All {args.cluster_size} pods in virtual cluster are ready!", "bold green", "✓")
+                                cluster_ready = True
+                                break
                             
                             time.sleep(10)
-                        if pods:
+                        
+                        if cluster_ready:
                             # Set first pod as 'pod' for any remaining single-pod logic
                             pod = pods[0]
                             break
@@ -3714,11 +3903,12 @@ def main():
                             image=current_image,
                             ssh_key_value=args.ssh_key_value,
                             data_center_id=args.data_center,
-                            volume_id=args.volume_id,
+                            volume_id=args.volume_id if args.volume_id else None,
                             volume_mount_path=args.volume_mount_path,
                             env=pod_env,
                         )
                         if not pod_result:
+                            # If auto-mode, continue to next candidate
                             continue
 
                         pod_id = pod_result["id"]
@@ -3856,16 +4046,25 @@ def main():
 
         if failed:
             _rich_log("One or more pods failed to initialize. Terminating...", "red", "✗")
-            if args.cluster_size > 1 and 'cluster_id' in locals():
-                bridge.delete_cluster(cluster_id)
-            else:
-                for p in pods:
+            
+            # Re-fetch pods to see what's actually still there
+            try:
+                active_pods = bridge.get_pods()
+                active_ids = {ap["id"] for ap in active_pods}
+            except Exception:
+                active_ids = set()
+
+            # For virtual clusters, we always terminate the specific list of pods
+            for p in pods:
+                if p["id"] in active_ids:
+                    _rich_log(f"Terminating member {p['id']}...", "dim")
                     bridge.terminate_pod(p["id"])
             sys.exit(1)
 
         # Re-fetch fresh pod info to ensure we have final runtime/port data for all pods
-        final_pods_data = bridge.get_pods()
-        pods = [next(p for p in final_pods_data if p["id"] == orig_p["id"]) for p in pods]
+        fresh_pods_list = bridge.get_pods()
+        cluster_ids = {p["id"] for p in pods}
+        pods = [p for p in fresh_pods_list if p["id"] in cluster_ids]
         
         # Display final cluster state
         _display_cluster_status(pods)
@@ -3915,7 +4114,27 @@ def main():
                                     os.kill(os.getpid(), signal.SIGINT)
                                     return
 
-                            # 2. Master Node Sync (Existing logic)
+                            # 2. S3-Based Sync (For ALL pods in cluster)
+                            if args.use_s3:
+                                _rich_log(f"Watchdog: S3 sync for {len(pods)} pod(s)...", "cyan", "🐕")
+                                for p in pods:
+                                    # Snapshot first (remotely tar logs/checkpoints)
+                                    # Note: Using p_id specific proxy if possible
+                                    p_proxy = f"{p['id']}-22@ssh.runpod.io"
+                                    
+                                    # Snapshot
+                                    remote_snapshot(
+                                        "ssh.runpod.io", 22, args.ssh_key, args.volume_mount_path, p["id"], p_proxy
+                                    )
+                                    # Push to S3 (specific to each pod's prefix)
+                                    s3_sync_pod(
+                                        "ssh.runpod.io", 22, args.ssh_key, 
+                                        args.s3_bucket, f"{args.s3_prefix}/{p['id']}", 
+                                        args.s3_region, args.s3_endpoint, "push",
+                                        pod_id=p["id"], proxy=p_proxy
+                                    )
+
+                            # 3. Master Node Sync (Local)
                             _rich_log("Watchdog: snapshot + sync (Master)", "cyan", "🐕")
                             remote_snapshot(
                                 pod_ip,
@@ -4155,6 +4374,23 @@ def main():
                 if "--adapter-name" not in train_args and not args.adapter_name:
                     train_args.extend(["--adapter-name", "rfal_alignment"])
 
+            if args.train_jit:
+                _rich_log("JIT Knowledge Absorption: Learning from verified search results", "bold yellow", "🧠")
+                # JIT uses standard SFT instead of DPO for fast fact ingestion
+                train_args.extend(["--source", "local", "--book-ids", "mavaia_core/data/jit_absorption.jsonl"])
+                if "--adapter-name" not in train_args and not args.adapter_name:
+                    train_args.extend(["--adapter-name", "jit_knowledge_base"])
+                if "--epochs" not in train_args:
+                    train_args.extend(["--epochs", "2"]) # Higher focus for small data
+
+            if args.train_tool_bench:
+                _rich_log("Tool-Efficacy Tuning: Learning from benchmark mistakes", "bold magenta", "🛠")
+                # Tool bench uses DPO to learn specifically what NOT to do
+                train_args.append("--dpo")
+                train_args.extend(["--dpo-data", "mavaia_core/data/tool_corrections.jsonl"])
+                if "--adapter-name" not in train_args and not args.adapter_name:
+                    train_args.extend(["--adapter-name", "tool_efficacy_v1"])
+
             script_rel = args.script or "scripts/train_neural_text_generator.py"
             
             # Auto-detect curriculum mode from flags
@@ -4295,8 +4531,13 @@ def main():
                         remote_train(m_ip, m_port, args.ssh_key, g_args, args.volume_mount_path, m_id, m_ssh_proxy, script_rel="scripts/train_curriculum.py")
                     else:
                         # standard NTG training
-                        group_args.extend(["--book-ids", dataset, "--adapter-name", f"topic_{topic.replace(' ', '_')}"])
-                        _rich_log(f"Group '{topic}': Launching on pod {m_id} using {dataset}...", "green", "🚀")
+                        if "--source" not in group_args:
+                            group_args.extend(["--source", "huggingface", "--book-ids", "roneneldan/TinyStories"])
+                        else:
+                            group_args.extend(["--book-ids", dataset])
+                        
+                        group_args.extend(["--adapter-name", f"topic_{topic.replace(' ', '_')}"])
+                        _rich_log(f"Group '{topic}': Launching on pod {m_id} using {dataset or 'TinyStories'}...", "green", "🚀")
                         remote_train(m_ip, m_port, args.ssh_key, group_args, args.volume_mount_path, m_id, m_ssh_proxy, script_rel="scripts/train_neural_text_generator.py")
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=len(args.topics)) as group_executor:
@@ -4306,17 +4547,45 @@ def main():
                 _rich_log("All topic groups finished execution.", "bold green", "✨")
                 
             else:
-                # Standard single-task execution (Existing logic)
-                remote_train(
-                    pod_ip,
-                    pod_port,
-                    args.ssh_key,
-                    train_args,
-                    args.volume_mount_path,
-                    pod["id"],
-                    args.ssh_proxy,
-                    script_rel=script_rel,
-                )
+                # Standard Virtual Cluster execution (Parallel training on all nodes)
+                _rich_log(f"Launching synchronized training on {len(pods)} nodes...", "bold cyan", "🚀")
+                
+                def _launch_train_on_node(node_idx, node_pod):
+                    node_id = node_pod["id"]
+                    # Setup node-specific args
+                    node_args = list(train_args)
+                    if "--node-rank" not in node_args:
+                        node_args.extend(["--node-rank", str(node_idx)])
+                    
+                    # Find SSH details for this specific node
+                    n_runtime = node_pod.get("runtime") or {}
+                    n_ports = n_runtime.get("ports") or []
+                    n_ssh_port_info = next((pt for pt in n_ports if (pt.get("isIpPublic") or not any(pt.get("ip", "").startswith(pref) for pref in ["10.", "172.", "192."])) and pt.get("privatePort") == 22), None)
+                    
+                    n_ssh_proxy = None
+                    if not n_ssh_port_info:
+                        n_ssh_proxy = f"{node_id}-22@ssh.runpod.io"
+                        n_ip = "ssh.runpod.io"
+                        n_port = 22
+                    else:
+                        n_ip = n_ssh_port_info["ip"]
+                        n_port = n_ssh_port_info["publicPort"]
+
+                    # Default to HuggingFace if no source provided
+                    if "--source" not in node_args and script_rel.endswith("train_neural_text_generator.py"):
+                        node_args.extend(["--source", "huggingface", "--book-ids", "roneneldan/TinyStories"])
+
+                    _rich_log(f"Node {node_idx} ({node_id}): Starting training...", "dim", "🏋")
+                    remote_train(
+                        n_ip, n_port, args.ssh_key, node_args, args.volume_mount_path, node_id, n_ssh_proxy, script_rel=script_rel
+                    )
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=len(pods)) as train_executor:
+                    train_futures = [train_executor.submit(_launch_train_on_node, i, p) for i, p in enumerate(pods)]
+                    # Wait for the first one to finish or fail
+                    concurrent.futures.wait(train_futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                
+                _rich_log("Virtual cluster training sequence complete.", "bold green", "✨")
             
             # Artifact Collection (Unified path)
             _rich_log("Starting cluster-wide artifact synchronization...", "cyan", "📥")
@@ -4453,7 +4722,7 @@ def main():
                     pod_port,
                     args.ssh_key,
                     args.s3_bucket,
-                    args.s3_prefix,
+                    f"{args.s3_prefix}/{pod['id']}",
                     args.s3_region,
                     args.s3_endpoint,
                     "push",

@@ -7,7 +7,10 @@ Mirrors Swift ToolCallParser.swift functionality
 import json
 import re
 from typing import List, Optional
-from tool_calling_models import ToolCall, ToolCallFunction
+try:
+    from mavaia_core.brain.modules.tool_calling_models import ToolCall, ToolCallFunction
+except ImportError:
+    from tool_calling_models import ToolCall, ToolCallFunction
 
 
 class ToolCallParser:

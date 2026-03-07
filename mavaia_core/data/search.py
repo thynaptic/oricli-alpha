@@ -2,8 +2,22 @@ import os
 import logging
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Try to load environment variables from .env if available
+try:
+    from dotenv import load_dotenv
+    # Search for .env in current dir or up to two levels up (project root)
+    dotenv_path = Path(".env")
+    if not dotenv_path.exists():
+        dotenv_path = Path(__file__).resolve().parent.parent.parent / ".env"
+    
+    if dotenv_path.exists():
+        load_dotenv(dotenv_path)
+except ImportError:
+    pass
 
 @dataclass
 class SearchResult:
@@ -37,15 +51,24 @@ class DatasetSearch:
             logger.warning(f"HF search disabled: failed to initialize HfApi: {e}")
 
     def _setup_kaggle(self):
+        # Map KAGGLE_API_TOKEN to KAGGLE_KEY if needed
+        if os.environ.get("KAGGLE_API_TOKEN") and not os.environ.get("KAGGLE_KEY"):
+            os.environ["KAGGLE_KEY"] = os.environ["KAGGLE_API_TOKEN"]
+            
         try:
             from kaggle.api.kaggle_api_extended import KaggleApi
             self.kaggle_api = KaggleApi()
             # This will look for ~/.kaggle/kaggle.json or KAGGLE_USERNAME/KAGGLE_KEY env vars
-            self.kaggle_api.authenticate()
+            try:
+                self.kaggle_api.authenticate()
+            except Exception as auth_err:
+                # If authentication fails, we don't want to crash the whole search service
+                logger.warning(f"Kaggle authentication failed: {auth_err}")
+                self.kaggle_api = None
         except ImportError:
             logger.debug("kaggle package missing, Kaggle search disabled")
         except Exception as e:
-            logger.warning(f"Kaggle search disabled: authentication failed: {e}. Ensure KAGGLE_USERNAME and KAGGLE_KEY are set.")
+            logger.warning(f"Kaggle search disabled: unexpected error: {e}")
             self.kaggle_api = None
 
     def search_huggingface(self, query: str, limit: int = 10) -> List[SearchResult]:
@@ -93,13 +116,20 @@ class DatasetSearch:
             datasets = self.kaggle_api.dataset_list(search=query)
             
             for ds in datasets[:limit]:
+                # Safer attribute access for Kaggle datasets
+                ref = getattr(ds, "ref", str(ds))
+                title = getattr(ds, "title", ref)
+                owner = getattr(ds, "ownerRef", "unknown")
+                downloads = getattr(ds, "downloadCount", 0)
+                size = getattr(ds, "totalBytes", None)
+                
                 results.append(SearchResult(
-                    id=f"kaggle::{ds.ref}",
-                    name=ds.title,
+                    id=f"kaggle::{ref}",
+                    name=title,
                     source="kaggle",
-                    description=f"Kaggle Dataset: {ds.title} by {ds.creatorName}",
-                    popularity_score=float(getattr(ds, "downloadCount", 0)),
-                    size_bytes=getattr(ds, "totalBytes", None)
+                    description=f"Kaggle Dataset: {title} by {owner}",
+                    popularity_score=float(downloads),
+                    size_bytes=size
                 ))
         except Exception as e:
             logger.error(f"Kaggle search failed: {e}")

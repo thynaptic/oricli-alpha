@@ -6,7 +6,10 @@ Mirrors Swift ToolRegistry.swift functionality
 
 from typing import Any, Dict, List, Optional
 import asyncio
-from tool_calling_models import Tool, ToolCall, ToolResult, ToolExecutor
+try:
+    from mavaia_core.brain.modules.tool_calling_models import Tool, ToolCall, ToolResult, ToolExecutor
+except ImportError:
+    from tool_calling_models import Tool, ToolCall, ToolResult, ToolExecutor
 
 
 class ToolRegistryError(Exception):

@@ -17,5 +17,19 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [x] **Track: Fix persistent SSH 255 errors during pod stabilization in runpod_bridge.py (Regression/Unresolved).**
+- [ ] **Track: Implement Dynamic ToolBench Framework (Efficacy & Self-Correction).**
+  *Link: [./tracks/tool_bench_20260306/](./tracks/tool_bench_20260306/)*
+
+---\n\n- [ ] **Track: Implement Just-In-Time (JIT) Knowledge Absorption (Autonomous Learning).**
+  *Link: [./tracks/jit_absorption_20260306/](./tracks/jit_absorption_20260306/)*
+
+---\n\n- [x] **Track: Implement Async Virtual Clustering (Alternative Orchestration).**
+  *Link: [./tracks/virtual_cluster_20260306/](./tracks/virtual_cluster_20260306/)*
+
+
+---\n\n- [x] **Track: Implement Local + S3 Strategy for RunPod Clusters (Performance/Decoupling).**
+  *Link: [./tracks/cluster_s3_sync_20260306/](./tracks/cluster_s3_sync_20260306/)*
+
+
+---\n\n- [x] **Track: Fix persistent SSH 255 errors during pod stabilization in runpod_bridge.py (Regression/Unresolved).**
   *Link: [./tracks/ssh_stability_20260302/](./tracks/ssh_stability_20260302/)*
