@@ -17,11 +17,25 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement Pre-Cog Cache (Predictive Speculation).**
+- [ ] **Track: Implement Metacognitive Sentience Layer (Cognitive Self-Regulation).**
+  *Link: [./tracks/metacognitive_sentience_20260306/](./tracks/metacognitive_sentience_20260306/)*
+
+---\n\n- [ ] **Track: [VAULTED] Distributed "Swarm" Intelligence (The Hive).**
+  *Link: [./tracks/swarm_hive_20260306/](./tracks/swarm_hive_20260306/)*
+
+---\n\n- [ ] **Track: Implement Pre-Cog Cache (Predictive Speculation).**
   *Link: [./tracks/precog_cache_20260306/](./tracks/precog_cache_20260306/)*
 
----\n\n- [ ] **Track: Implement Autonomic Self-Modification (Codebase Metacognition).**
-  *Link: [./tracks/autonomic_self_mod_20260306/](./tracks/autonomic_self_mod_20260306/)*
+---\n\n- [ ] **Track: Implement Multi-Modal Synthesis (Visual & Auditory Reasoner).**
+  *Link: [./tracks/multi_modal_20260306/](./tracks/multi_modal_20260306/)*
+
+---\n\n- [x] **Track: Implement Dynamic Graph Execution (DGE) (Adaptive Pathway Logic).**
+  *Link: [./tracks/dynamic_graph_20260306/](./tracks/dynamic_graph_20260306/)*
+
+---\n\n- [x] **Track: Implement Persistent Memory Subconscious (Neural Influence Layer).**
+  *Link: [./tracks/subconscious_field_20260306/](./tracks/subconscious_field_20260306/)*
+
+---\n\n- [x] **Track: Implement Autonomic Self-Modification (Codebase Metacognition).**
 
 ---\n\n- [ ] **Track: Implement Synthetic Dream State (Cognitive Consolidation).**
   *Link: [./tracks/synthetic_dream_20260306/](./tracks/synthetic_dream_20260306/)*

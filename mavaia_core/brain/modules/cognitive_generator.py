@@ -6,6 +6,7 @@ Uses existing modules: memory, reasoning, MCTS results, safety, style, and thoug
 """
 
 from typing import Any
+import os
 import json
 import re
 import random
@@ -22,6 +23,11 @@ from mavaia_core.exceptions import InvalidParameterError
 # No log_* functions - use diagnostic dictionary instead
 
 logger = logging.getLogger(__name__)
+
+def _rich_log(message: str, style: str = "white", icon: str = ""):
+    # Minimal helper for terminal visibility
+    prefix = f"{icon} " if icon else ""
+    print(f"[{style}]{prefix}{message}")
 
 
 class CognitiveGeneratorModule(BaseBrainModule):
@@ -61,6 +67,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
         self.tree_of_thought = None
         self.query_complexity = None
         self.multi_agent_orchestrator = None
+        self.subconscious_field = None
+        self.pathway_architect = None
+        self.graph_executor = None
+        self.sensory_router = None
+        self.metacognitive_sentinel = None
         # Conversation tracking
         self._conversation_history = []
         self._last_responses = []
@@ -254,6 +265,31 @@ class CognitiveGeneratorModule(BaseBrainModule):
             except Exception:
                 pass
             
+            try:
+                self.subconscious_field = ModuleRegistry.get_module("subconscious_field")
+            except Exception:
+                pass
+            
+            try:
+                self.pathway_architect = ModuleRegistry.get_module("pathway_architect")
+            except Exception:
+                pass
+            
+            try:
+                self.graph_executor = ModuleRegistry.get_module("graph_executor")
+            except Exception:
+                pass
+            
+            try:
+                self.sensory_router = ModuleRegistry.get_module("sensory_router")
+            except Exception:
+                pass
+            
+            try:
+                self.metacognitive_sentinel = ModuleRegistry.get_module("metacognitive_sentinel")
+            except Exception:
+                pass
+            
             # Load human-like enhancement modules
             try:
                 self.natural_language_flow = ModuleRegistry.get_module(
@@ -438,6 +474,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 reasoning_tree=params.get("reasoning_tree"),
                 conversation_history=conversation_history,
                 vision_context=params.get("vision_context"),
+                audio_context=params.get("audio_context"),
                 document_context=params.get("document_context"),
                 temperature=params.get("temperature", 0.7),
                 max_tokens=params.get("max_tokens"),
@@ -680,7 +717,17 @@ class CognitiveGeneratorModule(BaseBrainModule):
             "requires_search": False,
             "requires_math": False,
             "input": input_text,  # Store original input for later use
+            "mental_state": None,
         }
+
+        # Pull persistent mental state from subconscious field
+        if self.subconscious_field:
+            try:
+                ms_res = self.subconscious_field.execute("get_mental_state", {})
+                if ms_res.get("success"):
+                    intent_info["mental_state"] = ms_res.get("mental_state")
+            except Exception:
+                pass
         
         # Code-related queries
         # IMPORTANT: do not route purely conceptual questions to codegen just because they mention "Python".
@@ -2657,6 +2704,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         reasoning_tree: dict[str, Any] | str | None = None,
         conversation_history: list[dict[str, Any]] | None = None,
         vision_context: dict[str, Any] | None = None,
+        audio_context: dict[str, Any] | None = None,
         document_context: dict[str, Any] | None = None,
         temperature: float = 0.7,
         max_tokens: int | None = None,
@@ -2716,6 +2764,21 @@ class CognitiveGeneratorModule(BaseBrainModule):
         try:
             # CRITICAL: Load all modules upfront to ensure main path works
             self._ensure_modules_loaded()
+
+            # Step -1: Sensory Routing (New Step)
+            # Check if input_text is a file path or contains a file path
+            if self.sensory_router and input_text:
+                # Simple check for potential path
+                if "/" in input_text or "." in input_text:
+                    pot_path = input_text.strip()
+                    if os.path.exists(pot_path):
+                        s_res = self.sensory_router.execute("route_input", {"file_path": pot_path})
+                        if s_res.get("success"):
+                            _rich_log(f"Sensory: Routed {s_res.get('input_type')} input", "cyan", "👁")
+                            if s_res.get("input_type") == "image":
+                                vision_context = {"image_info": s_res.get("info"), "path": pot_path}
+                            elif s_res.get("input_type") == "audio":
+                                audio_context = {"audio_info": s_res.get("info"), "path": pot_path}
 
             # Step 0: Long-horizon memory refresh
             memory_context = ""
@@ -2821,362 +2884,130 @@ class CognitiveGeneratorModule(BaseBrainModule):
                         diagnostic_info["warnings"].append("Instruction bypass skipped: text_generation_engine not loaded")
 
             # Step 1: Learned Router - Detect intent and determine module routing
-            # NOTE: This uses dynamic module discovery - any new modules added to
-            # mavaia_core/brain/modules/ are automatically included in routing
-            # Router evolves: symbolic → hybrid → ML based on learning history
             intent_info = self._learned_route(input_text, context)
-            module_chain = self._select_modules_for_intent(intent_info)
-            diagnostic_info["intent"] = intent_info.get("intent", "general")
-            diagnostic_info["recommended_modules"] = intent_info.get("recommended_modules", [])
-            diagnostic_info["module_discovery"] = "dynamic"
-            diagnostic_info["routing_method"] = intent_info.get("routing_method", "symbolic")
-            diagnostic_info["router_state"] = intent_info.get("router_state", "symbolic")
             
-            # Track execution for trace graph
+            # DYNAMIC GRAPH EXECUTION (New Path)
+            use_dge = False
+            module_result = None
             execution_results = {}
-            trace_graph = None
-            
-            # Try intent-based module routing first.
-            # On a live VPS, prefer the lightweight module chain (usually just `reasoning`) over
-            # text-generation fallbacks; many valid prompts are imperatives without a '?' (e.g.
-            # "Translate...", "Summarize...") and should still route.
-            should_route = bool(module_chain)
-            if should_route and module_chain:
+
+            if self.pathway_architect and self.graph_executor:
                 try:
-                    module_result = self._execute_module_chain(module_chain, {
-                        "input": input_text,
-                        "context": context,
-                        "intent": intent_info.get("intent", "general"),
-                        "voice_context": voice_context,
-                        "conversation_history": conversation_history,
-                        "temperature": temperature,
-                        "max_tokens": max_tokens,
+                    arch_res = self.pathway_architect.execute("architect_graph", {
+                        "intent_info": intent_info,
+                        "query": input_text,
+                        "vision_context": vision_context,
+                        "audio_context": audio_context
                     })
-                    
-                    # Store execution results for trace graph
-                    # module_result from _execute_module_chain contains "results" dict with module_name -> result mappings
-                    execution_results = module_result.get("results", {})
-                    if not isinstance(execution_results, dict):
-                        execution_results = {}
-                    
-                    # Ensure we have the actual module results, not empty dicts
-                    # If results dict is empty but module_result has direct fields, extract them
-                    if not execution_results and isinstance(module_result, dict):
-                        # Check if module_result itself contains module results
-                        # Some modules might return results directly
-                        for key in ["text", "response", "answer", "reasoning", "conclusion"]:
-                            if key in module_result:
-                                # Create a synthetic result entry
-                                execution_results = {"synthetic": module_result}
-                                break
-                    
-                    # Validate and use result if successful
-                    # Prefer the module chain's chosen final_result (usually `reasoning`) to avoid
-                    # returning raw web snippets when a clean synthesized answer exists.
-                    response_text = ""
-                    final_result = module_result.get("final_result")
-                    if isinstance(final_result, dict):
-                        extracted_final = self._extract_answer_from_result(final_result)
-                        if extracted_final and self._validate_response(extracted_final):
-                            response_text = extracted_final
-                            module_result["text"] = extracted_final
-                            module_result["response"] = extracted_final
-
-                    # Fallback: extract from the overall module_result payload.
-                    if not response_text or not self._validate_response(response_text):
-                        response_text = self._extract_answer_from_result(module_result)
-
-                    # If we still have a web-snippet-y answer, prefer reasoning-style module outputs.
-                    preferred_modules = (
-                        "reasoning",
-                        "chain_of_thought",
-                        "tree_of_thought",
-                        "custom_reasoning",
-                        "cognitive_reasoning_orchestrator",
-                    )
-                    for pref in preferred_modules:
-                        mod_result = execution_results.get(pref)
-                        if isinstance(mod_result, dict):
-                            extracted = self._extract_answer_from_result(mod_result)
-                            if extracted and self._validate_response(extracted):
-                                response_text = extracted
-                                module_result["text"] = extracted
-                                module_result["response"] = extracted
-                                break
-
-                    # Also check remaining module results if we still don't have a valid answer.
-                    if not response_text or not self._validate_response(response_text):
-                        for mod_name, mod_result in execution_results.items():
-                            if isinstance(mod_result, dict):
-                                extracted = self._extract_answer_from_result(mod_result)
-                                if extracted and self._validate_response(extracted) and len(extracted.strip()) > 20:
-                                    response_text = extracted
-                                    module_result["text"] = extracted
-                                    module_result["response"] = extracted
-                                    break
-                    
-                    if True:
-                        # Fallback to simple extraction (only if we still don't have a valid answer)
-                        if module_result.get("success") or module_result.get("text") or module_result.get("response"):
-                            fallback_text = (
-                                module_result.get("final_answer", "") or
-                                module_result.get("answer", "") or
-                                module_result.get("text", "") or 
-                                module_result.get("response", "") or
-                                module_result.get("conclusion", "")
-                            )
-                            if (
-                                (not response_text or not self._validate_response(response_text))
-                                and fallback_text
-                                and self._validate_response(fallback_text)
-                            ):
-                                response_text = fallback_text
+                    if arch_res.get("success"):
+                        graph = arch_res.get("graph")
+                        _rich_log(f"DGE: Bespoke execution graph created for intent '{intent_info.get('intent')}'", "cyan", "🕸")
                         
-                        if response_text and self._validate_response(response_text):
-                            # Verification Layer: Check if output matches intent
-                            verification_result = self._verify_output_matches_intent(
-                                response_text, intent_info, input_text
-                            )
-                            
-                            # Confidence Model: Structural validation (calculate before reroute)
-                            structural_confidence = self._calculate_structural_confidence(
-                                response_text, intent_info, verification_result, module_chain
-                            )
-                            
-                            # Reflection Loop: Reroute if answer is nonsense or doesn't match intent
-                            reroute_used = False
-                            if not verification_result.get("matches_intent", False) or verification_result.get("confidence", 1.0) < 0.5:
-                                reroute_result = self._reflect_and_reroute(
-                                    response_text,
-                                    verification_result,
-                                    intent_info,
-                                    input_text,
-                                    module_chain,
-                                    {
-                                        "input": input_text,
-                                        "context": context,
-                                        "voice_context": voice_context,
-                                        "conversation_history": conversation_history,
-                                        "temperature": temperature,
-                                        "max_tokens": max_tokens,
-                                    }
-                                )
-                                
-                                if reroute_result:
-                                    reroute_text = reroute_result.get("text", "") or reroute_result.get("response", "")
-                                    if reroute_text and self._validate_response(reroute_text):
-                                        # Verify the rerouted result
-                                        reroute_verification = self._verify_output_matches_intent(
-                                            reroute_text, intent_info, input_text
-                                        )
-                                        
-                                        # Use reroute if it's better (higher confidence or actually matches intent)
-                                        original_confidence = verification_result.get("confidence", 0.0)
-                                        reroute_confidence = reroute_verification.get("confidence", 0.0)
-                                        
-                                        if (reroute_verification.get("matches_intent", False) and not verification_result.get("matches_intent", False)) or \
-                                           (reroute_confidence > original_confidence + 0.1) or \
-                                           (original_confidence < 0.4 and reroute_confidence > 0.4):
-                                            # Use rerouted result - it's better
-                                            response_text = reroute_text
-                                            verification_result = reroute_verification
-                                            structural_confidence = self._calculate_structural_confidence(
-                                                response_text, intent_info, verification_result, 
-                                                reroute_result.get("module_chain", module_chain)
-                                            )
-                                            reroute_used = True
-                                            diagnostic_info["rerouted"] = True
-                                            diagnostic_info["reroute_reason"] = reroute_result.get("reroute_reason", "Better result from reroute")
-                                            diagnostic_info["original_confidence"] = original_confidence
-                                            diagnostic_info["reroute_confidence"] = reroute_confidence
-                                            # Update module chain for trace graph
-                                            module_chain = reroute_result.get("module_chain", module_chain)
-                            
-                            # If the pipeline output is low quality (echo/invalid/off-intent),
-                            # regenerate using internal cognition (thought_to_text/text_generation_engine).
-                            issues_lower = [str(i).lower() for i in verification_result.get("issues", [])]
-                            import re
-                            input_norm = re.sub(r"[^a-z0-9]+", " ", (input_text or "").lower()).strip()
-                            resp_norm = re.sub(r"[^a-z0-9]+", " ", (response_text or "").lower()).strip()
-                            echo_issue = (
-                                any("echoes input" in i for i in issues_lower)
-                                or (input_norm and resp_norm == input_norm)
-                                or (len(input_norm) > 10 and input_norm in resp_norm)
-                            )
-                            needs_regeneration = (
-                                echo_issue
-                                or (not self._validate_response(response_text))
-                                or (not verification_result.get("matches_intent", False))
-                                or (verification_result.get("confidence", 1.0) < 0.55)
-                                or module_result.get("dynamic_solve_triggered")
-                                or module_result.get("_dynamic_solve_triggered")
-                            )
-                            if needs_regeneration:
-                                try:
-                                    regen_thoughts: list[str] = []
-                                    for mod_result in execution_results.values():
-                                        if not isinstance(mod_result, dict):
-                                            continue
-                                        for k in ("final_answer", "answer", "conclusion", "reasoning", "text", "response"):
-                                            v = mod_result.get(k)
-                                            if isinstance(v, str) and v.strip() and len(v.strip()) > 20:
-                                                regen_thoughts.append(v.strip())
-                                                break
-
-                                    if not regen_thoughts and response_text:
-                                        regen_thoughts = [response_text]
-
-                                    regenerated = self._generate_conversational_response(
-                                        input_text=input_text,
-                                        voice_context=voice_context or {},
-                                        context=context,
-                                        conversation_history=conversation_history,
-                                        selected_thoughts=regen_thoughts[:6],
-                                        max_tokens=max_tokens,
-                                        force_neural=module_result.get("dynamic_solve_triggered", False)
-                                    )
-                                    if regenerated and self._validate_response(regenerated):
-                                        response_text = regenerated
-                                        verification_result = self._verify_output_matches_intent(
-                                            response_text, intent_info, input_text
-                                        )
-                                        structural_confidence = self._calculate_structural_confidence(
-                                            response_text, intent_info, verification_result, module_chain
-                                        )
-                                        diagnostic_info["regenerated"] = True
-                                        diagnostic_info["regeneration_reason"] = (
-                                            "echo" if echo_issue else "verification_or_validation_failed"
-                                        )
-                                except Exception:
-                                    pass
-
-                            # FINAL WEB CONTENT VERIFICATION: Check if response contains web-sourced content
-                            # Extract any URLs or web sources from module results
-                            web_sources = []
-                            for mod_result in execution_results.values():
-                                if isinstance(mod_result, dict):
-                                    urls = mod_result.get("urls", []) or mod_result.get("sources", []) or []
-                                    if urls:
-                                        if isinstance(urls, list):
-                                            web_sources.extend(urls)
-                                        else:
-                                            web_sources.append(str(urls))
-                            
-                            # If response was generated from web content, verify it
-                            final_web_verification = None
-                            if web_sources or any(m[0] in ["web_search", "web_fetch", "web_scraper"] for m in module_chain):
-                                final_web_verification = self._verify_web_content(
-                                    response_text,
-                                    web_sources if web_sources else None,
-                                    input_text
-                                )
-                                # Add web verification to diagnostic info
-                                diagnostic_info["web_verification"] = final_web_verification
-                                
-                                # If web verification failed, adjust confidence downward
-                                if not final_web_verification.get("verified", False):
-                                    web_confidence = final_web_verification.get("confidence", 0.5)
-                                    # Reduce structural confidence if web content is unverified
-                                    current_conf = structural_confidence.get("confidence", 0.7)
-                                    structural_confidence["confidence"] = min(current_conf, web_confidence)
-                                    diagnostic_info["warnings"].append(
-                                        f"Web content verification issues: {', '.join(final_web_verification.get('issues', []))}"
-                                    )
-                            
-                            # Trace Graph: Log module path dependencies
-                            trace_graph = self._build_trace_graph(
-                                input_text,
-                                intent_info,
-                                module_chain,
-                                execution_results,
-                                verification_result,
-                                response_text,
-                                trace_id=trace_id,
-                            )
-                            
-                            # Update learned router with outcome
-                            self._update_routing_learning(
-                                module_chain,
-                                verification_result.get("matches_intent", False),
-                                structural_confidence.get("confidence", 0.0)
-                            )
-                            
-                            diagnostic_info["generation_method"] = f"intent_routing_{intent_info.get('intent', 'general')}"
-                            diagnostic_info["verification"] = verification_result
-                            diagnostic_info["structural_confidence"] = structural_confidence
-                            
-                            # Store a redacted trace for secure introspection.
-                            try:
-                                from mavaia_core.brain.introspection import get_trace_store
-
-                                get_trace_store().add(
-                                    trace_id,
-                                    {
-                                        "trace_id": trace_id,
-                                        "intent": intent_info,
-                                        "confidence": structural_confidence.get("confidence", 0.7),
-                                        "verification": verification_result,
-                                        "structural_confidence": structural_confidence,
-                                        "web_verification": final_web_verification,
-                                        "trace_graph": trace_graph,
-                                        "diagnostic": diagnostic_info,
-                                    },
-                                )
-                            except Exception:
-                                pass
-
-                            return {
-                                "success": True,
-                                "trace_id": trace_id,
-                                "text": response_text,
-                                "response": response_text,
-                                "generated_text": response_text,
-                                "confidence": structural_confidence.get("confidence", 0.7),
-                                "method": diagnostic_info["generation_method"],
-                                "intent": intent_info,
-                                "verification": verification_result,
-                                "structural_confidence": structural_confidence,
-                                "web_verification": final_web_verification,  # Include web verification if present
-                                "trace_graph": trace_graph,
-                                "diagnostic": diagnostic_info,
-                            }
-                except Exception as e:
-                    # If intent routing fails, continue with normal flow
-                    diagnostic_info["warnings"].append(f"Intent routing failed: {str(e)}")
-                    pass
-
-            # Step 1: Track conversation in memory if available
-            # Load module on-demand
-            start = time.time()
-            if not self.conversational_memory:
-                self._load_module_if_needed("conversational_memory")
-
-            if self.conversational_memory and conversation_history:
-                try:
-                    # Remember current turn
-                    self.conversational_memory.execute(
-                        "remember_context",
-                        {
-                        "turn": {
+                        graph_res = self.graph_executor.execute("execute_graph", {
+                            "graph": graph,
                             "input": input_text,
                             "context": context,
-                            "entities": [],  # Could extract entities here
-                                "topic": "",  # Could extract topic here
-                        }
-                        },
+                            "voice_context": voice_context,
+                            "conversation_history": conversation_history,
+                            "temperature": temperature,
+                            "max_tokens": max_tokens,
+                        })
+                        
+                        if graph_res.get("success"):
+                            use_dge = True
+                            execution_results = graph_res.get("all_results", {})
+                            module_result = graph_res.get("final_result", {})
+                except Exception as e:
+                    _rich_log(f"DGE failed: {e}. Falling back to linear chain.", "yellow", "⚠")
+
+            if not use_dge:
+                module_chain = self._select_modules_for_intent(intent_info)
+                diagnostic_info["intent"] = intent_info.get("intent", "general")
+                diagnostic_info["recommended_modules"] = intent_info.get("recommended_modules", [])
+                
+                # Try intent-based module routing first.
+                if module_chain:
+                    try:
+                        chain_res = self._execute_module_chain(module_chain, {
+                            "input": input_text,
+                            "context": context,
+                            "intent": intent_info.get("intent", "general"),
+                            "voice_context": voice_context,
+                            "conversation_history": conversation_history,
+                            "temperature": temperature,
+                            "max_tokens": max_tokens,
+                        })
+                        module_result = chain_res
+                        execution_results = chain_res.get("results", {})
+                    except Exception as e:
+                        module_result = {"success": False, "error": str(e)}
+                else:
+                    module_result = {"success": False, "error": "No module chain"}
+
+            # PROCESS RESULTS
+            response_text = ""
+            if module_result and isinstance(module_result, dict):
+                # Validate and use result if successful
+                final_result = module_result.get("final_result") if use_dge else module_result
+                
+                if isinstance(final_result, dict):
+                    extracted_final = self._extract_answer_from_result(final_result)
+                    if extracted_final:
+                        response_text = extracted_final
+                
+                if not response_text:
+                    response_text = (
+                        module_result.get("text") or 
+                        module_result.get("response") or 
+                        module_result.get("answer") or ""
+                    )
+
+                if response_text and self._validate_response(response_text):
+                    # 1. METACOGNITIVE SENTINEL CHECK (New Step)
+                    if self.metacognitive_sentinel:
+                        health = self.metacognitive_sentinel.execute("assess_cognitive_health", {
+                            "trace": response_text,
+                            "execution_results": execution_results
+                        })
+                        
+                        if health.get("requires_intervention"):
+                            _rich_log(f"Sentinel: Detected {health.get('cognitive_state')} state (Volatility: {health.get('volatility'):.2f})", "yellow", "🧠")
+                            
+                            # Trigger Radical Acceptance
+                            intervention = self.metacognitive_sentinel.execute("apply_radical_acceptance", {
+                                "goal": input_text,
+                                "failed_path": response_text
+                            })
+                            
+                            if intervention.get("action_required") == "reroute":
+                                diagnostic_info["warnings"].append(f"Sentinel Intervention: {intervention.get('intervention')}")
+                                # In a full implementation, this would trigger a re-architecting of the graph
+                                # For now, we prepend the intervention instruction to the output
+                                response_text = f"{intervention.get('instruction')}\n\n{response_text}"
+
+                    # 2. Verification Layer: Check if output matches intent
+                    verification_result = self._verify_output_matches_intent(
+                        response_text, intent_info, input_text
                     )
                     
-                    # Build on previous conversation
-                    build_result = self.conversational_memory.execute(
-                        "build_on_previous",
-                        {"current_input": input_text, "history": conversation_history},
+                    # Confidence Model: Structural validation
+                    structural_confidence = self._calculate_structural_confidence(
+                        response_text, intent_info, verification_result, (module_chain if not use_dge else [])
                     )
-                    if build_result.get("can_build_on") and build_result.get(
-                        "building_text"
-                    ):
-                        input_text = build_result["building_text"]
-                except Exception:
-                    pass
+                    
+                    diagnostic_info["generation_method"] = f"dge_{intent_info.get('intent')}" if use_dge else f"intent_routing_{intent_info.get('intent')}"
+                    
+                    return {
+                        "success": True,
+                        "trace_id": trace_id,
+                        "text": response_text,
+                        "response": response_text,
+                        "confidence": structural_confidence.get("confidence", 0.7),
+                        "method": diagnostic_info["generation_method"],
+                        "intent": intent_info,
+                        "verification": verification_result,
+                        "diagnostic": diagnostic_info,
+                    }
             
             # Step 1b: Process vision and document context if provided
             vision_insights = None

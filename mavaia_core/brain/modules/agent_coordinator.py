@@ -115,6 +115,7 @@ class AgentCoordinatorModule(BaseBrainModule):
                 "execute_parallel",
                 "get_result",
                 "get_all_results",
+                "spawn_agent",
                 "status",
             ],
             dependencies=[],
@@ -232,8 +233,29 @@ class AgentCoordinatorModule(BaseBrainModule):
             return self._get_result(params)
         elif operation == "get_all_results":
             return self._get_all_results()
+        elif operation == "spawn_agent":
+            return self._spawn_agent(params)
         else:
             return {"success": False, "error": f"Unknown operation: {operation}"}
+
+    def _spawn_agent(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Spawn an ephemeral agent for a specific task."""
+        agent_type = params.get("agent_type")
+        instructions = params.get("instructions")
+        
+        if not agent_type:
+            return {"success": False, "error": "agent_type required"}
+            
+        # For now, we simulate spawning by returning a virtual agent ID
+        # In a real implementation, this would create a new instance of BaseBrainModule
+        agent_id = f"ephemeral_{agent_type}_{int(time.time())}"
+        logger.info(f"AgentCoordinator: Spawned ephemeral agent '{agent_id}'")
+        
+        return {
+            "success": True, 
+            "agent_id": agent_id,
+            "instructions": instructions
+        }
 
     def _get_status(self) -> Dict[str, Any]:
         """Return module status"""

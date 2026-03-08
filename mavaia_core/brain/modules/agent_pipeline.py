@@ -25,6 +25,7 @@ class AgentPipelineModule(BaseBrainModule):
         self.synthesis = None
         self.answer = None
         self.verifier = None
+        self.subconscious_field = None
         self._absorption_service = None
         self._ensure_modules()
 
@@ -70,6 +71,11 @@ class AgentPipelineModule(BaseBrainModule):
         except Exception as e:
             logger.debug("VerifierAgent not found, JIT absorption will be limited.")
             self.verifier = None
+        
+        try:
+            self.subconscious_field = ModuleRegistry.get_module("subconscious_field", auto_discover=True, wait_timeout=1.0)
+        except Exception:
+            self.subconscious_field = None
         
         # Lazy load absorption service
         try:
@@ -120,16 +126,25 @@ class AgentPipelineModule(BaseBrainModule):
 
         # 2. ABSORPTION (New Step)
         # If the result is high quality and verified, record it for JIT learning
-        if is_verified and self._absorption_service:
-            self._absorption_service.record_lesson(
-                prompt=query, 
-                response=answer,
-                metadata={
-                    "source": "web_search_jit",
-                    "verification": verification_feedback,
-                    "confidence": "high"
-                }
-            )
+        if is_verified:
+            if self._absorption_service:
+                self._absorption_service.record_lesson(
+                    prompt=query, 
+                    response=answer,
+                    metadata={
+                        "source": "web_search_jit",
+                        "verification": verification_feedback,
+                        "confidence": "high"
+                    }
+                )
+            
+            if self.subconscious_field:
+                # 'vibrate' the verified knowledge into the field
+                self.subconscious_field.execute("vibrate", {
+                    "text": answer,
+                    "weight": 1.2, # Verified knowledge has higher weight
+                    "source": "verified_jit"
+                })
 
         formatted = self._run_answer(query, answer, ranked)
 
