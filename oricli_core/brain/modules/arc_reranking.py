@@ -13,6 +13,43 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
+from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from oricli_core.exceptions import InvalidParameterError
+
+class ARCRerankingModule(BaseBrainModule):
+    """Brain module for ARC prediction reranking."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.reranker = ARCReranking()
+
+    @property
+    def metadata(self) -> ModuleMetadata:
+        return ModuleMetadata(
+            name="arc_reranking",
+            version="1.0.0",
+            description="Aggregates and reranks ARC predictions from multiple transformations",
+            operations=[
+                "rerank",
+                "aggregate_across_transformations"
+            ],
+            dependencies=[],
+            model_required=False,
+        )
+
+    def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        if operation == "rerank":
+            candidates = params.get("candidates", [])
+            scores = params.get("scores")
+            results = self.reranker.rerank(candidates, scores)
+            return {"success": True, "results": results}
+        elif operation == "aggregate_across_transformations":
+            transformation_results = params.get("transformation_results", {})
+            results = self.reranker.aggregate_across_transformations(transformation_results)
+            return {"success": True, "results": results}
+        else:
+            raise InvalidParameterError(parameter="operation", value=operation, reason="Unsupported operation")
+
 class ARCReranking:
     """Reranking system for ARC predictions"""
     

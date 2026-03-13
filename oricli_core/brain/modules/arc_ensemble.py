@@ -20,6 +20,67 @@ from oricli_core.brain.modules.arc_transduction_model import ARCTransductionMode
 logger = logging.getLogger(__name__)
 
 
+from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from oricli_core.brain.registry import ModuleRegistry
+from oricli_core.exceptions import InvalidParameterError
+
+class ARCEnsembleModule(BaseBrainModule):
+    """Brain module for ARC induction/transduction ensembling."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.ensemble = None
+        self._modules_loaded = False
+
+    @property
+    def metadata(self) -> ModuleMetadata:
+        return ModuleMetadata(
+            name="arc_ensemble",
+            version="1.0.0",
+            description="Ensemble system combining induction and transduction for ARC",
+            operations=[
+                "predict",
+                "ensemble_predict",
+                "select_method"
+            ],
+            dependencies=[],
+            model_required=False,
+        )
+
+    def _ensure_modules_loaded(self):
+        if self._modules_loaded:
+            return
+        
+        induction_model = None
+        try:
+            # Try to get induction model from registry
+            induction_model = ModuleRegistry.get_module("custom_reasoning_networks")
+        except Exception:
+            pass
+            
+        self.ensemble = ARCEnsemble(induction_model=induction_model)
+        self._modules_loaded = True
+
+    def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        self._ensure_modules_loaded()
+        
+        if operation == "predict":
+            task_dict = params.get("task", {})
+            task = ARCTask.from_dict(task_dict)
+            return self.ensemble.predict(task)
+        elif operation == "ensemble_predict":
+            task_dict = params.get("task", {})
+            task = ARCTask.from_dict(task_dict)
+            compute_budget = params.get("compute_budget")
+            return self.ensemble.ensemble_predict(task, compute_budget)
+        elif operation == "select_method":
+            task_dict = params.get("task", {})
+            task = ARCTask.from_dict(task_dict)
+            method = self.ensemble.select_method(task)
+            return {"success": True, "method": method}
+        else:
+            raise InvalidParameterError(parameter="operation", value=operation, reason="Unsupported operation")
+
 class ARCEnsemble:
     """Ensemble system combining induction and transduction"""
     

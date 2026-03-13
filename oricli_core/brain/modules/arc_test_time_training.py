@@ -15,6 +15,49 @@ from oricli_core.brain.modules.arc_data_augmentation import ARCTask, ARCDataAugm
 from oricli_core.brain.modules.arc_transduction_model import ARCTransductionModel
 
 
+from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from oricli_core.exceptions import InvalidParameterError
+
+class ARCTestTimeTrainingModule(BaseBrainModule):
+    """Brain module for ARC test-time training."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.trainer = ARCTestTimeTraining()
+
+    @property
+    def metadata(self) -> ModuleMetadata:
+        return ModuleMetadata(
+            name="arc_test_time_training",
+            version="1.0.0",
+            description="Fine-tunes transduction models at test time for ARC",
+            operations=[
+                "test_time_train",
+                "create_pseudo_tasks"
+            ],
+            dependencies=[],
+            model_required=False,
+        )
+
+    def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        if operation == "test_time_train":
+            task_dict = params.get("task", {})
+            task = ARCTask.from_dict(task_dict)
+            model = params.get("model") # Expecting actual model object or proxy
+            if not isinstance(model, ARCTransductionModel):
+                # Use a fresh model if none provided
+                model = ARCTransductionModel()
+            
+            fine_tuned = self.trainer.test_time_train(model, task)
+            return {"success": True, "model": fine_tuned}
+        elif operation == "create_pseudo_tasks":
+            task_dict = params.get("task", {})
+            task = ARCTask.from_dict(task_dict)
+            pseudo_tasks = self.trainer.create_pseudo_tasks(task)
+            return {"success": True, "pseudo_tasks": [t.to_dict() for t in pseudo_tasks]}
+        else:
+            raise InvalidParameterError(parameter="operation", value=operation, reason="Unsupported operation")
+
 class ARCTestTimeTraining:
     """Test-time training for ARC transduction models"""
     

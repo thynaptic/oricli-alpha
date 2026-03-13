@@ -29,7 +29,7 @@ class ARCSolverModule(BaseBrainModule):
             version="1.0.0",
             description="Solver for ARC (Abstraction and Reasoning Corpus) problems",
             operations=["solve_arc_problem", "solve_arc_task", "solve_arc_task_enhanced", "solve_arc_ensemble"],
-            dependencies=[],
+            dependencies=["arc_induction", "arc_transduction"],
             model_required=False,
         )
     
@@ -240,33 +240,44 @@ class ARCSolverModule(BaseBrainModule):
             test_input=test_input
         )
         
-        # Create ensemble
-        ensemble = ARCEnsemble(
-            induction_model=self,  # Use self as induction model
-            transduction_model=None  # Will create default
-        )
-        
-        # Use ensemble prediction
-        if method == "auto":
-            result = ensemble.predict(task, use_ensemble=True)
-        elif method == "induction":
-            result = ensemble.predict(task, use_ensemble=False, fallback_to_transduction=False)
-        elif method == "transduction":
-            result = ensemble.predict(task, use_ensemble=False, fallback_to_transduction=True)
-            # Override method_used since we're forcing transduction
-            if result["prediction"]:
-                result["method_used"] = "transduction"
-        else:  # ensemble
-            result = ensemble.predict(task, use_ensemble=True)
+        # 1. INDUCTION PHASE
+        induction_result = {"success": False}
+        if method in ["auto", "induction", "ensemble"]:
+            try:
+                from oricli_core.brain.registry import ModuleRegistry
+                arc_induction = ModuleRegistry.get_module("arc_induction")
+                if arc_induction:
+                    induction_result = arc_induction.execute("solve_task", {"task": task.to_dict()})
+            except Exception as e:
+                print(f"[ARCSolver] Induction failed: {e}")
+
+        # 2. TRANSDUCTION PHASE (Fallback or Ensemble)
+        transduction_result = {"success": False}
+        if not induction_result.get("success") or method == "ensemble" or method == "transduction":
+            try:
+                arc_transduction = ModuleRegistry.get_module("arc_transduction")
+                if arc_transduction:
+                    transduction_result = arc_transduction.execute("predict", {"task": task.to_dict()})
+            except Exception as e:
+                print(f"[ARCSolver] Transduction failed: {e}")
+
+        # 3. FINAL SELECTION
+        if induction_result.get("success") and method != "transduction":
+            return {
+                "success": True,
+                "predicted_output": induction_result.get("prediction"),
+                "method_used": "induction",
+                "confidence": 1.0,
+                "reasoning": "Found working program via induction loop.",
+                "program": induction_result.get("program")
+            }
         
         return {
-            "success": result.get("success", False),
-            "predicted_output": result.get("prediction"),
-            "method_used": result.get("method_used", method),
-            "confidence": result.get("confidence", 0.0),
-            "induction_confidence": result.get("induction_confidence", 0.0),
-            "transduction_confidence": result.get("transduction_confidence", 0.0),
-            "reasoning": f"Used {result.get('method_used', method)} method"
+            "success": transduction_result.get("success", False),
+            "predicted_output": transduction_result.get("prediction"),
+            "method_used": transduction_result.get("method_used", "transduction"),
+            "confidence": transduction_result.get("confidence", 0.0),
+            "reasoning": f"Used {transduction_result.get('method_used', 'transduction')} method"
         }
 
 

@@ -25,6 +25,44 @@ from oricli_core.exceptions import InvalidParameterError
 logger = logging.getLogger(__name__)
 
 
+from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
+
+class ARCSyntheticDataModule(BaseBrainModule):
+    """Brain module for generating synthetic ARC data."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.generator = ARCSyntheticDataGenerator()
+
+    @property
+    def metadata(self) -> ModuleMetadata:
+        return ModuleMetadata(
+            name="arc_synthetic_data",
+            version="1.0.0",
+            description="Generates synthetic ARC problems from Python program solutions",
+            operations=[
+                "generate_from_program",
+                "expand_task_collection"
+            ],
+            dependencies=[],
+            model_required=False,
+        )
+
+    def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        if operation == "generate_from_program":
+            program_code = params.get("program_code", "")
+            n_examples = params.get("n_examples", 5)
+            task = self.generator.generate_from_program(program_code, n_examples=n_examples)
+            return {"success": True, "task": task.to_dict() if task else None}
+        elif operation == "expand_task_collection":
+            base_tasks_dicts = params.get("base_tasks", [])
+            base_tasks = [ARCTask.from_dict(d) for d in base_tasks_dicts]
+            expansion_factor = params.get("expansion_factor", 10)
+            expanded = self.generator.expand_task_collection(base_tasks, expansion_factor)
+            return {"success": True, "tasks": [t.to_dict() for t in expanded]}
+        else:
+            raise InvalidParameterError(parameter="operation", value=operation, reason="Unsupported operation")
+
 class ARCSyntheticDataGenerator:
     """Generate synthetic ARC problems from Python program solutions"""
     

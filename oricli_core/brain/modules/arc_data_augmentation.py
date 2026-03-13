@@ -20,6 +20,47 @@ import numpy as np
 from oricli_core.exceptions import InvalidParameterError
 
 
+from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
+
+class ARCDataAugmentationModule(BaseBrainModule):
+    """Brain module for ARC data augmentation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.augmentation = ARCDataAugmentation()
+
+    @property
+    def metadata(self) -> ModuleMetadata:
+        return ModuleMetadata(
+            name="arc_data_augmentation",
+            version="1.0.0",
+            description="Implements data augmentation transformations for ARC tasks",
+            operations=[
+                "augment_task",
+                "transpose_grid",
+                "rotate_grid"
+            ],
+            dependencies=[],
+            model_required=False,
+        )
+
+    def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        if operation == "augment_task":
+            task_dict = params.get("task", {})
+            task = ARCTask.from_dict(task_dict)
+            augmented = self.augmentation.augment_task(task)
+            # Return tasks as dicts
+            return {"success": True, "augmented": [{"task": t[0].to_dict()} for t in augmented]}
+        elif operation == "transpose_grid":
+            grid = params.get("grid", [])
+            return {"success": True, "grid": self.augmentation.transpose_grid(grid)}
+        elif operation == "rotate_grid":
+            grid = params.get("grid", [])
+            degrees = params.get("degrees", 90)
+            return {"success": True, "grid": self.augmentation.rotate_grid(grid, degrees)}
+        else:
+            raise InvalidParameterError(parameter="operation", value=operation, reason="Unsupported operation")
+
 class ARCTask:
     """ARC task representation with training examples and test input"""
     
@@ -333,6 +374,47 @@ class ARCDataAugmentation:
         
         return results
     
+    def augment_grid(self, grid: List[List[Any]]) -> List[Tuple[List[List[Any]], Dict[str, Any]]]:
+        """Apply the 8 standard symmetries to a single grid."""
+        np_grid = np.array(grid)
+        symmetries = []
+        
+        # Identity
+        symmetries.append((grid, {"type": "identity"}))
+        # Rotations
+        for k in [1, 2, 3]:
+            symmetries.append((np.rot90(np_grid, k).tolist(), {"type": "rotate", "k": k}))
+        # Flips
+        symmetries.append((np.flipud(np_grid).tolist(), {"type": "flip", "axis": 0}))
+        symmetries.append((np.fliplr(np_grid).tolist(), {"type": "flip", "axis": 1}))
+        # Transpose
+        symmetries.append((np.transpose(np_grid).tolist(), {"type": "transpose"}))
+        # Transverse (Rot90 + Flip)
+        symmetries.append((np.rot90(np.flipud(np_grid), 1).tolist(), {"type": "transverse"}))
+        
+        return symmetries
+
+    def reverse_transform(self, grid: List[List[Any]], transform_info: Dict[str, Any]) -> List[List[Any]]:
+        """Reverse a symmetry transformation."""
+        np_grid = np.array(grid)
+        t_type = transform_info.get("type")
+        
+        if t_type == "identity":
+            return grid
+        elif t_type == "rotate":
+            k = transform_info.get("k", 0)
+            return np.rot90(np_grid, -k).tolist()
+        elif t_type == "flip":
+            axis = transform_info.get("axis", 0)
+            return np.flip(np_grid, axis).tolist()
+        elif t_type == "transpose":
+            return np.transpose(np_grid).tolist()
+        elif t_type == "transverse":
+            # Reverse transverse: Flipud then Rot90(-1)
+            return np.flipud(np.rot90(np_grid, -1)).tolist()
+            
+        return grid
+
     def apply_inverse_transform(
         self, 
         prediction: List[List[Any]], 

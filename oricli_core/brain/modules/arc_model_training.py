@@ -21,6 +21,44 @@ from oricli_core.exceptions import InvalidParameterError
 logger = logging.getLogger(__name__)
 
 
+from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
+
+class ARCModelTrainingModule(BaseBrainModule):
+    """Brain module for ARC model training."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.trainer = ARCModelTraining()
+
+    @property
+    def metadata(self) -> ModuleMetadata:
+        return ModuleMetadata(
+            name="arc_model_training",
+            version="1.0.0",
+            description="Training infrastructure for ARC induction and transduction models",
+            operations=[
+                "train_induction_model",
+                "train_transduction_model",
+                "generate_synthetic_data"
+            ],
+            dependencies=[],
+            model_required=False,
+        )
+
+    def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        if operation == "train_induction_model":
+            data_path = params.get("data_path", "")
+            use_full_finetune = params.get("use_full_finetune", False)
+            return self.trainer.train_induction_model(data_path, use_full_finetune=use_full_finetune)
+        elif operation == "train_transduction_model":
+            data_path = params.get("data_path", "")
+            return self.trainer.train_transduction_model(data_path)
+        elif operation == "generate_synthetic_data":
+            base_programs = params.get("base_programs", [])
+            return {"success": True, "path": self.trainer.generate_synthetic_data(base_programs)}
+        else:
+            raise InvalidParameterError(parameter="operation", value=operation, reason="Unsupported operation")
+
 class ARCModelTraining:
     """Training infrastructure for ARC models"""
     

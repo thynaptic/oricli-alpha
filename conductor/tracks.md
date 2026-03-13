@@ -17,7 +17,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement Dynamic Skills Framework (.ori).**
+- [ ] **Track: Implement ARC Induction & Transduction Reasoning System.**
+  *Link: [./tracks/arc_reasoning_20260306/](./tracks/arc_reasoning_20260306/)*
+
+---\n\n- [ ] **Track: Implement Dynamic Skills Framework (.ori).**
   *Link: [./tracks/dynamic_skills_20260306/](./tracks/dynamic_skills_20260306/)*
 
 ---\n\n- [x] **Track: Implement Adversarial Sentinel (Red-Team Cognition).**
