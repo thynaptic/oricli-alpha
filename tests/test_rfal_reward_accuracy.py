@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.registry import ModuleRegistry
+from oricli_core.brain.registry import ModuleRegistry
 
 def test_multi_factor_reward():
     """Verify that HITL, Fact, and Tone signals are correctly weighted."""
@@ -28,7 +28,7 @@ def test_multi_factor_reward():
     mock_wk = MagicMock()
     mock_ar = MagicMock()
     
-    with patch("mavaia_core.brain.registry.ModuleRegistry.get_module") as mock_get:
+    with patch("oricli_core.brain.registry.ModuleRegistry.get_module") as mock_get:
         def side_effect(name, **kwargs):
             if name == "world_knowledge":
                 return mock_wk
@@ -79,7 +79,7 @@ def test_persistence():
     print("\nTesting lesson persistence...")
     
     rfal = ModuleRegistry.get_module("rfal_engine")
-    buffer_path = Path("mavaia_core/data/rfal_lessons.jsonl")
+    buffer_path = Path("oricli_core/data/rfal_lessons.jsonl")
     
     # Clear file first
     if buffer_path.exists():

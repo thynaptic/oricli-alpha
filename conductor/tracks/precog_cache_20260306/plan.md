@@ -1,17 +1,17 @@
 # Implementation Plan: Pre-Cog Cache
 
 ## Phase 1: Cache Service
-- [ ] Implement `mavaia_core/services/precog_service.py`.
+- [ ] Implement `oricli_core/services/precog_service.py`.
 - [ ] Use a time-limited cache (TTL) to store speculative responses.
 - [ ] Implement fuzzy-matching for queries.
 
 ## Phase 2: Speculation Logic
-- [ ] Create `mavaia_core/brain/modules/speculator.py`.
+- [ ] Create `oricli_core/brain/modules/speculator.py`.
 - [ ] Integrate with `hypothesis_generation` to predict follow-ups.
 - [ ] Build the background execution thread.
 
 ## Phase 3: API Integration
-- [ ] Update `mavaia_core/api/server.py` to check the `precog_service` before standard execution.
+- [ ] Update `oricli_core/api/server.py` to check the `precog_service` before standard execution.
 - [ ] Ensure speculative results are correctly formatted for the API response.
 
 ## Phase 4: Verification

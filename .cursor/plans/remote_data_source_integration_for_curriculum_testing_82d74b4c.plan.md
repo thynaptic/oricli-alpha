@@ -35,7 +35,7 @@ flowchart TD
 
 ### Components
 
-1. **DataSource Abstraction Layer** (`mavaia_core/evaluation/curriculum/data_sources/`)
+1. **DataSource Abstraction Layer** (`oricli_core/evaluation/curriculum/data_sources/`)
 
 - Base interface for all data sources
 - Unified streaming API
@@ -167,7 +167,7 @@ Add data source management:
 ## File Structure
 
 ```javascript
-mavaia_core/evaluation/curriculum/
+oricli_core/evaluation/curriculum/
 ├── data_sources/
 │   ├── __init__.py
 │   ├── base.py              # BaseDataSource abstract class

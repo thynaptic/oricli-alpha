@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oricli-Alpha Curriculum Testing Framework</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Oricli-Alpha Curriculum Testing Framework</h1>
+        </header>
+        
+        <nav>
+            <button onclick="showSection('selector')">Curriculum Selector</button>
+            <button onclick="showSection('executor')">Test Executor</button>
+            <button onclick="showSection('results')">Results Viewer</button>
+            <button onclick="showSection('history')">History</button>
+        </nav>
+        
+        <main>
+            <section id="selector" class="section active">
+                <h2>Curriculum Selector</h2>
+                <div id="curriculum-selector"></div>
+            </section>
+            
+            <section id="executor" class="section">
+                <h2>Test Executor</h2>
+                <div id="test-executor"></div>
+            </section>
+            
+            <section id="results" class="section">
+                <h2>Results Viewer</h2>
+                <div id="results-viewer"></div>
+            </section>
+            
+            <section id="history" class="section">
+                <h2>Test History</h2>
+                <div id="history-viewer"></div>
+            </section>
+        </main>
+    </div>
+    
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/curriculum-selector.js"></script>
+    <script src="/static/js/test-executor.js"></script>
+    <script src="/static/js/results-viewer.js"></script>
+    <script src="/static/js/visualizations.js"></script>
+</body>
+</html>
+

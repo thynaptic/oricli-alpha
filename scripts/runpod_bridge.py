@@ -26,9 +26,9 @@ if VENV_DIR.exists() and sys.prefix != str(VENV_DIR.resolve()):
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# Try to import Mavaia parser
+# Try to import Oricli-Alpha parser
 try:
-    from mavaia_core.evaluation.livebench_parser import LiveBenchResultParser
+    from oricli_core.evaluation.livebench_parser import LiveBenchResultParser
 except ImportError:
     LiveBenchResultParser = None
 
@@ -173,7 +173,7 @@ load_dotenv(REPO_ROOT / ".env")
 load_dotenv(Path.cwd() / ".env")
 
 # RunPod API configuration
-RUNPOD_API_KEY = os.environ.get("Mavaia_Key")
+RUNPOD_API_KEY = os.environ.get("Oricli-Alpha_Key")
 
 
 def _redact_secrets(text: str) -> str:
@@ -342,7 +342,7 @@ def get_task_details(args) -> Dict[str, Any]:
                 # Try to find next pending from progress.json
                 prog_path = (
                     REPO_ROOT
-                    / "mavaia_core"
+                    / "oricli_core"
                     / "models"
                     / "neural_text_generator"
                     / "curriculum"
@@ -908,7 +908,7 @@ def setup_pod_env(
             return
 
 
-def ensure_mavaia_installed(
+def ensure_oricli_installed(
     pod_ip: str,
     pod_port: int,
     ssh_key: str,
@@ -955,14 +955,14 @@ def ensure_mavaia_installed(
     s3_restore = ""
     if s3_key:
         s3_restore = (
-            f'if [ ! -d {workdir}/mavaia ] || [ "{force_reinstall}" = "True" ] || [ "{force_reinstall}" = "1" ]; then '
+            f'if [ ! -d {workdir}/oricli ] || [ "{force_reinstall}" = "True" ] || [ "{force_reinstall}" = "1" ]; then '
             f"  echo '[*] Syncing latest code from S3...'; "
-            f"  rm -rf {workdir}/mavaia; " # Pre-clean to ensure no weird FS locks
+            f"  rm -rf {workdir}/oricli; " # Pre-clean to ensure no weird FS locks
             f"  CUR_TIME=$(date +%s); "
-            f"  EXTRACT_DIR={workdir}/mavaia_$CUR_TIME; "
+            f"  EXTRACT_DIR={workdir}/oricli_$CUR_TIME; "
             f"  mkdir -p $EXTRACT_DIR; "
             f"  {cred_export} aws s3 cp {s3_key} - {aws_flags} | tar -xf - --no-same-owner -C $EXTRACT_DIR; "
-            f"  if [ -d $EXTRACT_DIR ]; then mv $EXTRACT_DIR {workdir}/mavaia; else echo '[ERROR] S3 extraction failed'; exit 1; fi; "
+            f"  if [ -d $EXTRACT_DIR ]; then mv $EXTRACT_DIR {workdir}/oricli; else echo '[ERROR] S3 extraction failed'; exit 1; fi; "
             f"fi; "
         )
 
@@ -973,7 +973,7 @@ def ensure_mavaia_installed(
         f"force_reinstall='{force_reinstall}'; "
         f"{cred_export}"
         f"{s3_restore}"
-        f"cd {workdir}/mavaia; "
+        f"cd {workdir}/oricli; "
         # LOGIN: Ensure HF_TOKEN is active for the CLI and library
         'if [ ! -z "$HF_TOKEN" ]; then '
         "  echo '[INFO] Logging into Hugging Face Hub...'; "
@@ -984,8 +984,8 @@ def ensure_mavaia_installed(
         "  echo '[INFO] Golden Image detected (torch found). Using system Python.'; "
         "  if [ -d .venv ]; then echo '[INFO] Removing old isolated .venv...'; rm -rf .venv; fi; "
         '  VENV_PY="python3"; '
-        "  echo '[INFO] Purging old mavaia-core installations to ensure fresh code usage...'; "
-        '  "$VENV_PY" -m pip uninstall -y mavaia-core 2>/dev/null || true; '
+        "  echo '[INFO] Purging old oricli-core installations to ensure fresh code usage...'; "
+        '  "$VENV_PY" -m pip uninstall -y oricli-core 2>/dev/null || true; '
         '  if [ "$force_reinstall" = "True" ] || [ "$force_reinstall" = "1" ]; then '
         "    echo '[INFO] Force refresh: cleaning up potentially broken extras...'; "
         '    "$VENV_PY" -m pip uninstall -y datasets transformers accelerate huggingface_hub pyarrow 2>/dev/null || true; '
@@ -1310,7 +1310,7 @@ def s3_sync_pod(
     direction: str,
     pod_id: str = None,
     proxy: str = None,
-    src: str = "/workspace/mavaia",
+    src: str = "/workspace/oricli",
     progress=None,
     task_id=None,
 ):
@@ -1399,11 +1399,11 @@ def pre_sync_cleanup(
     cleanup_cmd = (
         f"find {workdir} -maxdepth 2 -name '*.log' -delete 2>/dev/null || true; "
         f"find {workdir} -maxdepth 2 -name '*.tmp' -delete 2>/dev/null || true; "
-        f"rm -rf {workdir}/mavaia/mavaia_core/models/neural_text_generator/snapshots/* 2>/dev/null || true; "
-        f"rm -rf {workdir}/mavaia/mavaia_core/models/neural_text_generator/checkpoints/* 2>/dev/null || true; "
-        f"rm -rf {workdir}/mavaia/mavaia_core/models/neural_text_generator/runs/* 2>/dev/null || true; "
-        f"rm -rf {workdir}/mavaia/runs/* 2>/dev/null || true; "
-        f"rm -rf {workdir}/mavaia/build/* 2>/dev/null || true; "
+        f"rm -rf {workdir}/oricli/oricli_core/models/neural_text_generator/snapshots/* 2>/dev/null || true; "
+        f"rm -rf {workdir}/oricli/oricli_core/models/neural_text_generator/checkpoints/* 2>/dev/null || true; "
+        f"rm -rf {workdir}/oricli/oricli_core/models/neural_text_generator/runs/* 2>/dev/null || true; "
+        f"rm -rf {workdir}/oricli/runs/* 2>/dev/null || true; "
+        f"rm -rf {workdir}/oricli/build/* 2>/dev/null || true; "
         f"rm -rf /root/.cache/pip/* 2>/dev/null || true; "
         f"rm -rf /root/.cache/huggingface/* 2>/dev/null || true; "
         f"rm -rf /tmp/* 2>/dev/null || true; "
@@ -1446,13 +1446,13 @@ def sync_code(
         "--exclude",
         "models",
         "--include",
-        "mavaia_core/data/rfal_lessons.jsonl",
+        "oricli_core/data/rfal_lessons.jsonl",
         "--include",
-        "mavaia_core/data/search.py",
+        "oricli_core/data/search.py",
         "--include",
-        "mavaia_core/data/__init__.py",
+        "oricli_core/data/__init__.py",
         "--exclude",
-        "mavaia_core/data/*",
+        "oricli_core/data/*",
         "--exclude",
         "data",
         "--exclude",
@@ -1480,7 +1480,7 @@ def sync_code(
             "-e",
             _ssh_e(ssh_key, str(target_port)),
             str(local_path) + "/",
-            f"{target_host}:{workdir}/mavaia",
+            f"{target_host}:{workdir}/oricli",
         ] + common_excludes + rsync_info
         
         proc = subprocess.run(cmd, check=False, capture_output=bool(progress))
@@ -1520,7 +1520,7 @@ def sync_models_to_pod(
 ):
     _rich_log("Syncing model weights to pod...", "cyan", "📤", progress=progress, task_id=task_id)
 
-    src_dir = local_path / "mavaia_core" / "models"
+    src_dir = local_path / "oricli_core" / "models"
     if not src_dir.exists():
         _rich_log(
             "No local models directory found to sync.", "yellow", "⚠", progress=progress, task_id=task_id
@@ -1540,7 +1540,7 @@ def sync_models_to_pod(
             "-e",
             _ssh_e(ssh_key, "22"),
             str(src_dir) + "/",
-            f"{proxy}:{workdir}/mavaia/mavaia_core/models/",
+            f"{proxy}:{workdir}/oricli/oricli_core/models/",
         ]
         subprocess.run(rsync_cmd, check=True)
         return
@@ -1549,7 +1549,7 @@ def sync_models_to_pod(
         "-e",
         _ssh_e(ssh_key, str(pod_port)),
         str(src_dir) + "/",
-        f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/",
+        f"root@{pod_ip}:{workdir}/oricli/oricli_core/models/",
     ]
     try:
         proc = subprocess.run(rsync_cmd, check=False)
@@ -1569,7 +1569,7 @@ def sync_models_to_pod(
                 "-e",
                 _ssh_e(ssh_key, "22"),
                 str(src_dir) + "/",
-                f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/",
+                f"{pod_id}-22@ssh.runpod.io:{workdir}/oricli/oricli_core/models/",
             ]
             proc = subprocess.run(new_cmd, check=False)
             if proc.returncode not in (0, 23):
@@ -1679,7 +1679,7 @@ def _display_cluster_status(pods: List[Dict]):
             print(f"Pod {p['id']}: {p.get('desiredStatus', 'UNKNOWN')}")
         return
 
-    table = Table(title="Mavaia Cluster Orchestration Status", box=box.ROUNDED, border_style="cyan")
+    table = Table(title="Oricli-Alpha Cluster Orchestration Status", box=box.ROUNDED, border_style="cyan")
     table.add_column("Pod ID", style="magenta")
     table.add_column("Type", style="blue")
     table.add_column("IP Address", style="green")
@@ -1759,7 +1759,7 @@ def _init_pod_worker(p, bridge, args):
             pre_sync_cleanup(p_ip, p_port, args.ssh_key, args.volume_mount_path, p_id, p_ssh_proxy)
             
             # If S3 is enabled, skip the fragile SSH-based rsync for code and models.
-            # The 'ensure_mavaia_installed' step will pull everything reliably from AWS.
+            # The 'ensure_oricli_installed' step will pull everything reliably from AWS.
             if not args.use_s3:
                 sync_code(p_ip, p_port, args.ssh_key, REPO_ROOT, args.volume_mount_path, p_id, p_ssh_proxy)
                 
@@ -1768,7 +1768,7 @@ def _init_pod_worker(p, bridge, args):
             else:
                 _rich_log(f"Pod {p_id}: Skipping rsync (S3 strategy active).", "dim", "☁")
                 
-            ensure_mavaia_installed(
+            ensure_oricli_installed(
                 p_ip, p_port, args.ssh_key, args.volume_mount_path, p_id, p_ssh_proxy,
                 s3_bucket=args.s3_bucket if args.use_s3 else None,
                 s3_prefix=args.s3_prefix if args.use_s3 else None,
@@ -1830,7 +1830,7 @@ def remote_train(
     if "run_tests.py" in script_rel or "train" in script_rel:
         env_prefix += "MAVAIA_ENABLE_HEAVY_MODULES=true "
 
-    python_cmd = f"cd {workdir}/mavaia && export PYTHONPATH=. && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
+    python_cmd = f"cd {workdir}/oricli && export PYTHONPATH=. && PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); {env_prefix}$PYTHON_EXE {script_rel} {args_str}"
 
     if proxy:
         ssh_cmd = _ssh_base(ssh_key, "22", proxy) + [python_cmd]
@@ -1901,7 +1901,7 @@ os.environ['MAVAIA_STRICT_INIT'] = 'true'
 
 def check_fs():
     print("[HEALTH-FS] Checking filesystem for models...")
-    base_dir = Path('/workspace/mavaia/mavaia_core/models/neural_text_generator')
+    base_dir = Path('/workspace/oricli/oricli_core/models/neural_text_generator')
     if not base_dir.exists():
         print(f"[HEALTH-FS] Base directory {{base_dir}} does NOT exist.")
         return
@@ -1938,7 +1938,7 @@ try:
         print(f"[HEALTH] GPU: {{torch.cuda.get_device_name(0)}}")
     
     print("[HEALTH] Discovering modules (MAVAIA_ENABLE_HEAVY_MODULES=true)...")
-    from mavaia_core.brain.registry import ModuleRegistry
+    from oricli_core.brain.registry import ModuleRegistry
     ModuleRegistry.discover_modules(verbose=False)
     
     print("[HEALTH] Retrieving cognitive_generator...")
@@ -1983,7 +1983,7 @@ except Exception as e:
 """
     
     remote_cmd = f"""
-cd {workdir}/mavaia && \
+cd {workdir}/oricli && \
 PYTHON_EXE=$(if [ -f .venv/bin/python ]; then echo .venv/bin/python; else echo python3; fi); \
 cat << 'EOF' > model_health_check.py
 {health_script}
@@ -2048,7 +2048,7 @@ def remote_benchmark(
     if model_path:
         env_prefix += f"MAVAIA_MODEL_PATH='{model_path}' "
 
-    log_path = f"{workdir}/mavaia/server.log"
+    log_path = f"{workdir}/oricli/server.log"
 
     # Build a robust single script to run on the pod
     remote_script = f"""
@@ -2057,15 +2057,15 @@ export MAVAIA_ENABLE_HEAVY_MODULES=true
 
 # Cleanup old logs and temporary data to save disk space
 echo "[DEBUG] Cleaning up old logs and snapshots..."
-find {workdir}/mavaia -name "*.log" -type f -mtime +1 -delete 2>/dev/null || true
-rm -rf {workdir}/mavaia/mavaia_core/models/neural_text_generator/snapshots/* 2>/dev/null || true
+find {workdir}/oricli -name "*.log" -type f -mtime +1 -delete 2>/dev/null || true
+rm -rf {workdir}/oricli/oricli_core/models/neural_text_generator/snapshots/* 2>/dev/null || true
 
-PYTHON_EXE=$(if [ -f {workdir}/mavaia/.venv/bin/python ]; then echo {workdir}/mavaia/.venv/bin/python; else echo python3; fi)
+PYTHON_EXE=$(if [ -f {workdir}/oricli/.venv/bin/python ]; then echo {workdir}/oricli/.venv/bin/python; else echo python3; fi)
 echo "[DEBUG] Using Python: $PYTHON_EXE"
 
-cd {workdir}/mavaia
+cd {workdir}/oricli
 echo "[DEBUG] Starting API server..."
-{env_prefix} PYTHONPATH=. nohup $PYTHON_EXE -m mavaia_core.api.server --host 127.0.0.1 --port 8000 --no-auto-port > {log_path} 2>&1 &
+{env_prefix} PYTHONPATH=. nohup $PYTHON_EXE -m oricli_core.api.server --host 127.0.0.1 --port 8000 --no-auto-port > {log_path} 2>&1 &
 SERVER_PID=$!
 
 echo "Waiting for API server to start on 127.0.0.1:8000..."
@@ -2091,12 +2091,12 @@ if [ $READY -eq 0 ]; then
     exit 1
 fi
 
-cd {workdir}/mavaia/LiveBench/livebench
+cd {workdir}/oricli/LiveBench/livebench
 echo "[DEBUG] Cleaning old benchmark data..."
 # Archive existing results instead of deleting them to avoid data loss on partial runs
 rm -rf data_old/
 if [ -d data/ ]; then mv data/ data_old/; fi
-rm -f mavaia_result.json livebench_results_*.json
+rm -f oricli_result.json livebench_results_*.json
 
 if [ ! -f run_livebench.py ]; then
     echo "ERROR: run_livebench.py not found in $(pwd)"
@@ -2158,7 +2158,7 @@ def get_artifacts(
         scp_cmd = [
             "rsync", "-rlptz",
             "-e", _ssh_e(ssh_key, "22"),
-            f"{proxy}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
+            f"{proxy}:{workdir}/oricli/oricli_core/models/neural_text_generator/",
             str(dest_dir) + "/",
         ]
         subprocess.run(scp_cmd, check=True)
@@ -2167,7 +2167,7 @@ def get_artifacts(
     scp_cmd = [
         "rsync", "-rlptz",
         "-e", _ssh_e(ssh_key, str(pod_port)),
-        f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
+        f"root@{pod_ip}:{workdir}/oricli/oricli_core/models/neural_text_generator/",
         str(dest_dir) + "/",
     ]
     try:
@@ -2190,7 +2190,7 @@ def get_artifacts(
             proxy_cmd = [
                 "rsync", "-rlptz",
                 "-e", _ssh_e(ssh_key, "22"),
-                f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
+                f"{pod_id}-22@ssh.runpod.io:{workdir}/oricli/oricli_core/models/neural_text_generator/",
                 str(dest_dir) + "/",
             ]
             proc = subprocess.run(proxy_cmd, check=False)
@@ -2221,7 +2221,7 @@ def get_bench_results(
         "Pulling benchmark results from pod...", "cyan", "📥", progress=progress, task_id=task_id
     )
 
-    remote_base = f"{workdir}/mavaia/LiveBench/livebench"
+    remote_base = f"{workdir}/oricli/LiveBench/livebench"
     
     def run_sync(host_str, port_str):
         ssh_cmd = _ssh_e(ssh_key, port_str)
@@ -2230,7 +2230,7 @@ def get_bench_results(
             "rsync", "-rlptz",
             "-e", ssh_cmd,
             "--include=livebench_results_*.json",
-            "--include=mavaia_result.json",
+            "--include=oricli_result.json",
             "--exclude=*",
             f"{host_str}:{remote_base}/",
             str(local_path) + "/",
@@ -2279,7 +2279,7 @@ def get_internal_bench_results(
         task_id=task_id,
     )
 
-    dest_dir = local_path / "mavaia_core" / "evaluation" / "results"
+    dest_dir = local_path / "oricli_core" / "evaluation" / "results"
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     def run_sync(host_str, port_str):
@@ -2287,7 +2287,7 @@ def get_internal_bench_results(
         sync_cmd = [
             "rsync", "-rlptz",
             "-e", ssh_cmd,
-            f"{host_str}:{workdir}/mavaia/mavaia_core/evaluation/results/",
+            f"{host_str}:{workdir}/oricli/oricli_core/evaluation/results/",
             str(dest_dir) + "/",
         ]
         # Also ensure any root-level report HTMLs are caught
@@ -2296,7 +2296,7 @@ def get_internal_bench_results(
             "--include=report_*.html",
             "--exclude=*",
             "-e", ssh_cmd,
-            f"{host_str}:{workdir}/mavaia/mavaia_core/evaluation/results/",
+            f"{host_str}:{workdir}/oricli/oricli_core/evaluation/results/",
             str(dest_dir) + "/",
         ]
         subprocess.run(sync_cmd, check=True)
@@ -2356,13 +2356,13 @@ def sync_training_data(
         rsync_cmd = [
             "rsync", "-rlptz",
             "-e", _ssh_e(ssh_key, "22"),
-            f"{proxy}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
+            f"{proxy}:{workdir}/oricli/oricli_core/models/neural_text_generator/",
             str(dest_dir / "models") + "/",
         ]
         cache_cmd = [
             "rsync", "-rlptz",
             "-e", _ssh_e(ssh_key, "22"),
-            f"{proxy}:{workdir}/mavaia/mavaia_core/data/",
+            f"{proxy}:{workdir}/oricli/oricli_core/data/",
             str(dest_dir / "data_cache") + "/",
         ]
         for cmd in (rsync_cmd, cache_cmd):
@@ -2380,13 +2380,13 @@ def sync_training_data(
     rsync_cmd = [
         "rsync", "-rlptz",
         "-e", _ssh_e(ssh_key, str(pod_port)),
-        f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
+        f"root@{pod_ip}:{workdir}/oricli/oricli_core/models/neural_text_generator/",
         str(dest_dir / "models") + "/",
     ]
     cache_cmd = [
         "rsync", "-rlptz",
         "-e", _ssh_e(ssh_key, str(pod_port)),
-        f"root@{pod_ip}:{workdir}/mavaia/mavaia_core/data/",
+        f"root@{pod_ip}:{workdir}/oricli/oricli_core/data/",
         str(dest_dir / "data_cache") + "/",
     ]
     try:
@@ -2412,13 +2412,13 @@ def sync_training_data(
             proxy_rsync_cmd = [
                 "rsync", "-rlptz",
                 "-e", _ssh_e(ssh_key, "22"),
-                f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/models/neural_text_generator/",
+                f"{pod_id}-22@ssh.runpod.io:{workdir}/oricli/oricli_core/models/neural_text_generator/",
                 str(dest_dir / "models") + "/",
             ]
             proxy_cache_cmd = [
                 "rsync", "-rlptz",
                 "-e", _ssh_e(ssh_key, "22"),
-                f"{pod_id}-22@ssh.runpod.io:{workdir}/mavaia/mavaia_core/data/",
+                f"{pod_id}-22@ssh.runpod.io:{workdir}/oricli/oricli_core/data/",
                 str(dest_dir / "data_cache") + "/",
             ]
             for cmd in (proxy_rsync_cmd, proxy_cache_cmd):
@@ -2483,7 +2483,7 @@ def _fleet_role_specs(args) -> List[Dict[str, Any]]:
     # Modern curriculum-aligned fleet specs
     return [
         {
-            "name": "mavaia_distill",
+            "name": "oricli_distill",
             "role": "distill",
             "workdir": f"{base_mount}/distill",
             "script": "scripts/train_neural_text_generator.py",
@@ -2509,7 +2509,7 @@ def _fleet_role_specs(args) -> List[Dict[str, Any]]:
             + extra_train_args,
         },
         {
-            "name": "mavaia_logic",
+            "name": "oricli_logic",
             "role": "logic",
             "workdir": f"{base_mount}/logic",
             "script": "scripts/train_neural_text_generator.py",
@@ -2532,7 +2532,7 @@ def _fleet_role_specs(args) -> List[Dict[str, Any]]:
             + extra_train_args,
         },
         {
-            "name": "mavaia_tone",
+            "name": "oricli_tone",
             "role": "tone",
             "workdir": f"{base_mount}/tone",
             "script": "scripts/train_neural_text_generator.py",
@@ -2559,7 +2559,7 @@ def _fleet_role_specs(args) -> List[Dict[str, Any]]:
 
 def _fleet_auditor_cmd(workdir: str) -> str:
     return (
-        f"cd {workdir}/mavaia && "
+        f"cd {workdir}/oricli && "
         "while true; do "
         "  echo '[INFO] Fleet auditor heartbeat'; "
         "  date -u; "
@@ -2753,7 +2753,7 @@ def _fleet_worker(bridge: RunPodBridge, args, role: Dict[str, Any], stop_event: 
             progress=_FLEET_PROGRESS,
             task_id=task_id,
         )
-        ensure_mavaia_installed(
+        ensure_oricli_installed(
             pod_ip,
             pod_port,
             args.ssh_key,
@@ -2855,14 +2855,14 @@ def remote_snapshot(
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     snapshot_cmd = (
         "set -e; "
-        f"cd {workdir}/mavaia; "
-        f"SNAP_DIR={workdir}/mavaia/mavaia_core/models/neural_text_generator/snapshots/{{ts}}; "
+        f"cd {workdir}/oricli; "
+        f"SNAP_DIR={workdir}/oricli/oricli_core/models/neural_text_generator/snapshots/{{ts}}; "
         'mkdir -p "$SNAP_DIR"; '
-        'cp -a mavaia_core/models/neural_text_generator/checkpoints "$SNAP_DIR" 2>/dev/null || true; '
-        'cp -a mavaia_core/models/neural_text_generator/runs "$SNAP_DIR" 2>/dev/null || true; '
-        'cp -a mavaia_core/models/neural_text_generator/latest_run.txt "$SNAP_DIR" 2>/dev/null || true; '
-        'cp -a mavaia_core/models/neural_text_generator/*.keras "$SNAP_DIR" 2>/dev/null || true; '
-        'cp -a mavaia_core/models/neural_text_generator/*.json "$SNAP_DIR" 2>/dev/null || true; '
+        'cp -a oricli_core/models/neural_text_generator/checkpoints "$SNAP_DIR" 2>/dev/null || true; '
+        'cp -a oricli_core/models/neural_text_generator/runs "$SNAP_DIR" 2>/dev/null || true; '
+        'cp -a oricli_core/models/neural_text_generator/latest_run.txt "$SNAP_DIR" 2>/dev/null || true; '
+        'cp -a oricli_core/models/neural_text_generator/*.keras "$SNAP_DIR" 2>/dev/null || true; '
+        'cp -a oricli_core/models/neural_text_generator/*.json "$SNAP_DIR" 2>/dev/null || true; '
         'echo "snapshot_saved"'
     ).format(ts=timestamp)
 
@@ -2876,7 +2876,7 @@ def remote_snapshot(
 def _resolve_topic_datasets(topics: List[str]) -> Dict[str, str]:
     """Search for best-matching datasets for a list of topics."""
     _rich_log(f"Resolving datasets for {len(topics)} topics...", "cyan", "🔍")
-    from mavaia_core.data.search import DatasetSearch
+    from oricli_core.data.search import DatasetSearch
     
     search_service = DatasetSearch()
     topic_map = {}
@@ -2900,7 +2900,7 @@ def _resolve_topic_datasets(topics: List[str]) -> Dict[str, str]:
 
 def register_trained_adapters(local_path: Path):
     """Scan for trained adapters and register them with the AdapterRouter."""
-    _rich_log("Scanning for new adapters to register with Mavaia Core...", "cyan", "🛰")
+    _rich_log("Scanning for new adapters to register with Oricli-Alpha Core...", "cyan", "🛰")
     
     # Standard location for remote model weights
     remote_models_dir = local_path / "models" / "neural_text_generator_remote"
@@ -2926,10 +2926,10 @@ def register_trained_adapters(local_path: Path):
         _rich_log("No new adapters found to register.", "dim", "ℹ")
         return
 
-    # 2. Try to register via MavaiaClient (Preferred)
+    # 2. Try to register via Oricli-AlphaClient (Preferred)
     try:
-        from mavaia_core.client import MavaiaClient
-        client = MavaiaClient()
+        from oricli_core.client import Oricli-AlphaClient
+        client = Oricli-AlphaClient()
         
         for name, path in new_adapters.items():
             _rich_log(f"Registering adapter '{name}' via client...", "dim", "🛰")
@@ -2943,10 +2943,10 @@ def register_trained_adapters(local_path: Path):
                 _rich_log(f"Failed to register adapter {name} via client: {e}", "yellow", "⚠")
         return
     except Exception as e:
-        _rich_log(f"MavaiaClient unavailable for registration ({e}). Falling back to direct config update.", "yellow", "⚠")
+        _rich_log(f"Oricli-AlphaClient unavailable for registration ({e}). Falling back to direct config update.", "yellow", "⚠")
 
     # 3. Direct JSON Fallback (Resilient Path)
-    config_path = local_path / "mavaia_core" / "brain" / "modules" / "adapter_router_config.json"
+    config_path = local_path / "oricli_core" / "brain" / "modules" / "adapter_router_config.json"
     
     try:
         # Load existing or create new
@@ -2982,7 +2982,7 @@ def register_trained_adapters(local_path: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Mavaia RunPod Training Bridge")
+    parser = argparse.ArgumentParser(description="Oricli-Alpha RunPod Training Bridge")
     parser.add_argument("--pod-id", help="Existing pod ID to use")
     parser.add_argument("--gpu", default=None, help="GPU type for new pod (defaults to auto-selection)")
     parser.add_argument(
@@ -2993,7 +2993,7 @@ def main():
     parser.add_argument("--template", help="RunPod Template ID (overrides --image if provided)")
     parser.add_argument(
         "--ssh-key",
-        default=str(Path.home() / ".ssh" / "mavaia_key"),
+        default=str(Path.home() / ".ssh" / "oricli_key"),
         help="Path to your local private SSH key",
     )
     parser.add_argument(
@@ -3102,7 +3102,7 @@ def main():
         default=os.environ.get("MAVAIA_S3_ENDPOINT", "https://s3api-eu-ro-1.runpod.io"), 
         help="S3 endpoint URL"
     )
-    parser.add_argument("--s3-prefix", default="mavaia", help="S3 prefix for repo/workspace sync")
+    parser.add_argument("--s3-prefix", default="oricli", help="S3 prefix for repo/workspace sync")
     parser.add_argument(
         "--s3-ollama-prefix", default="ollama", help="S3 prefix for Ollama model storage"
     )
@@ -3133,7 +3133,7 @@ def main():
         help="Attach an existing RunPod network volume by ID (optional if using --upload-to-s3)",
     )
     parser.add_argument(
-        "--alias", default="mavaia_train", help="Alias for pod name (default: mavaia_train)"
+        "--alias", default="oricli_train", help="Alias for pod name (default: oricli_train)"
     )
     parser.add_argument(
         "--volume-mount-path", default="/workspace", help="Mount path for the attached volume"
@@ -3171,7 +3171,7 @@ def main():
         action="store_false",
         dest="editable_install",
         default=True,
-        help="Disable editable install for mavaia.",
+        help="Disable editable install for oricli.",
     )
     parser.add_argument(
         "--force-editable",
@@ -3192,7 +3192,7 @@ def main():
     parser.add_argument(
         "--internal-bench",
         action="store_true",
-        help="Run Mavaia's internal knowledge benchmark (run_tests.py --internal-bench) on the pod.",
+        help="Run Oricli-Alpha's internal knowledge benchmark (run_tests.py --internal-bench) on the pod.",
     )
     parser.add_argument(
         "--curriculum",
@@ -3319,10 +3319,10 @@ def main():
 
     # Refresh API Key from environment (after load_dotenv)
     global RUNPOD_API_KEY
-    RUNPOD_API_KEY = os.environ.get("Mavaia_Key")
+    RUNPOD_API_KEY = os.environ.get("Oricli-Alpha_Key")
 
     if not RUNPOD_API_KEY:
-        _rich_log("Error: Mavaia_Key not found in .env", "red", "✗")
+        _rich_log("Error: Oricli-Alpha_Key not found in .env", "red", "✗")
         sys.exit(1)
 
     _rich_log(f"Initializing RunPod Bridge (API: {RUNPOD_ENDPOINT})...", "cyan", "🚀")
@@ -3331,7 +3331,7 @@ def main():
     # Pre-flight auth check
     balance = bridge.get_balance()
     if balance is None:
-        _rich_log("CRITICAL: Failed to authorize with RunPod API. Check your Mavaia_Key in .env", "red", "✗")
+        _rich_log("CRITICAL: Failed to authorize with RunPod API. Check your Oricli-Alpha_Key in .env", "red", "✗")
         sys.exit(1)
     _rich_log(f"Authorized! Account Balance: ${balance:.2f}", "green", "✓")
 
@@ -3351,7 +3351,7 @@ def main():
                     )
                     try:
                         for p in bridge.get_pods():
-                            if str(p.get("name", "")).startswith("mavaia_"):
+                            if str(p.get("name", "")).startswith("oricli_"):
                                 bridge.terminate_pod(p["id"])
                     except Exception:
                         pass
@@ -3523,7 +3523,7 @@ def main():
         _rich_log("Finding existing pods...", "dim", "🔍")
         pods = bridge.get_pods()
         for p in pods:
-            if str(p.get("name", "")).startswith("mavaia_"):
+            if str(p.get("name", "")).startswith("oricli_"):
                 _rich_log(f"Terminating existing pod {p['id']} ({p.get('name')})", "yellow", "💥")
                 bridge.terminate_pod(p["id"])
 
@@ -3817,7 +3817,7 @@ def main():
                     else:
                         pod_env.pop("HSA_OVERRIDE_GFX_VERSION", None)
 
-                    pod_name = args.alias or "mavaia_train"
+                    pod_name = args.alias or "oricli_train"
                     if args.cluster_size > 1:
                         _rich_log(f"Orchestrating Virtual Cluster of {args.cluster_size} pods...", "cyan", "🪄")
                         
@@ -4192,10 +4192,10 @@ def main():
 
             if not has_model:
                 # Try to find the latest run from latest_run.txt
-                default_model = "mavaia_core/models/neural_text_generator"
+                default_model = "oricli_core/models/neural_text_generator"
                 latest_run_ptr = (
                     REPO_ROOT
-                    / "mavaia_core"
+                    / "oricli_core"
                     / "models"
                     / "neural_text_generator"
                     / "latest_run.txt"
@@ -4209,13 +4209,13 @@ def main():
                         # In both cases we want just the basename (run ID).
                         run_id = Path(raw).name
                         if run_id:
-                            default_model = f"mavaia_core/models/neural_text_generator/runs/{run_id}"
+                            default_model = f"oricli_core/models/neural_text_generator/runs/{run_id}"
                     except Exception:
                         pass
 
                 # Make path absolute for pod context since we cd into LiveBench/livebench
                 if not default_model.startswith("/"):
-                    default_model = f"{args.volume_mount_path}/mavaia/{default_model}"
+                    default_model = f"{args.volume_mount_path}/oricli/{default_model}"
 
                 _rich_log(
                     f"No model specified for benchmark. Defaulting to: {default_model}",
@@ -4241,7 +4241,7 @@ def main():
 
             # Use a clean display name so LiveBench doesn't use the full path as an identifier
             if "--model-display-name" not in bench_args:
-                bench_args.extend(["--model-display-name", "mavaia"])
+                bench_args.extend(["--model-display-name", "oricli"])
 
             # FORCE FOREGROUND MODE: Otherwise it spawns a tmux session and exits instantly
             if "--mode" not in bench_args:
@@ -4293,10 +4293,10 @@ def main():
                     "push",
                     pod["id"],
                     args.ssh_proxy,
-                    src=f"{args.volume_mount_path}/mavaia",
+                    src=f"{args.volume_mount_path}/oricli",
                 )
         elif args.internal_bench:
-            _rich_log("Starting Mavaia Internal Knowledge Benchmark...", "bold green", "🚀")
+            _rich_log("Starting Oricli-Alpha Internal Knowledge Benchmark...", "bold green", "🚀")
             
             # Internal bench uses run_tests.py with --internal-bench
             script_rel = "run_tests.py"
@@ -4375,14 +4375,14 @@ def main():
             if args.train_rfal:
                 _rich_log("RFAL Alignment Pass: Training on collected lessons", "bold cyan", "🎓")
                 train_args.append("--dpo")
-                train_args.extend(["--dpo-data", "mavaia_core/data/rfal_lessons.jsonl"])
+                train_args.extend(["--dpo-data", "oricli_core/data/rfal_lessons.jsonl"])
                 if "--adapter-name" not in train_args and not args.adapter_name:
                     train_args.extend(["--adapter-name", "rfal_alignment"])
 
             if args.train_jit:
                 _rich_log("JIT Knowledge Absorption: Learning from verified search results", "bold yellow", "🧠")
                 # JIT uses standard SFT instead of DPO for fast fact ingestion
-                train_args.extend(["--source", "local", "--book-ids", "mavaia_core/data/jit_absorption.jsonl"])
+                train_args.extend(["--source", "local", "--book-ids", "oricli_core/data/jit_absorption.jsonl"])
                 if "--adapter-name" not in train_args and not args.adapter_name:
                     train_args.extend(["--adapter-name", "jit_knowledge_base"])
                 if "--epochs" not in train_args:
@@ -4392,7 +4392,7 @@ def main():
                 _rich_log("Tool-Efficacy Tuning: Learning from benchmark mistakes", "bold magenta", "🛠")
                 # Tool bench uses DPO to learn specifically what NOT to do
                 train_args.append("--dpo")
-                train_args.extend(["--dpo-data", "mavaia_core/data/tool_corrections.jsonl"])
+                train_args.extend(["--dpo-data", "oricli_core/data/tool_corrections.jsonl"])
                 if "--adapter-name" not in train_args and not args.adapter_name:
                     train_args.extend(["--adapter-name", "tool_efficacy_v1"])
 
@@ -4634,7 +4634,7 @@ def main():
                     "push",
                     pod["id"],
                     args.ssh_proxy,
-                    src=f"{args.volume_mount_path}/mavaia",
+                    src=f"{args.volume_mount_path}/oricli",
                 )
                 try:
                     s3_sync_pod(
@@ -4739,7 +4739,7 @@ def main():
                     "push",
                     pod["id"],
                     args.ssh_proxy,
-                    src="/workspace/mavaia",
+                    src="/workspace/oricli",
                 )
                 try:
                     s3_sync_pod(

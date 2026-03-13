@@ -71,7 +71,7 @@ You can specify multiple sources in a list to combine data from different source
 - `internetarchive`: `pip install internetarchive` or `pipx install internetarchive`
 - `huggingface`: `pip install datasets huggingface_hub`
 
-**API Keys**: For HuggingFace private datasets, set `HF_TOKEN` or `MAVAIA_HUGGINGFACE_TOKEN` environment variable, or add to `mavaia_core/data/api_keys.json` (see `api_keys.json.example` for format).
+**API Keys**: For HuggingFace private datasets, set `HF_TOKEN` or `MAVAIA_HUGGINGFACE_TOKEN` environment variable, or add to `oricli_core/data/api_keys.json` (see `api_keys.json.example` for format).
 
 ## Available Categories
 

@@ -68,7 +68,7 @@ Replace the personality-based system with a universal voice that adapts contextu
 
 ### 1. Universal Voice Engine Module
 
-**File**: `mavaia_core/brain/modules/universal_voice_engine.py`
+**File**: `oricli_core/brain/modules/universal_voice_engine.py`
 
 **Purpose**: Single adaptive voice system that modulates tone based on context
 
@@ -96,7 +96,7 @@ Replace the personality-based system with a universal voice that adapts contextu
 
 ### 2. Text Generation Engine Module
 
-**File**: `mavaia_core/brain/modules/text_generation_engine.py`
+**File**: `oricli_core/brain/modules/text_generation_engine.py`
 
 **Purpose**: Generate complete responses from reasoning results with sentence-level control
 
@@ -127,7 +127,7 @@ Replace the personality-based system with a universal voice that adapts contextu
 
 ### 3. Update Hybrid Phrasing Service
 
-**File**: `mavaia_core/brain/modules/hybrid_phrasing_service.py`
+**File**: `oricli_core/brain/modules/hybrid_phrasing_service.py`
 
 **Changes**:
 
@@ -150,7 +150,7 @@ def _generate_hybrid_phrase(self, params: Dict[str, Any]) -> Dict[str, Any]:
 
 ### 4. Update Thought-to-Text Module
 
-**File**: `mavaia_core/brain/modules/thought_to_text.py`
+**File**: `oricli_core/brain/modules/thought_to_text.py`
 
 **Changes**:
 
@@ -167,7 +167,7 @@ def _generate_hybrid_phrase(self, params: Dict[str, Any]) -> Dict[str, Any]:
 
 ### 5. Update Cognitive Generator
 
-**File**: `mavaia_core/brain/modules/cognitive_generator.py`
+**File**: `oricli_core/brain/modules/cognitive_generator.py`
 
 **Changes**:
 
@@ -184,7 +184,7 @@ def _generate_hybrid_phrase(self, params: Dict[str, Any]) -> Dict[str, Any]:
 
 ### 6. Update Core Response Service
 
-**File**: `mavaia_core/brain/modules/core_response_service.py`
+**File**: `oricli_core/brain/modules/core_response_service.py`
 
 **Changes**:
 
@@ -202,12 +202,12 @@ def _generate_hybrid_phrase(self, params: Dict[str, Any]) -> Dict[str, Any]:
 
 **Files to deprecate** (mark as deprecated, don't remove yet):
 
-- `mavaia_core/brain/modules/personality_response.py`
-- `mavaia_core/brain/modules/personality_adaptation_service.py`
-- `mavaia_core/brain/modules/personality_quirks_service.py`
-- `mavaia_core/brain/modules/personality_builder_service.py`
-- `mavaia_core/brain/modules/personality_configuration_loader.py`
-- `mavaia_core/brain/modules/personality_builder_storage_service.py`
+- `oricli_core/brain/modules/personality_response.py`
+- `oricli_core/brain/modules/personality_adaptation_service.py`
+- `oricli_core/brain/modules/personality_quirks_service.py`
+- `oricli_core/brain/modules/personality_builder_service.py`
+- `oricli_core/brain/modules/personality_configuration_loader.py`
+- `oricli_core/brain/modules/personality_builder_storage_service.py`
 
 **Action**: Add deprecation warnings and update module metadata to indicate deprecated status
 
@@ -307,21 +307,21 @@ voice_context = {
 
 ## Files to Create
 
-- `mavaia_core/brain/modules/universal_voice_engine.py` (new)
-- `mavaia_core/brain/modules/text_generation_engine.py` (new)
+- `oricli_core/brain/modules/universal_voice_engine.py` (new)
+- `oricli_core/brain/modules/text_generation_engine.py` (new)
 
 ## Files to Modify
 
-- `mavaia_core/brain/modules/hybrid_phrasing_service.py`
-- `mavaia_core/brain/modules/thought_to_text.py`
-- `mavaia_core/brain/modules/cognitive_generator.py`
-- `mavaia_core/brain/modules/core_response_service.py`
+- `oricli_core/brain/modules/hybrid_phrasing_service.py`
+- `oricli_core/brain/modules/thought_to_text.py`
+- `oricli_core/brain/modules/cognitive_generator.py`
+- `oricli_core/brain/modules/core_response_service.py`
 
 ## Files to Deprecate
 
-- `mavaia_core/brain/modules/personality_response.py`
-- `mavaia_core/brain/modules/personality_adaptation_service.py`
-- `mavaia_core/brain/modules/personality_quirks_service.py`
-- `mavaia_core/brain/modules/personality_builder_service.py`
-- `mavaia_core/brain/modules/personality_configuration_loader.py`
-- `mavaia_core/brain/modules/personality_builder_storage_service.py`
+- `oricli_core/brain/modules/personality_response.py`
+- `oricli_core/brain/modules/personality_adaptation_service.py`
+- `oricli_core/brain/modules/personality_quirks_service.py`
+- `oricli_core/brain/modules/personality_builder_service.py`
+- `oricli_core/brain/modules/personality_configuration_loader.py`
+- `oricli_core/brain/modules/personality_builder_storage_service.py`

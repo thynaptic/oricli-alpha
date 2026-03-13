@@ -1,12 +1,12 @@
 # Implementation Plan: Sovereign Goal Execution
 
 ## Phase 1: Objective Infrastructure
-- [ ] Create `mavaia_core/data/global_objectives.jsonl`.
-- [ ] Implement `mavaia_core/services/goal_service.py` for thread-safe objective management.
+- [ ] Create `oricli_core/data/global_objectives.jsonl`.
+- [ ] Implement `oricli_core/services/goal_service.py` for thread-safe objective management.
 - [ ] Update `long_horizon_planner` to support `load_plan` and `save_plan`.
 
 ## Phase 2: Goal Daemon Implementation
-- [ ] Create `scripts/mavaia_goal_daemon.py`.
+- [ ] Create `scripts/oricli_goal_daemon.py`.
 - [ ] Implement the scheduling logic: Check for pending goals and available virtual cluster capacity.
 - [ ] Integrate with `runpod_bridge.py` to trigger goal-specific execution passes.
 

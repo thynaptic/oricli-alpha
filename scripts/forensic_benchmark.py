@@ -6,7 +6,7 @@ from collections import defaultdict
 
 def forensic_analysis(category="data_analysis/tablereformat"):
     base_dir = Path(f"data/live_bench/{category}")
-    answer_file = base_dir / "model_answer" / "mavaia.jsonl"
+    answer_file = base_dir / "model_answer" / "oricli.jsonl"
     judgment_file = base_dir / "model_judgment" / "ground_truth_judgment.jsonl"
 
     if not answer_file.exists():

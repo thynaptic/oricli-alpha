@@ -1,15 +1,15 @@
 # Specification: Sovereign Goal Execution
 
 ## Objective
-Enable Mavaia to autonomously pursue long-term objectives that persist across sessions and cluster deployments.
+Enable Oricli-Alpha to autonomously pursue long-term objectives that persist across sessions and cluster deployments.
 
 ## Core Components
 
 1. **The Global Objective Registry**:
-   - A persistent store (`mavaia_core/data/global_objectives.jsonl`) for high-level goals.
+   - A persistent store (`oricli_core/data/global_objectives.jsonl`) for high-level goals.
    - Each goal includes metadata: `priority`, `deadline`, `status` (pending, active, completed, failed), and `reasoning_trace`.
 
-2. **The Sovereign Goal Daemon (`mavaia_goal_daemon.py`)**:
+2. **The Sovereign Goal Daemon (`oricli_goal_daemon.py`)**:
    - A background process that orchestrates the execution of global objectives.
    - Schedules "Execution Windows" on available RunPod nodes.
    - Handles state synchronization via S3 to ensure work isn't duplicated.
@@ -23,7 +23,7 @@ Enable Mavaia to autonomously pursue long-term objectives that persist across se
 
 ## Workflow
 1. User provides a Sovereign Goal: "Research the competitive landscape of local-first AI backbones."
-2. Mavaia records the goal in `global_objectives.jsonl`.
+2. Oricli-Alpha records the goal in `global_objectives.jsonl`.
 3. Goal Daemon:
    - Breaks goal into sub-tasks (Search, Analyze, Summarize).
    - Assigns sub-tasks to available virtual cluster pods.

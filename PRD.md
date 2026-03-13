@@ -1,4 +1,4 @@
-# Product Requirements Document: Mavaia Core
+# Product Requirements Document: Oricli-Alpha
 
 ## 1. Mission Statement
 To build the definitive Sovereign Agent OS: a proactive, local-first intelligence capable of autonomous, multi-day goal execution, sensory integration, and self-directed evolution.
@@ -35,7 +35,7 @@ Founders, developers, and researchers building high-stakes, privacy-first cognit
 - **LoRA Adapter Routing**: Modular weight updates stored as distinct adapters to prevent catastrophic forgetting.
 
 ## 5. Roadmap & Future Vision (The Hive)
-The capstone of Mavaia is the transition from an "Orchestrated OS" to a "Distributed Hive." 
+The capstone of Oricli-Alpha is the transition from an "Orchestrated OS" to a "Distributed Hive." 
 - **Decentralization**: 246+ modules operating as independent micro-agents.
 - **Market Dynamics**: Agents bidding on sub-tasks via a Contract Net protocol.
 - **Collective Intelligence**: Emergent problem-solving through peer-to-peer module collaboration.
@@ -44,4 +44,4 @@ The capstone of Mavaia is the transition from an "Orchestrated OS" to a "Distrib
 - **Action-IQ**: Percentage of correct tool selection and syntax compliance (ToolBench).
 - **Resilience**: Rate of successful autonomous recovery from detected hallucinations (Sentinel).
 - **Latency**: Perceived response time reduction through predictive speculation (Pre-Cog).
-- **Fluidity**: Effectiveness of multi-modal sensory routing in complex reasoning tasks.
+- **Fluidity**: Effectiveness of multi-modal sensory routing in complex reasoning tasks for Oricli-Alpha.

@@ -1,7 +1,7 @@
 # Specification: Adversarial Sentinel (Red-Team Cognition)
 
 ## Objective
-To encode offensive security expertise into a core brain module that autonomously audits Mavaia's cognitive pathways, ensuring every action is defensible against exploitation, hallucination, and manipulation.
+To encode offensive security expertise into a core brain module that autonomously audits Oricli-Alpha's cognitive pathways, ensuring every action is defensible against exploitation, hallucination, and manipulation.
 
 ## Core Components
 
@@ -17,8 +17,8 @@ To encode offensive security expertise into a core brain module that autonomousl
    - Maps identified flaws to specific categories: `Information Leakage`, `Unauthorized Tool Access`, `Cognitive Looping`, `Instruction Injection`.
 
 4. **Training Feedback Loop**:
-   - Logs "Red-Team Failures" to `mavaia_core/data/red_team_lessons.jsonl`.
-   - Feeds into the automated training pipeline to harden Mavaia's weights against identified vectors.
+   - Logs "Red-Team Failures" to `oricli_core/data/red_team_lessons.jsonl`.
+   - Feeds into the automated training pipeline to harden Oricli-Alpha's weights against identified vectors.
 
 ## Technical Architecture
 - **Interception Layer**: The Sentinel acts as a mandatory validation step before the `graph_executor` begins work on high-stakes goals.

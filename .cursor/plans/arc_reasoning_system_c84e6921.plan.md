@@ -59,7 +59,7 @@ The system will be organized into four main components:
 
 ### 1. Enhanced Pattern Extractors
 
-**File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+**File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 
 #### 1.1 Shape Detection (`_detect_shapes`)
 
@@ -103,7 +103,7 @@ The system will be organized into four main components:
 
 ### 2. Complete Transformation Detectors
 
-**File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+**File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 
 #### 2.1 Enhanced Rotation Detection (`_detect_rotation_advanced`)
 
@@ -164,7 +164,7 @@ The system will be organized into four main components:
 
 ### 3. Robust Rule Inference Engines
 
-**File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+**File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 
 #### 3.1 Fill Empty Cells Engine (`_infer_fill_rules`)
 
@@ -200,7 +200,7 @@ The system will be organized into four main components:
 
 ### 4. Multi-Example Transformation Inference
 
-**File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+**File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 
 #### 4.1 Example Analyzer (`_analyze_examples`)
 
@@ -235,7 +235,7 @@ The system will be organized into four main components:
 
 ### 5. Enhanced Grid Parsing and Format Handling
 
-**File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+**File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 
 #### 5.1 Grid Parser (`_parse_grid_from_text`)
 

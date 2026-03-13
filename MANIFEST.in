@@ -8,7 +8,7 @@ exclude .env
 exclude s3.env
 exclude runpod_bridge.pid
 exclude runpod_monitor.pid
-exclude mavaia_result.json
+exclude oricli_result.json
 
 recursive-exclude .venv *
 recursive-exclude build *
@@ -24,4 +24,4 @@ recursive-exclude *.tmp *
 recursive-exclude scripts *
 
 # Only include the actual package
-recursive-include mavaia_core *
+recursive-include oricli_core *

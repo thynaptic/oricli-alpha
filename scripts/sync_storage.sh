@@ -1,9 +1,9 @@
 #!/bin/bash
-# Mavaia Storage Sync Utility
+# Oricli-Alpha Storage Sync Utility
 # Syncs local models and training data to Blaze B2
 
-REMOTE="blaze_b2:Mavaia-Alpha"
-LOCAL_MODELS="/home/mike/Mavaia/models/neural_text_generator_remote"
+REMOTE="blaze_b2:Oricli-Alpha-Alpha"
+LOCAL_MODELS="/home/mike/Oricli-Alpha/models/neural_text_generator_remote"
 
 usage() {
     echo "Usage: $0 {push|pull|status}"

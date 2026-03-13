@@ -43,18 +43,18 @@ Core architecture files that require RFCs:
 
 **Brain System Core:**
 
-- `mavaia_core/brain/base_module.py` - BaseBrainModule interface
-- `mavaia_core/brain/registry.py` - ModuleRegistry
-- `mavaia_core/brain/orchestrator.py` - ModuleOrchestrator
-- `mavaia_core/brain/state_storage/base_storage.py` - BaseStorage interface
-- `mavaia_core/brain/dependency_graph.py` - Dependency management
-- `mavaia_core/brain/module_lifecycle.py` - Lifecycle management
+- `oricli_core/brain/base_module.py` - BaseBrainModule interface
+- `oricli_core/brain/registry.py` - ModuleRegistry
+- `oricli_core/brain/orchestrator.py` - ModuleOrchestrator
+- `oricli_core/brain/state_storage/base_storage.py` - BaseStorage interface
+- `oricli_core/brain/dependency_graph.py` - Dependency management
+- `oricli_core/brain/module_lifecycle.py` - Lifecycle management
 
 **API & Client Core:**
 
-- `mavaia_core/api/server.py` - FastAPI server structure
-- `mavaia_core/api/openai_compatible.py` - OpenAI compatibility layer
-- `mavaia_core/client.py` - MavaiaClient interface
+- `oricli_core/api/server.py` - FastAPI server structure
+- `oricli_core/api/openai_compatible.py` - OpenAI compatibility layer
+- `oricli_core/client.py` - MavaiaClient interface
 
 **Architecture Rules:**
 

@@ -4,7 +4,7 @@
 
 set -e
 
-echo "Installing Mavaia Core with CMake policy fixes..."
+echo "Installing Oricli-Alpha Core with CMake policy fixes..."
 echo ""
 
 # Get the directory of this script

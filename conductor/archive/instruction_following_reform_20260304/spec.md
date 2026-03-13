@@ -15,7 +15,7 @@ The March 4th benchmark resulted in an overall pass rate of 2.5%, with a 0% scor
 
 ## 4. Acceptance Criteria
 - A detailed report identifying the specific failure modes (e.g., 'Model reproduces input HTML instead of JSONL').
-- Identification of whether the `mavaia_system_prompt_builder` is contributing to the failure.
+- Identification of whether the `oricli_system_prompt_builder` is contributing to the failure.
 - A technical proposal for 'Architectural Reform' (e.g., a dedicated `InstructionFollowingModule`).
 
 ## 5. Out of Scope

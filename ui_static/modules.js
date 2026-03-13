@@ -190,7 +190,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "mavaia-cognitive",
+          model: "oricli-cognitive",
           messages: [
             {
               role: "user",

@@ -1,6 +1,6 @@
-# Mavaia Core Brain Modules
+# Oricli-Alpha Core Brain Modules
 
-This directory contains all of Mavaia's brain modules - the intelligence components that power her capabilities.
+This directory contains all of Oricli-Alpha's brain modules - the intelligence components that power her capabilities.
 
 ## Module Count
 
@@ -15,7 +15,7 @@ All core modules have been audited and synchronized to follow a strict, unified 
 
 ### Standard Interface Enforcement
 Every module now strictly adheres to the `BaseBrainModule` API:
-1. **Inheritance**: `from mavaia_core.brain.base_module import BaseBrainModule`
+1. **Inheritance**: `from oricli_core.brain.base_module import BaseBrainModule`
 2. **Metadata**: Implements a `metadata` property with versioning and operation discovery.
 3. **Execution**: Implements `execute(operation, params)` with standardized return types (`success`, `error`, `metadata`).
 4. **Health Check**: Implements a `status` operation for automated health diagnostics.
@@ -81,7 +81,7 @@ The following modules were refactored for 100% compliance during the synchroniza
 
 ## Auto-Discovery
 
-All modules are automatically discovered by the `ModuleRegistry` when Mavaia Core initializes. The registry now performs **automated interface validation** during discovery, raising `ModuleDiscoveryError` if a module fails to meet the standardization requirements.
+All modules are automatically discovered by the `ModuleRegistry` when Oricli-Alpha Core initializes. The registry now performs **automated interface validation** during discovery, raising `ModuleDiscoveryError` if a module fails to meet the standardization requirements.
 
 ## Module Structure
 

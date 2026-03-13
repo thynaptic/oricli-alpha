@@ -1,5 +1,5 @@
 """
-Setup script for mavaia-core package
+Setup script for oricli-core package
 """
 
 from setuptools import setup, find_packages
@@ -10,14 +10,14 @@ readme_file = Path(__file__).parent / "README.md"
 long_description = readme_file.read_text(encoding="utf-8") if readme_file.exists() else ""
 
 setup(
-    name="mavaia-core",
+    name="oricli-core",
     version="1.0.0",
-    description="Mavaia Core - Modular AI Core Package with OpenAI-compatible API",
+    description="Oricli-Alpha Core - Modular AI Core Package with OpenAI-compatible API",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Thynaptic Research",
     author_email="ai@thynaptic.com",
-    url="https://github.com/thynaptic/mavaia-core",
+    url="https://github.com/thynaptic/oricli-core",
     packages=find_packages(),
     python_requires=">=3.8",
     install_requires=[
@@ -46,7 +46,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "mavaia-server=mavaia_core.api.server:main",
+            "oricli-server=oricli_core.api.server:main",
         ],
     },
     classifiers=[

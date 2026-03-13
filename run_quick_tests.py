@@ -8,8 +8,8 @@ from pathlib import Path
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from mavaia_core.evaluation.test_runner import TestRunner
-from mavaia_core.evaluation.test_data_manager import TestDataManager
+from oricli_core.evaluation.test_runner import TestRunner
+from oricli_core.evaluation.test_data_manager import TestDataManager
 
 def main():
     print("Loading test data...", flush=True)
@@ -24,7 +24,7 @@ def main():
     
     print(f"Found {len(cot_tests)} CoT tests and {len(mg_tests)} memory_graph tests\n", flush=True)
     
-    from mavaia_core.evaluation.categories.module_tests import ModuleTestRunner
+    from oricli_core.evaluation.categories.module_tests import ModuleTestRunner
     module_runner = ModuleTestRunner()
     
     results = []

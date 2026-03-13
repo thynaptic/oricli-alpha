@@ -1,7 +1,7 @@
 # Specification: Multi-Modal Synthesis
 
 ## Objective
-Create a unified sensory processing layer that allows Mavaia to perceive, analyze, and synthesize information from images, audio, and text simultaneously.
+Create a unified sensory processing layer that allows Oricli-Alpha to perceive, analyze, and synthesize information from images, audio, and text simultaneously.
 
 ## Core Components
 
@@ -17,7 +17,7 @@ Create a unified sensory processing layer that allows Mavaia to perceive, analyz
    - An expansion of the `cognitive_generator` that can take a "Sensory Pack" (e.g., An image of a circuit + a voice question "Why is this failing?") and produce a reasoned response.
 
 4. **Autonomic Voice Synthesis**:
-   - Integration with the `universal_voice_engine` to allow Mavaia to proactively "speak" her thoughts as an audio stream.
+   - Integration with the `universal_voice_engine` to allow Oricli-Alpha to proactively "speak" her thoughts as an audio stream.
 
 ## Technical Architecture
 - **Vision**: Integration with local vision-encoders (e.g., LLaVA or smaller CLIP models).

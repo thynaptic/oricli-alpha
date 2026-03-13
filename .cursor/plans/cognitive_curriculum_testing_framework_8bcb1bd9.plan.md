@@ -131,19 +131,19 @@ Build a new testing framework that enables comprehensive cognitive evaluation of
 
 ### Core Components
 
-1. **Curriculum Data Structure** (`mavaia_core/evaluation/curriculum/`)
+1. **Curriculum Data Structure** (`oricli_core/evaluation/curriculum/`)
 
 - Hierarchical organization: Level → Subject → Skill Type → Difficulty Style
 - Test question/problem storage in JSON/YAML format
 - Metadata for each test (expected reasoning type, answer format, etc.)
 
-2. **Curriculum Selector** (`mavaia_core/evaluation/curriculum/selector.py`)
+2. **Curriculum Selector** (`oricli_core/evaluation/curriculum/selector.py`)
 
 - Interactive menu system for selecting test parameters
 - Programmatic API for selection
 - Validation of selections
 
-3. **Test Execution Engine** (`mavaia_core/evaluation/curriculum/executor.py`)
+3. **Test Execution Engine** (`oricli_core/evaluation/curriculum/executor.py`)
 
 - Executes tests against Mavaia's cognitive stack
 - Captures reasoning traces from CoT/ToT/MCTS modules
@@ -151,27 +151,27 @@ Build a new testing framework that enables comprehensive cognitive evaluation of
 - Tracks memory continuity (if enabled)
 - Applies optional constraints (time/token limits, tool restrictions)
 
-4. **Result Analyzer** (`mavaia_core/evaluation/curriculum/analyzer.py`)
+4. **Result Analyzer** (`oricli_core/evaluation/curriculum/analyzer.py`)
 
 - Generates cognitive weakness/strength maps
 - Analyzes safety posture influence
 - Suggests next-level tests
 - Computes scores (numeric/categorical)
 
-5. **Output Formatter** (`mavaia_core/evaluation/curriculum/reporter.py`)
+5. **Output Formatter** (`oricli_core/evaluation/curriculum/reporter.py`)
 
 - Structured output (JSON, HTML reports)
 - Reasoning trace visualization
 - Cognitive maps visualization
 - Safety posture summaries
 
-6. **CLI Interface** (`mavaia_core/evaluation/curriculum/cli.py`)
+6. **CLI Interface** (`oricli_core/evaluation/curriculum/cli.py`)
 
 - Interactive menu for curriculum selection
 - Command-line arguments for programmatic use
 - Progress display during test execution
 
-7. **Web UI** (`mavaia_core/evaluation/curriculum/web_ui/`)
+7. **Web UI** (`oricli_core/evaluation/curriculum/web_ui/`)
 
 - Interactive web interface for curriculum selection
 - Real-time test execution monitoring
@@ -181,7 +181,7 @@ Build a new testing framework that enables comprehensive cognitive evaluation of
 - Safety posture dashboard
 - Historical test run comparison
 
-8. **Advanced Analytics** (`mavaia_core/evaluation/curriculum/analytics.py`)
+8. **Advanced Analytics** (`oricli_core/evaluation/curriculum/analytics.py`)
 
 - Machine learning-based test recommendations
 - Pattern detection across test runs
@@ -189,14 +189,14 @@ Build a new testing framework that enables comprehensive cognitive evaluation of
 - Automated test selection optimization
 - Trend analysis and regression detection
 
-9. **Export System** (`mavaia_core/evaluation/curriculum/exporters.py`)
+9. **Export System** (`oricli_core/evaluation/curriculum/exporters.py`)
 
 - Export to standard evaluation formats (OpenAI Evals, etc.)
 - Multi-format support (JSON, CSV, YAML)
 - Industry-standard benchmark formats
 - Interoperability with external evaluation tools
 
-10. **Real-Time Fine-Tuning** (`mavaia_core/evaluation/curriculum/fine_tuning.py`)
+10. **Real-Time Fine-Tuning** (`oricli_core/evaluation/curriculum/fine_tuning.py`)
 
 - Automatic model fine-tuning based on test failures
 - Failure pattern analysis and training data generation
@@ -204,7 +204,7 @@ Build a new testing framework that enables comprehensive cognitive evaluation of
 - Model validation and rollback mechanisms
 - Integration with neural text generator and reasoning modules
 
-11. **Distributed Fine-Tuning** (`mavaia_core/evaluation/curriculum/distributed_training.py`)
+11. **Distributed Fine-Tuning** (`oricli_core/evaluation/curriculum/distributed_training.py`)
 
 - Multi-GPU and multi-node fine-tuning support
 - Data parallelism and model parallelism
@@ -212,7 +212,7 @@ Build a new testing framework that enables comprehensive cognitive evaluation of
 - Resource management and load balancing
 - Fault tolerance and checkpoint recovery
 
-12. **Federated Learning** (`mavaia_core/evaluation/curriculum/federated_learning.py`)
+12. **Federated Learning** (`oricli_core/evaluation/curriculum/federated_learning.py`)
 
 - Privacy-preserving model improvement
 - Federated aggregation of model updates
@@ -223,7 +223,7 @@ Build a new testing framework that enables comprehensive cognitive evaluation of
 ## File Structure
 
 ```javascript
-mavaia_core/evaluation/curriculum/
+oricli_core/evaluation/curriculum/
 ├── __init__.py
 ├── selector.py              # Curriculum selection menu/API
 ├── executor.py              # Test execution engine
@@ -572,7 +572,7 @@ final_score = max(0.0, min(1.0, base_score + penalties))
 mavaia-curriculum-test --web-ui
 
 # Or programmatically
-from mavaia_core.evaluation.curriculum.web_ui.server import start_web_ui
+from oricli_core.evaluation.curriculum.web_ui.server import start_web_ui
 start_web_ui(host="0.0.0.0", port=8080)
 ```
 
@@ -622,7 +622,7 @@ Access at `http://localhost:8080`
 **Usage:**
 
 ```python
-from mavaia_core.evaluation.curriculum.analytics import CurriculumAnalytics
+from oricli_core.evaluation.curriculum.analytics import CurriculumAnalytics
 
 analytics = CurriculumAnalytics()
 analytics.load_history(results_dir)
@@ -743,7 +743,7 @@ weakness_scores = analytics.predict_weaknesses(test_config, history)
 **Usage:**
 
 ```python
-from mavaia_core.evaluation.curriculum.exporters import CurriculumExporter
+from oricli_core.evaluation.curriculum.exporters import CurriculumExporter
 from pathlib import Path
 
 exporter = CurriculumExporter()
@@ -873,7 +873,7 @@ class FineTuningConfig:
 **Usage:**
 
 ```python
-from mavaia_core.evaluation.curriculum.fine_tuning import FineTuningManager
+from oricli_core.evaluation.curriculum.fine_tuning import FineTuningManager
 
 manager = FineTuningManager()
 
@@ -1044,7 +1044,7 @@ class DistributedConfig:
 **Usage:**
 
 ```python
-from mavaia_core.evaluation.curriculum.distributed_training import DistributedTrainer
+from oricli_core.evaluation.curriculum.distributed_training import DistributedTrainer
 
 # Setup distributed training
 config = DistributedConfig(
@@ -1222,7 +1222,7 @@ class FederatedConfig:
 **Usage:**
 
 ```python
-from mavaia_core.evaluation.curriculum.federated_learning import FederatedServer, FederatedClient
+from oricli_core.evaluation.curriculum.federated_learning import FederatedServer, FederatedClient
 
 # Server side
 server = FederatedServer(FederatedConfig(
@@ -1419,7 +1419,7 @@ The generator creates balanced test datasets across all curriculum dimensions.**
 **Usage:**
 
 ```python
-from mavaia_core.evaluation.curriculum.generator import CurriculumGenerator
+from oricli_core.evaluation.curriculum.generator import CurriculumGenerator
 
 generator = CurriculumGenerator()
 generator.generate_full_curriculum(output_dir=Path("curriculum/data"))
@@ -1431,7 +1431,7 @@ generator.generate_level("k5", output_dir=Path("curriculum/data/levels/k5"))
 
 ## Dependencies
 
-- Existing: `mavaia_core.client`, `mavaia_core.brain.modules.*`
+- Existing: `oricli_core.client`, `oricli_core.brain.modules.*`
 - New: 
 - `rich` (for CLI formatting)
 - `typer` (for CLI)

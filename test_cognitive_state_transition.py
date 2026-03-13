@@ -7,8 +7,8 @@ from pathlib import Path
 # Add project root to path
 sys.path.append(str(Path(__file__).parent))
 
-from mavaia_core.brain.modules.state_manager import StateManagerModule
-from mavaia_core.types.cognitive import CognitiveState, ThoughtStep
+from oricli_core.brain.modules.state_manager import StateManagerModule
+from oricli_core.types.cognitive import CognitiveState, ThoughtStep
 
 class TestCognitiveStateTransition(unittest.TestCase):
     def setUp(self):

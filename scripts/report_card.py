@@ -239,7 +239,7 @@ def _summarize_livebench(livebench):
     return {"summary": summary, "category_rates": category_rates, "gaps": gaps}
 
 def main():
-    ap = argparse.ArgumentParser(description="Generate a Rich Report Card for Mavaia")
+    ap = argparse.ArgumentParser(description="Generate a Rich Report Card for Oricli-Alpha")
     ap.add_argument("--progress", default="")
     ap.add_argument("--format", choices=["text", "json", "rich"], default="rich")
     ap.add_argument("--output", default="", help="JSON output path")
@@ -262,8 +262,8 @@ def main():
     livebench_path = _find_latest(["livebench_results_*.json"], REPO_ROOT)
     livebench = _load_json(livebench_path)
     
-    mavaia_path = _find_latest(["mavaia_result.json"], REPO_ROOT)
-    mavaia_result = _load_json(mavaia_path) or {}
+    oricli_path = _find_latest(["oricli_result.json"], REPO_ROOT)
+    oricli_result = _load_json(oricli_path) or {}
 
     # Logic
     lb_info = _summarize_livebench(livebench)
@@ -340,7 +340,7 @@ def main():
     
     report = {
         "report_date": _now_iso(),
-        "student": "Mavaia",
+        "student": "Oricli-Alpha",
         "stage_title": progress.get("current_stage_title", "General Training"),
         "school": progress.get("current_school", "Independent Study"),
         "actual_age": progress.get("current_age", "N/A"),
@@ -349,7 +349,7 @@ def main():
         "livebench_grade": _grade_from_rate(pass_rate),
         "training_loss": f"{training_loss:.4f}" if isinstance(training_loss, float) else "N/A",
         "training_loss_trend": _loss_trend(metrics_path),
-        "self_confidence": f"{mavaia_result.get('confidence', 0):.2f}",
+        "self_confidence": f"{oricli_result.get('confidence', 0):.2f}",
         "subject_grades": subject_grades,
         "gaps": lb_info["gaps"],
         "next_steps": next_steps
@@ -360,7 +360,7 @@ def main():
         text_report = _format_rich_report(report)
     else:
         # Fallback to simple print if no rich
-        text_report = f"Mavaia Report Card - {report['report_date']}\n"
+        text_report = f"Oricli-Alpha Report Card - {report['report_date']}\n"
         text_report += f"Loss: {report['training_loss']} | Trend: {report['training_loss_trend']}\n"
         print(text_report)
 

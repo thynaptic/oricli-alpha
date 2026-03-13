@@ -65,7 +65,7 @@ flowchart LR
 
 ### 1. Query Agent Module (`query_agent.py`)
 
-**Location**: `mavaia_core/brain/modules/query_agent.py`
+**Location**: `oricli_core/brain/modules/query_agent.py`
 
 **Purpose**: Normalize user input, extract keywords, and formulate precise search queries.
 
@@ -84,7 +84,7 @@ flowchart LR
 
 ### 2. Retriever Agent Module (`retriever_agent.py`)
 
-**Location**: `mavaia_core/brain/modules/retriever_agent.py`
+**Location**: `oricli_core/brain/modules/retriever_agent.py`
 
 **Purpose**: Fetch candidate documents from various sources.
 
@@ -103,7 +103,7 @@ flowchart LR
 
 ### 3. Reranker Agent Module (`reranker_agent.py`)
 
-**Location**: `mavaia_core/brain/modules/reranker_agent.py`
+**Location**: `oricli_core/brain/modules/reranker_agent.py`
 
 **Purpose**: Score and rank retrieved documents by relevance.
 
@@ -122,7 +122,7 @@ flowchart LR
 
 ### 4. Synthesis Agent Module (`synthesis_agent.py`)
 
-**Location**: `mavaia_core/brain/modules/synthesis_agent.py`
+**Location**: `oricli_core/brain/modules/synthesis_agent.py`
 
 **Purpose**: Compile coherent answers from top-ranked documents.
 
@@ -141,7 +141,7 @@ flowchart LR
 
 ### 5. Verifier Agent Module (`verifier_agent.py`)
 
-**Location**: `mavaia_core/brain/modules/verifier_agent.py`
+**Location**: `oricli_core/brain/modules/verifier_agent.py`
 
 **Purpose**: Fact-check and validate synthesized information.
 
@@ -160,7 +160,7 @@ flowchart LR
 
 ### 6. Multi-Agent Pipeline Orchestrator (`multi_agent_pipeline.py`)
 
-**Location**: `mavaia_core/brain/modules/multi_agent_pipeline.py`
+**Location**: `oricli_core/brain/modules/multi_agent_pipeline.py`
 
 **Purpose**: Coordinate all agents in the pipeline.
 
@@ -181,7 +181,7 @@ flowchart LR
 ## File Structure
 
 ```
-mavaia_core/brain/modules/
+oricli_core/brain/modules/
 ├── query_agent.py              # NEW: Query normalization and keyword extraction
 ├── retriever_agent.py          # NEW: Document retrieval from multiple sources
 ├── reranker_agent.py           # NEW: Document relevance ranking

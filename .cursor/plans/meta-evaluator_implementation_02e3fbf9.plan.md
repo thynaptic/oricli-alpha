@@ -72,7 +72,7 @@ flowchart TD
 
 ### 1. Create Meta-Evaluator Module
 
-**File**: `mavaia_core/brain/modules/meta_evaluator.py`
+**File**: `oricli_core/brain/modules/meta_evaluator.py`
 
 **Key Components**:
 
@@ -149,7 +149,7 @@ TEMPLATES = {
 
 ### 3. Integration Point 1: Module-Level
 
-**File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+**File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 
 **Changes**:
 
@@ -179,7 +179,7 @@ if self._meta_evaluator:
 
 ### 4. Integration Point 2: Evaluation Layer
 
-**File**: `mavaia_core/evaluation/categories/livebench_tests.py`
+**File**: `oricli_core/evaluation/categories/livebench_tests.py`
 
 **Changes**:
 
@@ -271,16 +271,16 @@ When deterministic rules can't repair:
 
 ## Files to Create
 
-1. `mavaia_core/brain/modules/meta_evaluator.py` - Main module (~800-1000 lines)
+1. `oricli_core/brain/modules/meta_evaluator.py` - Main module (~800-1000 lines)
 
 ## Files to Modify
 
-1. `mavaia_core/brain/modules/custom_reasoning_networks.py`
+1. `oricli_core/brain/modules/custom_reasoning_networks.py`
 
    - Add meta_evaluator integration in response generation methods
    - ~5-10 integration points
 
-2. `mavaia_core/evaluation/categories/livebench_tests.py`
+2. `oricli_core/evaluation/categories/livebench_tests.py`
 
    - Add meta_evaluator call in `run_test_case`
    - Modify `_extract_module_response` to include repair step

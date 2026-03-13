@@ -86,9 +86,9 @@
 ## 💻 Usage Examples
 
 ```python
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
-client = MavaiaClient()
+client = Oricli-AlphaClient()
 
 # Refactoring
 suggestions = client.python.suggest_refactorings(code, refactoring_type="extract_method")

@@ -1,11 +1,11 @@
 # Implementation Plan: Synthetic Dream State
 
 ## Phase 1: Infrastructure
-- [ ] Create `mavaia_core/data/synthetic_insights.jsonl`.
-- [ ] Implement `mavaia_core/services/insight_service.py` for thread-safe insight management.
+- [ ] Create `oricli_core/data/synthetic_insights.jsonl`.
+- [ ] Implement `oricli_core/services/insight_service.py` for thread-safe insight management.
 
 ## Phase 2: Dream Daemon Implementation
-- [ ] Create `scripts/mavaia_dream_daemon.py`.
+- [ ] Create `scripts/oricli_dream_daemon.py`.
 - [ ] Implement idle-detection logic (checking last query time).
 - [ ] Build the "Consolidation Loop":
     - [ ] Sample memory graph and JIT facts.

@@ -1,7 +1,7 @@
 ---
 description: API development standards for FastAPI endpoints and OpenAI-compatible interfaces
 alwaysApply: false
-globs: mavaia_core/api/**/*.py
+globs: oricli_core/api/**/*.py
 ---
 
 # Cursor Rules: API Development Standards
@@ -207,8 +207,8 @@ examples:
     code: |
       from fastapi import APIRouter, Depends, HTTPException, Header
       from typing import Optional
-      from mavaia_core.types.models import ChatCompletionRequest, ChatCompletionResponse
-      from mavaia_core.exceptions import AuthenticationError
+      from oricli_core.types.models import ChatCompletionRequest, ChatCompletionResponse
+      from oricli_core.exceptions import AuthenticationError
       
       
       router = APIRouter(prefix="/v1", tags=["chat"])
@@ -276,7 +276,7 @@ examples:
     code: |
       from fastapi import FastAPI, HTTPException, Request
       from fastapi.responses import JSONResponse
-      from mavaia_core.exceptions import (
+      from oricli_core.exceptions import (
           MavaiaError,
           AuthenticationError,
           ValidationError,
@@ -336,5 +336,5 @@ references:
   - FastAPI documentation: https://fastapi.tiangolo.com/
   - OpenAI API reference: https://platform.openai.com/docs/api-reference
   - Pydantic validation: https://docs.pydantic.dev/
-  - Mavaia API implementation: mavaia_core/api/server.py
-  - Mavaia OpenAI compatibility: mavaia_core/api/openai_compatible.py
+  - Mavaia API implementation: oricli_core/api/server.py
+  - Mavaia OpenAI compatibility: oricli_core/api/openai_compatible.py

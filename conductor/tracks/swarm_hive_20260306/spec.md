@@ -1,7 +1,7 @@
 # Specification: Distributed "Swarm" Intelligence (The Hive)
 
 ## Objective
-To vault the final evolutionary step of Mavaia: converting the static module registry into a dynamic, decentralized multi-agent system ("The Hive") where 246+ specialized modules operate as independent micro-agents.
+To vault the final evolutionary step of Oricli-Alpha: converting the static module registry into a dynamic, decentralized multi-agent system ("The Hive") where 246+ specialized modules operate as independent micro-agents.
 
 ## Core Concepts
 
@@ -23,7 +23,7 @@ To vault the final evolutionary step of Mavaia: converting the static module reg
 
 ## Technical Architecture
 - **Message Bus**: A lightweight asynchronous pub/sub system (e.g., Redis pub/sub or an internal `asyncio` event bus).
-- **Decentralization**: No central "brain." The `MavaiaClient` simply drops a goal onto the bus and waits for a "Synthesis" agent to declare the goal complete.
+- **Decentralization**: No central "brain." The `Oricli-AlphaClient` simply drops a goal onto the bus and waits for a "Synthesis" agent to declare the goal complete.
 
 ## Prerequisite for Activation
 - **100% Module Census**: All 246+ modules must be fully implemented, tested, and mapped with accurate metadata, as the Swarm relies entirely on self-reported capabilities to function efficiently.

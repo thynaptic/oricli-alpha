@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.modules.cognitive_generator import CognitiveGeneratorModule
+from oricli_core.brain.modules.cognitive_generator import CognitiveGeneratorModule
 
 def verify_full_red_team_loop():
     print("--- Verifying Full Red-Team Audit Loop ---")
@@ -52,7 +52,7 @@ def verify_full_red_team_loop():
             print("✓ Full Loop Verified: Architect called twice (Audit Fail -> Re-architect with constraints).")
             
             # Verify lesson was logged
-            lesson_path = REPO_ROOT / "mavaia_core/data/red_team_lessons.jsonl"
+            lesson_path = REPO_ROOT / "oricli_core/data/red_team_lessons.jsonl"
             if lesson_path.exists() and lesson_path.stat().st_size > 0:
                 print("✓ Red-Team Lesson correctly logged to buffer.")
                 return True

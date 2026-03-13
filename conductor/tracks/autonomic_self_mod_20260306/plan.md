@@ -1,7 +1,7 @@
 # Implementation Plan: Autonomic Self-Modification
 
 ## Phase 1: Metacognition Daemon
-- [ ] Create `scripts/mavaia_metacognition_daemon.py`.
+- [ ] Create `scripts/oricli_metacognition_daemon.py`.
 - [ ] Implement log/trace scanning to find actionable errors or inefficiencies.
 
 ## Phase 2: Patch Generation

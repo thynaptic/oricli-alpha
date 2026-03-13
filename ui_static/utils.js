@@ -1,4 +1,4 @@
-// Shared utilities for Mavaia UI
+// Shared utilities for Oricli-Alpha UI
 
 const Utils = {
   // Toast notifications

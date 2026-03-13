@@ -3,19 +3,19 @@
 *Note: This track is vaulted until module census reaches 100%.*
 
 ## Phase 1: The Swarm Bus
-- [ ] Implement `mavaia_core/brain/swarm_bus.py` (Pub/Sub messaging system).
+- [ ] Implement `oricli_core/brain/swarm_bus.py` (Pub/Sub messaging system).
 - [ ] Define standard message protocols (CFP, BID, ACCEPT, RESULT).
 
 ## Phase 2: Micro-Agent Wrapper
-- [ ] Create `mavaia_core/brain/hive_node.py`.
+- [ ] Create `oricli_core/brain/hive_node.py`.
 - [ ] Implement the logic that wraps a `BaseBrainModule`, listens to the bus, and automatically generates bids based on the module's `ModuleMetadata`.
 
 ## Phase 3: The Broker & Market Dynamics
-- [ ] Implement `mavaia_core/brain/modules/swarm_broker.py`.
+- [ ] Implement `oricli_core/brain/modules/swarm_broker.py`.
 - [ ] Build the arbitration logic to evaluate bids (weighing confidence against compute cost) and award contracts.
 
 ## Phase 4: Decentralized Execution
-- [ ] Refactor `MavaiaClient` to drop queries onto the Swarm Bus rather than calling the `cognitive_generator` directly.
+- [ ] Refactor `Oricli-AlphaClient` to drop queries onto the Swarm Bus rather than calling the `cognitive_generator` directly.
 - [ ] Ensure the `subconscious_field` is updated dynamically by any agent that completes a task.
 
 ## Phase 5: The "Society of Mind" Test

@@ -7,7 +7,7 @@
 - **Priority**: Medium
 
 ## Summary
-Enable Mavaia to natively process and reason across multiple sensory modalities. This track implements the infrastructure to bind visual (image), auditory (voice/audio), and textual inputs into a unified cognitive graph, allowing for truly multi-modal reasoning and synthesis.
+Enable Oricli-Alpha to natively process and reason across multiple sensory modalities. This track implements the infrastructure to bind visual (image), auditory (voice/audio), and textual inputs into a unified cognitive graph, allowing for truly multi-modal reasoning and synthesis.
 
 ## Files
 - [Specification](./spec.md)

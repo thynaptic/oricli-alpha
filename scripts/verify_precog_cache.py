@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.modules.speculator import SpeculatorModule
-from mavaia_core.services.precog_service import PreCogService
+from oricli_core.brain.modules.speculator import SpeculatorModule
+from oricli_core.services.precog_service import PreCogService
 
 def verify_speculation_loop():
     print("--- Step 1: Verifying Speculation Trigger ---")

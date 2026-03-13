@@ -14,7 +14,7 @@ To simulate cluster behavior by orchestrating N independent RunPod instances. Th
    - Use the Local + S3 strategy to ensure all pods pull the exact same codebase and state.
 
 3. **Coordination & Identity**:
-   - Each pod in the virtual cluster gets a unique suffix (e.g., `mavaia_train_1`, `mavaia_train_2`).
+   - Each pod in the virtual cluster gets a unique suffix (e.g., `oricli_train_1`, `oricli_train_2`).
    - The first pod created is designated as the "Master" for result aggregation.
 
 4. **Robust Monitoring**:

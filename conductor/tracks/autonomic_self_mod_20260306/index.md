@@ -7,7 +7,7 @@
 - **Priority**: High
 
 ## Summary
-Implement a Metacognition loop that analyzes Mavaia's own execution traces. When inefficiencies or failures are detected, she uses her Python reasoning modules to write an optimized patch for her own source code, tests it in a sandbox, and proposes a `REFORM_PROPOSAL.md`.
+Implement a Metacognition loop that analyzes Oricli-Alpha's own execution traces. When inefficiencies or failures are detected, she uses her Python reasoning modules to write an optimized patch for her own source code, tests it in a sandbox, and proposes a `REFORM_PROPOSAL.md`.
 
 ## Files
 - [Specification](./spec.md)

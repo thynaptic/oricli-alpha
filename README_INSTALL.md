@@ -1,4 +1,4 @@
-# Mavaia Core Installation
+# Oricli-Alpha Core Installation
 
 ## Quick Start
 

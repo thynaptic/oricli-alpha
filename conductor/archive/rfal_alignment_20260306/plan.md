@@ -3,7 +3,7 @@
 **Phase 1: RFAL Module & Conflict Detection**
 Goal: Establish the base RFAL module and the logic to detect conversational conflicts.
 - [x] Task: Scaffold RFAL Module
-    - [ ] Create `mavaia_core/brain/modules/rfal_engine.py`.
+    - [ ] Create `oricli_core/brain/modules/rfal_engine.py`.
     - [ ] Implement `RFALEngine` class with `process_feedback`, `calculate_reward`, and `generate_dpo_pair` operations.
 - [x] Task: Implement Conflict Detection
     - [ ] Logic for keyword-based rejection detection.
@@ -20,7 +20,7 @@ Goal: Build the scoring engine that combines HITL, Factual, and Tone signals.
     - [ ] Logic to cross-reference `AdapterRouter` for tone alignment scoring.
     - [ ] Implementation of the weighted sum for the final Reward Scalar.
 - [x] Task: Experience Replay Integration
-    - [x] Create `mavaia_core/data/rfal_lessons.jsonl` persistence logic.
+    - [x] Create `oricli_core/data/rfal_lessons.jsonl` persistence logic.
     - [x] Logic to handle `[Prompt, Chosen, Rejected]` triplet generation.
 - [x] Task: TDD - Reward Accuracy
     - [ ] Verify that a hallucinated fact results in a negative weighted award.
@@ -30,7 +30,7 @@ Goal: Build the scoring engine that combines HITL, Factual, and Tone signals.
 **Phase 3: Cognitive Loop Integration**
 Goal: Wire the RFAL engine into the live generation pipeline without adding latency.
 - [x] Task: Background Processing Hook
-    - [x] Implement asynchronous hook in `cognitive_generator.py` or `MavaiaClient`.
+    - [x] Implement asynchronous hook in `cognitive_generator.py` or `Oricli-AlphaClient`.
     - [x] Logic to send response + user feedback to `RFALEngine` in a background thread.
 - [x] Task: Interaction Buffer Management
     - [x] Logic to track "Lesson Buffer" size.

@@ -1,7 +1,7 @@
 # Specification: RunPod Cluster Support & Multi-Pod Orchestration
 
 ## Overview
-Enhance the Mavaia RunPod Bridge to support RunPod "Instant Clusters" and private VPC networking (Global Networking). This enables both high-throughput parallel task execution (fleets) and synchronized multi-node training.
+Enhance the Oricli-Alpha RunPod Bridge to support RunPod "Instant Clusters" and private VPC networking (Global Networking). This enables both high-throughput parallel task execution (fleets) and synchronized multi-node training.
 
 ## Functional Requirements
 1. **Cluster Lifecycle Management**:

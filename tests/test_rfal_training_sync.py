@@ -24,7 +24,7 @@ def test_bridge_rfal_flag():
         patch("scripts.runpod_bridge._rich_log"),
         patch("scripts.runpod_bridge.remote_train"),
         patch("scripts.runpod_bridge.setup_pod_env"),
-        patch("scripts.runpod_bridge.ensure_mavaia_installed"),
+        patch("scripts.runpod_bridge.ensure_oricli_installed"),
         patch("scripts.runpod_bridge.pre_sync_cleanup"),
         patch("scripts.runpod_bridge.setup_ollama"),
         patch("scripts.runpod_bridge.sync_code"),
@@ -55,7 +55,7 @@ def test_bridge_rfal_flag():
         mock_bridge = mock_bridge_cls.return_value
         mock_bridge.get_pods.return_value = [{
             "id": "mock-pod-id",
-            "name": "mavaia_train",
+            "name": "oricli_train",
             "desiredStatus": "RUNNING",
             "runtime": {
                 "uptimeInSeconds": 100,
@@ -87,7 +87,7 @@ def test_bridge_rfal_flag():
             if "--dpo" in passed_args and "--dpo-data" in passed_args:
                 print("✓ --dpo and --dpo-data flags correctly forwarded")
                 idx = passed_args.index("--dpo-data")
-                if passed_args[idx+1] == "mavaia_core/data/rfal_lessons.jsonl":
+                if passed_args[idx+1] == "oricli_core/data/rfal_lessons.jsonl":
                     print("✓ Correct DPO data path forwarded")
                 else:
                     print(f"✗ Incorrect DPO data path: {passed_args[idx+1]}")

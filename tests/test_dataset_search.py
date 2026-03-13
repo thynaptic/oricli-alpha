@@ -1,5 +1,5 @@
 import pytest
-from mavaia_core.data.search import DatasetSearch, SearchResult
+from oricli_core.data.search import DatasetSearch, SearchResult
 
 def test_ranking_logic():
     search = DatasetSearch()

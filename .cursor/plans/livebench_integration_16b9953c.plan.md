@@ -3,7 +3,7 @@ name: LiveBench Integration
 overview: Integrate LiveBench benchmark suite into Mavaia's evaluation framework as a new test category, enabling automatic testing of all brain modules against LiveBench tasks with direct integration of LiveBench's code_runner for code execution.
 todos:
   - id: create_livebench_runner
-    content: Create LiveBenchTestRunner class in mavaia_core/evaluation/categories/livebench_tests.py with basic structure and imports
+    content: Create LiveBenchTestRunner class in oricli_core/evaluation/categories/livebench_tests.py with basic structure and imports
     status: completed
   - id: implement_question_loading
     content: Implement LiveBench question loading using load_questions/load_questions_jsonl from livebench.common
@@ -63,7 +63,7 @@ Integrate LiveBench benchmark suite into Mavaia's evaluation framework, allowing
 
 ### 1. Create LiveBench Test Runner
 
-**File**: `mavaia_core/evaluation/categories/livebench_tests.py`
+**File**: `oricli_core/evaluation/categories/livebench_tests.py`
 
 - Create `LiveBenchTestRunner` class following the pattern of existing test runners
 - Implement `run_test_case()` and `run_test_suite()` methods
@@ -74,7 +74,7 @@ Integrate LiveBench benchmark suite into Mavaia's evaluation framework, allowing
 
 ### 2. Integrate Code Runner
 
-**File**: `mavaia_core/evaluation/categories/livebench_tests.py`
+**File**: `oricli_core/evaluation/categories/livebench_tests.py`
 
 - Import and use `livebench.code_runner.eval.utils` for code execution
 - Wrap code execution in safe environment context managers
@@ -83,7 +83,7 @@ Integrate LiveBench benchmark suite into Mavaia's evaluation framework, allowing
 
 ### 3. Module-to-Task Mapping
 
-**File**: `mavaia_core/evaluation/categories/livebench_tests.py`
+**File**: `oricli_core/evaluation/categories/livebench_tests.py`
 
 - Create automatic mapping logic based on module metadata:
   - Reasoning modules → reasoning tasks (web_of_lies, zebra_puzzle, house_traversal, etc.)
@@ -96,14 +96,14 @@ Integrate LiveBench benchmark suite into Mavaia's evaluation framework, allowing
 
 ### 4. Test Discovery Integration
 
-**File**: `mavaia_core/evaluation/test_data_manager.py` (if needed)
+**File**: `oricli_core/evaluation/test_data_manager.py` (if needed)
 
 - Optionally extend test discovery to include LiveBench questions
 - Or handle LiveBench test discovery directly in `LiveBenchTestRunner`
 
 ### 5. Test Runner Integration
 
-**File**: `mavaia_core/evaluation/test_runner.py`
+**File**: `oricli_core/evaluation/test_runner.py`
 
 - Add `livebench_runner` to lazy initialization (line ~55)
 - Add "livebench" to `TEST_CATEGORIES` dictionary (line ~1922)
@@ -112,14 +112,14 @@ Integrate LiveBench benchmark suite into Mavaia's evaluation framework, allowing
 
 ### 6. Category Exports
 
-**File**: `mavaia_core/evaluation/categories/__init__.py`
+**File**: `oricli_core/evaluation/categories/__init__.py`
 
 - Add `LiveBenchTestRunner` to `__all__`
 - Add lazy import for `LiveBenchTestRunner` in `__getattr__`
 
 ### 7. Module Execution Adapter
 
-**File**: `mavaia_core/evaluation/categories/livebench_tests.py`
+**File**: `oricli_core/evaluation/categories/livebench_tests.py`
 
 - Create adapter to convert LiveBench question format to Mavaia module execution format
 - Handle multi-turn conversations for LiveBench questions
@@ -128,7 +128,7 @@ Integrate LiveBench benchmark suite into Mavaia's evaluation framework, allowing
 
 ### 8. Result Conversion
 
-**File**: `mavaia_core/evaluation/categories/livebench_tests.py`
+**File**: `oricli_core/evaluation/categories/livebench_tests.py`
 
 - Convert LiveBench scores (0/1 or multi-score) to TestResult status
 - Preserve LiveBench metadata (task, category, question_id) in TestResult
@@ -172,12 +172,12 @@ Integrate LiveBench benchmark suite into Mavaia's evaluation framework, allowing
 
 ### New Files
 
-- `mavaia_core/evaluation/categories/livebench_tests.py` - Main LiveBench test runner
+- `oricli_core/evaluation/categories/livebench_tests.py` - Main LiveBench test runner
 
 ### Modified Files
 
-- `mavaia_core/evaluation/test_runner.py` - Add LiveBench category routing
-- `mavaia_core/evaluation/categories/__init__.py` - Export LiveBenchTestRunner
+- `oricli_core/evaluation/test_runner.py` - Add LiveBench category routing
+- `oricli_core/evaluation/categories/__init__.py` - Export LiveBenchTestRunner
 
 ## Dependencies
 

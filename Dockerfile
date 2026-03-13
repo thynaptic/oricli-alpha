@@ -41,7 +41,7 @@ WORKDIR /workspace
 COPY pyproject.toml .
 RUN touch README.md
 
-# Install mavaia_core dependencies (train_neural and ml)
+# Install oricli_core dependencies (train_neural and ml)
 RUN pip install --no-cache-dir ".[train_neural,ml]"
 
 # Copy our custom entrypoint and make it executable

@@ -1,11 +1,11 @@
 # Specification: Synthetic Dream State
 
 ## Objective
-Enable Mavaia to autonomously innovate and consolidate knowledge by simulating a "dream state" during idle periods, where she finds novel connections between disparate pieces of information.
+Enable Oricli-Alpha to autonomously innovate and consolidate knowledge by simulating a "dream state" during idle periods, where she finds novel connections between disparate pieces of information.
 
 ## Core Components
 
-1. **The Dream Daemon (`mavaia_dream_daemon.py`)**:
+1. **The Dream Daemon (`oricli_dream_daemon.py`)**:
    - Monitors system load and user activity.
    - Triggers the "Dream Sequence" when the system has been idle for a configurable period.
 
@@ -15,7 +15,7 @@ Enable Mavaia to autonomously innovate and consolidate knowledge by simulating a
    - Feeds pairs of disparate facts to the `analogical_reasoning` module to find potential correlations.
 
 3. **The Insight Registry**:
-   - A persistent store (`mavaia_core/data/synthetic_insights.jsonl`) for new connections found during dreaming.
+   - A persistent store (`oricli_core/data/synthetic_insights.jsonl`) for new connections found during dreaming.
    - Each insight is scored by the `meta_evaluator`.
 
 4. **Integration with RFAL**:

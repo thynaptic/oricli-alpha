@@ -10,7 +10,7 @@ This plan outlines the steps to fix the issue where detailed benchmark results a
 
 ## Phase 2: Core Retrieval & Parsing Fix
 - [x] Task: Update the file identification logic in `scripts/runpod_bridge.py` to robustly locate remote LiveBench outputs.
-- [x] Task: Implement a `LiveBenchResultParser` class in `mavaia_core/evaluation/` to extract counts, categories, and percentages from JSON results.
+- [x] Task: Implement a `LiveBenchResultParser` class in `oricli_core/evaluation/` to extract counts, categories, and percentages from JSON results.
 - [x] Task: Write tests for `LiveBenchResultParser` using mock data.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Core Retrieval & Parsing Fix' (Protocol in workflow.md)
 

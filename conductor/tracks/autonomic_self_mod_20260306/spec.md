@@ -1,7 +1,7 @@
 # Specification: Autonomic Self-Modification (Codebase Metacognition)
 
 ## Objective
-Enable Mavaia to actively analyze her own execution traces, identify logic errors or performance bottlenecks, and autonomously write, test, and propose patches to her own source code.
+Enable Oricli-Alpha to actively analyze her own execution traces, identify logic errors or performance bottlenecks, and autonomously write, test, and propose patches to her own source code.
 
 ## Core Components
 
@@ -10,7 +10,7 @@ Enable Mavaia to actively analyze her own execution traces, identify logic error
    - Identifies patterns of failure, high latency, or redundant module routing.
 
 2. **The Metacognition Loop**:
-   - Triggered by the `mavaia_metacognition_daemon.py` on a schedule.
+   - Triggered by the `oricli_metacognition_daemon.py` on a schedule.
    - Uses `python_project_understanding` to find the relevant module.
    - Uses `python_refactoring_reasoning` or `reasoning_code_generator` to draft a patch.
 

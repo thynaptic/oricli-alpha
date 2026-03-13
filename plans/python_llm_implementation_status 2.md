@@ -14,7 +14,7 @@
 **Status:** ✅ Complete
 
 ### 1. Program Behavior Reasoning Module
-**File:** `mavaia_core/brain/modules/program_behavior_reasoning.py`  
+**File:** `oricli_core/brain/modules/program_behavior_reasoning.py`  
 **Status:** ✅ Complete
 
 **Capabilities:**
@@ -36,7 +36,7 @@
 7. `predict_outputs` - Predict outputs for test cases
 
 ### 2. Code-to-Code Reasoning Module
-**File:** `mavaia_core/brain/modules/code_to_code_reasoning.py`  
+**File:** `oricli_core/brain/modules/code_to_code_reasoning.py`  
 **Status:** ✅ Complete
 
 **Capabilities:**
@@ -58,7 +58,7 @@
 7. `analyze_code_differences` - Analyze differences
 
 ### 3. Code Optimization Reasoning Module
-**File:** `mavaia_core/brain/modules/code_optimization_reasoning.py`  
+**File:** `oricli_core/brain/modules/code_optimization_reasoning.py`  
 **Status:** ✅ Complete
 
 **Capabilities:**
@@ -87,7 +87,7 @@
 ## ✅ Completed: Phase 1 Foundation Modules
 
 ### 1. Python Semantic Understanding Module
-**File:** `mavaia_core/brain/modules/python_semantic_understanding.py`  
+**File:** `oricli_core/brain/modules/python_semantic_understanding.py`  
 **Status:** ✅ Complete
 
 **Capabilities:**
@@ -119,7 +119,7 @@
 ---
 
 ### 2. Python Code Embeddings Module
-**File:** `mavaia_core/brain/modules/python_code_embeddings.py`  
+**File:** `oricli_core/brain/modules/python_code_embeddings.py`  
 **Status:** ✅ Complete
 
 **Capabilities:**
@@ -150,7 +150,7 @@
 ---
 
 ### 3. Python Code Memory Module
-**File:** `mavaia_core/brain/modules/python_code_memory.py`  
+**File:** `oricli_core/brain/modules/python_code_memory.py`  
 **Status:** ✅ Complete
 
 **Capabilities:**

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.modules.cognitive_generator import CognitiveGeneratorModule
+from oricli_core.brain.modules.cognitive_generator import CognitiveGeneratorModule
 
 def verify_multi_modal_routing():
     print("--- Step 1: Verifying Multi-Modal Sensory Routing ---")

@@ -9,11 +9,11 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.mavaia_tool_daemon import MavaiaToolDaemon
+from scripts.oricli_tool_daemon import Oricli-AlphaToolDaemon
 
 def verify_scenario_file():
     print("--- Step 1: Verifying Scenario File ---")
-    path = REPO_ROOT / "mavaia_core" / "data" / "tool_bench_scenarios.json"
+    path = REPO_ROOT / "oricli_core" / "data" / "tool_bench_scenarios.json"
     if path.exists():
         with open(path, "r") as f:
             data = json.load(f)
@@ -24,7 +24,7 @@ def verify_scenario_file():
 
 def verify_correction_logging():
     print("\n--- Step 2: Verifying Correction Logging ---")
-    path = REPO_ROOT / "mavaia_core" / "data" / "tool_corrections.jsonl"
+    path = REPO_ROOT / "oricli_core" / "data" / "tool_corrections.jsonl"
     
     # Simulate a correction
     test_correction = {
@@ -42,7 +42,7 @@ def verify_correction_logging():
 
 def verify_tool_daemon():
     print("\n--- Step 3: Verifying Tool Daemon Trigger ---")
-    daemon = MavaiaToolDaemon()
+    daemon = Oricli-AlphaToolDaemon()
     daemon.sync_threshold = 1 # Set low for test
     daemon.last_sync_count = 0
     

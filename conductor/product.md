@@ -1,4 +1,4 @@
-# Product Definition: Mavaia Core
+# Product Definition: Oricli-Alpha Core
 
 ## Mission
 To provide a sovereign, local-first backbone for intelligence, enabling developers and founders to build modular cognitive systems with full data privacy.
@@ -9,7 +9,7 @@ To provide a sovereign, local-first backbone for intelligence, enabling develope
 - **Local-First Solution Founders**: Creating products where data sovereignty and privacy are core competitive advantages.
 
 ## Core Problem
-Mavaia Core addresses the complexity of orchestrating modular AI systems while ensuring **Sovereign Reasoning & Data Privacy**. It provides a standardized framework for modularity and cognitive orchestration, reducing the friction of integrating diverse intelligence patterns into a single, cohesive application.
+Oricli-Alpha Core addresses the complexity of orchestrating modular AI systems while ensuring **Sovereign Reasoning & Data Privacy**. It provides a standardized framework for modularity and cognitive orchestration, reducing the friction of integrating diverse intelligence patterns into a single, cohesive application.
 
 ## Key Features
 - **Standardized Module Architecture**: A library of 200+ plug-and-play cognitive modules adhering to a strict, validated interface for reliable orchestration.
@@ -27,4 +27,4 @@ Mavaia Core addresses the complexity of orchestrating modular AI systems while e
 - **High-Precision Instruction Following**: Specialized modules for zero-fluff task execution, designed to bypass conversational drift for rigid formatting and data analysis requirements.
 
 ## Future Vision (12 Months)
-Mavaia Core aims to become the definitive **Agent OS**—the sovereign backbone for local-first intelligence, powering a new generation of autonomous, privacy-respecting agents.
+Oricli-Alpha Core aims to become the definitive **Agent OS**—the sovereign backbone for local-first intelligence, powering a new generation of autonomous, privacy-respecting agents.

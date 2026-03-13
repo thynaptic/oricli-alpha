@@ -271,7 +271,7 @@ examples:
       - No external dependencies required
       
       Example Usage:
-          >>> from mavaia_core.brain.modules.reasoning import ReasoningModule
+          >>> from oricli_core.brain.modules.reasoning import ReasoningModule
           >>> module = ReasoningModule()
           >>> module.initialize()
           >>> result = module.execute(
@@ -289,7 +289,7 @@ examples:
       - Some reasoning types may not be available in all contexts
       """
       
-      from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+      from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
       
       
       class ReasoningModule(BaseBrainModule):

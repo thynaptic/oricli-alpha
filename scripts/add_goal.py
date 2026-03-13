@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mavaia Goal Submission Utility.
+Oricli-Alpha Goal Submission Utility.
 Add new high-level objectives to the Sovereign Goal registry.
 """
 
@@ -13,10 +13,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.services.goal_service import GoalService
+from oricli_core.services.goal_service import GoalService
 
 def main():
-    parser = argparse.ArgumentParser(description="Mavaia Sovereign Goal Submission")
+    parser = argparse.ArgumentParser(description="Oricli-Alpha Sovereign Goal Submission")
     parser.add_argument("goal", type=str, help="The high-level objective text")
     parser.add_argument("--priority", type=int, default=1, help="Priority level (1-5, higher is more urgent)")
     parser.add_argument("--list", action="store_true", help="List all current objectives")

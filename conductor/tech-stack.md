@@ -1,4 +1,4 @@
-# Technology Stack: Mavaia Core
+# Technology Stack: Oricli-Alpha Core
 
 ## Language & Runtime
 - **Python (3.11+)**: The primary programming language, leveraging modern features and type hinting.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test asynchronous loop integration of RFAL in MavaiaClient.
+Test asynchronous loop integration of RFAL in Oricli-AlphaClient.
 """
 
 import sys
@@ -13,17 +13,17 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.client import MavaiaClient
-from mavaia_core.types.models import ChatCompletionRequest, ChatMessage
+from oricli_core.client import Oricli-AlphaClient
+from oricli_core.types.models import ChatCompletionRequest, ChatMessage
 
 def test_async_rfal_trigger():
-    """Verify that MavaiaClient triggers RFAL in the background on user correction."""
-    print("Testing async RFAL trigger in MavaiaClient...")
+    """Verify that Oricli-AlphaClient triggers RFAL in the background on user correction."""
+    print("Testing async RFAL trigger in Oricli-AlphaClient...")
     
     # Enable heavy modules for registration
     os.environ["MAVAIA_ENABLE_HEAVY_MODULES"] = "true"
     
-    client = MavaiaClient()
+    client = Oricli-AlphaClient()
     
     # Mock the RFAL engine
     mock_rfal = MagicMock()
@@ -36,7 +36,7 @@ def test_async_rfal_trigger():
         "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20}
     }
     
-    with patch("mavaia_core.brain.registry.ModuleRegistry.get_module") as mock_get:
+    with patch("oricli_core.brain.registry.ModuleRegistry.get_module") as mock_get:
         def side_effect(name, **kwargs):
             if name == "rfal_engine":
                 return mock_rfal
@@ -64,7 +64,7 @@ def test_async_rfal_trigger():
         # This should immediately return while RFAL runs in background
         res = client.chat.completions.create(
             messages=messages,
-            model="mavaia-cognitive"
+            model="oricli-cognitive"
         )
         
         elapsed = time.time() - start_time

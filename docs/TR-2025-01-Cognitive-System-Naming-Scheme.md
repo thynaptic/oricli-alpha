@@ -48,7 +48,7 @@ Where:
 - Counted via `ModuleRegistry.discover_modules()` discovery process
 - Includes all registered `BaseBrainModule` instances discovered from filesystem
 - Count is determined at runtime through module discovery protocol
-- Example: `mavaia-137c` indicates 137 cognitive modules
+- Example: `oricli-137c` indicates 137 cognitive modules
 
 **For Parameter Systems (`p` suffix):**
 - Quantifier represents parameter count in billions
@@ -95,7 +95,7 @@ This section defines the module discovery protocol, validation procedures, and c
 The module discovery process follows this procedure:
 
 1. Execute `ModuleRegistry.discover_modules(verbose=False)`
-2. Iterate through all Python files in `mavaia_core/brain/modules/` directory
+2. Iterate through all Python files in `oricli_core/brain/modules/` directory
 3. Skip base files: `__init__.py`, `base_module.py`, `module_registry.py`, `model_manager.py`
 4. Import each module file and inspect for classes inheriting from `BaseBrainModule`
 5. Instantiate each discovered module class to obtain `ModuleMetadata`
@@ -103,7 +103,7 @@ The module discovery process follows this procedure:
 7. Count total registered modules via `len(ModuleRegistry.list_modules())`
 
 **Current System Assignment:**
-- **System Identifier:** `mavaia-137c`
+- **System Identifier:** `oricli-137c`
 - **Module Count:** 137 (discovered via ModuleRegistry)
 - **Architecture Type:** Cognitive (`c` suffix)
 - **LLM Count:** 0
@@ -127,7 +127,7 @@ All system identifiers must pass validation:
 **Implementation Validation:**
 
 - Module count verified via `ModuleRegistry.discover_modules()`
-- Discovery process: `mavaia_core/brain/modules/module_registry.py`
+- Discovery process: `oricli_core/brain/modules/module_registry.py`
 - All modules must inherit from `BaseBrainModule`
 
 ---
@@ -174,16 +174,16 @@ All system identifiers in code must use the standardized naming scheme:
 **Python Implementation:**
 
 ```python
-from mavaia_core import SYSTEM_ID, SYSTEM_ID_FULL, get_system_identifier_with_subname
+from oricli_core import SYSTEM_ID, SYSTEM_ID_FULL, get_system_identifier_with_subname
 
 # Base identifier
-SYSTEM_ID  # "mavaia-137c"
+SYSTEM_ID  # "oricli-137c"
 
 # Full identifier with subname (if set)
-SYSTEM_ID_FULL()  # "mavaia-137c-alpha" (if subname set)
+SYSTEM_ID_FULL()  # "oricli-137c-alpha" (if subname set)
 
 # Generate identifier with specific subname
-get_system_identifier_with_subname("alpha")  # "mavaia-137c-alpha"
+get_system_identifier_with_subname("alpha")  # "oricli-137c-alpha"
 ```
 
 **Environment Variable:**
@@ -195,10 +195,10 @@ export MAVAIA_SYSTEM_SUBNAME="Pro"
 **Function-Based Configuration:**
 
 ```python
-from mavaia_core import set_system_subname, SYSTEM_ID_FULL
+from oricli_core import set_system_subname, SYSTEM_ID_FULL
 
 set_system_subname("Flash")
-SYSTEM_ID_FULL()  # Returns "mavaia-137c-Flash"
+SYSTEM_ID_FULL()  # Returns "oricli-137c-Flash"
 ```
 
 ### Documentation References
@@ -227,19 +227,19 @@ This section documents current system validation results and compliance verifica
 
 ### Current System Validation
 
-**Mavaia Cognitive Architecture:**
-- **Current Label:** `mavaia-137c`
+**Oricli-Alpha Cognitive Architecture:**
+- **Current Label:** `oricli-137c`
 - **Validation Date:** 2025-01-27
-- **Discovery Method:** `mavaia_core.brain.modules.module_registry.ModuleRegistry.discover_modules()`
+- **Discovery Method:** `oricli_core.brain.modules.module_registry.ModuleRegistry.discover_modules()`
 - **Module Count:** 137 registered `BaseBrainModule` instances
 - **Architecture Verification:** 100% cognitive module-based, 0 LLMs
-- **Subname Support:** Implemented via `mavaia_core.system_identifier` module
+- **Subname Support:** Implemented via `oricli_core.system_identifier` module
 
 ### Naming Scheme Compliance Check
 
 **Implementation Status:**
 
-- Base identifier format: `mavaia-137c` (verified)
+- Base identifier format: `oricli-137c` (verified)
 - Quantifier matches discovered module count (137 modules confirmed)
 - Architecture type suffix (`c`) matches system composition (100% cognitive modules)
 - Sub-naming protocol implemented and validated (tested via `get_system_identifier_with_subname()`)
@@ -290,10 +290,10 @@ This section documents current system validation results and compliance verifica
 
 ## References
 
-- Module Registry Implementation: `mavaia_core/brain/modules/module_registry.py`
-- System Identifier Module: `mavaia_core/system_identifier.py`
-- Base Brain Module: `mavaia_core/brain/base_module.py`
-- Cognitive Generator: `mavaia_core/brain/modules/cognitive_generator.py`
+- Module Registry Implementation: `oricli_core/brain/modules/module_registry.py`
+- System Identifier Module: `oricli_core/system_identifier.py`
+- Base Brain Module: `oricli_core/brain/base_module.py`
+- Cognitive Generator: `oricli_core/brain/modules/cognitive_generator.py`
 - Thynaptic Publication Style Framework: `.cursor/rules/thynaptic-publications.mdc`
 
 ---
@@ -301,5 +301,5 @@ This section documents current system validation results and compliance verifica
 **Document Status:** Active  
 **Last Updated:** 2025-01-27  
 **Next Review:** 2025-04-27  
-**Current System Identifier:** `mavaia-137c`
+**Current System Identifier:** `oricli-137c`
 

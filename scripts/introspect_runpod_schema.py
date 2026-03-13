@@ -3,7 +3,7 @@ import os
 import requests
 import json
 
-RUNPOD_API_KEY = os.environ.get("Mavaia_Key")
+RUNPOD_API_KEY = os.environ.get("Oricli-Alpha_Key")
 RUNPOD_ENDPOINT = "https://api.runpod.io/graphql"
 
 query = """
@@ -27,7 +27,7 @@ query IntrospectionQuery {
 
 def introspect():
     if not RUNPOD_API_KEY:
-        print("Error: Mavaia_Key (RunPod API Key) not found in environment.")
+        print("Error: Oricli-Alpha_Key (RunPod API Key) not found in environment.")
         return
 
     headers = {

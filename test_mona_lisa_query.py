@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Mavaia Cognitive Engine - General Purpose Query Interface
+Oricli-Alpha Cognitive Engine - General Purpose Query Interface
 
-This script provides a complete interface to query Mavaia using the full
-cognitive generator system, which orchestrates ALL modules in mavaia_core/brain/modules/
+This script provides a complete interface to query Oricli-Alpha using the full
+cognitive generator system, which orchestrates ALL modules in oricli_core/brain/modules/
 dynamically based on intent detection and module discovery.
 
 Usage:
@@ -40,7 +40,7 @@ from typing import Any, Dict
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
 
 def format_reasoning_trace(result: Dict[str, Any], indent: int = 0) -> str:
@@ -501,8 +501,8 @@ def main():
     
     try:
         # Initialize client
-        print("Initializing Mavaia client...")
-        client = MavaiaClient()
+        print("Initializing Oricli-Alpha client...")
+        client = Oricli-AlphaClient()
         print("Client initialized successfully.\n")
         
         # PRIMARY METHOD: Use cognitive_generator which orchestrates ALL modules
@@ -513,7 +513,7 @@ def main():
                 input=query,
                 context="",
                 voice_context={
-                    "base_personality": "mavaia",
+                    "base_personality": "oricli",
                     "tone": "neutral",
                     "formality_level": 0.5,
                     "technical_level": 0.3,
@@ -528,7 +528,7 @@ def main():
             display_cognitive_generator_result(result, query)
             
             # Save full result
-            output_file = "mavaia_result.json"
+            output_file = "oricli_result.json"
             with open(output_file, "w") as f:
                 json.dump(result, f, indent=2, default=str)
             print(f"\nFull result saved to: {output_file}\n")
@@ -545,7 +545,7 @@ def main():
                     query=query,
                     context="",
                     configuration={"max_steps": 5},
-                    session_id="mavaia_test"
+                    session_id="oricli_test"
                 )
                 
                 print("✓ Successfully executed chain-of-thought\n")
@@ -603,7 +603,7 @@ def main():
                     print("  (None identified)")
                 
                 # Save full result
-                output_file = "mavaia_result.json"
+                output_file = "oricli_result.json"
                 with open(output_file, "w") as f:
                     json.dump(result, f, indent=2, default=str)
                 print(f"\nFull result saved to: {output_file}\n")

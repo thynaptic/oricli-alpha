@@ -63,7 +63,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 #### 1.1 Integrate Existing Reasoning Modules
 
-- **File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+- **File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 - **Action**: Add module registry integration to access:
 - `reasoning` module for structured reasoning
 - `chain_of_thought` module for multi-step reasoning
@@ -75,7 +75,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 #### 1.2 Enhance Text Generation with Real Reasoning
 
-- **File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+- **File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 - **Method**: `_generate_text_from_embeddings()`
 - **Action**: 
 - Instead of placeholder responses, call actual reasoning modules
@@ -85,7 +85,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 #### 1.3 Improve Multi-Step Reasoning Pipeline
 
-- **File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+- **File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 - **Method**: `_multi_step_reasoning()`
 - **Action**:
 - Before generating text, attempt to solve using `reasoning.multi_step_solve()`
@@ -99,7 +99,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 #### 2.1 Create Puzzle Parser
 
-- **File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+- **File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 - **Method**: `_parse_puzzle_constraints()`
 - **Action**:
 - Parse puzzle text to extract entities, relationships, and constraints
@@ -109,7 +109,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 #### 2.2 Integrate Symbolic Solver for Puzzles
 
-- **File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+- **File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 - **Method**: `_solve_puzzle_with_solver()`
 - **Action**:
 - Use `symbolic_solver` module for constraint satisfaction
@@ -119,7 +119,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 #### 2.3 Zebra Puzzle Specific Solver
 
-- **File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+- **File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 - **Method**: `_solve_zebra_puzzle()`
 - **Action**:
 - Parse zebra puzzle constraints (houses, colors, nationalities, drinks, pets)
@@ -134,7 +134,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 #### 3.1 Task Type Detection
 
-- **File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+- **File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 - **Method**: `_detect_reasoning_type()`
 - **Action**:
 - Analyze task type and question content
@@ -143,7 +143,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 #### 3.2 Routing Logic
 
-- **File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+- **File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 - **Method**: `execute()` - enhance routing
 - **Action**:
 - Detect reasoning type
@@ -157,7 +157,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 #### 3.3 Fallback Chain
 
-- **File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+- **File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 - **Action**: Implement fallback if primary method fails:
 
 1. Try specialized solver
@@ -171,7 +171,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 #### 4.1 Better Embedding Usage
 
-- **File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+- **File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 - **Method**: `_get_embeddings()`
 - **Action**:
 - Use embeddings to extract key concepts and relationships
@@ -181,7 +181,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 #### 4.2 Hybrid Reasoning
 
-- **File**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+- **File**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 - **Method**: `_hybrid_reasoning()`
 - **Action**:
 - Combine neural embeddings with symbolic reasoning
@@ -193,7 +193,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 
 ### Key Files to Modify
 
-1. **`mavaia_core/brain/modules/custom_reasoning_networks.py`**
+1. **`oricli_core/brain/modules/custom_reasoning_networks.py`**
 
 - Add module registry integration
 - Add puzzle parsing and solving methods
@@ -201,7 +201,7 @@ The `custom_reasoning_networks.py` module is failing at 9% (13/200 tests) becaus
 - Add routing logic in `execute()`
 - Add constraint satisfaction problem solving
 
-2. **`mavaia_core/evaluation/categories/livebench_tests.py`** (if needed)
+2. **`oricli_core/evaluation/categories/livebench_tests.py`** (if needed)
 
 - Ensure task information is properly passed to modules
 - Verify response formatting matches LiveBench expectations

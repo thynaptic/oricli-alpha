@@ -2,7 +2,7 @@ import unittest
 import json
 import shutil
 from pathlib import Path
-from mavaia_core.evaluation.livebench_parser import LiveBenchResultParser
+from oricli_core.evaluation.livebench_parser import LiveBenchResultParser
 
 class TestLiveBenchResultParser(unittest.TestCase):
     def setUp(self):
@@ -23,7 +23,7 @@ class TestLiveBenchResultParser(unittest.TestCase):
             for i in range(total_count):
                 score = 1 if i < passed_count else 0
                 entry = {
-                    "model": "mavaia",
+                    "model": "oricli",
                     "score": score,
                     "task": f"{task}_{i}",
                     "category": category,

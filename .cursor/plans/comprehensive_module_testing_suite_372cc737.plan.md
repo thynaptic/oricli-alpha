@@ -1,6 +1,6 @@
 ---
 name: Comprehensive Module Testing Suite
-overview: "Expand the test file to test ALL modules in mavaia_core/brain/modules/ using a hybrid approach: smoke tests for all modules plus detailed integration tests for critical modules."
+overview: "Expand the test file to test ALL modules in oricli_core/brain/modules/ using a hybrid approach: smoke tests for all modules plus detailed integration tests for critical modules."
 todos:
   - id: "1"
     content: Add session fixture for module discovery that discovers all modules once per test session
@@ -54,7 +54,7 @@ todos:
 
 ## Overview
 
-Modify `tests/test_multi_agent_pipeline.py` to comprehensively test all modules discovered in `mavaia_core/brain/modules/`. The test suite will use a hybrid approach:
+Modify `tests/test_multi_agent_pipeline.py` to comprehensively test all modules discovered in `oricli_core/brain/modules/`. The test suite will use a hybrid approach:
 
 - **Smoke tests** for all discovered modules (verify initialization, metadata, and basic operation calls)
 - **Detailed integration tests** for critical modules (existing tests plus additional coverage)

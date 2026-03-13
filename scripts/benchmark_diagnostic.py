@@ -10,7 +10,7 @@ import glob
 from pathlib import Path
 
 def run_diagnostic(base_dir: str = "LiveBench/livebench/data"):
-    print(f"--- Mavaia Benchmark Diagnostic ---")
+    print(f"--- Oricli-Alpha Benchmark Diagnostic ---")
     base_path = Path(base_dir)
     if not base_path.exists():
         print(f"ERROR: Base directory {base_dir} does not exist.")
@@ -90,7 +90,7 @@ def run_diagnostic(base_dir: str = "LiveBench/livebench/data"):
     print("\n--- Diagnostic Complete ---")
 
 def main():
-    # Check if we are in the mavaia root or livebench root
+    # Check if we are in the oricli root or livebench root
     if Path("LiveBench/livebench/data").exists():
         run_diagnostic("LiveBench/livebench/data")
     elif Path("data").exists() and "live_bench" in os.listdir("data"):

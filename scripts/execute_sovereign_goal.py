@@ -14,7 +14,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.registry import ModuleRegistry
+from oricli_core.brain.registry import ModuleRegistry
 
 def execute_goal(goal_id):
     print(f"🚀 Initializing Sovereign Goal Execution: {goal_id}")
@@ -40,7 +40,7 @@ def execute_goal(goal_id):
     if not result.get("success") and "No persistent plan found" in result.get("error", ""):
         # If no plan exists, we need to find the original goal text from the registry
         print("  - No existing plan found. Finding goal metadata...")
-        from mavaia_core.services.goal_service import GoalService
+        from oricli_core.services.goal_service import GoalService
         service = GoalService()
         objectives = service.list_objectives()
         goal_meta = next((obj for obj in objectives if obj["id"] == goal_id), None)

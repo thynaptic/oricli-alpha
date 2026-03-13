@@ -1,7 +1,7 @@
 # Specification: Stage 9 - Comprehensive World Knowledge
 
 ## Overview
-Implement "Stage 9: Comprehensive World Knowledge" into the Mavaia training curriculum. This stage is designed to provide the model with a dense, multi-faceted understanding of the world, spanning historical facts, scientific principles, contemporary culture, and common-sense causal reasoning. Unlike elective LoRAs, this will be a core sequential stage that updates the foundation model's weights.
+Implement "Stage 9: Comprehensive World Knowledge" into the Oricli-Alpha training curriculum. This stage is designed to provide the model with a dense, multi-faceted understanding of the world, spanning historical facts, scientific principles, contemporary culture, and common-sense causal reasoning. Unlike elective LoRAs, this will be a core sequential stage that updates the foundation model's weights.
 
 ## Functional Requirements
 1.  **Curriculum Integration**: Add Stage 9 to `scripts/train_curriculum.py` as a mandatory sequential stage following Stage 8 (Alignment).

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Mavaia Core - Server Launcher
+# Oricli-Alpha Core - Server Launcher
 # Starts both API and UI servers
 
 set -euo pipefail
@@ -48,7 +48,7 @@ trap cleanup SIGINT SIGTERM EXIT
 echo -e "${BOLD}${MAGENTA}"
 echo "============================================================="
 echo ""
-echo -e "   ${WHITE}Mavaia Core - Server Launcher${MAGENTA}"
+echo -e "   ${WHITE}Oricli-Alpha Core - Server Launcher${MAGENTA}"
 echo ""
 echo "============================================================="
 echo -e "${NC}"
@@ -119,19 +119,19 @@ if ! check_port $API_PORT; then
 fi
 
 # Clear old log file
-> /tmp/mavaia_api.log
+> /tmp/oricli_api.log
 
 # Start server in background with unbuffered output
 # Enable auto-port as fallback (server will also check)
-PYTHONUNBUFFERED=1 python3 -u -m mavaia_core.api.server \
+PYTHONUNBUFFERED=1 python3 -u -m oricli_core.api.server \
     --host "$API_HOST" \
     --port "$ACTUAL_API_PORT" \
     --log-level info \
-    2>&1 | tee /tmp/mavaia_api.log &
+    2>&1 | tee /tmp/oricli_api.log &
 API_PID=$!
 
 # Log the PID for debugging
-echo "$API_PID" > /tmp/mavaia_api.pid
+echo "$API_PID" > /tmp/oricli_api.pid
 echo -e "${CYAN}  [DEBUG] API server PID: $API_PID${NC}"
 
 # Give it a moment to start
@@ -141,14 +141,14 @@ sleep 3
 if ! kill -0 "$API_PID" 2>/dev/null; then
     echo -e "${RED}  [ERROR] API server process died immediately${NC}"
     echo -e "${YELLOW}  [INFO] Server output:${NC}"
-    cat /tmp/mavaia_api.log 2>/dev/null || echo "  (no output captured)"
+    cat /tmp/oricli_api.log 2>/dev/null || echo "  (no output captured)"
     exit 1
 fi
 
 # Show initial log output
-if [ -f /tmp/mavaia_api.log ] && [ -s /tmp/mavaia_api.log ]; then
+if [ -f /tmp/oricli_api.log ] && [ -s /tmp/oricli_api.log ]; then
     echo -e "${CYAN}  [INFO] Server output so far:${NC}"
-    tail -5 /tmp/mavaia_api.log | sed 's/^/    /'
+    tail -5 /tmp/oricli_api.log | sed 's/^/    /'
 fi
 
 # Wait for API to be ready (longer timeout for module discovery)
@@ -165,7 +165,7 @@ for i in {1..60}; do
     if ! kill -0 "$API_PID" 2>/dev/null; then
         echo -e "${RED}  [ERROR] API server process died${NC}"
         echo -e "${YELLOW}  [INFO] Server output:${NC}"
-        tail -30 /tmp/mavaia_api.log 2>/dev/null || echo "  (no output captured)"
+        tail -30 /tmp/oricli_api.log 2>/dev/null || echo "  (no output captured)"
         exit 1
     fi
     # Show progress every 5 seconds
@@ -184,7 +184,7 @@ if [ "$API_READY" = "false" ]; then
         echo -e "${YELLOW}    Process is not running${NC}"
     fi
     echo -e "${YELLOW}  [INFO] Server output:${NC}"
-    tail -50 /tmp/mavaia_api.log 2>/dev/null || echo "  (no output captured)"
+    tail -50 /tmp/oricli_api.log 2>/dev/null || echo "  (no output captured)"
     exit 1
 fi
 
@@ -209,27 +209,27 @@ if ! check_port $UI_PORT; then
 fi
 
 # Clear old log file
-> /tmp/mavaia_ui.log
+> /tmp/oricli_ui.log
 
 # Start server in background (use actual API port)
 # Use unbuffered Python output and ensure environment variables are set
 export MAVAIA_API_BASE="http://localhost:${ACTUAL_API_PORT}"
 export MAVAIA_UI_PORT=$ACTUAL_UI_PORT
-PYTHONUNBUFFERED=1 python3 -u ui_app.py 2>&1 | tee /tmp/mavaia_ui.log &
+PYTHONUNBUFFERED=1 python3 -u ui_app.py 2>&1 | tee /tmp/oricli_ui.log &
 UI_PID=$!
 
 # Log the PID for debugging
-echo "$UI_PID" > /tmp/mavaia_ui.pid
+echo "$UI_PID" > /tmp/oricli_ui.pid
 echo -e "${CYAN}  [DEBUG] UI server PID: $UI_PID${NC}"
 
 # Give Flask more time to start (it can be slow)
 sleep 3
 
 # Show initial log output
-if [ -f /tmp/mavaia_ui.log ]; then
-    if [ -s /tmp/mavaia_ui.log ]; then
+if [ -f /tmp/oricli_ui.log ]; then
+    if [ -s /tmp/oricli_ui.log ]; then
         echo -e "${CYAN}  [INFO] UI server output so far:${NC}"
-        tail -10 /tmp/mavaia_ui.log | sed 's/^/    /'
+        tail -10 /tmp/oricli_ui.log | sed 's/^/    /'
     else
         echo -e "${YELLOW}  [WARN] UI server log is empty (Flask may not have started yet)${NC}"
     fi
@@ -239,7 +239,7 @@ fi
 if ! kill -0 "$UI_PID" 2>/dev/null; then
     echo -e "${RED}  [ERROR] UI server process died immediately${NC}"
     echo -e "${YELLOW}  [INFO] Server output:${NC}"
-    cat /tmp/mavaia_ui.log 2>/dev/null || echo "  (no output captured)"
+    cat /tmp/oricli_ui.log 2>/dev/null || echo "  (no output captured)"
     exit 1
 fi
 
@@ -259,16 +259,16 @@ for i in {1..40}; do
     if ! kill -0 "$UI_PID" 2>/dev/null; then
         echo -e "${RED}  [ERROR] UI server process died${NC}"
         echo -e "${YELLOW}  [INFO] Server output:${NC}"
-        tail -50 /tmp/mavaia_ui.log 2>/dev/null || echo "  (no output captured)"
+        tail -50 /tmp/oricli_ui.log 2>/dev/null || echo "  (no output captured)"
         exit 1
     fi
     # Show progress every 5 seconds
     if [ $((i % 10)) -eq 0 ]; then
         echo -e "${CYAN}  [INFO] Still waiting... (${i}/40)${NC}"
         # Show recent log output
-        if [ -f /tmp/mavaia_ui.log ] && [ -s /tmp/mavaia_ui.log ]; then
+        if [ -f /tmp/oricli_ui.log ] && [ -s /tmp/oricli_ui.log ]; then
             echo -e "${CYAN}  [INFO] Recent UI server output:${NC}"
-            tail -5 /tmp/mavaia_ui.log | sed 's/^/    /'
+            tail -5 /tmp/oricli_ui.log | sed 's/^/    /'
         else
             # Check if port is listening
             if command -v lsof > /dev/null 2>&1 && lsof -i :${ACTUAL_UI_PORT} > /dev/null 2>&1; then
@@ -288,7 +288,7 @@ if [ "$UI_READY" = "false" ]; then
         echo -e "${YELLOW}    Process is not running${NC}"
     fi
     echo -e "${YELLOW}  [INFO] Server output:${NC}"
-    tail -50 /tmp/mavaia_ui.log 2>/dev/null || echo "  (no output captured)"
+    tail -50 /tmp/oricli_ui.log 2>/dev/null || echo "  (no output captured)"
     exit 1
 fi
 
@@ -310,8 +310,8 @@ fi
 echo -e "${YELLOW}  [NOTE] If you see 403 errors, try accessing /docs or /health directly${NC}"
 
 echo -e "\n${WHITE}${BOLD}Monitoring:${NC}"
-echo -e "${YELLOW}  API Logs: tail -f /tmp/mavaia_api.log${NC}"
-echo -e "${YELLOW}  UI Logs:  tail -f /tmp/mavaia_ui.log${NC}"
+echo -e "${YELLOW}  API Logs: tail -f /tmp/oricli_api.log${NC}"
+echo -e "${YELLOW}  UI Logs:  tail -f /tmp/oricli_ui.log${NC}"
 
 # Open browser
 if [ "$OPEN_BROWSER" = "true" ]; then

@@ -70,8 +70,8 @@ python3 run_quick_tests.py
 python3 run_tests.py
 
 # Format and Lint
-black mavaia_core/ scripts/
-ruff check mavaia_core/ scripts/
+black oricli_core/ scripts/
+ruff check oricli_core/ scripts/
 ```
 
 ## Commit Guidelines

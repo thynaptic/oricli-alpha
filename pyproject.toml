@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mavaia-core"
+name = "oricli-alpha"
 version = "1.0.0"
-description = "Mavaia Core - Modular AI Core Package with OpenAI-compatible API"
+description = "Oricli-Alpha - Modular AI Core Package with OpenAI-compatible API"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
@@ -89,25 +89,25 @@ ml = [
 ]
 
 [project.scripts]
-mavaia-server = "mavaia_core.api.server:main"
-mavaia-curriculum-test = "mavaia_core.evaluation.curriculum.cli:main"
-mavaia-distill = "mavaia_core.cli.distill:main"
+oricli-server = "oricli_core.api.server:main"
+oricli-test = "oricli_core.evaluation.curriculum.cli:main"
+oricli-distill = "oricli_core.cli.distill:main"
 
 [project.urls]
-Homepage = "https://github.com/thynaptic/mavaia-core"
-Documentation = "https://github.com/thynaptic/mavaia-core/docs"
-Repository = "https://github.com/thynaptic/mavaia-core"
+Homepage = "https://github.com/thynaptic/oricli-alpha"
+Documentation = "https://github.com/thynaptic/oricli-alpha/docs"
+Repository = "https://github.com/thynaptic/oricli-alpha"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["mavaia_core*"]
+include = ["oricli_core*"]
 exclude = ["models*", "LiveBench*", "build*", "dist*", "tests*", ".venv*", ".cursor*"]
 
 [tool.setuptools.package-data]
-"mavaia_core" = ["py.typed", "**/*.json", "**/*.db"]
+"oricli_core" = ["py.typed", "**/*.json", "**/*.db"]
 
 [tool.black]
 line-length = 100

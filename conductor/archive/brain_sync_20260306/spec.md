@@ -1,10 +1,10 @@
 # Specification: Brain Module Synchronization Audit
 
 ## Overview
-Perform a comprehensive technical audit and synchronization of all Mavaia cognitive modules. The goal is to ensure that every module in the "brain" follows a unified interface, utilizes shared context correctly, and operates as a cohesive unit within the cognitive pipeline.
+Perform a comprehensive technical audit and synchronization of all Oricli-Alpha cognitive modules. The goal is to ensure that every module in the "brain" follows a unified interface, utilizes shared context correctly, and operates as a cohesive unit within the cognitive pipeline.
 
 ## Functional Requirements
-1. **API Standardization**: Every module in `mavaia_core/brain/modules/` must strictly inherit from `BaseBrainModule` and implement the `execute` and `initialize` methods with consistent signatures.
+1. **API Standardization**: Every module in `oricli_core/brain/modules/` must strictly inherit from `BaseBrainModule` and implement the `execute` and `initialize` methods with consistent signatures.
 2. **Return Type Parity**: Standardize all operation results to a consistent dictionary format:
    - Must include `success: bool`.
    - Must include `error: Optional[str]` on failure.

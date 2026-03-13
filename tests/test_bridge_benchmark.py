@@ -32,13 +32,13 @@ class TestBridgeBenchmark(unittest.TestCase):
         
         # Command should contain cd to workdir and evaluation script
         full_cmd = cmd_list[-1]
-        self.assertIn(f"cd {workdir}/mavaia", full_cmd)
+        self.assertIn(f"cd {workdir}/oricli", full_cmd)
         self.assertIn("LiveBench/livebench/evaluate.py", full_cmd)
         self.assertIn("--category coding", full_cmd)
 
     @patch("scripts.runpod_bridge.subprocess.run")
     def test_get_bench_results_rsync(self, mock_run):
-        local_path = Path("/tmp/mavaia_local")
+        local_path = Path("/tmp/oricli_local")
         workdir = "/workspace"
         pod_ip = "1.2.3.4"
         pod_port = 1234
@@ -54,7 +54,7 @@ class TestBridgeBenchmark(unittest.TestCase):
         
         self.assertEqual(rsync_cmd[0], "rsync")
         self.assertIn("--include=livebench_results_*.json", rsync_cmd)
-        self.assertIn("--include=mavaia_result.json", rsync_cmd)
+        self.assertIn("--include=oricli_result.json", rsync_cmd)
         self.assertIn("--exclude=*", rsync_cmd)
 
 if __name__ == "__main__":

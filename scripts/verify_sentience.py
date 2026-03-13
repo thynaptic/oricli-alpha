@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.modules.cognitive_generator import CognitiveGeneratorModule
-from mavaia_core.brain.modules.metacognitive_sentinel import MetacognitiveSentinelModule
+from oricli_core.brain.modules.cognitive_generator import CognitiveGeneratorModule
+from oricli_core.brain.modules.metacognitive_sentinel import MetacognitiveSentinelModule
 
 def verify_sentinel_logic():
     print("--- Step 1: Verifying Volatility Detection (Looping) ---")

@@ -14,7 +14,7 @@ Implement a secure web fetch tool that retrieves full content from web pages and
 
 ### Components
 
-1. **Web Fetch Module** (`mavaia_core/brain/modules/web_fetch.py`)
+1. **Web Fetch Module** (`oricli_core/brain/modules/web_fetch.py`)
 
    - BaseBrainModule implementation for direct web fetching
    - URL validation and security checks
@@ -23,7 +23,7 @@ Implement a secure web fetch tool that retrieves full content from web pages and
    - Citation generation
    - Rate limiting
 
-2. **Web Fetch Tool Service** (`mavaia_core/services/web_fetch_service.py`)
+2. **Web Fetch Tool Service** (`oricli_core/services/web_fetch_service.py`)
 
    - Service layer for web fetching operations
    - URL validation logic
@@ -37,14 +37,14 @@ Implement a secure web fetch tool that retrieves full content from web pages and
    - Support for `web_fetch_20250910` tool type
    - Configuration options: max_uses, allowed_domains, blocked_domains, citations, max_content_tokens
 
-4. **API Integration** (`mavaia_core/api/server.py`)
+4. **API Integration** (`oricli_core/api/server.py`)
 
    - Endpoint for web fetch operations
    - Tool invocation support via tool registry
 
 ## Implementation Details
 
-### 1. Web Fetch Module (`mavaia_core/brain/modules/web_fetch.py`)
+### 1. Web Fetch Module (`oricli_core/brain/modules/web_fetch.py`)
 
 **Operations:**
 
@@ -67,7 +67,7 @@ Implement a secure web fetch tool that retrieves full content from web pages and
 - Timeout handling
 - Error handling with specific error codes
 
-### 2. Web Fetch Service (`mavaia_core/services/web_fetch_service.py`)
+### 2. Web Fetch Service (`oricli_core/services/web_fetch_service.py`)
 
 **Key Classes:**
 
@@ -168,7 +168,7 @@ Implement a secure web fetch tool that retrieves full content from web pages and
 ## File Structure
 
 ```
-mavaia_core/
+oricli_core/
 ├── services/
 │   └── web_fetch_service.py
 ├── brain/

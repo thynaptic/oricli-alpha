@@ -1,8 +1,8 @@
 import unittest
 
-from mavaia_core.brain.modules.multi_agent_pipeline import MultiAgentPipeline
-from mavaia_core.brain.modules.synthesis_agent import SynthesisAgentModule
-from mavaia_core.exceptions import InvalidParameterError
+from oricli_core.brain.modules.multi_agent_pipeline import MultiAgentPipeline
+from oricli_core.brain.modules.synthesis_agent import SynthesisAgentModule
+from oricli_core.exceptions import InvalidParameterError
 
 
 class TestMultiAgentPipelineSmoke(unittest.TestCase):

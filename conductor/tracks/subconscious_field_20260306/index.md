@@ -7,7 +7,7 @@
 - **Priority**: High
 
 ## Summary
-Evolve Mavaia's memory from a reactive RAG-based database into an active "Subconscious Field." This layer acts as a persistent bias field that influences tonal and logical generation without requiring explicit retrieval steps for every query.
+Evolve Oricli-Alpha's memory from a reactive RAG-based database into an active "Subconscious Field." This layer acts as a persistent bias field that influences tonal and logical generation without requiring explicit retrieval steps for every query.
 
 ## Files
 - [Specification](./spec.md)

@@ -46,26 +46,26 @@ def test_create_cluster():
         "data": {
             "createCluster": {
                 "id": "new-cluster-id",
-                "name": "mavaia-cluster"
+                "name": "oricli-cluster"
             }
         }
     }
 
     with patch.object(bridge, "_query", return_value=mock_response) as mock_query:
         cluster = bridge.create_cluster(
-            name="mavaia-cluster",
+            name="oricli-cluster",
             gpu_type_id="gpu-nvidia-rtx-6000-ada",
             pod_count=2,
             image="runpod/pytorch"
         )
         
         assert cluster["id"] == "new-cluster-id"
-        assert cluster["name"] == "mavaia-cluster"
+        assert cluster["name"] == "oricli-cluster"
         
         # Verify input structure
         args, kwargs = mock_query.call_args
         sent_input = kwargs["variables"]["input"]
-        assert sent_input["clusterName"] == "mavaia-cluster"
+        assert sent_input["clusterName"] == "oricli-cluster"
         assert "nodeGroups" in sent_input
         assert sent_input["nodeGroups"][0]["gpuTypeId"] == "gpu-nvidia-rtx-6000-ada"
         assert sent_input["nodeGroups"][0]["podCount"] == 2

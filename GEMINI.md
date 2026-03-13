@@ -1,7 +1,7 @@
-# Mavaia Project Context & Agent Guidelines
+# Oricli-Alpha Project Context & Agent Guidelines
 
-## 1. Project Identity: Mavaia Core
-Mavaia is a **Sovereign, Local-First Agent OS**. It is designed to move beyond reactive prompting into proactive, distributed intelligence. The system is modular (246+ modules), self-correcting, and capable of multi-day autonomous goal execution.
+## 1. Project Identity: Oricli-Alpha
+Oricli-Alpha is a **Sovereign, Local-First Agent OS**. It is designed to move beyond reactive prompting into proactive, distributed intelligence. The system is modular (246+ modules), self-correcting, and capable of multi-day autonomous goal execution.
 
 ## 2. Environment: Root VPS
 - **OS**: Linux (Root/Sudo privileges).

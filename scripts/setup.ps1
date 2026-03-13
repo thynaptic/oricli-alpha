@@ -1,8 +1,8 @@
-# Mavaia Core Setup Script (PowerShell for Windows)
+# Oricli-Alpha Core Setup Script (PowerShell for Windows)
 # Installs system dependencies (CMake) and Python packages
 
 Write-Host "╔══════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║          Mavaia Core Setup Script (Windows)            ║" -ForegroundColor Cyan
+Write-Host "║          Oricli-Alpha Core Setup Script (Windows)            ║" -ForegroundColor Cyan
 Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
@@ -142,6 +142,6 @@ Write-Host ""
 Write-Host "✓ CMake installed" -ForegroundColor Green
 Write-Host "✓ Python dependencies installed" -ForegroundColor Green
 Write-Host ""
-Write-Host "You can now use Mavaia Core. To verify installation:" -ForegroundColor Yellow
+Write-Host "You can now use Oricli-Alpha Core. To verify installation:" -ForegroundColor Yellow
 Write-Host "  $pythonCmd -c 'import jax; import flax; print(\"JAX/Flax installed successfully\")'" -ForegroundColor White
 Write-Host ""

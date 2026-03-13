@@ -29,7 +29,7 @@ Build a Claude-like local Flask chat UI that calls the existing OpenAI-compatibl
 
 1) Backend (Flask)
 
-- Add Flask app (e.g., `ui_app.py` or `mavaia_core/ui/app.py`) with routes: `/` SPA HTML, `/static/*` assets, `/chat` proxy → `http://localhost:8000/v1/chat/completions` with SSE and AbortController support, `/models` proxy → `/v1/models`, `/health` returning `{ "ok": true }`, and stub `/events` for future logs/traces.
+- Add Flask app (e.g., `ui_app.py` or `oricli_core/ui/app.py`) with routes: `/` SPA HTML, `/static/*` assets, `/chat` proxy → `http://localhost:8000/v1/chat/completions` with SSE and AbortController support, `/models` proxy → `/v1/models`, `/health` returning `{ "ok": true }`, and stub `/events` for future logs/traces.
 - Implement backoff + retry in proxy for network errors; enforce attachment size cap.
 
 2) Frontend layout & theming

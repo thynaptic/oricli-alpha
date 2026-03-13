@@ -22,8 +22,8 @@ Reduce perceived latency to near-zero for follow-up questions by speculatively e
    - If a match is found (above a similarity threshold), the cached result is delivered instantly.
 
 ## Workflow
-1. User: "How do I install Mavaia?"
-2. Mavaia: Delivers instructions.
+1. User: "How do I install Oricli-Alpha?"
+2. Oricli-Alpha: Delivers instructions.
 3. Speculator (Background): 
    - H1: "How do I configure the API key?"
    - H2: "Can I run it on Windows?"

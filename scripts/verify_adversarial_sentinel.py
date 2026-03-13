@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.modules.adversarial_auditor import AdversarialAuditorModule
+from oricli_core.brain.modules.adversarial_auditor import AdversarialAuditorModule
 
 def verify_audit_plan():
     print("--- Step 1: Verifying Plan Audit (Security Flaw Detection) ---")

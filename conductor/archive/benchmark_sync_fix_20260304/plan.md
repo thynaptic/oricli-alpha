@@ -15,7 +15,7 @@ This plan addresses the benchmark result retrieval inconsistency and 0.0% score 
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Retrieval & Path Correction' (Protocol in workflow.md)
 
 ## Phase 3: Parser Resilience
-- [x] Task: Update `LiveBenchResultParser` in `mavaia_core/evaluation/livebench_parser.py` to handle markdown-wrapped JSONL outputs.
+- [x] Task: Update `LiveBenchResultParser` in `oricli_core/evaluation/livebench_parser.py` to handle markdown-wrapped JSONL outputs.
 - [x] Task: Implement a more robust `clean_llm_output` or similar logic in the local parser.
 - [x] Task: Test the parser against a variety of model response formats (bare jsonl, markdown jsonl, mixed text).
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Parser Resilience' (Protocol in workflow.md)

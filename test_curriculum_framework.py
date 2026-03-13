@@ -14,7 +14,7 @@ def test_imports():
     print("Testing imports...")
     
     try:
-        from mavaia_core.evaluation.curriculum import (
+        from oricli_core.evaluation.curriculum import (
             TestConfiguration,
             OptionalConstraints,
             TestResult,
@@ -29,63 +29,63 @@ def test_imports():
         return False
     
     try:
-        from mavaia_core.evaluation.curriculum.selector import CurriculumSelector
+        from oricli_core.evaluation.curriculum.selector import CurriculumSelector
         print("✓ Selector imported")
     except Exception as e:
         print(f"✗ Failed to import selector: {e}")
         return False
     
     try:
-        from mavaia_core.evaluation.curriculum.executor import TestExecutor
+        from oricli_core.evaluation.curriculum.executor import TestExecutor
         print("✓ Executor imported")
     except Exception as e:
         print(f"✗ Failed to import executor: {e}")
         return False
     
     try:
-        from mavaia_core.evaluation.curriculum.analyzer import ResultAnalyzer
+        from oricli_core.evaluation.curriculum.analyzer import ResultAnalyzer
         print("✓ Analyzer imported")
     except Exception as e:
         print(f"✗ Failed to import analyzer: {e}")
         return False
     
     try:
-        from mavaia_core.evaluation.curriculum.reporter import TestReporter
+        from oricli_core.evaluation.curriculum.reporter import TestReporter
         print("✓ Reporter imported")
     except Exception as e:
         print(f"✗ Failed to import reporter: {e}")
         return False
     
     try:
-        from mavaia_core.evaluation.curriculum.rubric import RubricScorer
+        from oricli_core.evaluation.curriculum.rubric import RubricScorer
         print("✓ Rubric scorer imported")
     except Exception as e:
         print(f"✗ Failed to import rubric scorer: {e}")
         return False
     
     try:
-        from mavaia_core.evaluation.curriculum.constraints import ConstraintManager
+        from oricli_core.evaluation.curriculum.constraints import ConstraintManager
         print("✓ Constraint manager imported")
     except Exception as e:
         print(f"✗ Failed to import constraint manager: {e}")
         return False
     
     try:
-        from mavaia_core.evaluation.curriculum.generator import CurriculumGenerator
+        from oricli_core.evaluation.curriculum.generator import CurriculumGenerator
         print("✓ Generator imported")
     except Exception as e:
         print(f"✗ Failed to import generator: {e}")
         return False
     
     try:
-        from mavaia_core.evaluation.curriculum.analytics import CurriculumAnalytics
+        from oricli_core.evaluation.curriculum.analytics import CurriculumAnalytics
         print("✓ Analytics imported")
     except Exception as e:
         print(f"✗ Failed to import analytics: {e}")
         return False
     
     try:
-        from mavaia_core.evaluation.curriculum.exporters import CurriculumExporter
+        from oricli_core.evaluation.curriculum.exporters import CurriculumExporter
         print("✓ Exporter imported")
     except Exception as e:
         print(f"✗ Failed to import exporter: {e}")
@@ -99,7 +99,7 @@ def test_data_models():
     print("\nTesting data models...")
     
     try:
-        from mavaia_core.evaluation.curriculum.models import (
+        from oricli_core.evaluation.curriculum.models import (
             TestConfiguration,
             OptionalConstraints,
             MemoryContinuityMode,
@@ -149,7 +149,7 @@ def test_selector():
     print("\nTesting curriculum selector...")
     
     try:
-        from mavaia_core.evaluation.curriculum.selector import CurriculumSelector
+        from oricli_core.evaluation.curriculum.selector import CurriculumSelector
         
         selector = CurriculumSelector()
         
@@ -188,8 +188,8 @@ def test_constraints():
     print("\nTesting constraint manager...")
     
     try:
-        from mavaia_core.evaluation.curriculum.constraints import ConstraintManager
-        from mavaia_core.evaluation.curriculum.models import OptionalConstraints, MemoryContinuityMode
+        from oricli_core.evaluation.curriculum.constraints import ConstraintManager
+        from oricli_core.evaluation.curriculum.models import OptionalConstraints, MemoryContinuityMode
         
         constraints = OptionalConstraints(
             time_bound=60.0,
@@ -219,7 +219,7 @@ def test_rubric():
     print("\nTesting scoring rubric...")
     
     try:
-        from mavaia_core.evaluation.curriculum.rubric import RubricScorer
+        from oricli_core.evaluation.curriculum.rubric import RubricScorer
         
         scorer = RubricScorer()
         
@@ -253,8 +253,8 @@ def test_analyzer():
     print("\nTesting result analyzer...")
     
     try:
-        from mavaia_core.evaluation.curriculum.analyzer import ResultAnalyzer
-        from mavaia_core.evaluation.curriculum.models import (
+        from oricli_core.evaluation.curriculum.analyzer import ResultAnalyzer
+        from oricli_core.evaluation.curriculum.models import (
             TestResult,
             TestConfiguration,
             ScoreBreakdown,
@@ -315,8 +315,8 @@ def test_reporter():
     print("\nTesting reporter...")
     
     try:
-        from mavaia_core.evaluation.curriculum.reporter import TestReporter
-        from mavaia_core.evaluation.curriculum.models import (
+        from oricli_core.evaluation.curriculum.reporter import TestReporter
+        from oricli_core.evaluation.curriculum.models import (
             TestResult,
             TestConfiguration,
             ScoreBreakdown,
@@ -386,7 +386,7 @@ def test_metadata_files():
         import json
         from pathlib import Path
         
-        metadata_dir = Path(__file__).parent / "mavaia_core" / "evaluation" / "curriculum" / "data" / "metadata"
+        metadata_dir = Path(__file__).parent / "oricli_core" / "evaluation" / "curriculum" / "data" / "metadata"
         
         files = ["levels.json", "subjects.json", "skill_types.json", "difficulty_styles.json"]
         

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.mavaia_metacognition_daemon import MetacognitionDaemon
+from scripts.oricli_metacognition_daemon import MetacognitionDaemon
 
 def verify_metacognition_cycle():
     print("--- Step 1: Initializing Daemon ---")

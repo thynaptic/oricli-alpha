@@ -3,7 +3,7 @@
 **Phase 1: Diagnostics & Baseline** (33130a5)
 Goal: Establish a baseline of current module health and identify discrepancies.
 - [x] Task: Create Module Health Diagnostic Script
-    - [x] Implement `scripts/module_health_diagnostics.py` to scan `mavaia_core/brain/modules/`.
+    - [x] Implement `scripts/module_health_diagnostics.py` to scan `oricli_core/brain/modules/`.
     - [x] Check for `BaseBrainModule` inheritance, `initialize`, and `execute` implementation.
     - [x] Validate return structures of common operations against a standard schema.
 - [x] Task: Run Baseline Diagnostic

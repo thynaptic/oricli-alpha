@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.registry import ModuleRegistry
+from oricli_core.brain.registry import ModuleRegistry
 
 # Mock neural_text_generator
 mock_ntg = MagicMock()
@@ -27,7 +27,7 @@ def side_effect(name, **kwargs):
         return mock_ntg
     return original_get_module(name, **kwargs)
 
-@patch("mavaia_core.brain.registry.ModuleRegistry.get_module", side_effect=side_effect)
+@patch("oricli_core.brain.registry.ModuleRegistry.get_module", side_effect=side_effect)
 def test_load_adapter_logic(mock_get_module):
     """Verify adapter loading logic with mocked base model."""
     print("Testing adapter loading logic...")
@@ -53,7 +53,7 @@ def test_load_adapter_logic(mock_get_module):
         print(f"✗ load_adapter failed: {res}")
         sys.exit(1)
 
-@patch("mavaia_core.brain.registry.ModuleRegistry.get_module", side_effect=side_effect)
+@patch("oricli_core.brain.registry.ModuleRegistry.get_module", side_effect=side_effect)
 def test_unload_adapter_logic(mock_get_module):
     """Verify adapter unloading logic."""
     print("\nTesting adapter unloading logic...")

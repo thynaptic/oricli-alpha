@@ -1,4 +1,4 @@
-from mavaia_core.brain.registry import ModuleRegistry
+from oricli_core.brain.registry import ModuleRegistry
 import logging
 logging.basicConfig(level=logging.DEBUG)
 try:

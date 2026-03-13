@@ -1,7 +1,7 @@
 # Implementation Plan: Dataset Discovery Elective
 
 ## Phase 1: Search Infrastructure & Ranking
-- [x] Task: Implement `DatasetSearch` service in `mavaia_core/data/search.py`.
+- [x] Task: Implement `DatasetSearch` service in `oricli_core/data/search.py`.
     - [x] Integrate Hugging Face `huggingface_hub` for dataset discovery.
     - [x] Integrate Wikipedia search via `wikipedia` package.
     - [x] Integrate Internet Archive search via `internetarchive` package.

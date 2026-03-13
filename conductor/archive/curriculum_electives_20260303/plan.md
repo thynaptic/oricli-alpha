@@ -12,7 +12,7 @@
     - [x] Implement logic to automatically append `--lora` to `extra_args` if the stage is an elective.
     - [x] Implement base model selection: use `--elective-base` if provided, otherwise default to the output of the last completed non-elective stage.
 - [x] Task: Update `train_neural_text_generator.py` to support a new `--adapter-name` flag for unique LoRA artifact naming.
-- [x] Task: Update the `save_model` operation in `mavaia_core/brain/modules/neural_text_generator.py` to utilize the custom adapter name when saving LoRA weights.
+- [x] Task: Update the `save_model` operation in `oricli_core/brain/modules/neural_text_generator.py` to utilize the custom adapter name when saving LoRA weights.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Elective Execution Logic' (Protocol in workflow.md)
 
 ## Phase 3: Verification & TDD

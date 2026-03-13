@@ -3,7 +3,7 @@ import unittest
 
 class TestMctsMemoryGraphIntegrationSmoke(unittest.TestCase):
     def test_memory_graph_recall_memories_exists(self) -> None:
-        from mavaia_core.brain.modules.memory_graph import MemoryGraph
+        from oricli_core.brain.modules.memory_graph import MemoryGraph
 
         mg = MemoryGraph()
         mg.initialize()
@@ -13,7 +13,7 @@ class TestMctsMemoryGraphIntegrationSmoke(unittest.TestCase):
         self.assertIsInstance(result["memories"], list)
 
     def test_mcts_unknown_operation_raises(self) -> None:
-        from mavaia_core.brain.modules.mcts_service import MCTSService
+        from oricli_core.brain.modules.mcts_service import MCTSService
 
         mcts = MCTSService()
         with self.assertRaises(Exception):

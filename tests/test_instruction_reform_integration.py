@@ -1,7 +1,7 @@
 import unittest
 import sys
 import os
-from mavaia_core.brain.registry import ModuleRegistry
+from oricli_core.brain.registry import ModuleRegistry
 
 class TestInstructionReformIntegration(unittest.TestCase):
     @classmethod
@@ -38,7 +38,7 @@ class TestInstructionReformIntegration(unittest.TestCase):
 
     def test_standard_conversational_routing(self):
         # A standard conversational prompt that should NOT trigger the bypass
-        prompt = "Hello Mavaia, how are you today?"
+        prompt = "Hello Oricli-Alpha, how are you today?"
         
         result = self.cog_gen.execute(
             operation="generate_response",

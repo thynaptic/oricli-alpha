@@ -15,12 +15,12 @@ signal.alarm(10)
 try:
     print("Attempting to import test_runner...")
     start = time.time()
-    import mavaia_core.evaluation.test_runner
+    import oricli_core.evaluation.test_runner
     elapsed = time.time() - start
     signal.alarm(0)  # Cancel alarm
     print(f"✓ Import successful in {elapsed:.2f} seconds")
-    print(f"✓ TestRunnerCLI is: {mavaia_core.evaluation.test_runner.TestRunnerCLI}")
-    print(f"✓ _get_cli_class function exists: {hasattr(mavaia_core.evaluation.test_runner, '_get_cli_class')}")
+    print(f"✓ TestRunnerCLI is: {oricli_core.evaluation.test_runner.TestRunnerCLI}")
+    print(f"✓ _get_cli_class function exists: {hasattr(oricli_core.evaluation.test_runner, '_get_cli_class')}")
 except Exception as e:
     signal.alarm(0)
     print(f"✗ Import failed: {e}")

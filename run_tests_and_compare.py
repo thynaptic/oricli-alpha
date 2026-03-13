@@ -8,11 +8,11 @@ from pathlib import Path
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from mavaia_core.evaluation.test_runner import TestRunner
+from oricli_core.evaluation.test_runner import TestRunner
 
 def main():
     print("=" * 80)
-    print("Running Mavaia Test Suite")
+    print("Running Oricli-Alpha Test Suite")
     print("=" * 80)
     print()
     
@@ -22,7 +22,7 @@ def main():
     # Run all test categories
     categories = ['functional', 'reasoning', 'safety', 'api', 'client', 'system']
     
-    from mavaia_core.evaluation.test_results import TestRunResults, TestStatus
+    from oricli_core.evaluation.test_results import TestRunResults, TestStatus
     from datetime import datetime, timezone
     import uuid
     
@@ -71,7 +71,7 @@ def main():
     print("Generating Industry Comparison Report...")
     print('=' * 80)
     
-    from mavaia_core.evaluation.industry_comparison import IndustryComparison
+    from oricli_core.evaluation.industry_comparison import IndustryComparison
     from pathlib import Path
     
     results_file = Path(archive_path) / "detailed_results.json"

@@ -1,4 +1,4 @@
-# Product Guidelines: Mavaia Core
+# Product Guidelines: Oricli-Alpha Core
 
 ## Voice & Tone
 - **Sovereign Expert**: The prose should be **Direct, Engineering-First & Grounded**. Avoid fluff; focus on technical precision and clear instructions.

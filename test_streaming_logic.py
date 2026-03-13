@@ -7,9 +7,9 @@ import sys
 # Add project root to path
 sys.path.append(os.getcwd())
 
-from mavaia_core.brain.registry import ModuleRegistry
-from mavaia_core.api.openai_compatible import OpenAICompatibleAPI
-from mavaia_core.types.models import ChatCompletionRequest, ChatMessage
+from oricli_core.brain.registry import ModuleRegistry
+from oricli_core.api.openai_compatible import OpenAICompatibleAPI
+from oricli_core.types.models import ChatCompletionRequest, ChatMessage
 
 async def test_streaming_logic():
     # 1. Initialize Registry
@@ -21,7 +21,7 @@ async def test_streaming_logic():
     
     # 3. Create a mock request
     request = ChatCompletionRequest(
-        model="mavaia-cognitive",
+        model="oricli-cognitive",
         messages=[ChatMessage(role="user", content="Test complex reasoning")],
         stream=True
     )

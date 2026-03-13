@@ -7,7 +7,7 @@
 - **Priority**: Medium
 
 ## Summary
-Implement a "Dream State" for Mavaia to run during idle periods. In this state, she consolidates memories, finds hidden correlations between JIT facts and existing knowledge, and generates novel "Insights" using the analogical reasoning and meta-evaluation modules.
+Implement a "Dream State" for Oricli-Alpha to run during idle periods. In this state, she consolidates memories, finds hidden correlations between JIT facts and existing knowledge, and generates novel "Insights" using the analogical reasoning and meta-evaluation modules.
 
 ## Files
 - [Specification](./spec.md)

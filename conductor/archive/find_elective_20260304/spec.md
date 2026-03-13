@@ -32,5 +32,5 @@ Add a dynamic dataset discovery mechanism to the curriculum training pipeline. T
 - The feature works seamlessly over the RunPod bridge (`scripts/runpod_bridge.py`).
 
 ## Out of Scope
-- Automated dataset cleaning/scrubbing beyond standard Mavaia preprocessing.
+- Automated dataset cleaning/scrubbing beyond standard Oricli-Alpha preprocessing.
 - Training multiple discovered datasets in a single command pass.

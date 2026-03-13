@@ -1,17 +1,17 @@
 # Implementation Plan: Dynamic Graph Execution (DGE)
 
 ## Phase 1: The Architect
-- [ ] Implement `mavaia_core/brain/modules/pathway_architect.py`.
+- [ ] Implement `oricli_core/brain/modules/pathway_architect.py`.
 - [ ] Build the logic to translate `intent_info` into a JSON-based DAG.
 - [ ] Implement pre-defined graph templates for common intents (code, search, reasoning).
 
 ## Phase 2: Async Executor
-- [ ] Implement `mavaia_core/brain/modules/graph_executor.py`.
+- [ ] Implement `oricli_core/brain/modules/graph_executor.py`.
 - [ ] Build the asynchronous traversal engine using `asyncio.gather`.
 - [ ] Implement state passing between graph nodes.
 
 ## Phase 3: Cognitive Integration
-- [ ] Update `mavaia_core/brain/modules/cognitive_generator.py` to use `graph_executor` instead of the linear `_execute_module_chain`.
+- [ ] Update `oricli_core/brain/modules/cognitive_generator.py` to use `graph_executor` instead of the linear `_execute_module_chain`.
 - [ ] Ensure backward compatibility for modules that don't support async yet.
 
 ## Phase 4: Dynamic Agent Spawning

@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Tuple
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
 
 PROMPTS: List[Tuple[str, str]] = [
@@ -78,8 +78,8 @@ def _is_obviously_bad(text: str) -> bool:
 def main() -> int:
     per_prompt_timeout_s = 25
 
-    print("Initializing Mavaia client...", flush=True)
-    client = MavaiaClient()
+    print("Initializing Oricli-Alpha client...", flush=True)
+    client = Oricli-AlphaClient()
     print("Client ready. Running prompt matrix...\n", flush=True)
 
     # Use SIGALRM for per-prompt timeouts (Linux VPS).
@@ -88,7 +88,7 @@ def main() -> int:
     passed = 0
     failed = 0
 
-    out_dir = Path("mavaia_matrix_results") / "latest"
+    out_dir = Path("oricli_matrix_results") / "latest"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for i, (category, prompt) in enumerate(PROMPTS, start=1):
@@ -99,7 +99,7 @@ def main() -> int:
                 input=prompt,
                 context="",
                 voice_context={
-                    "base_personality": "mavaia",
+                    "base_personality": "oricli",
                     "tone": "neutral",
                     "formality_level": 0.5,
                     "technical_level": 0.5,

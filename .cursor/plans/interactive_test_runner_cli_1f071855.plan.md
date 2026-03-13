@@ -53,7 +53,7 @@ todos:
 
 ## Overview
 
-Transform `mavaia_core/evaluation/test_runner.py` from a single-command argparse interface into an interactive REPL-style command-line interface using Python's `cmd.Cmd` class. All current functionality will be accessible as interactive commands.
+Transform `oricli_core/evaluation/test_runner.py` from a single-command argparse interface into an interactive REPL-style command-line interface using Python's `cmd.Cmd` class. All current functionality will be accessible as interactive commands.
 
 ## Architecture
 
@@ -142,7 +142,7 @@ All current argparse options will be converted to commands:
 
 ### 1. Create TestRunnerCLI Class
 
-**File:** `mavaia_core/evaluation/test_runner.py`
+**File:** `oricli_core/evaluation/test_runner.py`
 
 - Create `TestRunnerCLI(cmd.Cmd)` class
 - Initialize with `TestRunner` instance
@@ -483,7 +483,7 @@ class ColorOutput:
 
 ## File Changes
 
-### `mavaia_core/evaluation/test_runner.py`
+### `oricli_core/evaluation/test_runner.py`
 
 **Changes:**
 
@@ -580,9 +580,9 @@ class TestRunnerCLI(cmd.Cmd):
 
 ## Migration Notes
 
-- Old usage: `python3 -m mavaia_core.evaluation.test_runner --module X`
-- New usage: `python3 -m mavaia_core.evaluation.test_runner` then `run --module X`
-- Or: `python3 -m mavaia_core.evaluation.test_runner run --module X` (single command mode)
+- Old usage: `python3 -m oricli_core.evaluation.test_runner --module X`
+- New usage: `python3 -m oricli_core.evaluation.test_runner` then `run --module X`
+- Or: `python3 -m oricli_core.evaluation.test_runner run --module X` (single command mode)
 
 ## Testing Considerations
 

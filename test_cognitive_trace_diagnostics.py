@@ -3,7 +3,7 @@ import unittest
 
 class TestCognitiveTraceDiagnostics(unittest.TestCase):
     def test_trace_pipeline_and_redaction(self) -> None:
-        from mavaia_core.brain.modules.cognitive_trace_diagnostics import (
+        from oricli_core.brain.modules.cognitive_trace_diagnostics import (
             CognitiveTraceDiagnosticsModule,
         )
 
@@ -45,7 +45,7 @@ class TestCognitiveTraceDiagnostics(unittest.TestCase):
         self.assertEqual(params_summary.get("api_key"), "***REDACTED***")
 
     def test_trace_pipeline_nonfatal_missing_module(self) -> None:
-        from mavaia_core.brain.modules.cognitive_trace_diagnostics import (
+        from oricli_core.brain.modules.cognitive_trace_diagnostics import (
             CognitiveTraceDiagnosticsModule,
         )
 

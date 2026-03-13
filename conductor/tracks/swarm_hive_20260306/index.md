@@ -7,7 +7,7 @@
 - **Priority**: Capstone
 
 ## Summary
-Transform Mavaia from a centrally-routed "OS" into a decentralized "Society of Mind." Instead of a single brain calling modules, all 246+ modules become independent micro-agents. They use a Contract Net protocol to "bid" on sub-tasks derived from Sovereign Goals, collaborating autonomously in a high-speed, peer-to-peer cognitive swarm.
+Transform Oricli-Alpha from a centrally-routed "OS" into a decentralized "Society of Mind." Instead of a single brain calling modules, all 246+ modules become independent micro-agents. They use a Contract Net protocol to "bid" on sub-tasks derived from Sovereign Goals, collaborating autonomously in a high-speed, peer-to-peer cognitive swarm.
 
 ## Files
 - [Specification](./spec.md)

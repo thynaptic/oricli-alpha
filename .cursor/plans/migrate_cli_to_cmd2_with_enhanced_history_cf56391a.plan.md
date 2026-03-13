@@ -85,7 +85,7 @@ Migrate `TestRunnerCLIImpl` from `cmd.Cmd` to `cmd2.Cmd`, adding enhanced histor
 
 ## Key Changes
 
-### 1. Core Migration (`mavaia_core/evaluation/test_runner.py`)
+### 1. Core Migration (`oricli_core/evaluation/test_runner.py`)
 
 **Base Class Change:**
 
@@ -331,7 +331,7 @@ def _execute_script(self, script_path: str, failure_mode: str = "continue_on_err
 
 **New Files:**
 
-- `mavaia_core/evaluation/scripts/` - Directory for saved scripts
+- `oricli_core/evaluation/scripts/` - Directory for saved scripts
 - `~/.mavaia/scripts/` - User script storage
 - `~/.mavaia/test_runner_history.txt` - Persistent history
 - `~/.mavaia/replay_logs/` - Execution replay logs with error annotations
@@ -411,7 +411,7 @@ def _execute_script(self, script_path: str, failure_mode: str = "continue_on_err
 
 ## Files to Modify
 
-- `mavaia_core/evaluation/test_runner.py` - Main CLI implementation
+- `oricli_core/evaluation/test_runner.py` - Main CLI implementation
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 - Lines 560-1871: CLI class definition
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 - Lines 1101-1109: History command
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 - Lines 1338-1410: Run command

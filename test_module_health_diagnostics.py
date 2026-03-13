@@ -3,7 +3,7 @@ import unittest
 
 class TestModuleHealthDiagnostics(unittest.TestCase):
     def test_scan_modules_basic(self) -> None:
-        from mavaia_core.brain.modules.module_health_diagnostics import (
+        from oricli_core.brain.modules.module_health_diagnostics import (
             ModuleHealthDiagnosticsModule,
         )
 
@@ -24,7 +24,7 @@ class TestModuleHealthDiagnostics(unittest.TestCase):
         self.assertTrue(any(bool(e.get("import_ok")) for e in entries if isinstance(e, dict)))
 
     def test_scan_module_file_invalid(self) -> None:
-        from mavaia_core.brain.modules.module_health_diagnostics import (
+        from oricli_core.brain.modules.module_health_diagnostics import (
             ModuleHealthDiagnosticsModule,
         )
 

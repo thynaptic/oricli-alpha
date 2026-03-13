@@ -1,12 +1,12 @@
 import sys
 from pprint import pprint
 
-from mavaia_core.brain.registry import ModuleRegistry
+from oricli_core.brain.registry import ModuleRegistry
 
 def test_generation():
-    print("=== Mavaia Text Generation Readiness Report ===")
+    print("=== Oricli-Alpha Text Generation Readiness Report ===")
     
-    print("\n1. Initializing Mavaia Module Registry...")
+    print("\n1. Initializing Oricli-Alpha Module Registry...")
     ModuleRegistry.discover_modules(verbose=False)
     
     print("\n2. Retrieving neural_text_generator module...")
@@ -49,7 +49,7 @@ def test_generation():
             params={
                 "input": "Progress report.",
                 "context": "",
-                "persona": "mavaia_standalone"
+                "persona": "oricli_standalone"
             }
         )
         if result.get("success"):

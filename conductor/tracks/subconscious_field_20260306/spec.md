@@ -1,7 +1,7 @@
 # Specification: Persistent Memory Subconscious
 
 ## Objective
-Transform memory from a discrete retrieval task into a continuous "field of influence" that shapes Mavaia's cognitive outputs.
+Transform memory from a discrete retrieval task into a continuous "field of influence" that shapes Oricli-Alpha's cognitive outputs.
 
 ## Core Concepts
 
@@ -15,7 +15,7 @@ Transform memory from a discrete retrieval task into a continuous "field of infl
 
 3. **Bias Injection**:
    - The `cognitive_generator` pulls the current mental state vector.
-   - This vector is used to bias word selection and logic paths, ensuring Mavaia remains consistent with her recent learnings without explicit context padding.
+   - This vector is used to bias word selection and logic paths, ensuring Oricli-Alpha remains consistent with her recent learnings without explicit context padding.
 
 4. **Background Consolidation**:
    - Periodic "deep-sea" syncs between the Subconscious Field and the long-term `memory_graph`.
@@ -23,7 +23,7 @@ Transform memory from a discrete retrieval task into a continuous "field of infl
 ## Technical Architecture
 - **In-Memory Store**: A circular buffer of high-dimensional vectors.
 - **Influence Function**: A mathematical weight applied to the `cognitive_generator`'s routing and synthesis logic.
-- **Persistence**: State is saved to `mavaia_core/data/subconscious_state.bin` and synced to S3.
+- **Persistence**: State is saved to `oricli_core/data/subconscious_state.bin` and synced to S3.
 
 ## Workflow
 1. User provides input.
