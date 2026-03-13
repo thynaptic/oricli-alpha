@@ -77,7 +77,7 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Expansion Opportunities:**
 
-- **Centralized State Storage Service** (`mavaia_core/brain/state_storage/`)
+- **Centralized State Storage Service** (`oricli_core/brain/state_storage/`)
 - Abstract storage interface (file-based, database, in-memory)
 - State versioning and migration
 - State compression and archival
@@ -92,12 +92,12 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Files to Create:**
 
-- `mavaia_core/brain/state_storage/__init__.py`
-- `mavaia_core/brain/state_storage/base_storage.py` - Abstract storage interface
-- `mavaia_core/brain/state_storage/file_storage.py` - File-based implementation
-- `mavaia_core/brain/state_storage/db_storage.py` - Database implementation (SQLite/PostgreSQL)
-- `mavaia_core/brain/state_storage/memory_storage.py` - In-memory implementation
-- `mavaia_core/brain/state_storage/state_index.py` - State indexing and querying
+- `oricli_core/brain/state_storage/__init__.py`
+- `oricli_core/brain/state_storage/base_storage.py` - Abstract storage interface
+- `oricli_core/brain/state_storage/file_storage.py` - File-based implementation
+- `oricli_core/brain/state_storage/db_storage.py` - Database implementation (SQLite/PostgreSQL)
+- `oricli_core/brain/state_storage/memory_storage.py` - In-memory implementation
+- `oricli_core/brain/state_storage/state_index.py` - State indexing and querying
 
 ### 2. Module Orchestration & Dependency Management
 
@@ -105,7 +105,7 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Expansion Opportunities:**
 
-- **Module Orchestrator** (`mavaia_core/brain/orchestrator.py`)
+- **Module Orchestrator** (`oricli_core/brain/orchestrator.py`)
 - Dependency graph construction and validation
 - Automatic module loading order
 - Module lifecycle management
@@ -120,9 +120,9 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Files to Create:**
 
-- `mavaia_core/brain/orchestrator.py` - Main orchestration engine
-- `mavaia_core/brain/dependency_graph.py` - Dependency graph management
-- `mavaia_core/brain/module_lifecycle.py` - Lifecycle management
+- `oricli_core/brain/orchestrator.py` - Main orchestration engine
+- `oricli_core/brain/dependency_graph.py` - Dependency graph management
+- `oricli_core/brain/module_lifecycle.py` - Lifecycle management
 
 ### 3. Module Intercommunication & Events
 
@@ -130,7 +130,7 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Expansion Opportunities:**
 
-- **Event System** (`mavaia_core/brain/events.py`)
+- **Event System** (`oricli_core/brain/events.py`)
 - Module event bus
 - Event publishing and subscription
 - Event routing and filtering
@@ -144,9 +144,9 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Files to Create:**
 
-- `mavaia_core/brain/events.py` - Event system
-- `mavaia_core/brain/messaging.py` - Inter-module messaging
-- `mavaia_core/brain/contracts.py` - Module interface contracts
+- `oricli_core/brain/events.py` - Event system
+- `oricli_core/brain/messaging.py` - Inter-module messaging
+- `oricli_core/brain/contracts.py` - Module interface contracts
 
 ### 4. Performance & Caching Layer
 
@@ -154,7 +154,7 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Expansion Opportunities:**
 
-- **Centralized Cache System** (`mavaia_core/brain/cache.py`)
+- **Centralized Cache System** (`oricli_core/brain/cache.py`)
 - Multi-level caching (memory, disk, distributed)
 - Cache invalidation strategies
 - Cache warming and preloading
@@ -168,9 +168,9 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Files to Create:**
 
-- `mavaia_core/brain/cache.py` - Caching system
-- `mavaia_core/brain/performance.py` - Performance monitoring
-- `mavaia_core/brain/optimization.py` - Optimization engine
+- `oricli_core/brain/cache.py` - Caching system
+- `oricli_core/brain/performance.py` - Performance monitoring
+- `oricli_core/brain/optimization.py` - Optimization engine
 
 ### 5. Observability & Metrics
 
@@ -178,7 +178,7 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Expansion Opportunities:**
 
-- **Module Metrics System** (`mavaia_core/brain/metrics.py`)
+- **Module Metrics System** (`oricli_core/brain/metrics.py`)
 - Execution time tracking
 - Success/failure rates
 - Resource usage monitoring
@@ -192,9 +192,9 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Files to Create:**
 
-- `mavaia_core/brain/metrics.py` - Metrics collection
-- `mavaia_core/brain/health.py` - Health checking
-- `mavaia_core/brain/tracing.py` - Distributed tracing
+- `oricli_core/brain/metrics.py` - Metrics collection
+- `oricli_core/brain/health.py` - Health checking
+- `oricli_core/brain/tracing.py` - Distributed tracing
 
 ### 6. Module Testing Infrastructure
 
@@ -202,7 +202,7 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Expansion Opportunities:**
 
-- **Module Test Framework** (`mavaia_core/brain/testing/`)
+- **Module Test Framework** (`oricli_core/brain/testing/`)
 - Unit test helpers
 - Integration test utilities
 - Mock module system
@@ -210,10 +210,10 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 **Files to Create:**
 
-- `mavaia_core/brain/testing/__init__.py`
-- `mavaia_core/brain/testing/fixtures.py` - Test fixtures
-- `mavaia_core/brain/testing/mocks.py` - Mock modules
-- `mavaia_core/brain/testing/helpers.py` - Test utilities
+- `oricli_core/brain/testing/__init__.py`
+- `oricli_core/brain/testing/fixtures.py` - Test fixtures
+- `oricli_core/brain/testing/mocks.py` - Mock modules
+- `oricli_core/brain/testing/helpers.py` - Test utilities
 
 ### 7. Advanced Capabilities
 
@@ -266,14 +266,14 @@ Analysis of the current brain architecture reveals 78+ modules across reasoning,
 
 ### Core Infrastructure
 
-- `mavaia_core/brain/__init__.py` - Export new systems
-- `mavaia_core/brain/registry.py` - Integrate with orchestrator
-- `mavaia_core/brain/base_module.py` - Add lifecycle hooks
+- `oricli_core/brain/__init__.py` - Export new systems
+- `oricli_core/brain/registry.py` - Integrate with orchestrator
+- `oricli_core/brain/base_module.py` - Add lifecycle hooks
 
 ### Module Updates
 
-- `mavaia_core/brain/modules/cognitive_generator.py` - Use orchestrator
-- `mavaia_core/brain/modules/state_manager.py` - Use storage service
+- `oricli_core/brain/modules/cognitive_generator.py` - Use orchestrator
+- `oricli_core/brain/modules/state_manager.py` - Use storage service
 - All modules - Add metrics and health checks
 
 ## Implementation Todos

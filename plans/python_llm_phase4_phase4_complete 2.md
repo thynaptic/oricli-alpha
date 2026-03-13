@@ -90,9 +90,9 @@
 ## 💻 Usage Examples
 
 ```python
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
-client = MavaiaClient()
+client = Oricli-AlphaClient()
 
 # Security Analysis
 security = client.python.analyze_security(code)

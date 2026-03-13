@@ -36,7 +36,7 @@ flowchart TD
 
 ### 1. Create Neural Text Generator Module
 
-**File**: `mavaia_core/brain/modules/neural_text_generator.py`
+**File**: `oricli_core/brain/modules/neural_text_generator.py`
 
 - New `BaseBrainModule` that implements both character-level and word-level models
 - Operations:
@@ -66,7 +66,7 @@ flowchart TD
 
 ### 3. Data Pipeline
 
-**File**: `mavaia_core/brain/modules/neural_text_generator_data.py` (helper module)
+**File**: `oricli_core/brain/modules/neural_text_generator_data.py` (helper module)
 
 - `load_gutenberg_data`: Download/load Project Gutenberg books
 - `preprocess_text`: Clean and normalize text
@@ -94,7 +94,7 @@ flowchart TD
 
 ### 5. Model Storage
 
-**Storage Location**: `mavaia_core/models/neural_text_generator/`
+**Storage Location**: `oricli_core/models/neural_text_generator/`
 
 - Model files: `char_model.h5` / `word_model.h5`
 - Metadata: `char_model.json` / `word_model.json` (vocabulary, config, training history)
@@ -125,7 +125,7 @@ flowchart TD
 
 ### 8. Configuration
 
-**File**: `mavaia_core/brain/modules/neural_text_generator_config.json`
+**File**: `oricli_core/brain/modules/neural_text_generator_config.json`
 
 ```json
 {
@@ -220,17 +220,17 @@ def generate_text(model, prompt, max_length=500, temperature=0.7):
 
 ## Files to Create
 
-1. `mavaia_core/brain/modules/neural_text_generator.py` - Main module
-2. `mavaia_core/brain/modules/neural_text_generator_data.py` - Data loading/preprocessing
-3. `mavaia_core/brain/modules/neural_text_generator_config.json` - Configuration
+1. `oricli_core/brain/modules/neural_text_generator.py` - Main module
+2. `oricli_core/brain/modules/neural_text_generator_data.py` - Data loading/preprocessing
+3. `oricli_core/brain/modules/neural_text_generator_config.json` - Configuration
 4. `scripts/train_neural_text_generator.py` - Training script
-5. `mavaia_core/models/neural_text_generator/` - Model storage directory
+5. `oricli_core/models/neural_text_generator/` - Model storage directory
 
 ## Files to Modify
 
-1. `mavaia_core/brain/modules/text_generation_engine.py` - Add neural generation option
+1. `oricli_core/brain/modules/text_generation_engine.py` - Add neural generation option
 2. `requirements-ml.txt` - Add TensorFlow/Keras dependency
-3. `mavaia_core/brain/modules/__init__.py` - Register new module
+3. `oricli_core/brain/modules/__init__.py` - Register new module
 
 ## Training Data
 

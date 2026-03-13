@@ -6,7 +6,7 @@
 
 **Version:** v1.0.0
 
-**Authors:** Mavaia Core Engineering Team
+**Authors:** Oricli-Alpha Core Engineering Team
 
 ---
 
@@ -20,7 +20,7 @@ We describe a comprehensive training framework for neural text generation models
 
 Local-first text generation remains a critical requirement for cognitive systems that prioritize privacy, autonomy, and deterministic inference pathways. Unlike cloud-based language models that rely on remote APIs, local models provide complete control over the inference process, enable offline operation, and eliminate data transmission risks. However, training effective local models requires sophisticated data management, flexible training configurations, and robust preprocessing pipelines.
 
-This document describes the Neural Text Generator Training System, a framework that addresses these requirements through a modular architecture combining multi-source data integration, profile-based training configuration, and dual-model support (character and word-level RNN/LSTM models). The system is designed to operate within Mavaia's cognitive layer architecture, enabling seamless integration with the broader brain module ecosystem.
+This document describes the Neural Text Generator Training System, a framework that addresses these requirements through a modular architecture combining multi-source data integration, profile-based training configuration, and dual-model support (character and word-level RNN/LSTM models). The system is designed to operate within Oricli-Alpha's cognitive layer architecture, enabling seamless integration with the broader brain module ecosystem.
 
 We developed this system to support research into adaptive sampling strategies and local-first inference pathways. The framework allows researchers to rapidly experiment with different data sources, training profiles, and model configurations while maintaining consistency across training runs through standardized configuration files.
 
@@ -206,7 +206,7 @@ While the system has limitations in model architecture and evaluation capabiliti
 
 ## References
 
-- Mavaia Core Architecture Documentation
+- Oricli-Alpha Core Architecture Documentation
 - TensorFlow/Keras Documentation: https://www.tensorflow.org/
 - Project Gutenberg: https://www.gutenberg.org/
 - HuggingFace Datasets: https://huggingface.co/datasets

@@ -155,13 +155,13 @@ examples:
             
             - name: Run linters
               run: |
-                ruff check mavaia_core/
-                black --check mavaia_core/
-                mypy mavaia_core/
+                ruff check oricli_core/
+                black --check oricli_core/
+                mypy oricli_core/
             
             - name: Run tests
               run: |
-                pytest tests/ --cov=mavaia_core --cov-report=xml
+                pytest tests/ --cov=oricli_core --cov-report=xml
             
             - name: Upload coverage
               uses: codecov/codecov-action@v3

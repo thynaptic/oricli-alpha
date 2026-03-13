@@ -170,7 +170,7 @@ examples:
   - description: "State storage with metadata"
     language: python
     code: |
-      from mavaia_core.brain.state_storage.base_storage import BaseStorage, StorageConfig
+      from oricli_core.brain.state_storage.base_storage import BaseStorage, StorageConfig
       from typing import Dict, Any, Optional
       from datetime import datetime
       
@@ -258,7 +258,7 @@ examples:
           return sanitized
 
 references:
-  - Mavaia storage interface: mavaia_core/brain/state_storage/base_storage.py
+  - Mavaia storage interface: oricli_core/brain/state_storage/base_storage.py
   - GDPR: https://gdpr.eu/
   - CCPA: https://oag.ca.gov/privacy/ccpa
   - Data minimization: https://ico.org.uk/for-organisations/guide-to-data-protection/guide-to-the-general-data-protection-regulation-gdpr/principles/data-minimisation/

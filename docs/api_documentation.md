@@ -1,11 +1,11 @@
 # API Documentation
 
-Complete API documentation for Mavaia Core.
+Complete API documentation for Oricli-Alpha Core.
 
 ## Base URL
 
 - Local: `http://localhost:8000`
-- Production: `https://api.mavaia.com` (when deployed)
+- Production: `https://api.oricli.com` (when deployed)
 
 ## Authentication
 
@@ -31,10 +31,10 @@ export MAVAIA_API_KEY="your-secret-key"
 export MAVAIA_REQUIRE_AUTH="true"
 
 # Start server
-mavaia-server --port 8000
+oricli-server --port 8000
 
 # Or set via command line
-mavaia-server --port 8000 --api-key "your-secret-key" --require-auth
+oricli-server --port 8000 --api-key "your-secret-key" --require-auth
 ```
 
 ## OpenAI-Compatible Endpoints
@@ -48,7 +48,7 @@ Create a chat completion.
 **Request:**
 ```json
 {
-  "model": "mavaia-cognitive",
+  "model": "oricli-cognitive",
   "messages": [
     {"role": "user", "content": "Hello, how are you?"}
   ],
@@ -64,7 +64,7 @@ Create a chat completion.
   "id": "chatcmpl-123",
   "object": "chat.completion",
   "created": 1694268190,
-  "model": "mavaia-cognitive",
+  "model": "oricli-cognitive",
   "choices": [
     {
       "index": 0,
@@ -84,7 +84,7 @@ Create a chat completion.
 ```
 
 **Parameters:**
-- `model` (string, required): Model identifier (default: "mavaia-cognitive")
+- `model` (string, required): Model identifier (default: "oricli-cognitive")
 - `messages` (array, required): Conversation messages
 - `temperature` (float, optional): Sampling temperature (0.0-2.0, default: 0.7)
 - `max_tokens` (integer, optional): Maximum tokens to generate
@@ -103,7 +103,7 @@ Create embeddings for text.
 ```json
 {
   "input": "text to embed",
-  "model": "mavaia-embeddings"
+  "model": "oricli-embeddings"
 }
 ```
 
@@ -118,7 +118,7 @@ Create embeddings for text.
       "index": 0
     }
   ],
-  "model": "mavaia-embeddings",
+  "model": "oricli-embeddings",
   "usage": {
     "prompt_tokens": 4,
     "total_tokens": 4
@@ -128,7 +128,7 @@ Create embeddings for text.
 
 **Parameters:**
 - `input` (string or array, required): Text(s) to embed
-- `model` (string, optional): Embedding model (default: "mavaia-embeddings")
+- `model` (string, optional): Embedding model (default: "oricli-embeddings")
 
 ### Models
 
@@ -142,19 +142,19 @@ List available models.
   "object": "list",
   "data": [
     {
-      "id": "mavaia-cognitive",
+      "id": "oricli-cognitive",
       "object": "model",
       "created": 1694268190,
-      "owned_by": "mavaia",
+      "owned_by": "oricli",
       "permission": [],
-      "root": "mavaia-cognitive",
+      "root": "oricli-cognitive",
       "parent": null
     }
   ]
 }
 ```
 
-## Mavaia-Specific Endpoints
+## Oricli-Alpha-Specific Endpoints
 
 ### List Modules
 
@@ -188,7 +188,7 @@ Check server health.
 ```json
 {
   "status": "healthy",
-  "service": "mavaia-core",
+  "service": "oricli-core",
   "version": "1.0.0"
 }
 ```
@@ -237,21 +237,21 @@ When API key authentication is required but fails:
 # Missing header
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "mavaia-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "oricli-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
 # Returns 401 if authentication required
 
 # Invalid format
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Authorization: invalid-format" \
   -H "Content-Type: application/json" \
-  -d '{"model": "mavaia-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "oricli-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
 # Returns 401: "Invalid authorization format. Expected 'Bearer <token>'"
 
 # Wrong API key
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Authorization: Bearer wrong-key" \
   -H "Content-Type: application/json" \
-  -d '{"model": "mavaia-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "oricli-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
 # Returns 401: "Invalid API key"
 ```
 
@@ -280,14 +280,14 @@ When request parameters are invalid:
 # Missing messages
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "mavaia-cognitive"}'
+  -d '{"model": "oricli-cognitive"}'
 # Returns 400: "messages is required"
 
 # Invalid temperature
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "mavaia-cognitive",
+    "model": "oricli-cognitive",
     "messages": [{"role": "user", "content": "Hello"}],
     "temperature": 3.0
   }'
@@ -320,7 +320,7 @@ When an internal error occurs:
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "mavaia-cognitive",
+    "model": "oricli-cognitive",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 # Returns 500 if cognitive_generator module is not available
@@ -331,7 +331,7 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 **Python:**
 ```python
 import httpx
-from mavaia_core.exceptions import (
+from oricli_core.exceptions import (
     AuthenticationError,
     ModuleNotFoundError,
     ModuleOperationError
@@ -340,7 +340,7 @@ from mavaia_core.exceptions import (
 try:
     response = httpx.post(
         "http://localhost:8000/v1/chat/completions",
-        json={"model": "mavaia-cognitive", "messages": [...]},
+        json={"model": "oricli-cognitive", "messages": [...]},
         headers={"Authorization": "Bearer your-key"}
     )
     response.raise_for_status()
@@ -364,7 +364,7 @@ try {
       'Authorization': 'Bearer your-key'
     },
     body: JSON.stringify({
-      model: 'mavaia-cognitive',
+      model: 'oricli-cognitive',
       messages: [{ role: 'user', content: 'Hello' }]
     })
   });
@@ -397,7 +397,7 @@ Set `stream: true` in the request to receive streaming responses:
 **Request:**
 ```json
 {
-  "model": "mavaia-cognitive",
+  "model": "oricli-cognitive",
   "messages": [{"role": "user", "content": "Hello"}],
   "stream": true
 }
@@ -421,7 +421,7 @@ import httpx
 response = httpx.post(
     "http://localhost:8000/v1/chat/completions",
     json={
-        "model": "mavaia-cognitive",
+        "model": "oricli-cognitive",
         "messages": [{"role": "user", "content": "Hello"}]
     }
 )
@@ -432,7 +432,7 @@ response = httpx.post(
     "http://localhost:8000/v1/embeddings",
     json={
         "input": "text to embed",
-        "model": "mavaia-embeddings"
+        "model": "oricli-embeddings"
     }
 )
 print(response.json())
@@ -445,7 +445,7 @@ print(response.json())
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "mavaia-cognitive",
+    "model": "oricli-cognitive",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 
@@ -454,7 +454,7 @@ curl -X POST http://localhost:8000/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{
     "input": "text to embed",
-    "model": "mavaia-embeddings"
+    "model": "oricli-embeddings"
   }'
 ```
 
@@ -468,7 +468,7 @@ const response = await fetch('http://localhost:8000/v1/chat/completions', {
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    model: 'mavaia-cognitive',
+    model: 'oricli-cognitive',
     messages: [{ role: 'user', content: 'Hello' }]
   })
 });

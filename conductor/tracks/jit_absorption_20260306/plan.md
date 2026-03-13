@@ -1,15 +1,15 @@
 # Implementation Plan: JIT Knowledge Absorption
 
 ## Phase 1: Data Infrastructure
-- [ ] Create `mavaia_core/data/jit_absorption.jsonl`.
-- [ ] Implement `mavaia_core/services/absorption_service.py` to handle thread-safe writes to the buffer.
+- [ ] Create `oricli_core/data/jit_absorption.jsonl`.
+- [ ] Implement `oricli_core/services/absorption_service.py` to handle thread-safe writes to the buffer.
 
 ## Phase 2: Pipeline Integration
-- [ ] Update `mavaia_core/brain/modules/agent_coordinator.py` to trigger the absorption service after a successful, verified web-search synthesis.
+- [ ] Update `oricli_core/brain/modules/agent_coordinator.py` to trigger the absorption service after a successful, verified web-search synthesis.
 - [ ] Ensure the "Verifier Agent" has a specific instruction to flag "Learnable" content.
 
 ## Phase 3: The JIT Daemon
-- [ ] Implement `scripts/mavaia_jit_daemon.py` based on the RFAL daemon template.
+- [ ] Implement `scripts/oricli_jit_daemon.py` based on the RFAL daemon template.
 - [ ] Configure it to trigger `runpod_bridge.py` with the `--train-jit` flag (to be added).
 
 ## Phase 4: Bridge Integration

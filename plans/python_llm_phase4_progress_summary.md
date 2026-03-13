@@ -10,7 +10,7 @@
 ### ✅ Code Review Module Implemented
 
 **Module:** `python_code_review.py`  
-**Location:** `mavaia_core/brain/modules/python_code_review.py`  
+**Location:** `oricli_core/brain/modules/python_code_review.py`  
 **Status:** ✅ Complete and ready for use
 
 **8 Operations Implemented:**
@@ -46,9 +46,9 @@
 
 **Example Usage:**
 ```python
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
-client = MavaiaClient()
+client = Oricli-AlphaClient()
 
 # Get comprehensive code review
 review = client.python.review_code(code)
@@ -105,7 +105,7 @@ print(f"Debt Level: {debt['debt_level']}")
 - ✅ Comprehensive type hints
 - ✅ Full docstring coverage
 - ✅ Error handling throughout
-- ✅ Follows Mavaia coding standards
+- ✅ Follows Oricli-Alpha coding standards
 - ✅ Follows BaseBrainModule pattern
 
 ---
@@ -155,9 +155,9 @@ print(f"Debt Level: {debt['debt_level']}")
 The Code Review module is **complete and ready for use**:
 
 ```python
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
-client = MavaiaClient()
+client = Oricli-AlphaClient()
 
 # Start reviewing code immediately!
 review = client.python.review_code(your_code)

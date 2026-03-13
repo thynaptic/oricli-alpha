@@ -2,13 +2,13 @@
 
 ## Abstract
 
-We introduce Thynaptic Registry, a distribution platform for cognitive modules and pre-configured cognitive frameworks within the Mavaia ecosystem. This system enables discovery, installation, and management of cognitive capabilities through a centralized registry service. The registry supports both individual brain modules and complete cognitive framework configurations, providing developers with a streamlined experience for cognitive systems components. This document describes the architecture, capabilities, security mechanisms, and technical roadmap for the Thynaptic Registry platform.
+We introduce Thynaptic Registry, a distribution platform for cognitive modules and pre-configured cognitive frameworks within the Oricli-Alpha ecosystem. This system enables discovery, installation, and management of cognitive capabilities through a centralized registry service. The registry supports both individual brain modules and complete cognitive framework configurations, providing developers with a streamlined experience for cognitive systems components. This document describes the architecture, capabilities, security mechanisms, and technical roadmap for the Thynaptic Registry platform.
 
 ## Introduction
 
-Mavaia's current architecture relies on filesystem-based module discovery, where brain modules are automatically discovered from local directories. While this approach enables plug-and-play module integration, it requires manual installation and distribution of modules. Developers must clone repositories, copy module files, or install packages through traditional Python package managers to access new cognitive capabilities.
+Oricli-Alpha's current architecture relies on filesystem-based module discovery, where brain modules are automatically discovered from local directories. While this approach enables plug-and-play module integration, it requires manual installation and distribution of modules. Developers must clone repositories, copy module files, or install packages through traditional Python package managers to access new cognitive capabilities.
 
-We designed Thynaptic Registry to address these limitations by providing a centralized distribution mechanism for cognitive modules and frameworks. The platform enables developers to discover, install, and manage cognitive capabilities through a unified interface. This approach reduces friction in extending Mavaia's capabilities and enables community-driven module sharing.
+We designed Thynaptic Registry to address these limitations by providing a centralized distribution mechanism for cognitive modules and frameworks. The platform enables developers to discover, install, and manage cognitive capabilities through a unified interface. This approach reduces friction in extending Oricli-Alpha's capabilities and enables community-driven module sharing.
 
 A cognitive framework, in this context, refers to a pre-configured combination of brain modules with specific settings, dependencies, and orchestration patterns. Frameworks represent complete cognitive system configurations optimized for particular use cases—such as research assistance, code analysis, or conversational AI—rather than individual modules. Developers can install entire frameworks with a single command.
 
@@ -16,7 +16,7 @@ The registry architecture supports both public and private registries, enabling 
 
 ## Architecture Summary
 
-Thynaptic Registry consists of three primary components: the registry service, the distribution format system, and the client integration layer. These components extend Mavaia's existing module architecture without requiring fundamental changes to the core cognitive framework.
+Thynaptic Registry consists of three primary components: the registry service, the distribution format system, and the client integration layer. These components extend Oricli-Alpha's existing module architecture without requiring fundamental changes to the core cognitive framework.
 
 ### Registry Service Architecture
 
@@ -30,9 +30,9 @@ The registry service stores module metadata, version histories, dependency graph
 
 ### Distribution Format System
 
-The registry supports multiple distribution formats to accommodate different module types and deployment scenarios. Standalone Python files (`.py`) provide the simplest distribution mechanism for lightweight modules that require minimal dependencies. These modules can be downloaded directly and placed in the local modules directory, maintaining compatibility with Mavaia's existing filesystem-based discovery.
+The registry supports multiple distribution formats to accommodate different module types and deployment scenarios. Standalone Python files (`.py`) provide the simplest distribution mechanism for lightweight modules that require minimal dependencies. These modules can be downloaded directly and placed in the local modules directory, maintaining compatibility with Oricli-Alpha's existing filesystem-based discovery.
 
-Python package distribution (wheels and source distributions) supports more complex modules with multiple files, data assets, or compiled extensions. Package-based modules follow standard Python packaging conventions and integrate with existing dependency management systems. The registry validates package structure, extracts metadata, and verifies compatibility with Mavaia's module interface.
+Python package distribution (wheels and source distributions) supports more complex modules with multiple files, data assets, or compiled extensions. Package-based modules follow standard Python packaging conventions and integrate with existing dependency management systems. The registry validates package structure, extracts metadata, and verifies compatibility with Oricli-Alpha's module interface.
 
 Framework distribution uses a manifest-based format that defines module combinations, configuration parameters, and orchestration patterns. Framework manifests are JSON or YAML documents that specify which modules to include, their versions, default settings, and dependency relationships. The manifest format enables reproducible framework installations and supports version pinning for stability.
 
@@ -40,7 +40,7 @@ The distribution system includes integrity verification through cryptographic si
 
 ### Integration with Existing System
 
-Thynaptic Registry integrates with Mavaia's existing module architecture through extensions to the `ModuleRegistry` class. The registry maintains backward compatibility with filesystem-based discovery while adding remote discovery capabilities.
+Thynaptic Registry integrates with Oricli-Alpha's existing module architecture through extensions to the `ModuleRegistry` class. The registry maintains backward compatibility with filesystem-based discovery while adding remote discovery capabilities.
 
 The integration layer extends `ModuleRegistry.discover_modules()` to support remote module sources. When configured with a registry endpoint, the discovery process queries the registry API for available modules, downloads them to a local cache, and makes them available through the standard module interface. This approach preserves the existing auto-discovery mechanism while adding remote distribution capabilities.
 
@@ -62,7 +62,7 @@ Dependency visualization helps developers understand module relationships and po
 
 ### Installation and Management
 
-The registry CLI provides commands for installing modules and frameworks from the registry. The `pull` command downloads components, verifies signatures, resolves dependencies, and installs them to the local modules directory. The installation process maintains compatibility with Mavaia's existing module discovery mechanism.
+The registry CLI provides commands for installing modules and frameworks from the registry. The `pull` command downloads components, verifies signatures, resolves dependencies, and installs them to the local modules directory. The installation process maintains compatibility with Oricli-Alpha's existing module discovery mechanism.
 
 Version management enables installing specific versions, updating to latest versions, and pinning versions for stability. The registry tracks version compatibility and provides recommendations for updates. Dependency resolution ensures all required modules are installed in compatible versions.
 
@@ -190,5 +190,5 @@ We continue to evolve the registry based on user feedback and usage patterns. Th
 
 ---
 
-*This document describes Thynaptic Registry version 1.0.0 (planned). For technical documentation on Mavaia's module architecture, see the [public overview](public_overview.md) and [module development guide](module_development.md).*
+*This document describes Thynaptic Registry version 1.0.0 (planned). For technical documentation on Oricli-Alpha's module architecture, see the [public overview](public_overview.md) and [module development guide](module_development.md).*
 

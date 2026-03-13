@@ -1,4 +1,4 @@
-from mavaia_core.brain.modules.neural_text_generator import NeuralTextGeneratorModule
+from oricli_core.brain.modules.neural_text_generator import NeuralTextGeneratorModule
 try:
     mod = NeuralTextGeneratorModule()
     print("Instance created:", mod)

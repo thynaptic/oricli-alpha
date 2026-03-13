@@ -17,7 +17,7 @@ class TestMemoryBridgeService(unittest.TestCase):
             self.skipTest("lmdb/cryptography not available")
 
     def test_put_get_list_delete_roundtrip(self) -> None:
-        from mavaia_core.services.memory_bridge_service import (
+        from oricli_core.services.memory_bridge_service import (
             MemoryBridgeConfig,
             MemoryBridgeService,
             MemoryCategory,
@@ -57,7 +57,7 @@ class TestMemoryBridgeService(unittest.TestCase):
                 svc.close()
 
     def test_reflection_log_append_and_read(self) -> None:
-        from mavaia_core.services.memory_bridge_service import MemoryBridgeConfig, MemoryBridgeService
+        from oricli_core.services.memory_bridge_service import MemoryBridgeConfig, MemoryBridgeService
 
         with tempfile.TemporaryDirectory() as td:
             cfg = MemoryBridgeConfig(
@@ -82,7 +82,7 @@ class TestMemoryBridgeService(unittest.TestCase):
                 svc.close()
 
     def test_tamper_detection_fails_decrypt(self) -> None:
-        from mavaia_core.services.memory_bridge_service import (
+        from oricli_core.services.memory_bridge_service import (
             MemoryBridgeConfig,
             MemoryBridgeService,
             MemoryCategory,
@@ -99,7 +99,7 @@ class TestMemoryBridgeService(unittest.TestCase):
             svc = MemoryBridgeService(cfg)
             svc.initialize()
             try:
-                svc.put(MemoryCategory.IDENTITY, "system:info", {"name": "mavaia"})
+                svc.put(MemoryCategory.IDENTITY, "system:info", {"name": "oricli"})
 
                 # Corrupt a byte in the ciphertext directly in LMDB.
                 key = b"system:info"

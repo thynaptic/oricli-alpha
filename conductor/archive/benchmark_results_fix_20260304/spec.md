@@ -6,7 +6,7 @@ The current `@scripts/runpod_bridge.py --benchmark` command fails to provide det
 ## 2. Goals
 - **Successful Retrieval:** Ensure all LiveBench output files (JSON, logs, etc.) generated on the remote RunPod are correctly identified, bundled, and transferred to the local machine.
 - **Detailed Terminal Reporting:** Display a comprehensive summary of the benchmark results directly in the terminal (stdout) upon completion.
-- **Knowledge Gap Analysis:** Implement or expose a mechanism to derive 'what datasets Mavaia needs next' from the benchmark results and display this insight.
+- **Knowledge Gap Analysis:** Implement or expose a mechanism to derive 'what datasets Oricli-Alpha needs next' from the benchmark results and display this insight.
 
 ## 3. Functional Requirements
 - **Remote File Identification:** Update `runpod_bridge.py` to robustly locate LiveBench results on the pod (typically in `outputs/` or a LiveBench-specific directory).
@@ -15,7 +15,7 @@ The current `@scripts/runpod_bridge.py --benchmark` command fails to provide det
     - List of tests ran.
     - Pass/fail count and percentage per category.
     - Overall performance score.
-- **Knowledge Gap Engine:** Correlate failing categories with suggested datasets from the Mavaia curriculum or external sources (e.g., 'Requires more Wikipedia-based reasoning for Stage 5').
+- **Knowledge Gap Engine:** Correlate failing categories with suggested datasets from the Oricli-Alpha curriculum or external sources (e.g., 'Requires more Wikipedia-based reasoning for Stage 5').
 
 ## 4. Acceptance Criteria
 - Running `python3 scripts/runpod_bridge.py --benchmark` results in a detailed table printed to stdout after the 'Results retrieved' message.

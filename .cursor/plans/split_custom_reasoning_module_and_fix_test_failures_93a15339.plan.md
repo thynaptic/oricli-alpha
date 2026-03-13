@@ -78,7 +78,7 @@ Move all advanced puzzle solver functionality:
 
 ### Step 1: Create New Module Structure
 
-1. Create `mavaia_core/brain/modules/advanced_reasoning_solvers.py`
+1. Create `oricli_core/brain/modules/advanced_reasoning_solvers.py`
 2. Define `AdvancedReasoningSolversModule(BaseBrainModule)`
 3. Move all solver methods from `custom_reasoning_networks.py`
 4. Register operations: `solve_zebra_puzzle`, `solve_spatial_problem`, `solve_arc_problem`, `solve_web_of_lies`
@@ -114,8 +114,8 @@ Move all advanced puzzle solver functionality:
 
 ## Files to Modify
 
-1. **Create**: `mavaia_core/brain/modules/advanced_reasoning_solvers.py`
-2. **Modify**: `mavaia_core/brain/modules/custom_reasoning_networks.py`
+1. **Create**: `oricli_core/brain/modules/advanced_reasoning_solvers.py`
+2. **Modify**: `oricli_core/brain/modules/custom_reasoning_networks.py`
 
 - Remove solver methods (~4000 lines)
 - Fix JAX batch dimension errors

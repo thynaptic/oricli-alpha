@@ -69,7 +69,7 @@ The implementation will:
 
 ### 1. Create URL Context Module
 
-**File**: `mavaia_core/brain/modules/url_context.py`
+**File**: `oricli_core/brain/modules/url_context.py`
 
 - Inherit from `BaseBrainModule`
 - Implement operations: `extract_urls`, `fetch_url_context`, `get_url_context`
@@ -78,7 +78,7 @@ The implementation will:
 
 ### 2. Implement URL Extraction
 
-**File**: `mavaia_core/brain/modules/url_context.py`
+**File**: `oricli_core/brain/modules/url_context.py`
 
 - Extract URLs from text using regex patterns
 - Support common URL formats (http://, https://, www.)
@@ -87,7 +87,7 @@ The implementation will:
 
 ### 3. Implement Two-Step Retrieval
 
-**File**: `mavaia_core/brain/modules/url_context.py`
+**File**: `oricli_core/brain/modules/url_context.py`
 
 - Step 1: Check database cache for URL content
 - Step 2: If not cached, fetch live content using WebFetchService
@@ -96,7 +96,7 @@ The implementation will:
 
 ### 4. Implement URL Context Metadata
 
-**File**: `mavaia_core/brain/modules/url_context.py`
+**File**: `oricli_core/brain/modules/url_context.py`
 
 - Track retrieval status for each URL:
   - `SUCCESS`: Content retrieved successfully
@@ -107,7 +107,7 @@ The implementation will:
 
 ### 5. Integrate with Chat Completion Flow
 
-**Files**: `mavaia_core/client.py`, `mavaia_core/api/openai_compatible.py`
+**Files**: `oricli_core/client.py`, `oricli_core/api/openai_compatible.py`
 
 - Automatically detect URLs in messages
 - Fetch URL context before generating response
@@ -116,7 +116,7 @@ The implementation will:
 
 ### 6. Register URL Context Tool
 
-**File**: `mavaia_core/api/server.py`
+**File**: `oricli_core/api/server.py`
 
 - Register `url_context` tool
 - Tool should call URLContextModule operations
@@ -126,18 +126,18 @@ The implementation will:
 
 ### 7. Add URL Context to Response Models
 
-**File**: `mavaia_core/types/models.py`
+**File**: `oricli_core/types/models.py`
 
 - Add `url_context_metadata` field to `ChatCompletionResponse`
 - Define `URLContextMetadata` model with status and metadata fields
 
 ## Files to Create/Modify
 
-1. **New**: `mavaia_core/brain/modules/url_context.py` - URL context module
-2. **Modify**: `mavaia_core/types/models.py` - Add URL context metadata models
-3. **Modify**: `mavaia_core/api/server.py` - Register url_context tool
-4. **Modify**: `mavaia_core/client.py` - Integrate URL context in chat completion
-5. **Modify**: `mavaia_core/api/openai_compatible.py` - Handle URL context in API
+1. **New**: `oricli_core/brain/modules/url_context.py` - URL context module
+2. **Modify**: `oricli_core/types/models.py` - Add URL context metadata models
+3. **Modify**: `oricli_core/api/server.py` - Register url_context tool
+4. **Modify**: `oricli_core/client.py` - Integrate URL context in chat completion
+5. **Modify**: `oricli_core/api/openai_compatible.py` - Handle URL context in API
 
 ## Technical Details
 

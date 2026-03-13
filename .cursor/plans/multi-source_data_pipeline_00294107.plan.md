@@ -71,7 +71,7 @@ Enhance the neural text generator to support multiple data sources beyond Projec
 
 ### 1. Data Source Abstraction Layer
 
-Create a base interface for data sources in `mavaia_core/brain/modules/neural_text_generator_data.py`:
+Create a base interface for data sources in `oricli_core/brain/modules/neural_text_generator_data.py`:
 
 - **BaseDataSource** abstract class with methods:
 - `load_data(book_ids, categories, max_books, max_text_size) -> str`
@@ -141,7 +141,7 @@ Update `scripts/train_neural_text_generator.py`:
 
 ### 6. Module Integration
 
-Update `mavaia_core/brain/modules/neural_text_generator.py`:
+Update `oricli_core/brain/modules/neural_text_generator.py`:
 
 - Accept `source` parameter in `_train_model()` method
 - Pass source to data loading functions
@@ -151,7 +151,7 @@ Update `mavaia_core/brain/modules/neural_text_generator.py`:
 
 ### File Changes
 
-1. **`mavaia_core/brain/modules/neural_text_generator_data.py`**
+1. **`oricli_core/brain/modules/neural_text_generator_data.py`**
 
 - Add `BaseDataSource` abstract class
 - Refactor existing Gutenberg code into `GutenbergSource` class
@@ -162,7 +162,7 @@ Update `mavaia_core/brain/modules/neural_text_generator.py`:
 - Update `NeuralTextGeneratorData` to use registry
 - Maintain backward compatibility
 
-2. **`mavaia_core/brain/modules/neural_text_generator.py`**
+2. **`oricli_core/brain/modules/neural_text_generator.py`**
 
 - Update `_train_model()` to accept and pass `source` parameter
 - Update docstrings

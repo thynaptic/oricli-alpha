@@ -7,7 +7,7 @@
 - [~] Task: Conductor - User Manual Verification 'Phase 1: Argument & State Infrastructure' (Protocol in workflow.md)
 
 ## Phase 2: Execution & Result Sync
-- [x] Task: Enhance `ensure_mavaia_installed` or create a new `ensure_bench_ready` to handle `LiveBench` dependencies on the pod.
+- [x] Task: Enhance `ensure_oricli_installed` or create a new `ensure_bench_ready` to handle `LiveBench` dependencies on the pod.
 - [x] Task: Implement the `get_bench_results` function to identify and pull specific result patterns from the pod.
 - [x] Task: Integrate S3 upload logic for benchmarking results.
 - [~] Task: Conductor - User Manual Verification 'Phase 2: Execution & Result Sync' (Protocol in workflow.md)

@@ -7,7 +7,7 @@
 - **Priority**: High
 
 ## Summary
-Implement a recursive learning loop where Mavaia patches her own knowledge gaps via web-search and agent verification. Verified results are stored in an absorption buffer and automatically trained as LoRA adapters via a dedicated daemon process.
+Implement a recursive learning loop where Oricli-Alpha patches her own knowledge gaps via web-search and agent verification. Verified results are stored in an absorption buffer and automatically trained as LoRA adapters via a dedicated daemon process.
 
 ## Files
 - [Specification](./spec.md)

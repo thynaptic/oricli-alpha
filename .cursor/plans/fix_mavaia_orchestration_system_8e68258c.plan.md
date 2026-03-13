@@ -50,14 +50,14 @@ Mavaia is currently returning "1" as a fallback response because:
 
 ### 1. Fix "1" Fallback Issue
 
-- **File**: `mavaia_core/brain/modules/advanced_reasoning_solvers.py`
+- **File**: `oricli_core/brain/modules/advanced_reasoning_solvers.py`
 - Remove hardcoded "1" default answer
 - Replace with proper error handling that returns None/empty instead of "1"
 - Ensure all fallback paths return meaningful error messages or None
 
 ### 2. Implement Auto-Routing System
 
-- **File**: `mavaia_core/brain/modules/cognitive_generator.py`
+- **File**: `oricli_core/brain/modules/cognitive_generator.py`
 - Add intent detection and query classification
 - Implement module selection logic based on input type:
 - Reasoning queries → `reasoning`, `chain_of_thought`
@@ -69,7 +69,7 @@ Mavaia is currently returning "1" as a fallback response because:
 
 ### 3. Enhance Module Orchestration
 
-- **File**: `mavaia_core/brain/modules/cognitive_generator.py`
+- **File**: `oricli_core/brain/modules/cognitive_generator.py`
 - Improve `generate_response()` to:
 - Analyze input to determine required capabilities
 - Route to appropriate modules based on analysis
@@ -79,7 +79,7 @@ Mavaia is currently returning "1" as a fallback response because:
 
 ### 4. Fix Personality-Aware Fallback
 
-- **File**: `mavaia_core/brain/modules/cognitive_generator.py`
+- **File**: `oricli_core/brain/modules/cognitive_generator.py`
 - Ensure `_generate_personality_aware_fallback()` always returns meaningful responses
 - Never return "1" or single digits
 - Use conversational templates based on persona
@@ -87,7 +87,7 @@ Mavaia is currently returning "1" as a fallback response because:
 
 ### 5. Add Module Discovery and Initialization
 
-- **File**: `mavaia_core/brain/modules/cognitive_generator.py`
+- **File**: `oricli_core/brain/modules/cognitive_generator.py`
 - Ensure all required modules are discovered and loaded
 - Add proper initialization checks
 - Handle missing modules gracefully with clear error messages
@@ -133,10 +133,10 @@ Mavaia is currently returning "1" as a fallback response because:
 
 ## Key Files to Modify
 
-1. `mavaia_core/brain/modules/advanced_reasoning_solvers.py` - Remove "1" fallback
-2. `mavaia_core/brain/modules/cognitive_generator.py` - Add auto-routing and orchestration
-3. `mavaia_core/brain/modules/chain_of_thought.py` - Ensure no "1" responses (already has checks, verify they work)
-4. `mavaia_core/brain/modules/unified_interface.py` - Enhance routing if needed
+1. `oricli_core/brain/modules/advanced_reasoning_solvers.py` - Remove "1" fallback
+2. `oricli_core/brain/modules/cognitive_generator.py` - Add auto-routing and orchestration
+3. `oricli_core/brain/modules/chain_of_thought.py` - Ensure no "1" responses (already has checks, verify they work)
+4. `oricli_core/brain/modules/unified_interface.py` - Enhance routing if needed
 
 ## Success Criteria
 

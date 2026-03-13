@@ -1,7 +1,7 @@
 # Specification: Remote Benchmarking Mode for RunPod Bridge
 
 ## Overview
-Implement a dedicated `--benchmark` mode in `scripts/runpod_bridge.py`. This feature enables standalone evaluation of Mavaia models on remote GPUs, allowing for high-performance benchmarking (e.g., LiveBench) without requiring a local GPU. Results are automatically synchronized back to local and S3 storage.
+Implement a dedicated `--benchmark` mode in `scripts/runpod_bridge.py`. This feature enables standalone evaluation of Oricli-Alpha models on remote GPUs, allowing for high-performance benchmarking (e.g., LiveBench) without requiring a local GPU. Results are automatically synchronized back to local and S3 storage.
 
 ## Functional Requirements
 1.  **Standalone CLI Mode**: Add a `--benchmark` flag to `runpod_bridge.py` that skips the training flow and executes a specified evaluation script.

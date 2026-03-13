@@ -1,7 +1,7 @@
 # Specification: Cluster S3-Local Sync Strategy
 
 ## Objective
-To decouple Mavaia clusters from regional network volume bottlenecks (like EU-RO1 saturation) by using a combination of local ephemeral storage (NVMe) on pods and S3 for persistent state.
+To decouple Oricli-Alpha clusters from regional network volume bottlenecks (like EU-RO1 saturation) by using a combination of local ephemeral storage (NVMe) on pods and S3 for persistent state.
 
 ## Core Requirements
 

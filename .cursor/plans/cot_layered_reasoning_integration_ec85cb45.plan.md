@@ -88,7 +88,7 @@ The framework exists but lacks:
 
 ### Files to Modify
 
-1. **[mavaia_core/brain/modules/chain_of_thought.py](mavaia_core/brain/modules/chain_of_thought.py)**
+1. **[oricli_core/brain/modules/chain_of_thought.py](oricli_core/brain/modules/chain_of_thought.py)**
 
    - **Add**: Stage orchestration methods (`_decomposition_stage`, `_reasoning_stage`, `_synthesis_stage`)
    - **Modify**: `_execute_cot` to use explicit stage flow
@@ -96,7 +96,7 @@ The framework exists but lacks:
    - **Enhance**: Synthesis to leverage SynthesisAgent for reasoning synthesis
    - **Preserve**: All existing operations and backward compatibility
 
-2. **[mavaia_core/brain/modules/cot_models.py](mavaia_core/brain/modules/cot_models.py)**
+2. **[oricli_core/brain/modules/cot_models.py](oricli_core/brain/modules/cot_models.py)**
 
    - **Add**: `CoTStageResult` dataclass to track stage outputs
    - **Add**: Stage metadata to `CoTConfiguration` (optional stage enablement)
@@ -131,7 +131,7 @@ def _synthesis_stage(self, query: str, reasoning_steps: list[CoTStep], decompose
 Each stage method will record metrics using the existing metrics system:
 
 ```python
-from mavaia_core.brain.metrics import record_operation
+from oricli_core.brain.metrics import record_operation
 
 # In each stage method:
 start_time = time.time()

@@ -8,7 +8,7 @@
 
 ## Phase 2: Data Pipeline Verification
 - [x] Task: Write a verification script to ensure `NeuralTextGeneratorData` can successfully load and extract text from the selected datasets (Wikipedia, CommonSenseQA, FineWeb-Edu).
-- [x] Task: Update `mavaia_core/brain/modules/neural_text_generator_data.py` if any specific column mapping or extraction logic is missing for these new sources.
+- [x] Task: Update `oricli_core/brain/modules/neural_text_generator_data.py` if any specific column mapping or extraction logic is missing for these new sources.
 - [x] Task: Run a "dry run" of Stage 9 to verify the total character count and estimated training time.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Data Pipeline Verification' (Protocol in workflow.md)
 

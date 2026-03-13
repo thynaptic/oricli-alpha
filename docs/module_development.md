@@ -1,19 +1,19 @@
 # Module Development Guide
 
-This guide explains how to create new brain modules for Mavaia Core.
+This guide explains how to create new brain modules for Oricli-Alpha Core.
 
 ## Overview
 
-Brain modules are plug-and-play Python modules that extend Mavaia's capabilities. They are automatically discovered and made available via the API without requiring code changes.
+Brain modules are plug-and-play Python modules that extend Oricli-Alpha's capabilities. They are automatically discovered and made available via the API without requiring code changes.
 
 ## Creating a Module
 
 ### Basic Structure
 
-Create a new Python file in the `mavaia_core/brain/modules/` directory:
+Create a new Python file in the `oricli_core/brain/modules/` directory:
 
 ```python
-from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from typing import Any
 
 class MyModule(BaseBrainModule):
@@ -121,9 +121,9 @@ Modules are automatically discovered when:
 ### Via Python Client
 
 ```python
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
-client = MavaiaClient()
+client = Oricli-AlphaClient()
 result = client.brain.my_module.operation1(param1="value1")
 ```
 
@@ -135,7 +135,7 @@ curl -X POST http://localhost:8000/v1/modules/my_module/operation1 \
   -d '{"param1": "value1"}'
 ```
 
-### Via mavaia_brain.py (Swift Bridge)
+### Via oricli_brain.py (Swift Bridge)
 
 ```python
 # JSON request
@@ -157,7 +157,7 @@ curl -X POST http://localhost:8000/v1/modules/my_module/operation1 \
 ## Example: Simple Calculator Module
 
 ```python
-from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from typing import Any
 
 class CalculatorModule(BaseBrainModule):

@@ -92,7 +92,7 @@ todos:
 
 #### 2.1 Plan Optimizer Module
 
-**File:** `mavaia_core/brain/modules/plan_optimizer.py`
+**File:** `oricli_core/brain/modules/plan_optimizer.py`
 
 **Changes:**
 
@@ -130,7 +130,7 @@ class PlanScorer(nn.Module):
 
 #### 2.2 Tool Routing Model
 
-**File:** `mavaia_core/brain/modules/tool_routing_model.py`
+**File:** `oricli_core/brain/modules/tool_routing_model.py`
 
 **Changes:**
 
@@ -143,7 +143,7 @@ class PlanScorer(nn.Module):
 
 #### 2.3 Reinforcement Learning Agent
 
-**File:** `mavaia_core/brain/modules/reinforcement_learning_agent.py`
+**File:** `oricli_core/brain/modules/reinforcement_learning_agent.py`
 
 **Changes:**
 
@@ -159,7 +159,7 @@ class PlanScorer(nn.Module):
 
 #### 2.4 Custom Reasoning Networks
 
-**File:** `mavaia_core/brain/modules/custom_reasoning_networks.py`
+**File:** `oricli_core/brain/modules/custom_reasoning_networks.py`
 
 **Changes:**
 
@@ -175,7 +175,7 @@ class PlanScorer(nn.Module):
 
 #### 2.5 Gradient Plan Optimizer
 
-**File:** `mavaia_core/brain/modules/gradient_plan_optimizer.py`
+**File:** `oricli_core/brain/modules/gradient_plan_optimizer.py`
 
 **Changes:**
 
@@ -188,7 +188,7 @@ class PlanScorer(nn.Module):
 
 #### 2.6 Neural Architecture Search
 
-**File:** `mavaia_core/brain/modules/neural_architecture_search.py`
+**File:** `oricli_core/brain/modules/neural_architecture_search.py`
 
 **Changes:**
 
@@ -200,7 +200,7 @@ class PlanScorer(nn.Module):
 
 #### 2.7 Python Code Embeddings
 
-**File:** `mavaia_core/brain/modules/python_code_embeddings.py`
+**File:** `oricli_core/brain/modules/python_code_embeddings.py`
 
 **Changes:**
 
@@ -213,7 +213,7 @@ class PlanScorer(nn.Module):
 
 #### 3.1 Model Manager
 
-**File:** `mavaia_core/brain/modules/model_manager.py`
+**File:** `oricli_core/brain/modules/model_manager.py`
 
 **Changes:**
 
@@ -224,7 +224,7 @@ class PlanScorer(nn.Module):
 
 #### 3.2 Embeddings Module
 
-**File:** `mavaia_core/brain/modules/embeddings.py`
+**File:** `oricli_core/brain/modules/embeddings.py`
 
 **Changes:**
 

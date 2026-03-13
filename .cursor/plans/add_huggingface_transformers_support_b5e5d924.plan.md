@@ -87,7 +87,7 @@ Branch: model_type
 
 ### 1. Module Structure Updates
 
-**File: `mavaia_core/brain/modules/neural_text_generator.py`**
+**File: `oricli_core/brain/modules/neural_text_generator.py`**
 
 #### Add Transformers Dependencies
 
@@ -138,7 +138,7 @@ Branch: model_type
 
 ### 2. Configuration Updates
 
-**File: `mavaia_core/brain/modules/neural_text_generator_config.json`**
+**File: `oricli_core/brain/modules/neural_text_generator_config.json`**
 
 Add transformer configuration section:
 

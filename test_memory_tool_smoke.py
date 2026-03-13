@@ -1,5 +1,5 @@
-from mavaia_core.brain.modules.memory_tool import MemoryToolModule
-from mavaia_core.exceptions import InvalidParameterError
+from oricli_core.brain.modules.memory_tool import MemoryToolModule
+from oricli_core.exceptions import InvalidParameterError
 import unittest
 
 

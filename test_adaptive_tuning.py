@@ -1,8 +1,8 @@
 import unittest
-from mavaia_core.brain.orchestrator import ModuleOrchestrator
-from mavaia_core.brain.metrics import get_metrics_collector
-from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mavaia_core.brain.registry import ModuleRegistry
+from oricli_core.brain.orchestrator import ModuleOrchestrator
+from oricli_core.brain.metrics import get_metrics_collector
+from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from oricli_core.brain.registry import ModuleRegistry
 
 class MockFailingModule(BaseBrainModule):
     @property

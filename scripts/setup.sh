@@ -1,11 +1,11 @@
 #!/bin/bash
-# Mavaia Core Setup Script
+# Oricli-Alpha Core Setup Script
 # Installs system dependencies (CMake) and Python packages
 
 set -e  # Exit on error
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║          Mavaia Core Setup Script                      ║"
+echo "║          Oricli-Alpha Core Setup Script                      ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -259,6 +259,6 @@ echo ""
 echo "✓ CMake installed"
 echo "✓ Python dependencies installed"
 echo ""
-echo "You can now use Mavaia Core. To verify installation:"
+echo "You can now use Oricli-Alpha Core. To verify installation:"
 echo "  python3 -c 'import jax; import flax; print(\"JAX/Flax installed successfully\")'"
 echo ""

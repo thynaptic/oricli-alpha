@@ -16,7 +16,7 @@ Data Sources:
     Use --list-sources to see all available sources
     
     For HuggingFace: Set HF_TOKEN or MAVAIA_HUGGINGFACE_TOKEN environment variable
-    for private datasets. API keys can also be stored in mavaia_core/data/api_keys.json
+    for private datasets. API keys can also be stored in oricli_core/data/api_keys.json
 
 Training Profiles:
     Profiles are loaded from YAML files in scripts/training_profiles/
@@ -138,7 +138,7 @@ def _cleanup_disk(run_dir: Optional[Path]) -> None:
     min_free_gb = 30
 
     try:
-        base_dir = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator"
+        base_dir = Path(__file__).parent.parent / "oricli_core" / "models" / "neural_text_generator"
         runs_dir = base_dir / "runs"
         snapshots_dir = base_dir / "snapshots"
         now_ts = time.time()
@@ -1762,7 +1762,7 @@ def main():
             
             # Import data module (may hang if registry initialization is slow)
             print("Loading data sources...", flush=True)
-            from mavaia_core.brain.modules.neural_text_generator_data import NeuralTextGeneratorData
+            from oricli_core.brain.modules.neural_text_generator_data import NeuralTextGeneratorData
             
             sources = NeuralTextGeneratorData.list_available_sources()
             if not sources:
@@ -1993,7 +1993,7 @@ def main():
         print("Importing NeuralTextGeneratorModule...", flush=True)
         print("  (This may take a moment if transformers/torch are being imported)", flush=True)
         try:
-            from mavaia_core.brain.modules.neural_text_generator import NeuralTextGeneratorModule
+            from oricli_core.brain.modules.neural_text_generator import NeuralTextGeneratorModule
             print("Module imported successfully", flush=True)
         except Exception as e:
             print(f"ERROR: Failed to import module: {e}", flush=True)
@@ -2330,7 +2330,7 @@ def main():
             hostname = socket.gethostname()
             # Clean hostname for path use
             safe_host = "".join(c if c.isalnum() else "_" for c in hostname)
-            final_run_dir = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator" / "runs" / f"{ts}_{safe_host}"
+            final_run_dir = Path(__file__).parent.parent / "oricli_core" / "models" / "neural_text_generator" / "runs" / f"{ts}_{safe_host}"
         
         final_run_dir.mkdir(parents=True, exist_ok=True)
         (final_run_dir / "checkpoints").mkdir(exist_ok=True)
@@ -2349,7 +2349,7 @@ def main():
         # Store *only* the run_id (basename), not the full absolute path, so the
         # pointer is portable across local and remote (RunPod) environments.
         try:
-            latest_ptr = Path(__file__).parent.parent / "mavaia_core" / "models" / "neural_text_generator" / "latest_run.txt"
+            latest_ptr = Path(__file__).parent.parent / "oricli_core" / "models" / "neural_text_generator" / "latest_run.txt"
             latest_ptr.write_text(final_run_dir.name + "\n", encoding="utf-8")
         except Exception:
             pass

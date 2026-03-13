@@ -1,0 +1,19 @@
+[Unit]
+Description=Oricli-Alpha RFAL Trainer Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=mike
+Group=mike
+WorkingDirectory=/home/mike/Oricli-Alpha
+Environment=PYTHONPATH=/home/mike/Oricli-Alpha
+Environment=MAVAIA_ENABLE_HEAVY_MODULES=true
+ExecStart=/home/mike/Oricli-Alpha/.venv/bin/python3 /home/mike/Oricli-Alpha/scripts/oricli_trainer_daemon.py
+Restart=always
+RestartSec=30
+StandardOutput=append:/home/mike/Oricli-Alpha/trainer_daemon.log
+StandardError=append:/home/mike/Oricli-Alpha/trainer_daemon.log
+
+[Install]
+WantedBy=multi-user.target

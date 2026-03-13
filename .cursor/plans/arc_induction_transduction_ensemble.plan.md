@@ -37,7 +37,7 @@ Mavaia already has:
 
 ### 1. Neural Transduction Model
 
-**File**: `mavaia_core/brain/modules/arc_transduction_model.py`
+**File**: `oricli_core/brain/modules/arc_transduction_model.py`
 
 **Purpose**: Direct neural prediction of output grids from training input-output pairs
 
@@ -79,7 +79,7 @@ class ARCTransductionModel:
 
 ### 2. Enhanced Induction (Program Synthesis)
 
-**File**: `mavaia_core/brain/modules/custom_reasoning_networks.py` (enhance existing)
+**File**: `oricli_core/brain/modules/custom_reasoning_networks.py` (enhance existing)
 
 **Enhancements**:
 
@@ -112,7 +112,7 @@ def _execute_program_on_test(
 
 ### 3. Data Augmentation Pipeline
 
-**File**: `mavaia_core/brain/modules/arc_data_augmentation.py`
+**File**: `oricli_core/brain/modules/arc_data_augmentation.py`
 
 **Transformations**:
 
@@ -150,7 +150,7 @@ class ARCDataAugmentation:
 
 ### 4. Reranking System
 
-**File**: `mavaia_core/brain/modules/arc_reranking.py`
+**File**: `oricli_core/brain/modules/arc_reranking.py`
 
 **Purpose**: Aggregate and rank predictions from multiple transformations
 
@@ -193,7 +193,7 @@ class ARCReranking:
 
 ### 5. Test-Time Training
 
-**File**: `mavaia_core/brain/modules/arc_test_time_training.py`
+**File**: `oricli_core/brain/modules/arc_test_time_training.py`
 
 **Purpose**: Fine-tune transduction model at test time using augmented examples
 
@@ -239,7 +239,7 @@ class ARCTestTimeTraining:
 
 ### 6. Ensemble System
 
-**File**: `mavaia_core/brain/modules/arc_ensemble.py`
+**File**: `oricli_core/brain/modules/arc_ensemble.py`
 
 **Purpose**: Combine induction and transduction predictions intelligently
 
@@ -288,7 +288,7 @@ class ARCEnsemble:
 
 ### 7. Synthetic Data Generator
 
-**File**: `mavaia_core/brain/modules/arc_synthetic_data.py`
+**File**: `oricli_core/brain/modules/arc_synthetic_data.py`
 
 **Purpose**: Generate synthetic ARC problems from existing Python solutions
 
@@ -342,7 +342,7 @@ class ARCSyntheticDataGenerator:
 
 ### 8. Model Training Infrastructure
 
-**File**: `mavaia_core/brain/modules/arc_model_training.py`
+**File**: `oricli_core/brain/modules/arc_model_training.py`
 
 **Purpose**: Training pipeline for induction and transduction models
 

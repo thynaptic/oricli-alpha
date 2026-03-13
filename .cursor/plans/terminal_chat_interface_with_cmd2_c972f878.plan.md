@@ -3,7 +3,7 @@ name: Terminal Chat Interface with cmd2
 overview: Build a fully functional terminal chat interface using cmd2 that integrates with Mavaia's brain system, providing persistent chats, command history, code analysis capabilities, and a polished UI experience similar to ChatGPT/Claude CLI.
 todos:
   - id: setup-cli-structure
-    content: Create mavaia_core/cli/ directory structure with __init__.py and base module files
+    content: Create oricli_core/cli/ directory structure with __init__.py and base module files
     status: pending
   - id: implement-session-manager
     content: Implement SessionManager class with persistence using Mavaia state storage (save, load, list, delete sessions)
@@ -38,21 +38,21 @@ Create a production-ready terminal chat interface using `cmd2` that provides ful
 
 ### Core Components
 
-1. **Main CLI Application** (`mavaia_core/cli/chat_cli.py`)
+1. **Main CLI Application** (`oricli_core/cli/chat_cli.py`)
 
    - Extends `cmd2.Cmd` for interactive terminal interface
    - Integrates with `MavaiaClient` for brain operations
    - Manages chat sessions and conversation state
    - Provides command history via cmd2's built-in features
 
-2. **Chat Session Manager** (`mavaia_core/cli/session_manager.py`)
+2. **Chat Session Manager** (`oricli_core/cli/session_manager.py`)
 
    - Manages persistent chat sessions
    - Uses Mavaia's state storage system for persistence
    - Handles session creation, loading, saving, and listing
    - Tracks conversation history per session
 
-3. **UI Formatter** (`mavaia_core/cli/formatter.py`)
+3. **UI Formatter** (`oricli_core/cli/formatter.py`)
 
    - Formats messages with colors and styling
    - Handles code block formatting
@@ -72,7 +72,7 @@ Create a production-ready terminal chat interface using `cmd2` that provides ful
 ### File Structure
 
 ```
-mavaia_core/cli/
+oricli_core/cli/
 ├── __init__.py
 ├── chat_cli.py          # Main CLI application
 ├── session_manager.py   # Session persistence
@@ -138,7 +138,7 @@ mavaia_core/cli/
 
 2. **State Storage Integration**
    ```python
-   from mavaia_core.brain.state_storage import get_storage
+   from oricli_core.brain.state_storage import get_storage
    storage = get_storage()
    storage.save("conversation", session_id, conversation_data)
    ```
@@ -161,14 +161,14 @@ Add to `pyproject.toml`:
 
 ```toml
 [project.scripts]
-mavaia-chat = "mavaia_core.cli.chat_cli:main"
+mavaia-chat = "oricli_core.cli.chat_cli:main"
 ```
 
 ## Implementation Steps
 
 1. **Setup CLI Structure**
 
-   - Create `mavaia_core/cli/` directory
+   - Create `oricli_core/cli/` directory
    - Add `__init__.py`
    - Create base CLI class structure
 
@@ -216,15 +216,15 @@ mavaia-chat = "mavaia_core.cli.chat_cli:main"
 
 ### New Files
 
-- `mavaia_core/cli/__init__.py`
-- `mavaia_core/cli/chat_cli.py` (~500-800 lines)
-- `mavaia_core/cli/session_manager.py` (~200-300 lines)
-- `mavaia_core/cli/formatter.py` (~150-200 lines)
+- `oricli_core/cli/__init__.py`
+- `oricli_core/cli/chat_cli.py` (~500-800 lines)
+- `oricli_core/cli/session_manager.py` (~200-300 lines)
+- `oricli_core/cli/formatter.py` (~150-200 lines)
 
 ### Modified Files
 
 - `pyproject.toml` - Add cmd2 dependency and entry point
-- `mavaia_core/__init__.py` - Export CLI if needed
+- `oricli_core/__init__.py` - Export CLI if needed
 
 ## Considerations
 

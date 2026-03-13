@@ -1,7 +1,7 @@
 # Specification: Curriculum Electives via LoRA
 
 ## Overview
-Implement an "Electives" system within the Mavaia curriculum training framework (`scripts/train_curriculum.py`). This feature allows developers to train specialized reasoning "modes" (e.g., Coding, Business, Medical) as independent LoRA adapters. These adapters build upon a shared foundation model without modifying it directly, preventing catastrophic forgetting and allowing for a modular, multi-mode cognitive architecture.
+Implement an "Electives" system within the Oricli-Alpha curriculum training framework (`scripts/train_curriculum.py`). This feature allows developers to train specialized reasoning "modes" (e.g., Coding, Business, Medical) as independent LoRA adapters. These adapters build upon a shared foundation model without modifying it directly, preventing catastrophic forgetting and allowing for a modular, multi-mode cognitive architecture.
 
 ## Functional Requirements
 1.  **Elective Selection**: Add an `--elective` flag to `scripts/train_curriculum.py` that accepts one or more stage names or indices to be treated as specialized electives.

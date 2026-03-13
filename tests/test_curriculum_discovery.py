@@ -26,7 +26,7 @@ def test_find_elective_arg_parsing():
 def test_discovery_flow_logic(mocker):
     """Test the logic of injecting a discovered stage."""
     from scripts.train_curriculum import _auto_inject_stage
-    from mavaia_core.data.search import SearchResult
+    from oricli_core.data.search import SearchResult
     
     res = SearchResult(id="test/ds", name="Test DS", source="huggingface", description="desc")
     stage = _auto_inject_stage(res, base_epochs=2, base_data_pct=0.5)

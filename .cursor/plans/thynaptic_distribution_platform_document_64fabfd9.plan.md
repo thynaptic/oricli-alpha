@@ -194,7 +194,7 @@ The document will follow the prescribed Soft Academic structure:
 
 ### Integration Points
 
-- Extensions to `mavaia_core/brain/registry.py`
+- Extensions to `oricli_core/brain/registry.py`
 - New CLI commands
 - API server enhancements
 - Client library updates
@@ -211,8 +211,8 @@ The document will follow the prescribed Soft Academic structure:
 
 ## Files to Reference
 
-- `mavaia_core/brain/registry.py` - Current module discovery mechanism
-- `mavaia_core/brain/base_module.py` - Module interface and metadata structure
+- `oricli_core/brain/registry.py` - Current module discovery mechanism
+- `oricli_core/brain/base_module.py` - Module interface and metadata structure
 - `docs/public_overview.md` - Current system overview
 - `docs/module_development.md` - Module development patterns
 - `MODULES.md` - Existing module catalog

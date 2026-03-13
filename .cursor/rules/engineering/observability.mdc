@@ -203,7 +203,7 @@ examples:
   - description: "Metrics collection with decorator"
     language: python
     code: |
-      from mavaia_core.brain.metrics import record_operation
+      from oricli_core.brain.metrics import record_operation
       import time
       from functools import wraps
       
@@ -240,7 +240,7 @@ examples:
   - description: "Health check implementation"
     language: python
     code: |
-      from mavaia_core.brain.health import get_health_checker, HealthStatus
+      from oricli_core.brain.health import get_health_checker, HealthStatus
       
       
       def check_system_health():
@@ -285,6 +285,6 @@ examples:
 
 references:
   - Python logging: https://docs.python.org/3/library/logging.html
-  - Mavaia metrics: mavaia_core/brain/metrics.py
-  - Mavaia health: mavaia_core/brain/health.py
+  - Mavaia metrics: oricli_core/brain/metrics.py
+  - Mavaia health: oricli_core/brain/health.py
   - Structured logging: https://www.structlog.org/

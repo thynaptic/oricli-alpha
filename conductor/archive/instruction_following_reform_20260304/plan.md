@@ -9,9 +9,9 @@ This plan outlines the forensic analysis steps to understand the 2.5% benchmark 
 
 
 ## Phase 2: Root Cause Investigation
-- [x] Task: Audit `mavaia_core/brain/modules/cognitive_generator.py` to see if it filters out the JSONL formatting instructions.
+- [x] Task: Audit `oricli_core/brain/modules/cognitive_generator.py` to see if it filters out the JSONL formatting instructions.
 - [x] Task: Test the model directly with a "raw" prompt (bypassing the brain modules) to see if the underlying weights are capable of the task.
-- [x] Task: Analyze the impact of the `mavaia_system_prompt_builder` on instruction following.
+- [x] Task: Analyze the impact of the `oricli_system_prompt_builder` on instruction following.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Root Cause Investigation' (Protocol in workflow.md)
 
 ## Phase 3: Reform Proposal

@@ -9,7 +9,7 @@
 ## Phase 2: Training Implementation
 - [x] Task: Execute Stage 3 training via `runpod_bridge.py`.
     - [x] Launch with Stage 2 model path as `--model-name`.
-    - [x] Monitor Sentinel logs for `[Mavaia-Sentinel]` events.
+    - [x] Monitor Sentinel logs for `[Oricli-Alpha-Sentinel]` events.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Training Implementation' (Protocol in workflow.md)
 
 ## Phase 3: Artifact Verification

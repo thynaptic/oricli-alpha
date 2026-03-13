@@ -3,8 +3,8 @@ import unittest
 
 class TestSweepSmoke(unittest.TestCase):
     def test_unknown_operation_raises(self) -> None:
-        from mavaia_core.brain.modules.thought_to_text import ThoughtToTextModule
-        from mavaia_core.brain.modules.core_response_service import CoreResponseServiceModule
+        from oricli_core.brain.modules.thought_to_text import ThoughtToTextModule
+        from oricli_core.brain.modules.core_response_service import CoreResponseServiceModule
 
         t2t = ThoughtToTextModule()
         core = CoreResponseServiceModule()

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Based on the paper ["Combining Induction and Transduction for Abstract Reasoning"](https://arxiv.org/pdf/2411.02272) (arxiv:2411.02272), this document outlines implementable components to enhance Mavaia's ARC reasoning capabilities.
+Based on the paper ["Combining Induction and Transduction for Abstract Reasoning"](https://arxiv.org/pdf/2411.02272) (arxiv:2411.02272), this document outlines implementable components to enhance Oricli-Alpha's ARC reasoning capabilities.
 
 ## Key Findings from the Paper
 
@@ -36,7 +36,7 @@ Based on the paper ["Combining Induction and Transduction for Abstract Reasoning
 
 **Priority**: High
 
-**File**: `mavaia_core/brain/modules/arc_transduction_model.py`
+**File**: `oricli_core/brain/modules/arc_transduction_model.py`
 
 ### 2. Enhanced Induction (Program Synthesis) 🔄 **ENHANCE EXISTING**
 
@@ -60,7 +60,7 @@ Based on the paper ["Combining Induction and Transduction for Abstract Reasoning
 
 **Priority**: High
 
-**File**: `mavaia_core/brain/modules/arc_data_augmentation.py`
+**File**: `oricli_core/brain/modules/arc_data_augmentation.py`
 
 ### 4. Reranking System ⭐ **NEW**
 
@@ -72,7 +72,7 @@ Based on the paper ["Combining Induction and Transduction for Abstract Reasoning
 
 **Priority**: Medium
 
-**File**: `mavaia_core/brain/modules/arc_reranking.py`
+**File**: `oricli_core/brain/modules/arc_reranking.py`
 
 ### 5. Test-Time Training ⭐ **NEW**
 
@@ -84,7 +84,7 @@ Based on the paper ["Combining Induction and Transduction for Abstract Reasoning
 
 **Priority**: Medium-Low (nice to have, less critical)
 
-**File**: `mavaia_core/brain/modules/arc_test_time_training.py`
+**File**: `oricli_core/brain/modules/arc_test_time_training.py`
 
 ### 6. Ensemble Framework ⭐ **NEW**
 
@@ -96,7 +96,7 @@ Based on the paper ["Combining Induction and Transduction for Abstract Reasoning
 
 **Priority**: High (enables leveraging both approaches)
 
-**File**: `mavaia_core/brain/modules/arc_ensemble.py`
+**File**: `oricli_core/brain/modules/arc_ensemble.py`
 
 ### 7. Synthetic Data Generator ⭐ **NEW**
 
@@ -108,7 +108,7 @@ Based on the paper ["Combining Induction and Transduction for Abstract Reasoning
 
 **Priority**: Medium (needed for training, but can use existing ARC data initially)
 
-**File**: `mavaia_core/brain/modules/arc_synthetic_data.py`
+**File**: `oricli_core/brain/modules/arc_synthetic_data.py`
 
 ## Implementation Strategy
 
@@ -155,7 +155,7 @@ def augment_task(task, transformations):
 
 ## Integration with Existing Code
 
-Mavaia already has:
+Oricli-Alpha already has:
 - ✅ ARC pattern extraction (`_extract_arc_patterns`)
 - ✅ Transformation detection (`_detect_arc_transformations`)
 - ✅ Multi-example learning (`_solve_arc_task_enhanced`)
@@ -181,5 +181,5 @@ Based on paper results:
 
 - Paper: [arxiv:2411.02272](https://arxiv.org/pdf/2411.02272)
 - ARC Benchmark: https://github.com/fchollet/ARC
-- Mavaia ARC Plan: `.cursor/plans/arc_reasoning_system_c84e6921.plan.md`
+- Oricli-Alpha ARC Plan: `.cursor/plans/arc_reasoning_system_c84e6921.plan.md`
 

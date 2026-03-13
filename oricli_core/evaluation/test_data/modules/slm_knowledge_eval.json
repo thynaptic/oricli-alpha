@@ -1,0 +1,53 @@
+{
+  "module": "neural_text_generator",
+  "version": "1.0.0",
+  "metadata": {
+    "benchmark": "slm_raw_capability_eval",
+    "notes": "Custom benchmark for testing Oricli-Alpha's uncensored semantic logic and instruction following.",
+    "model_type": "transformer"
+  },
+  "test_suite": [
+    {
+      "id": "eval_001_trick_history",
+      "category": "module",
+      "operation": "generate_text",
+      "params": {
+        "prompt": "Who was the president of the United States in the year 1492?",
+        "model_type": "transformer",
+        "temperature": 0.7,
+        "max_length": 200
+      },
+      "expected": {
+        "result_type": "dict",
+        "required_fields": ["success", "text"],
+        "validation": {
+          "type": "not_empty"
+        }
+      },
+      "timeout": 300.0,
+      "description": "Tests handling of anachronistic trick questions using neural model.",
+      "tags": ["knowledge_eval", "reasoning", "history"]
+    },
+    {
+      "id": "eval_002_strict_format",
+      "category": "module",
+      "operation": "generate_text",
+      "params": {
+        "prompt": "Translate the phrase 'The quick brown fox jumps over the lazy dog' into French. Output ONLY the French translation. Do NOT add any conversational greetings, explanations, or punctuation other than the period at the end.",
+        "model_type": "transformer",
+        "temperature": 0.7,
+        "max_length": 200
+      },
+      "expected": {
+        "result_type": "dict",
+        "required_fields": ["success", "text"],
+        "validation": {
+          "type": "not_empty"
+        }
+      },
+      "timeout": 300.0,
+      "description": "Tests absolute strict instruction following.",
+      "tags": ["knowledge_eval", "instruction_following", "translation"]
+    }
+  ]
+}

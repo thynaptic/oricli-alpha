@@ -1,4 +1,4 @@
-# Mavaia Query Results: "Why do people find the Mona Lisa beautiful?"
+# Oricli-Alpha Query Results: "Why do people find the Mona Lisa beautiful?"
 
 ## Query
 **Question:** "Why do people find the Mona Lisa beautiful?"
@@ -100,7 +100,7 @@ This requires careful analysis to provide a thorough and accurate response.
 
 The query execution revealed several issues:
 
-1. **Meta-Reasoning Problem:** Mavaia generated reasoning about how to approach the question rather than actually answering it. The reasoning step describes a process ("I'll analyze this step by step...") but doesn't provide substantive content about why people find the Mona Lisa beautiful.
+1. **Meta-Reasoning Problem:** Oricli-Alpha generated reasoning about how to approach the question rather than actually answering it. The reasoning step describes a process ("I'll analyze this step by step...") but doesn't provide substantive content about why people find the Mona Lisa beautiful.
 
 2. **Synthesis Failure:** The final answer extraction failed, resulting in a placeholder value of "1" instead of a meaningful answer.
 

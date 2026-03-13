@@ -156,7 +156,7 @@ examples:
       def start_server(port: int, host: str) -> None:
           """Start the API server"""
           try:
-              from mavaia_core.api.server import main
+              from oricli_core.api.server import main
               # Configure server settings
               os.environ["MAVAIA_API_PORT"] = str(port)
               os.environ["MAVAIA_API_HOST"] = host

@@ -1,18 +1,18 @@
-## Mavaia Core
+## Oricli-Alpha
 
-**Mavaia Core** is a modular cognitive framework for building intelligent applications. It provides:
+**Oricli-Alpha** is a modular cognitive framework for building intelligent applications. It provides:
 - a plug-and-play brain module system
 - an OpenAI-compatible HTTP API
 - a Python client for direct module execution
 - a lightweight UI for interactive testing
 
-**System identifier**: Mavaia follows the TR-2025-01 naming scheme. The system identifier is derived from discovered cognitive modules and is available via `from mavaia_core import SYSTEM_ID` (and `SYSTEM_ID_FULL`).
+**System identifier**: Oricli-Alpha follows the TR-2025-01 naming scheme. The system identifier is derived from discovered cognitive modules and is available via `from oricli_core import SYSTEM_ID` (and `SYSTEM_ID_FULL`).
 
 ## What’s in this repo
 
-- **Core package**: `mavaia_core/`
-- **Brain modules**: `mavaia_core/brain/modules/` (auto-discovered)
-- **OpenAI-compatible API**: `mavaia_core/api/`
+- **Core package**: `oricli_core/`
+- **Brain modules**: `oricli_core/brain/modules/` (auto-discovered)
+- **OpenAI-compatible API**: `oricli_core/api/`
 - **UI**: `ui_app.py` + `ui_static/`
 - **Scripts**: `scripts/`
 - **Docs**: `docs/`
@@ -76,10 +76,10 @@ Notes:
 
 ```bash
 # Entry point (installed via pyproject [project.scripts])
-mavaia-server --host 0.0.0.0 --port 8000
+oricli-server --host 0.0.0.0 --port 8000
 
 # Or module execution
-python3 -m mavaia_core.api.server --host 0.0.0.0 --port 8000
+python3 -m oricli_core.api.server --host 0.0.0.0 --port 8000
 ```
 
 ### Start the UI server (manual)
@@ -96,7 +96,7 @@ MAVAIA_API_BASE="http://localhost:8000" python3 ui_app.py
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "mavaia-cognitive",
+    "model": "oricli-cognitive",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 ```
@@ -108,7 +108,7 @@ curl -X POST http://localhost:8000/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{
     "input": "text to embed",
-    "model": "mavaia-embeddings"
+    "model": "oricli-embeddings"
   }'
 ```
 
@@ -124,12 +124,12 @@ curl http://localhost:8000/v1/health/modules
 ## Python client usage
 
 ```python
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
-client = MavaiaClient()
+client = Oricli-AlphaClient()
 
 resp = client.chat.completions.create(
-    model="mavaia-cognitive",
+    model="oricli-cognitive",
     messages=[{"role": "user", "content": "Hello"}],
 )
 
@@ -138,7 +138,8 @@ print(resp.choices[0].message.content)
 
 ## Configuration
 
-Mavaia configuration uses environment variables (prefix `MAVAIA_`) with sensible defaults.
+Oricli-Alpha configuration uses environment variables
+ (prefix `MAVAIA_`) with sensible defaults.
 
 ### Common environment variables
 
@@ -157,7 +158,7 @@ Command-line arguments override environment variables; environment variables ove
 
 ## Brain modules
 
-Modules live in `mavaia_core/brain/modules/` and are auto-discovered by the registry.
+Modules live in `oricli_core/brain/modules/` and are auto-discovered by the registry.
 
 - Full module list: see `MODULES.md`
 - Module development guide: see `docs/module_development.md`
@@ -191,13 +192,13 @@ Some modules require optional extras (e.g. `.[search]`, `.[sandbox]`, `.[ml]`). 
 
 ## Repository links
 
-- Source: [thynaptic/mavaia-core](https://github.com/thynaptic/mavaia-core)
+- Source: [thynaptic/oricli-alpha](https://github.com/thynaptic/oricli-alpha)
 
 ## Project structure
 
 ```text
-mavaia-core/
-├── mavaia_core/              # Python package
+oricli-alpha/
+├── oricli_core/              # Python package
 │   ├── api/                  # FastAPI server + OpenAI compatibility layer
 │   ├── brain/                # Module system, registry, orchestration
 │   │   └── modules/          # Brain modules (auto-discovered)
@@ -221,14 +222,14 @@ python3 /workspace/run_tests.py
 
 ```bash
 pip install -e ".[dev]"
-black mavaia_core/
-ruff check mavaia_core/
-mypy mavaia_core/
+black oricli_core/
+ruff check oricli_core/
+mypy oricli_core/
 ```
 
 ## Creating brain modules
 
-Brain modules are auto-discovered from `mavaia_core/brain/modules/`. A module must:
+Brain modules are auto-discovered from `oricli_core/brain/modules/`. A module must:
 - inherit `BaseBrainModule`
 - expose `metadata`
 - implement `execute(operation, params)`
@@ -240,8 +241,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
-from mavaia_core.exceptions import InvalidParameterError
+from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from oricli_core.exceptions import InvalidParameterError
 
 
 class MyModule(BaseBrainModule):
@@ -282,11 +283,11 @@ For deeper guidance, see `docs/module_development.md`.
 ### Basic Chat Completion
 
 ```python
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
-client = MavaiaClient()
+client = Oricli-AlphaClient()
 response = client.chat.completions.create(
-    model="mavaia-cognitive",
+    model="oricli-cognitive",
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Explain quantum computing."}
@@ -307,7 +308,7 @@ with httpx.stream(
     "POST",
     "http://localhost:8000/v1/chat/completions",
     json={
-        "model": "mavaia-cognitive",
+        "model": "oricli-cognitive",
         "messages": [{"role": "user", "content": "Hello"}],
         "stream": True
     }
@@ -367,12 +368,12 @@ MIT License - see LICENSE file for details.
 ## Support
 
 - **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/thynaptic/mavaia-core/issues)
+- **Issues**: [GitHub Issues](https://github.com/thynaptic/oricli-alpha/issues)
 - **Email**: ai@thynaptic.com
 
 ## Design partners
 
-If you’re evaluating Mavaia as a design partner, see `README_DESIGN_PARTNERS.md`.
+If you’re evaluating Oricli-Alpha as a design partner, see `README_DESIGN_PARTNERS.md`.
 
 ## Version
 
@@ -380,13 +381,13 @@ Current version: **1.0.0**
 
 ## System Identifier
 
-Mavaia uses a standardized cognitive system naming scheme (see TR-2025-01-Cognitive-System-Naming-Scheme). The system identifier follows the format `mavaia-{module_count}c`, where the module count is dynamically discovered via `ModuleRegistry.discover_modules()`.
+Oricli-Alpha uses a standardized cognitive system naming scheme (see TR-2025-01-Cognitive-System-Naming-Scheme). The system identifier follows the format `oricli-{module_count}c`, where the module count is dynamically discovered via `ModuleRegistry.discover_modules()`.
 
 ### Base Identifier
 
 ```python
-from mavaia_core import SYSTEM_ID
-print(SYSTEM_ID)  # e.g., "mavaia-137c"
+from oricli_core import SYSTEM_ID
+print(SYSTEM_ID)  # e.g., "oricli-137c"
 ```
 
 ### Sub-Naming Support
@@ -394,7 +395,7 @@ print(SYSTEM_ID)  # e.g., "mavaia-137c"
 You can add custom sub-names to the system identifier (e.g., "alpha", "Pro", "Flash"):
 
 ```python
-from mavaia_core import (
+from oricli_core import (
     SYSTEM_ID,
     SYSTEM_ID_FULL,
     get_system_identifier_with_subname,
@@ -404,15 +405,15 @@ from mavaia_core import (
 
 # Get identifier with specific subname
 alpha_id = get_system_identifier_with_subname("alpha")
-print(alpha_id)  # "mavaia-137c-alpha"
+print(alpha_id)  # "oricli-137c-alpha"
 
 # Set default subname for session
 set_system_subname("Pro")
-print(SYSTEM_ID_FULL())  # "mavaia-137c-Pro"
+print(SYSTEM_ID_FULL())  # "oricli-137c-Pro"
 
 # Clear subname
 set_system_subname(None)
-print(SYSTEM_ID_FULL())  # "mavaia-137c"
+print(SYSTEM_ID_FULL())  # "oricli-137c"
 ```
 
 You can also set the subname via environment variable:
@@ -420,9 +421,9 @@ You can also set the subname via environment variable:
 export MAVAIA_SYSTEM_SUBNAME="Flash"
 ```
 
-The system identifier represents the cognitive architecture composition and is distinct from API model identifiers (`mavaia-cognitive`, `mavaia-embeddings`).
+The system identifier represents the cognitive architecture composition and is distinct from API model identifiers (`oricli-cognitive`, `oricli-embeddings`).
 
 ## Acknowledgments
 
-Mavaia Core is developed by Thynaptic Research as part of the Mavaia cognitive systems framework.
+Oricli-Alpha Core is developed by Thynaptic Research as part of the Oricli-Alpha cognitive systems framework.
 

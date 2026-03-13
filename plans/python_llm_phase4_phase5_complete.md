@@ -96,9 +96,9 @@
 ## 💻 Usage Examples
 
 ```python
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
-client = MavaiaClient()
+client = Oricli-AlphaClient()
 
 # Project Understanding
 project_info = client.python.understand_project("./my_project")

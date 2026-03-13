@@ -30,7 +30,7 @@ except Exception as e:
 # Step 2: Create app
 print("\n[2] Testing app creation...")
 try:
-    from mavaia_core.api.server import create_app
+    from oricli_core.api.server import create_app
     print("  ✓ create_app imported")
 except Exception as e:
     print(f"  ✗ create_app import failed: {e}")
@@ -46,22 +46,22 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 
-# Step 3: Test MavaiaClient
-print("\n[3] Testing MavaiaClient initialization...")
+# Step 3: Test OricliAlphaClient
+print("\n[3] Testing OricliAlphaClient initialization...")
 try:
-    from mavaia_core.client import MavaiaClient
-    print("  ✓ MavaiaClient imported")
+    from oricli_core.client import OricliAlphaClient
+    print("  ✓ OricliAlphaClient imported")
 except Exception as e:
-    print(f"  ✗ MavaiaClient import failed: {e}")
+    print(f"  ✗ OricliAlphaClient import failed: {e}")
     traceback.print_exc()
     sys.exit(1)
 
 try:
-    print("  Initializing MavaiaClient...")
-    client = MavaiaClient()
-    print("  ✓ MavaiaClient initialized")
+    print("  Initializing OricliAlphaClient...")
+    client = OricliAlphaClient()
+    print("  ✓ OricliAlphaClient initialized")
 except Exception as e:
-    print(f"  ✗ MavaiaClient initialization failed: {e}")
+    print(f"  ✗ OricliAlphaClient initialization failed: {e}")
     traceback.print_exc()
     sys.exit(1)
 

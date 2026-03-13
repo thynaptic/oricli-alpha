@@ -78,7 +78,7 @@ examples:
   - description: "Standard module skeleton"
     language: python
     code: |
-      from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
+      from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
       from typing import Any
 
       class ExampleModule(BaseBrainModule):

@@ -1,6 +1,6 @@
 import unittest
 
-from mavaia_core.brain.modules.agent_coordinator import AgentCoordinatorModule, AgentType
+from oricli_core.brain.modules.agent_coordinator import AgentCoordinatorModule, AgentType
 
 
 class TestAgentCoordinatorSmoke(unittest.TestCase):

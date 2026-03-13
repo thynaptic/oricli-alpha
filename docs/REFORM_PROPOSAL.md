@@ -15,7 +15,7 @@ We propose a new module designed to "short-circuit" the conversational brain for
 - **Raw Execution Mode:** Allows the model to output structured data without conversational preambles (e.g., "I'd say...", "Here is your table:").
 
 ## 3. System Prompt Reform
-Update `mavaia_system_prompt_builder.py` to support a `TASK_EXECUTION` mode.
+Update `oricli_system_prompt_builder.py` to support a `TASK_EXECUTION` mode.
 
 ### Implementation:
 - **Priority Override:** If a task is detected, the prompt shifts from "Great Chat Partner" to "Precise Data Engineer."

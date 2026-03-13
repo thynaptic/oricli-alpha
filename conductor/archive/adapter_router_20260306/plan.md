@@ -1,20 +1,20 @@
 # Implementation Plan: Multi-Adapter Router
 
 **Phase 1: Module Foundation & Registry Integration**
-Goal: Establish the standalone module structure and ensure it is discoverable by the Mavaia Core registry.
+Goal: Establish the standalone module structure and ensure it is discoverable by the Oricli-Alpha Core registry.
 - [x] Task: Scaffold Module Structure
-    - [ ] Create `mavaia_core/brain/modules/adapter_router.py`.
+    - [ ] Create `oricli_core/brain/modules/adapter_router.py`.
     - [ ] Implement `AdapterRouter` class inheriting from `BaseModule`.
     - [ ] Define core operations: `route_input`, `load_adapter`, `status`.
 - [x] Task: TDD - Module Discovery
     - [ ] Write unit test to verify registration in `ModuleRegistry`.
-    - [ ] Verify basic operation dispatch via `MavaiaClient`.
+    - [ ] Verify basic operation dispatch via `Oricli-AlphaClient`.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Foundation' (Protocol in workflow.md)
 
 **Phase 2: Independent Semantic Routing**
-Goal: Implement the embedding-based classification logic using Mavaia's embedding service.
+Goal: Implement the embedding-based classification logic using Oricli-Alpha's embedding service.
 - [x] Task: Integrate Embedding Client
-    - [ ] Logic to call `mavaia-embeddings` (standalone service) to get input vectors.
+    - [ ] Logic to call `oricli-embeddings` (standalone service) to get input vectors.
     - [ ] Implement a trainable linear classification head (PyTorch) for mapping embeddings to intents.
 - [x] Task: Implement Routing Table
     - [ ] Logic to map intent classifications to specific adapter names/IDs.
@@ -29,7 +29,7 @@ Goal: Implement the fetching and application of adapters from Hugging Face and S
 - [x] Task: Implement HF Hub Integration
     - [ ] Add logic to fetch and cache adapters using `peft` and `huggingface_hub`.
 - [x] Task: Implement S3 Integration
-    - [ ] Integrate with Mavaia's S3 bridge to retrieve private adapters.
+    - [ ] Integrate with Oricli-Alpha's S3 bridge to retrieve private adapters.
 - [x] Task: Dynamic Adapter Swapping
     - [ ] Implement VRAM-aware logic to attach/detach adapters from a base model on-the-fly.
 - [x] Task: TDD - Loading & VRAM Safety

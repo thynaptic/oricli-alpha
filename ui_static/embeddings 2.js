@@ -39,7 +39,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           input: inputData,
-          model: "mavaia-embeddings",
+          model: "oricli-embeddings",
         }),
       });
 
@@ -53,7 +53,7 @@
         input: inputData,
         embeddings: data.data || [],
         usage: data.usage || {},
-        model: data.model || "mavaia-embeddings",
+        model: data.model || "oricli-embeddings",
         timestamp: new Date().toISOString(),
       };
 

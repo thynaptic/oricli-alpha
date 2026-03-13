@@ -1,24 +1,24 @@
-# Mavaia: A Modular Cognitive Framework
+# Oricli-Alpha: A Modular Cognitive Framework
 
 ## Abstract
 
-Mavaia is a modular AI cognitive framework designed for building intelligent applications through a composable architecture of specialized cognitive modules. This document provides an overview of Mavaia's architecture, capabilities, and design principles. We describe how the system enables plug-and-play module integration, provides an OpenAI-compatible API interface, and supports extensible cognitive processing through a unified orchestration layer.
+Oricli-Alpha is a modular AI cognitive framework designed for building intelligent applications through a composable architecture of specialized cognitive modules. This document provides an overview of Oricli-Alpha's architecture, capabilities, and design principles. We describe how the system enables plug-and-play module integration, provides an OpenAI-compatible API interface, and supports extensible cognitive processing through a unified orchestration layer.
 
 ## Introduction
 
-Mavaia represents a cognitive-systems approach to artificial intelligence, structured around a modular architecture that separates distinct cognitive capabilities into independently deployable components. Rather than treating intelligence as a monolithic system, we organize functionality into discrete brain modules that can be composed, extended, and replaced without modifying core infrastructure.
+Oricli-Alpha represents a cognitive-systems approach to artificial intelligence, structured around a modular architecture that separates distinct cognitive capabilities into independently deployable components. Rather than treating intelligence as a monolithic system, we organize functionality into discrete brain modules that can be composed, extended, and replaced without modifying core infrastructure.
 
-The framework provides three primary interfaces: a Python client library for programmatic access, an OpenAI-compatible HTTP API for standard integration patterns, and direct module access for specialized use cases. This design enables developers to leverage Mavaia's capabilities through familiar interfaces while maintaining access to the underlying cognitive architecture.
+The framework provides three primary interfaces: a Python client library for programmatic access, an OpenAI-compatible HTTP API for standard integration patterns, and direct module access for specialized use cases. This design enables developers to leverage Oricli-Alpha's capabilities through familiar interfaces while maintaining access to the underlying cognitive architecture.
 
-We built Mavaia to address the need for flexible, extensible AI systems that can evolve through module addition rather than system redesign. The architecture supports automatic module discovery, dependency resolution, and lifecycle management, reducing the operational overhead typically associated with modular systems.
+We built Oricli-Alpha to address the need for flexible, extensible AI systems that can evolve through module addition rather than system redesign. The architecture supports automatic module discovery, dependency resolution, and lifecycle management, reducing the operational overhead typically associated with modular systems.
 
 ## Architecture Summary
 
-Mavaia's architecture centers on four core components: the module registry, the orchestration layer, the state storage system, and the API gateway.
+Oricli-Alpha's architecture centers on four core components: the module registry, the orchestration layer, the state storage system, and the API gateway.
 
 ### Module System
 
-All cognitive capabilities in Mavaia are implemented as brain modules—Python classes that inherit from `BaseBrainModule`. Each module declares its operations, dependencies, and metadata through a standardized interface. The module registry automatically discovers modules from the filesystem and makes them available to the system without manual registration.
+All cognitive capabilities in Oricli-Alpha are implemented as brain modules—Python classes that inherit from `BaseBrainModule`. Each module declares its operations, dependencies, and metadata through a standardized interface. The module registry automatically discovers modules from the filesystem and makes them available to the system without manual registration.
 
 Modules communicate through a unified execution interface. Each module implements an `execute` method that accepts an operation name and parameters, returning structured results. This design enables consistent interaction patterns across diverse cognitive capabilities, from reasoning and memory to embeddings and language processing.
 
@@ -30,19 +30,19 @@ The orchestrator also supports module composition, allowing multiple modules to 
 
 ### State Storage Infrastructure
 
-Mavaia provides a unified state storage interface that abstracts over multiple backends: file-based storage for development, in-memory storage for ephemeral state, and database storage for production deployments. The storage system handles state persistence, retrieval, and indexing, enabling modules to maintain context across invocations.
+Oricli-Alpha provides a unified state storage interface that abstracts over multiple backends: file-based storage for development, in-memory storage for ephemeral state, and database storage for production deployments. The storage system handles state persistence, retrieval, and indexing, enabling modules to maintain context across invocations.
 
-The state index allows querying stored state by type, metadata, or content, supporting efficient retrieval for memory and context management modules. This infrastructure underpins Mavaia's conversational memory, memory graph operations, and other stateful cognitive capabilities.
+The state index allows querying stored state by type, metadata, or content, supporting efficient retrieval for memory and context management modules. This infrastructure underpins Oricli-Alpha's conversational memory, memory graph operations, and other stateful cognitive capabilities.
 
 ### API Gateway
 
-The API gateway exposes Mavaia's capabilities through an OpenAI-compatible HTTP interface, enabling drop-in replacement for OpenAI API endpoints. The gateway routes requests to appropriate modules, handles authentication and validation, and formats responses according to OpenAI's specification.
+The API gateway exposes Oricli-Alpha's capabilities through an OpenAI-compatible HTTP interface, enabling drop-in replacement for OpenAI API endpoints. The gateway routes requests to appropriate modules, handles authentication and validation, and formats responses according to OpenAI's specification.
 
-Beyond OpenAI compatibility, the gateway provides Mavaia-specific endpoints for module discovery, health monitoring, and metrics collection. This dual approach supports both standard integration patterns and advanced operational needs.
+Beyond OpenAI compatibility, the gateway provides Oricli-Alpha-specific endpoints for module discovery, health monitoring, and metrics collection. This dual approach supports both standard integration patterns and advanced operational needs.
 
 ## Capabilities Overview
 
-Mavaia includes 78+ brain modules organized across several capability categories. We describe the major categories below.
+Oricli-Alpha includes 78+ brain modules organized across several capability categories. We describe the major categories below.
 
 ### Core Intelligence
 
@@ -50,7 +50,7 @@ The cognitive generator module orchestrates the primary text generation workflow
 
 ### Memory and Context
 
-Mavaia's memory system operates through multiple specialized modules. The conversational memory module maintains dialogue context and history. The memory graph module implements graph-based knowledge representation with clustering and relationship tracking. The memory processor module handles memory encoding, retrieval, and consolidation. These modules work together to provide persistent, queryable context for cognitive operations.
+Oricli-Alpha's memory system operates through multiple specialized modules. The conversational memory module maintains dialogue context and history. The memory graph module implements graph-based knowledge representation with clustering and relationship tracking. The memory processor module handles memory encoding, retrieval, and consolidation. These modules work together to provide persistent, queryable context for cognitive operations.
 
 ### Reasoning and Logic
 
@@ -74,7 +74,7 @@ The framework includes built-in observability through metrics collection, health
 
 ## Safety & Reliability Summary
 
-Mavaia implements several safety and reliability mechanisms at the architectural level. Parameter validation occurs before module execution, preventing invalid inputs from reaching cognitive modules. Error handling is standardized across modules, with structured error types and clear error messages.
+Oricli-Alpha implements several safety and reliability mechanisms at the architectural level. Parameter validation occurs before module execution, preventing invalid inputs from reaching cognitive modules. Error handling is standardized across modules, with structured error types and clear error messages.
 
 The dependency graph system prevents circular dependencies that could cause system deadlocks. The lifecycle management system ensures modules are properly initialized before use and cleaned up during shutdown. Health checks provide operational visibility into module status.
 
@@ -84,7 +84,7 @@ The API gateway includes configurable authentication and request validation. Rat
 
 ## Limitations
 
-Mavaia's modular architecture introduces some limitations. Module discovery occurs at startup, requiring system restart to detect new modules. While the orchestrator handles dependencies automatically, complex dependency graphs can increase initialization time.
+Oricli-Alpha's modular architecture introduces some limitations. Module discovery occurs at startup, requiring system restart to detect new modules. While the orchestrator handles dependencies automatically, complex dependency graphs can increase initialization time.
 
 The OpenAI-compatible API provides broad compatibility but may not expose all module-specific capabilities. Advanced use cases may require direct module access or custom API endpoints.
 
@@ -96,11 +96,11 @@ Some modules require external model files or services. These dependencies must b
 
 ## Future Directions
 
-We are developing several enhancements to expand Mavaia's capabilities and operational characteristics. Module intercommunication through an event system will enable more sophisticated workflows. A centralized caching layer will improve performance for frequently accessed operations.
+We are developing several enhancements to expand Oricli-Alpha's capabilities and operational characteristics. Module intercommunication through an event system will enable more sophisticated workflows. A centralized caching layer will improve performance for frequently accessed operations.
 
 Testing infrastructure will provide comprehensive validation of module behavior and integration. Performance optimization efforts will focus on reducing latency and resource consumption.
 
-Multi-modal processing capabilities will extend Mavaia beyond text to images, audio, and other media types. Real-time learning mechanisms will enable modules to adapt based on usage patterns.
+Multi-modal processing capabilities will extend Oricli-Alpha beyond text to images, audio, and other media types. Real-time learning mechanisms will enable modules to adapt based on usage patterns.
 
 Advanced reasoning capabilities will incorporate more sophisticated planning, meta-reasoning, and self-correction mechanisms. Distributed systems support will enable horizontal scaling and fault tolerance.
 
@@ -108,4 +108,4 @@ We continue to expand the module library with new cognitive capabilities. Commun
 
 ---
 
-*This document describes Mavaia version 1.0.0. For technical documentation, API references, and module development guides, see the [documentation directory](.) and [module development guide](module_development.md).*
+*This document describes Oricli-Alpha version 1.0.0. For technical documentation, API references, and module development guides, see the [documentation directory](.) and [module development guide](module_development.md).*

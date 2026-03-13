@@ -1,7 +1,7 @@
 ---
 description: External service integration patterns and standards
 alwaysApply: false
-globs: mavaia_core/services/**/*.py
+globs: oricli_core/services/**/*.py
 ---
 
 # Cursor Rules: Service Integration Standards
@@ -142,7 +142,7 @@ examples:
       import time
       import requests
       from typing import Dict, Any, Optional
-      from mavaia_core.exceptions import MavaiaError
+      from oricli_core.exceptions import MavaiaError
       
       
       class ServiceIntegrationError(MavaiaError):
@@ -298,6 +298,6 @@ examples:
 references:
   - Retry patterns: https://docs.microsoft.com/en-us/azure/architecture/patterns/retry
   - Circuit breaker pattern: https://docs.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
-  - Mavaia service implementations: mavaia_core/services/
-  - Web fetch service: mavaia_core/services/web_fetch_service.py
-  - Tool registry: mavaia_core/services/tool_registry.py
+  - Mavaia service implementations: oricli_core/services/
+  - Web fetch service: oricli_core/services/web_fetch_service.py
+  - Tool registry: oricli_core/services/tool_registry.py

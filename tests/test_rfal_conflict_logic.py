@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.registry import ModuleRegistry
+from oricli_core.brain.registry import ModuleRegistry
 
 def test_keyword_conflict():
     """Verify that rejection keywords trigger a conflict."""
@@ -59,7 +59,7 @@ def test_sentiment_conflict():
     # Mock emotional_inference
     mock_ei = MagicMock()
     
-    with patch("mavaia_core.brain.registry.ModuleRegistry.get_module") as mock_get:
+    with patch("oricli_core.brain.registry.ModuleRegistry.get_module") as mock_get:
         def side_effect(name, **kwargs):
             if name == "emotional_inference":
                 return mock_ei

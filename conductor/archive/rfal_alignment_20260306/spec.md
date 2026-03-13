@@ -1,7 +1,7 @@
 # Specification: Conversational RFAL Alignment
 
 **Overview**
-Conversational RFAL (Reinforced Award Learning) is an autonomous alignment system that enables Mavaia to learn from organic user feedback and automated checks. By detecting conversational conflicts (e.g., "No, that's not what I meant") and cross-referencing facts and tone, the system generates Direct Preference Optimization (DPO) pairs. These pairs are used to asynchronously update model weights, teaching Mavaia to self-correct hallucinations and maintain contextual tone.
+Conversational RFAL (Reinforced Award Learning) is an autonomous alignment system that enables Oricli-Alpha to learn from organic user feedback and automated checks. By detecting conversational conflicts (e.g., "No, that's not what I meant") and cross-referencing facts and tone, the system generates Direct Preference Optimization (DPO) pairs. These pairs are used to asynchronously update model weights, teaching Oricli-Alpha to self-correct hallucinations and maintain contextual tone.
 
 **Functional Requirements**
 1.  **Conversational Conflict Detector**:

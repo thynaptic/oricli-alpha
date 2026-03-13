@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Curriculum-style training runner for Mavaia.
+Curriculum-style training runner for OricliAlpha.
 Runs sequential training stages over a fixed list of datasets to build a baseline.
 """
 import argparse
@@ -29,7 +29,7 @@ from pathlib import Path
 
 # Try to import DatasetSearch
 try:
-    from mavaia_core.data.search import DatasetSearch
+    from oricli_core.data.search import DatasetSearch
 except ImportError as e:
     DatasetSearch = None
     print(f"[DEBUG] DatasetSearch import failed: {e}")
@@ -38,7 +38,7 @@ except ImportError as e:
         import huggingface_hub
         import wikipedia
         import internetarchive
-        print("[DEBUG] Core search dependencies are available, but mavaia_core.data.search failed.")
+        print("[DEBUG] Core search dependencies are available, but oricli_core.data.search failed.")
     except ImportError as de:
         print(f"[DEBUG] Search dependency missing: {de}")
 from pathlib import Path
@@ -47,7 +47,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRAIN_SCRIPT = REPO_ROOT / "scripts" / "train_neural_text_generator.py"
 REPORT_SCRIPT = REPO_ROOT / "scripts" / "report_card.py"
-MANIFEST_FILE = REPO_ROOT / "mavaia_core" / "data" / "curriculum_manifest.json"
+MANIFEST_FILE = REPO_ROOT / "oricli_core" / "data" / "curriculum_manifest.json"
 
 # Determine Python executable
 VENV_PY = REPO_ROOT / ".venv" / "bin" / "python"
@@ -535,7 +535,7 @@ def _interactive_select(results):
         print("[ERROR] No datasets found for the given query.")
         return None
 
-    print("\n[Mavaia-Discovery] Top dataset matches found:")
+    print("\n[OricliAlpha-Discovery] Top dataset matches found:")
     print("-" * 90)
     print(f"{'Idx':<5} {'Source':<15} {'Name':<40} {'Score':<10} {'Status'}")
     print("-" * 90)
@@ -616,7 +616,7 @@ def main():
     ap.add_argument("--add-stage", type=str, help="Search for a dataset and permanently add it as a new curriculum stage")
     ap.add_argument("--discover-only", action="store_true", help="Perform dataset discovery or stage addition without starting training")
     ap.add_argument("--auto-select", action="store_true", help="Auto-select the best match for --find-elective or --add-stage without interaction")
-    ap.add_argument("--run-root", default=str(REPO_ROOT / "mavaia_core" / "models" / "neural_text_generator" / "curriculum"))
+    ap.add_argument("--run-root", default=str(REPO_ROOT / "oricli_core" / "models" / "neural_text_generator" / "curriculum"))
     ap.add_argument("extra_args", nargs=argparse.REMAINDER, help="Extra args passed to train_neural_text_generator.py")
 
     args = ap.parse_args()
@@ -877,7 +877,7 @@ def main():
                 
                 for ds_id in datasets:
                     safe_filename = ds_id.replace('/', '_').replace(':', '_')
-                    cache_file = REPO_ROOT / "mavaia_core" / "data" / "huggingface" / f"{safe_filename}.txt"
+                    cache_file = REPO_ROOT / "oricli_core" / "data" / "huggingface" / f"{safe_filename}.txt"
                     if cache_file.exists():
                         full_text = cache_file.read_text(encoding="utf-8")
                         # Take a random slice proportional to replay_pct

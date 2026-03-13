@@ -6,13 +6,13 @@
 
 ## Vision
 
-Transform Mavaia into the **industry's first Python "LLM"** - an AI system where Python code is the native language of cognition, not just a target output format.
+Transform Oricli-Alpha into the **industry's first Python "LLM"** - an AI system where Python code is the native language of cognition, not just a target output format.
 
 ---
 
 ## Key Differentiators
 
-| Traditional Tools | Mavaia Python LLM |
+| Traditional Tools | Oricli-Alpha Python LLM |
 |-------------------|-------------------|
 | Pattern matching | Cognitive reasoning |
 | File context | Persistent code memory |

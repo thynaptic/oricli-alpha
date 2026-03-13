@@ -6,8 +6,8 @@ from pathlib import Path
 # Add project root to path
 sys.path.append(str(Path(__file__).parent))
 
-from mavaia_core.brain.modules.model_warmup_service import ModelWarmupServiceModule
-from mavaia_core.brain.registry import ModuleRegistry
+from oricli_core.brain.modules.model_warmup_service import ModelWarmupServiceModule
+from oricli_core.brain.registry import ModuleRegistry
 
 class TestWarmupLatency(unittest.TestCase):
     def setUp(self):

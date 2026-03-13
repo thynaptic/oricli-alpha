@@ -12,8 +12,8 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.registry import ModuleRegistry
-from mavaia_core.client import MavaiaClient
+from oricli_core.brain.registry import ModuleRegistry
+from oricli_core.client import OricliAlphaClient
 
 def test_intent_registration():
     """Verify that intents can be registered and listed."""
@@ -28,7 +28,7 @@ def test_intent_registration():
         sys.exit(1)
         
     # Register a new intent
-    res = router.execute("register_intent", {"intent": "coding", "adapter_id": "mavaia/python-lora"})
+    res = router.execute("register_intent", {"intent": "coding", "adapter_id": "oricli/python-lora"})
     if res.get("success") and res.get("intent") == "coding":
         print("✓ intent 'coding' registered")
     else:
@@ -37,7 +37,7 @@ def test_intent_registration():
         
     # List intents
     list_res = router.execute("list_intents", {})
-    if "coding" in list_res.get("intents", []) and list_res.get("routing_table", {}).get("coding") == "mavaia/python-lora":
+    if "coding" in list_res.get("intents", []) and list_res.get("routing_table", {}).get("coding") == "oricli/python-lora":
         print("✓ intent 'coding' found in list and routing table")
     else:
         print(f"✗ intent 'coding' NOT found in list or table: {list_res}")
@@ -60,11 +60,11 @@ def test_routing_logic():
             return mock_emb
         return original_get_module(name, **kwargs)
     
-    with patch("mavaia_core.brain.registry.ModuleRegistry.get_module", side_effect=side_effect):
+    with patch("oricli_core.brain.registry.ModuleRegistry.get_module", side_effect=side_effect):
         router = ModuleRegistry.get_module("adapter_router")
         
         # Register mapping
-        router.execute("register_intent", {"intent": "math", "adapter_id": "mavaia/math-lora"})
+        router.execute("register_intent", {"intent": "math", "adapter_id": "oricli/math-lora"})
         
         # Route input
         route_res = router.execute("route_input", {"text": "calculate 2+2"})

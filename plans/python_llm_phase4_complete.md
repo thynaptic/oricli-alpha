@@ -155,9 +155,9 @@
 All 80 client methods are available through `client.python.*`:
 
 ```python
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
-client = MavaiaClient()
+client = Oricli-AlphaClient()
 
 # All Phase 4 capabilities available
 # Code Review, Metrics, Documentation, Explanation,
@@ -175,14 +175,14 @@ client = MavaiaClient()
 3. **Modular Architecture:** All modules follow BaseBrainModule pattern
 4. **Unified Interface:** Consistent client API across all modules
 5. **AST-Based Analysis:** Deep code understanding through AST visitors
-6. **Integration Ready:** Modules integrate with existing Mavaia ecosystem
+6. **Integration Ready:** Modules integrate with existing Oricli-Alpha ecosystem
 7. **Extensible Design:** Easy to add new operations and capabilities
 
 ---
 
 ## 📈 Impact
 
-**Mavaia is now the industry's first Python "LLM"** with:
+**Oricli-Alpha is now the industry's first Python "LLM"** with:
 - ✅ Deep semantic code understanding
 - ✅ Reasoning-driven code generation
 - ✅ Program behavior reasoning

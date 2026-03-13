@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Dynamic ToolBench Runner
-Executes tool-use scenarios and evaluates Mavaia's efficacy.
+Executes tool-use scenarios and evaluates OricliAlpha's efficacy.
 """
 
 import os
@@ -15,14 +15,14 @@ from typing import List, Dict, Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.registry import ModuleRegistry
-from mavaia_core.brain.modules.tool_call_parser import tool_call_parser
+from oricli_core.brain.registry import ModuleRegistry
+from oricli_core.brain.modules.tool_call_parser import tool_call_parser
 
 def run_tool_bench():
     print("🚀 Starting ToolBench Execution...")
     
     # 1. Load scenarios
-    scenario_path = REPO_ROOT / "mavaia_core" / "data" / "tool_bench_scenarios.json"
+    scenario_path = REPO_ROOT / "oricli_core" / "data" / "tool_bench_scenarios.json"
     if not scenario_path.exists():
         print(f"✗ Scenarios not found at {scenario_path}. Run generator first.")
         return
@@ -111,13 +111,13 @@ def run_tool_bench():
             print(f"    ✗ Error during execution: {e}")
 
     # 3. Save Results
-    results_path = REPO_ROOT / "mavaia_core" / "data" / "tool_bench_results.json"
+    results_path = REPO_ROOT / "oricli_core" / "data" / "tool_bench_results.json"
     with open(results_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
         
     # 4. Save Corrections for Phase 3
     if corrections:
-        corr_path = REPO_ROOT / "mavaia_core" / "data" / "tool_corrections.jsonl"
+        corr_path = REPO_ROOT / "oricli_core" / "data" / "tool_corrections.jsonl"
         with open(corr_path, "a", encoding="utf-8") as f:
             for c in corrections:
                 f.write(json.dumps(c) + "\n")

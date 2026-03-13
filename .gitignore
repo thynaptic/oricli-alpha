@@ -118,22 +118,22 @@ checkpoints/
 !**/*_config.json
 !**/package.json
 !**/pyproject.toml
-!mavaia_core/evaluation/test_data/**/*.json
-!mavaia_core/evaluation/test_data/**/*.yaml
-!mavaia_core/evaluation/test_data/**/*.yml
+!oricli_core/evaluation/test_data/**/*.json
+!oricli_core/evaluation/test_data/**/*.yaml
+!oricli_core/evaluation/test_data/**/*.yml
 
 # Internal Reports
 technical_reports/
 *.txt
 LiveBench/
-mavaia_core/evaluation/results/
-mavaia_core/evaluation/test_data_manager.py
-mavaia_core/evaluation/test_results.py
-mavaia_core/evaluation/test_runner.py
-mavaia_core/evaluation/test_reporter.py
-mavaia_core/evaluation/test_data_manager.py
-mavaia_core/evaluation/test_results.py
-mavaia_core/evaluation/test_runner.py
-mavaia_core/evaluation/test_reporter.py
+oricli_core/evaluation/results/
+oricli_core/evaluation/test_data_manager.py
+oricli_core/evaluation/test_results.py
+oricli_core/evaluation/test_runner.py
+oricli_core/evaluation/test_reporter.py
+oricli_core/evaluation/test_data_manager.py
+oricli_core/evaluation/test_results.py
+oricli_core/evaluation/test_runner.py
+oricli_core/evaluation/test_reporter.py
 .venv_*
 .venv_broken_*

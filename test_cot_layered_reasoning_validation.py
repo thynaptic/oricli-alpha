@@ -12,8 +12,8 @@ from pathlib import Path
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from mavaia_core.brain.registry import ModuleRegistry
-from mavaia_core.brain.metrics import get_metrics_collector
+from oricli_core.brain.registry import ModuleRegistry
+from oricli_core.brain.metrics import get_metrics_collector
 
 
 def test_module_discovery():

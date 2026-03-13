@@ -1,4 +1,4 @@
-// Main Mavaia Chat Application
+// Main Oricli-Alpha Chat Application
 
 (() => {
   const els = {
@@ -45,8 +45,8 @@
     endpoint: window.location.origin + "/chat",
     modelsEndpoint: window.location.origin + "/models",
     temperature: 0.7,
-    model: "mavaia-cognitive",
-    systemPrompt: "You are Mavaia, a precise and helpful cognitive AI. Keep responses concise, and show reasoning only when asked.",
+    model: "oricli-cognitive",
+    systemPrompt: "You are Oricli-Alpha, a precise and helpful cognitive AI. Keep responses concise, and show reasoning only when asked.",
     theme: "light",
   };
 
@@ -84,7 +84,7 @@
   // Settings management
   function loadSettings() {
     try {
-      const stored = localStorage.getItem("mavaia.settings");
+      const stored = localStorage.getItem("oricli.settings");
       return stored ? { ...defaultSettings, ...JSON.parse(stored) } : { ...defaultSettings };
     } catch {
       return { ...defaultSettings };
@@ -92,7 +92,7 @@
   }
 
   function saveSettings() {
-    localStorage.setItem("mavaia.settings", JSON.stringify(state.settings));
+    localStorage.setItem("oricli.settings", JSON.stringify(state.settings));
   }
 
   function applySettingsToUI() {
@@ -110,14 +110,14 @@
 
   // Thread management
   function saveThreads() {
-    localStorage.setItem("mavaia.threads", JSON.stringify(state.threads));
-    localStorage.setItem("mavaia.currentThreadId", state.currentThreadId || "");
+    localStorage.setItem("oricli.threads", JSON.stringify(state.threads));
+    localStorage.setItem("oricli.currentThreadId", state.currentThreadId || "");
   }
 
   function loadThreads() {
     try {
-      const raw = localStorage.getItem("mavaia.threads");
-      const current = localStorage.getItem("mavaia.currentThreadId");
+      const raw = localStorage.getItem("oricli.threads");
+      const current = localStorage.getItem("oricli.currentThreadId");
       state.threads = raw ? JSON.parse(raw) : [];
       state.currentThreadId = current || (state.threads[0]?.id ?? null);
     } catch {
@@ -166,7 +166,7 @@
 
   // Tab navigation
   function setupTabs() {
-    const savedTab = localStorage.getItem("mavaia.activeTab") || "chat";
+    const savedTab = localStorage.getItem("oricli.activeTab") || "chat";
     switchTab(savedTab);
 
     els.tabs.forEach((tab) => {
@@ -179,7 +179,7 @@
 
   function switchTab(tabName) {
     state.activeTab = tabName;
-    localStorage.setItem("mavaia.activeTab", tabName);
+    localStorage.setItem("oricli.activeTab", tabName);
 
     els.tabs.forEach((tab) => {
       if (tab.dataset.tab === tabName) {
@@ -275,7 +275,7 @@
     if (thread.messages.length === 0) {
       const empty = document.createElement("div");
       empty.className = "empty-state";
-      empty.textContent = "Start a conversation with Mavaia...";
+      empty.textContent = "Start a conversation with Oricli-Alpha...";
       els.messages.appendChild(empty);
       return;
     }

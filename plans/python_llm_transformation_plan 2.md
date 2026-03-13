@@ -1,4 +1,4 @@
-# Python LLM Transformation Plan: Making Mavaia the Industry's First Python "LLM"
+# Python LLM Transformation Plan: Making Oricli-Alpha the Industry's First Python "LLM"
 
 **Document Version:** 1.0.0  
 **Date:** 2025-01-11  
@@ -9,15 +9,15 @@
 
 ## Executive Summary
 
-This plan outlines the transformation of Mavaia from a modular cognitive framework into the industry's first **Python "LLM"** - a system that understands, generates, and reasons about Python code with the same depth and fluency that traditional LLMs work with natural language.
+This plan outlines the transformation of Oricli-Alpha from a modular cognitive framework into the industry's first **Python "LLM"** - a system that understands, generates, and reasons about Python code with the same depth and fluency that traditional LLMs work with natural language.
 
 ### Vision Statement
 
-**Mavaia will become the first AI system where Python code is the native language of cognition.** Just as LLMs understand natural language semantics, context, and generation patterns, Mavaia will understand Python code semantics, execution context, and code generation patterns at a fundamental level.
+**Oricli-Alpha will become the first AI system where Python code is the native language of cognition.** Just as LLMs understand natural language semantics, context, and generation patterns, Oricli-Alpha will understand Python code semantics, execution context, and code generation patterns at a fundamental level.
 
 ### Key Differentiator
 
-Unlike code completion tools (GitHub Copilot, Cursor) or code analysis tools (SonarQube, Pylint), Mavaia will:
+Unlike code completion tools (GitHub Copilot, Cursor) or code analysis tools (SonarQube, Pylint), Oricli-Alpha will:
 - **Understand Python as a language** - semantic understanding beyond syntax
 - **Generate Python as thought** - code generation as a cognitive process
 - **Reason about Python programs** - logical inference about code behavior
@@ -41,7 +41,7 @@ A Python LLM is an AI system that:
 
 ### 1.2 Comparison Matrix
 
-| Capability | Traditional LLMs | Code Completion Tools | Mavaia Python LLM |
+| Capability | Traditional LLMs | Code Completion Tools | Oricli-Alpha Python LLM |
 |------------|----------------|----------------------|-------------------|
 | **Primary Language** | Natural Language | Natural Language → Code | Python Code |
 | **Understanding Depth** | Semantic (text) | Syntactic (code) | Semantic (code) |
@@ -551,7 +551,7 @@ python_code_orchestrator
 
 ### 7.1 Positioning
 
-**Primary Message**: "Mavaia: The First AI That Thinks in Python"
+**Primary Message**: "Oricli-Alpha: The First AI That Thinks in Python"
 
 **Key Differentiators**:
 1. **Reasoning-Driven**: Not pattern matching, but cognitive reasoning
@@ -730,13 +730,13 @@ python_code_orchestrator
 
 ## Conclusion
 
-This plan outlines a comprehensive strategy to transform Mavaia into the industry's first Python "LLM" - a system that understands, generates, and reasons about Python code with the depth and fluency of traditional LLMs working with natural language.
+This plan outlines a comprehensive strategy to transform Oricli-Alpha into the industry's first Python "LLM" - a system that understands, generates, and reasons about Python code with the depth and fluency of traditional LLMs working with natural language.
 
-The phased approach ensures incremental progress with measurable milestones. The focus on reasoning, memory, and semantic understanding differentiates Mavaia from existing code completion tools and establishes a new category of AI systems.
+The phased approach ensures incremental progress with measurable milestones. The focus on reasoning, memory, and semantic understanding differentiates Oricli-Alpha from existing code completion tools and establishes a new category of AI systems.
 
 Success will be measured through technical metrics (accuracy, quality), adoption metrics (users, usage), and business metrics (satisfaction, retention). The plan includes risk mitigation strategies and clear next steps for immediate action.
 
-**The vision is ambitious but achievable**: Mavaia will become the first AI system where Python code is not just a target output, but the native language of cognition itself.
+**The vision is ambitious but achievable**: Oricli-Alpha will become the first AI system where Python code is not just a target output, but the native language of cognition itself.
 
 ---
 
@@ -744,7 +744,7 @@ Success will be measured through technical metrics (accuracy, quality), adoption
 
 ### A.1 Python Semantic Understanding Module
 
-**File**: `mavaia_core/brain/modules/python_semantic_understanding.py`
+**File**: `oricli_core/brain/modules/python_semantic_understanding.py`
 
 **Dependencies**:
 - `ast` (standard library)
@@ -760,7 +760,7 @@ Success will be measured through technical metrics (accuracy, quality), adoption
 
 ### A.2 Python Code Embedding Module
 
-**File**: `mavaia_core/brain/modules/python_code_embeddings.py`
+**File**: `oricli_core/brain/modules/python_code_embeddings.py`
 
 **Dependencies**:
 - `transformers` (HuggingFace)
@@ -773,11 +773,11 @@ Success will be measured through technical metrics (accuracy, quality), adoption
 
 ### A.3 Code Memory System
 
-**File**: `mavaia_core/brain/modules/python_code_memory.py`
+**File**: `oricli_core/brain/modules/python_code_memory.py`
 
 **Dependencies**:
-- `mavaia_core.brain.state_storage` (for persistence)
-- `mavaia_core.brain.memory_graph` (for graph operations)
+- `oricli_core.brain.state_storage` (for persistence)
+- `oricli_core.brain.memory_graph` (for graph operations)
 
 **Key Methods**:
 - `remember_code_pattern(pattern: str, context: Dict[str, Any]) -> str`

@@ -42,7 +42,7 @@ def test_init_pod_worker():
     with patch("scripts.runpod_bridge.setup_pod_env") as mock_setup, \
          patch("scripts.runpod_bridge.pre_sync_cleanup") as mock_cleanup, \
          patch("scripts.runpod_bridge.sync_code") as mock_sync, \
-         patch("scripts.runpod_bridge.ensure_mavaia_installed") as mock_install, \
+         patch("scripts.runpod_bridge.ensure_oricli_installed") as mock_install, \
          patch("scripts.runpod_bridge.setup_ollama") as mock_ollama:
          
         p_id = _init_pod_worker(mock_pod, mock_bridge, mock_args)

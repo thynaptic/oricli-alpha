@@ -10,7 +10,7 @@
 **Status:** ✅ Complete
 
 ### Module: `python_code_review.py`
-**File:** `mavaia_core/brain/modules/python_code_review.py`  
+**File:** `oricli_core/brain/modules/python_code_review.py`  
 **Status:** ✅ Complete
 
 **Capabilities:**
@@ -48,7 +48,7 @@
 - ✅ Comprehensive type hints
 - ✅ Full docstring coverage
 - ✅ Error handling throughout
-- ✅ Follows Mavaia standards
+- ✅ Follows Oricli-Alpha standards
 - ✅ Follows BaseBrainModule pattern
 
 ---
@@ -65,13 +65,13 @@
 5. `analyze_technical_debt(code, project)` - Technical debt analysis
 6. `suggest_improvements(code, focus)` - Improvement suggestions
 
-**File:** `mavaia_core/client.py`
+**File:** `oricli_core/client.py`
 
 **Example Usage:**
 ```python
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
-client = MavaiaClient()
+client = Oricli-AlphaClient()
 
 # Comprehensive code review
 review = client.python.review_code(code, review_type="comprehensive")
@@ -154,7 +154,7 @@ print(f"Improvements: {improvements['count']}")
 **Status:** ✅ Complete
 
 ### Module: `python_code_metrics.py`
-**File:** `mavaia_core/brain/modules/python_code_metrics.py`  
+**File:** `oricli_core/brain/modules/python_code_metrics.py`  
 **Status:** ✅ Complete
 
 **Capabilities:**
@@ -189,7 +189,7 @@ print(f"Improvements: {improvements['count']}")
 - ✅ Comprehensive type hints
 - ✅ Full docstring coverage
 - ✅ Error handling throughout
-- ✅ Follows Mavaia standards
+- ✅ Follows Oricli-Alpha standards
 - ✅ Follows BaseBrainModule pattern
 
 ---
@@ -206,13 +206,13 @@ print(f"Improvements: {improvements['count']}")
 5. `measure_documentation_coverage(code)` - Documentation coverage
 6. `analyze_dependency_complexity(project)` - Dependency complexity
 
-**File:** `mavaia_core/client.py`
+**File:** `oricli_core/client.py`
 
 **Example Usage:**
 ```python
-from mavaia_core import MavaiaClient
+from oricli_core import Oricli-AlphaClient
 
-client = MavaiaClient()
+client = Oricli-AlphaClient()
 
 # Calculate all metrics
 metrics = client.python.calculate_metrics(code)
@@ -306,7 +306,7 @@ print(f"Coverage: {doc_coverage['overall_percentage']:.1f}%")
 - ✅ Error handling
 - ✅ Follows BaseBrainModule pattern
 - ✅ No linter errors
-- ✅ Follows Mavaia coding standards
+- ✅ Follows Oricli-Alpha coding standards
 
 ### Known Limitations
 1. **Simplified Pattern Detection**: Some pattern detection is simplified (can be enhanced)

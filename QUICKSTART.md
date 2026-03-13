@@ -34,13 +34,13 @@ This will:
 **Option 1: Using the entry point (if package is installed)**
 ```bash
 source venv/bin/activate
-mavaia-server --port 8000
+oricli-server --port 8000
 ```
 
 **Option 2: Using Python module**
 ```bash
 source venv/bin/activate
-python3 -m mavaia_core.api.server --port 8000
+python3 -m oricli_core.api.server --port 8000
 ```
 
 **Option 3: Using the startup script**
@@ -87,7 +87,7 @@ source venv/bin/activate
 Use a different port:
 ```bash
 # API server
-python3 -m mavaia_core.api.server --port 8001
+python3 -m oricli_core.api.server --port 8001
 
 # UI server
 MAVAIA_UI_PORT=5001 python3 ui_app.py

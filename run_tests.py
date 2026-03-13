@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Mavaia Core Test Suite - CLI Wrapper
+OricliAlpha Core Test Suite - CLI Wrapper
 ===================================
-A high-performance wrapper for the Mavaia evaluation framework.
+A high-performance wrapper for the OricliAlpha evaluation framework.
 Supports both interactive and non-interactive (argument-based) execution.
 
 Usage:
   # Run all tests
   ./run_tests.py
 
-  # Run Mavaia's internal knowledge benchmark (Science, Logic, History)
+  # Run OricliAlpha's internal knowledge benchmark (Science, Logic, History)
   ./run_tests.py --internal-bench
 
   # Run tests for a specific module
@@ -41,7 +41,7 @@ def main():
     # then we pass everything to the core test_runner.
     
     parser = argparse.ArgumentParser(
-        description="Mavaia Core Test Suite Wrapper",
+        description="OricliAlpha Core Test Suite Wrapper",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False # We handle help manually to show BOTH wrapper and core options
     )
@@ -60,7 +60,7 @@ def main():
         print(__doc__)
         print("\nAdvanced options are available in the core runner:")
         try:
-            from mavaia_core.evaluation.test_runner import main as core_main
+            from oricli_core.evaluation.test_runner import main as core_main
             # Execute with --help to show full core options
             sys.argv = [sys.argv[0], "--help"]
             core_main()
@@ -69,12 +69,12 @@ def main():
         return
 
     try:
-        from mavaia_core.evaluation.test_runner import main as core_main
+        from oricli_core.evaluation.test_runner import main as core_main
         
         # Only print header if not quiet
         if "--quiet" not in sys.argv:
             print("=" * 70, flush=True)
-            print("Mavaia Core Evaluation System".center(70), flush=True)
+            print("OricliAlpha Core Evaluation System".center(70), flush=True)
             print(f"Time: {os.popen('date').read().strip()}".center(70), flush=True)
             print("=" * 70, flush=True)
             print(flush=True)

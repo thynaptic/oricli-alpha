@@ -1,4 +1,4 @@
-# Mavaia Scripts
+# Oricli-Alpha Scripts
 
 ## 🚀 start_servers.sh
 
@@ -52,13 +52,13 @@ MAVAIA_API_HOST=127.0.0.1 MAVAIA_UI_HOST=127.0.0.1 ./scripts/start_servers.sh
 
 ### Logs
 
-- API logs: `/tmp/mavaia_api.log`
-- UI logs: `/tmp/mavaia_ui.log`
+- API logs: `/tmp/oricli_api.log`
+- UI logs: `/tmp/oricli_ui.log`
 
 View logs in real-time:
 ```bash
-tail -f /tmp/mavaia_api.log
-tail -f /tmp/mavaia_ui.log
+tail -f /tmp/oricli_api.log
+tail -f /tmp/oricli_ui.log
 ```
 
 ### Stopping

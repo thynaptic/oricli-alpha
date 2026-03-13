@@ -1,6 +1,6 @@
 import sys
 import logging
-from mavaia_core.brain.modules.cognitive_generator import CognitiveGeneratorModule
+from oricli_core.brain.modules.cognitive_generator import CognitiveGeneratorModule
 
 logging.basicConfig(level=logging.INFO)
 
@@ -8,7 +8,7 @@ def run_test():
     generator = CognitiveGeneratorModule()
     
     # Needs a registry load to pick up modules correctly
-    from mavaia_core.brain.registry import ModuleRegistry
+    from oricli_core.brain.registry import ModuleRegistry
     ModuleRegistry.discover_modules()
 
     print("=== TEST 1: Python Code ===")

@@ -91,7 +91,7 @@ Create a comprehensive evaluation framework following MMLU (Massive Multitask La
 ### Test Suite Structure
 
 ```
-mavaia_core/evaluation/
+oricli_core/evaluation/
 ├── __init__.py
 ├── test_runner.py              # Main test execution engine
 ├── test_reporter.py             # Real-time progress and reporting
@@ -181,7 +181,7 @@ mavaia_core/evaluation/
 
 **Key Features**:
 
-- Discovers all modules from `mavaia_core/brain/modules/`
+- Discovers all modules from `oricli_core/brain/modules/`
 - Loads test data from `test_data/` directories
 - Executes tests with timeout handling
 - Collects metrics (execution time, success/failure, errors)
@@ -348,26 +348,26 @@ mavaia_core/evaluation/
 
 ```bash
 # Run all tests
-python -m mavaia_core.evaluation.test_runner
+python -m oricli_core.evaluation.test_runner
 
 # Test specific module
-python -m mavaia_core.evaluation.test_runner --module chain_of_thought
+python -m oricli_core.evaluation.test_runner --module chain_of_thought
 
 # Test specific category
-python -m mavaia_core.evaluation.test_runner --category reasoning
+python -m oricli_core.evaluation.test_runner --category reasoning
 
 # Generate report only
-python -m mavaia_core.evaluation.test_runner --report-only
+python -m oricli_core.evaluation.test_runner --report-only
 
 # Custom test data directory
-python -m mavaia_core.evaluation.test_runner --test-data-dir /path/to/tests
+python -m oricli_core.evaluation.test_runner --test-data-dir /path/to/tests
 ```
 
 ### Programmatic Usage
 
 ```python
-from mavaia_core.evaluation.test_runner import TestRunner
-from mavaia_core.evaluation.test_reporter import TestReporter
+from oricli_core.evaluation.test_runner import TestRunner
+from oricli_core.evaluation.test_reporter import TestReporter
 
 runner = TestRunner()
 reporter = TestReporter()

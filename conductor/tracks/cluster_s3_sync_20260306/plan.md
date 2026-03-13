@@ -12,7 +12,7 @@
 - [ ] Update `_init_pod_worker` to support S3-based initialization.
 - [ ] If S3 parameters are provided:
     - [ ] Perform `s3_sync_pod(direction="pull")` on each pod in the cluster.
-    - [ ] Ensure `mavaia_core` and dependencies are installed in the local `/workspace`.
+    - [ ] Ensure `oricli_core` and dependencies are installed in the local `/workspace`.
 
 ## Phase 4: Training & Synchronization
 - [ ] Modify the training script or bridge to periodically sync the local checkpoints back to S3.

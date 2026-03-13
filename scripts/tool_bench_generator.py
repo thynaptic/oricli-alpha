@@ -15,8 +15,8 @@ from typing import List, Dict, Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from mavaia_core.brain.registry import ModuleRegistry
-from mavaia_core.brain.modules.tool_registry import tool_registry
+from oricli_core.brain.registry import ModuleRegistry
+from oricli_core.brain.modules.tool_registry import tool_registry
 
 def generate_tool_bench():
     print("🚀 Initializing Dynamic ToolBench Generator...")
@@ -96,7 +96,7 @@ def generate_tool_bench():
         })
 
     # 4. Save the generated benchmark
-    output_path = REPO_ROOT / "mavaia_core" / "data" / "tool_bench_scenarios.json"
+    output_path = REPO_ROOT / "oricli_core" / "data" / "tool_bench_scenarios.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(scenarios, f, indent=2)
     

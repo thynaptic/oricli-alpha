@@ -3,21 +3,21 @@ name: Module Warmup and Monitoring System
 overview: Create a comprehensive module warmup and monitoring framework that ensures all brain modules are pre-loaded, initialized, tested, and kept online with automatic recovery to achieve 0% downtime.
 todos:
   - id: create_warmup_service
-    content: Create ModuleWarmupService in mavaia_core/brain/warmup.py with warmup_all_modules(), warmup_module(), and status tracking
+    content: Create ModuleWarmupService in oricli_core/brain/warmup.py with warmup_all_modules(), warmup_module(), and status tracking
     status: pending
   - id: create_monitor_service
-    content: Create ModuleMonitorService in mavaia_core/brain/monitor.py with background monitoring thread and health checks
+    content: Create ModuleMonitorService in oricli_core/brain/monitor.py with background monitoring thread and health checks
     status: pending
   - id: create_recovery_service
-    content: Create ModuleRecoveryService in mavaia_core/brain/recovery.py with automatic retry and exponential backoff
+    content: Create ModuleRecoveryService in oricli_core/brain/recovery.py with automatic retry and exponential backoff
     status: pending
   - id: create_degraded_classifier
-    content: Create DegradedModeClassifier in mavaia_core/brain/degraded_classifier.py with degradation classification and fallback routing
+    content: Create DegradedModeClassifier in oricli_core/brain/degraded_classifier.py with degradation classification and fallback routing
     status: pending
     dependencies:
       - create_monitor_service
   - id: create_availability_manager
-    content: Create ModuleAvailabilityManager in mavaia_core/brain/availability.py to coordinate all services with automatic fallback routing
+    content: Create ModuleAvailabilityManager in oricli_core/brain/availability.py to coordinate all services with automatic fallback routing
     status: pending
     dependencies:
       - create_warmup_service
@@ -25,22 +25,22 @@ todos:
       - create_recovery_service
       - create_degraded_classifier
   - id: integrate_server_startup
-    content: Integrate ModuleAvailabilityManager into server startup in mavaia_core/api/server.py
+    content: Integrate ModuleAvailabilityManager into server startup in oricli_core/api/server.py
     status: pending
     dependencies:
       - create_availability_manager
   - id: integrate_registry
-    content: Integrate availability checks into ModuleRegistry.get_module() in mavaia_core/brain/registry.py
+    content: Integrate availability checks into ModuleRegistry.get_module() in oricli_core/brain/registry.py
     status: pending
     dependencies:
       - create_availability_manager
   - id: integrate_orchestrator
-    content: Integrate availability manager into ModuleOrchestrator in mavaia_core/brain/orchestrator.py
+    content: Integrate availability manager into ModuleOrchestrator in oricli_core/brain/orchestrator.py
     status: pending
     dependencies:
       - create_availability_manager
   - id: add_health_endpoints
-    content: Add health and warmup status endpoints to API server in mavaia_core/api/server.py
+    content: Add health and warmup status endpoints to API server in oricli_core/api/server.py
     status: pending
     dependencies:
       - create_availability_manager
@@ -75,16 +75,16 @@ This creates a self-healing, adaptive cognitive architecture that maintains serv
 
 The system will consist of:
 
-1. **ModuleWarmupService** (`mavaia_core/brain/warmup.py`) - Core warmup service
-2. **ModuleMonitorService** (`mavaia_core/brain/monitor.py`) - Continuous health monitoring
-3. **ModuleRecoveryService** (`mavaia_core/brain/recovery.py`) - Automatic recovery for failed modules
-4. **DegradedModeClassifier** (`mavaia_core/brain/degraded_classifier.py`) - Classifies degradation reasons and manages fallback routing
-5. **ModuleAvailabilityManager** (`mavaia_core/brain/availability.py`) - Unified interface coordinating all services with automatic fallback
+1. **ModuleWarmupService** (`oricli_core/brain/warmup.py`) - Core warmup service
+2. **ModuleMonitorService** (`oricli_core/brain/monitor.py`) - Continuous health monitoring
+3. **ModuleRecoveryService** (`oricli_core/brain/recovery.py`) - Automatic recovery for failed modules
+4. **DegradedModeClassifier** (`oricli_core/brain/degraded_classifier.py`) - Classifies degradation reasons and manages fallback routing
+5. **ModuleAvailabilityManager** (`oricli_core/brain/availability.py`) - Unified interface coordinating all services with automatic fallback
 6. Integration points in server startup and orchestrator
 
 ## Implementation Plan
 
-### 1. Create Module Warmup Service (`mavaia_core/brain/warmup.py`)
+### 1. Create Module Warmup Service (`oricli_core/brain/warmup.py`)
 
 **Purpose**: Pre-load, initialize, test, and pre-warm all modules**Key Features**:
 
@@ -111,7 +111,7 @@ The system will consist of:
 - `MAVAIA_WARMUP_CONCURRENCY` (default: 4 parallel warmups)
 - `MAVAIA_WARMUP_TEST_OPERATIONS` (default: true)
 
-### 2. Create Module Monitor Service (`mavaia_core/brain/monitor.py`)
+### 2. Create Module Monitor Service (`oricli_core/brain/monitor.py`)
 
 **Purpose**: Continuously monitor module health and detect failures**Key Features**:
 
@@ -140,7 +140,7 @@ The system will consist of:
 - `MAVAIA_MONITOR_TIMEOUT` (default: 10s per check)
 - `MAVAIA_MONITOR_SLOW_THRESHOLD` (default: 5.0s) - Response time threshold for "slow" classification
 
-### 3. Create Module Recovery Service (`mavaia_core/brain/recovery.py`)
+### 3. Create Module Recovery Service (`oricli_core/brain/recovery.py`)
 
 **Purpose**: Automatically recover failed or offline modules**Key Features**:
 
@@ -165,7 +165,7 @@ The system will consist of:
 - `MAVAIA_RECOVERY_BACKOFF_BASE` (default: 2.0)
 - `MAVAIA_RECOVERY_BACKOFF_MAX` (default: 300s)
 
-### 4. Create Degraded Mode Classifier (`mavaia_core/brain/degraded_classifier.py`)
+### 4. Create Degraded Mode Classifier (`oricli_core/brain/degraded_classifier.py`)
 
 **Purpose**: Classify degradation reasons and manage automatic fallback routing**Key Features**:
 
@@ -214,7 +214,7 @@ The system will consist of:
 - `MAVAIA_FALLBACK_MAPPINGS_FILE` (optional JSON file with custom mappings)
 - `MAVAIA_FALLBACK_AUTO_ROUTE` (default: true) - Automatically route to fallback when degraded
 
-### 5. Create Unified Module Availability Manager (`mavaia_core/brain/availability.py`)
+### 5. Create Unified Module Availability Manager (`oricli_core/brain/availability.py`)
 
 **Purpose**: Unified interface coordinating warmup, monitoring, recovery, and fallback routing**Key Features**:
 
@@ -237,7 +237,7 @@ The system will consist of:
 - `register_fallback_mapping(primary, fallbacks)` - Register custom fallback
 - `get_fallback_usage_stats()` - Get statistics on fallback routing
 
-### 6. Integrate with Server Startup (`mavaia_core/api/server.py`)
+### 6. Integrate with Server Startup (`oricli_core/api/server.py`)
 
 **Changes**:
 
@@ -246,7 +246,7 @@ The system will consist of:
 - Add `/health/modules` endpoint for module availability status
 - Add `/warmup/status` endpoint for warmup status
 
-### 7. Integrate with Module Registry (`mavaia_core/brain/registry.py`)
+### 7. Integrate with Module Registry (`oricli_core/brain/registry.py`)
 
 **Changes**:
 
@@ -256,14 +256,14 @@ The system will consist of:
 - Log warnings when modules are requested but not available
 - Add `get_module_or_fallback(module_name, operation=None)` method that automatically routes to fallback
 
-### 8. Integrate with Module Orchestrator (`mavaia_core/brain/orchestrator.py`)
+### 8. Integrate with Module Orchestrator (`oricli_core/brain/orchestrator.py`)
 
 **Changes**:
 
 - Use `ModuleAvailabilityManager` to ensure modules are available before loading
 - Coordinate with warmup service for dependency-aware warmup
 
-### 9. Add Health Check Endpoints (`mavaia_core/api/server.py`)
+### 9. Add Health Check Endpoints (`oricli_core/api/server.py`)
 
 **New Endpoints**:
 
@@ -356,17 +356,17 @@ The system will consist of:
 
 ## Files to Create
 
-1. `mavaia_core/brain/warmup.py` - Module warmup service
-2. `mavaia_core/brain/monitor.py` - Module monitoring service
-3. `mavaia_core/brain/recovery.py` - Module recovery service
-4. `mavaia_core/brain/degraded_classifier.py` - Degraded mode classifier and fallback routing
-5. `mavaia_core/brain/availability.py` - Unified availability manager with fallback support
+1. `oricli_core/brain/warmup.py` - Module warmup service
+2. `oricli_core/brain/monitor.py` - Module monitoring service
+3. `oricli_core/brain/recovery.py` - Module recovery service
+4. `oricli_core/brain/degraded_classifier.py` - Degraded mode classifier and fallback routing
+5. `oricli_core/brain/availability.py` - Unified availability manager with fallback support
 
 ## Files to Modify
 
-1. `mavaia_core/api/server.py` - Add warmup initialization and health endpoints
-2. `mavaia_core/brain/registry.py` - Integrate availability checks in `get_module()`
-3. `mavaia_core/brain/orchestrator.py` - Integrate with availability manager
+1. `oricli_core/api/server.py` - Add warmup initialization and health endpoints
+2. `oricli_core/brain/registry.py` - Integrate availability checks in `get_module()`
+3. `oricli_core/brain/orchestrator.py` - Integrate with availability manager
 
 ## Testing Strategy
 

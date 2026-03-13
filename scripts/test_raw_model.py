@@ -10,8 +10,8 @@ def test_model(model_path, prompt):
     
     # If absolute path fails, try relative to repo root
     if not path.exists():
-        # Try /workspace/mavaia prefix (Pod standard)
-        pod_path = Path("/workspace/mavaia") / path.relative_to(path.anchor if path.is_absolute() else "")
+        # Try /workspace/oricli prefix (Pod standard)
+        pod_path = Path("/workspace/oricli") / path.relative_to(path.anchor if path.is_absolute() else "")
         if pod_path.exists():
             path = pod_path
         else:

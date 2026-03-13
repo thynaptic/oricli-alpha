@@ -15,7 +15,7 @@ Goal: Update the main bridge loop to handle multiple pods and parallel setup.
 - [x] Task: Implement Cluster CLI Flags
     - [x] Add `--cluster-size` (1-10) and `--vpc` flags to `argparse`.
 - [x] Task: Async Pod Stabilization
-    - [x] Refactor `setup_pod_env` and `ensure_mavaia_installed` to use `threading` or `asyncio` for parallel pod setup.
+    - [x] Refactor `setup_pod_env` and `ensure_oricli_installed` to use `threading` or `asyncio` for parallel pod setup.
     - [x] Ensure Global Networking (VPC) flag is correctly passed.
 - [x] Task: TDD - Multi-Pod Setup Logic
     - [x] Verify that multiple pod IDs are correctly captured and processed in parallel.
