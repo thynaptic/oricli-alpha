@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mavaia Core Test Report - 20260304_171511_0a0a0db3</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 5px;
+        }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #4CAF50;
+        }
+        .stat-card.failed {
+            border-left-color: #f44336;
+        }
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            color: #666;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+            font-weight: 600;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .status-passed {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .status-failed {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .status-skipped {
+            color: #ff9800;
+            font-weight: bold;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background-color: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+        .timestamp {
+            color: #999;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Mavaia Core Test Report</h1>
+        <div class="timestamp">
+            Test Run ID: 20260304_171511_0a0a0db3<br>
+            Timestamp: 2026-03-04T17:15:11.451379<br>
+            Version: 1.0.0
+        </div>
+        
+        <h2>Executive Summary</h2>
+        <div class="summary">
+            <div class="stat-card">
+                <h3>Total Tests</h3>
+                <div class="value">2</div>
+            </div>
+            <div class="stat-card">
+                <h3>Passed</h3>
+                <div class="value" style="color: #4CAF50;">1</div>
+            </div>
+            <div class="stat-card failed">
+                <h3>Failed</h3>
+                <div class="value" style="color: #f44336;">1</div>
+            </div>
+            <div class="stat-card">
+                <h3>Success Rate</h3>
+                <div class="value">50.0%</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Time</h3>
+                <div class="value">0.04s</div>
+            </div>
+            <div class="stat-card">
+                <h3>Avg Time</h3>
+                <div class="value">0.02s</div>
+            </div>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: 50.0%;"></div>
+        </div>
+
+        <h2>Per-Module Breakdown</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Module</th>
+                    <th>Total</th>
+                    <th>Passed</th>
+                    <th>Failed</th>
+                    <th>Success Rate</th>
+                    <th>Avg Time</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr>
+                    <td>reasoning_code_generator</td>
+                    <td>2</td>
+                    <td class="status-passed">1</td>
+                    <td class="status-failed">1</td>
+                    <td>50.0%</td>
+                    <td>0.02s</td>
+                </tr>
+
+            </tbody>
+        </table>
+
+        <h2>Per-Category Breakdown</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Total</th>
+                    <th>Passed</th>
+                    <th>Failed</th>
+                    <th>Success Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr>
+                    <td>functional</td>
+                    <td>2</td>
+                    <td class="status-passed">1</td>
+                    <td class="status-failed">1</td>
+                    <td>50.0%</td>
+                </tr>
+
+            </tbody>
+        </table>
+
+        <h2>Failures</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Test ID</th>
+                    <th>Module</th>
+                    <th>Category</th>
+                    <th>Operation</th>
+                    <th>Error</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr>
+                    <td>code_002_reverse_string</td>
+                    <td>reasoning_code_generator</td>
+                    <td>functional</td>
+                    <td>generate_code_reasoning</td>
+                    <td class="status-failed">Test 1: Execution failed - No deterministic template available for this request; add a new pattern/template to reasoning_code_generator.; Test 2: Execution failed - No deterministic template available for this request; add a new pattern/template to reasoning_code_generator.</td>
+                    <td>0.01s</td>
+                </tr>
+
+            </tbody>
+        </table>
+
+        <h2>Performance Metrics</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr><td>Average Execution Time</td><td>0.02s</td></tr>
+                <tr><td>Min Execution Time</td><td>0.01s</td></tr>
+                <tr><td>Max Execution Time</td><td>0.03s</td></tr>
+                <tr><td>Median Execution Time</td><td>0.01s</td></tr>
+
+            </tbody>
+        </table>
+
+    </div>
+</body>
+</html>
