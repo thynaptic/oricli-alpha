@@ -57,6 +57,7 @@ class MemoryGraph(BaseBrainModule):
                 "get_graph_stats",
                 "add_node",
                 "get_node",
+                "get_temporal_context",
             ],
             dependencies=["neo4j", "networkx"],
             enabled=True,
@@ -147,6 +148,11 @@ class MemoryGraph(BaseBrainModule):
             limit = params.get("limit", 5)
             return self.recall_memories(query=query, limit=limit)
 
+        elif operation == "get_temporal_context":
+            query = params.get("query", "")
+            limit = params.get("limit", 10)
+            return self.get_temporal_context(query=query, limit=limit)
+
         else:
             raise InvalidParameterError(
                 parameter="operation",
@@ -226,13 +232,17 @@ class MemoryGraph(BaseBrainModule):
                     self.graph = {}
 
             # Add nodes (memories)
+            import time
             for node in nodes:
                 node_id = node.get("id", "")
                 if node_id:
+                    node_data = dict(node)
+                    if "timestamp" not in node_data:
+                        node_data["timestamp"] = time.time()
                     if NETWORKX_AVAILABLE and isinstance(self.graph, nx.DiGraph):
-                        self.graph.add_node(node_id, **node)
+                        self.graph.add_node(node_id, **node_data)
                     elif isinstance(self.graph, dict):
-                        self.graph[node_id] = dict(node)
+                        self.graph[node_id] = node_data
 
             # Add relationships (edges)
             for rel in relationships:
@@ -643,15 +653,16 @@ class MemoryGraph(BaseBrainModule):
                     self.graph = {}  # Use dict-based graph
             
             # Add node based on graph type
+            import time
+            node_attrs = dict(node_data)
+            node_attrs["id"] = node_id
+            if "timestamp" not in node_attrs:
+                node_attrs["timestamp"] = time.time()
+                
             if NETWORKX_AVAILABLE and isinstance(self.graph, nx.DiGraph):
-                # Merge node_data with node_id
-                node_attrs = dict(node_data)
-                node_attrs["id"] = node_id
                 self.graph.add_node(node_id, **node_attrs)
             else:
                 # Dict-based graph
-                node_attrs = dict(node_data)
-                node_attrs["id"] = node_id
                 self.graph[node_id] = node_attrs
             
             # If Neo4j is available, also add there
@@ -719,3 +730,59 @@ class MemoryGraph(BaseBrainModule):
             self.driver.close()
         if self.graph:
             self.graph.clear()
+
+    def get_temporal_context(self, query: str = "", limit: int = 10) -> Dict[str, Any]:
+        """Find memories strictly sorted by timestamp for chronological context"""
+        try:
+            if not self.graph:
+                return {"success": True, "result": {"temporal_sequence": [], "count": 0}}
+
+            candidates = []
+            
+            # If query provided, filter first
+            if query and query.strip():
+                query_lower = query.lower()
+                query_words = set(query_lower.split())
+                
+                for node_id, node_data in self.graph.nodes(data=True) if NETWORKX_AVAILABLE and isinstance(self.graph, nx.DiGraph) else self.graph.items():
+                    if not isinstance(node_data, dict):
+                        continue
+                        
+                    content = str(node_data.get("content", "")).lower()
+                    keywords = [str(k).lower() for k in node_data.get("keywords", [])]
+                    tags = [str(t).lower() for t in node_data.get("tags", [])]
+                    
+                    content_words = set(content.split())
+                    all_terms = content_words | set(keywords) | set(tags)
+                    
+                    overlap = len(query_words & all_terms)
+                    if overlap > 0:
+                        candidates.append({
+                            "id": node_id,
+                            "type": node_data.get("type", "memory"),
+                            "content": node_data.get("content", "")[:200],
+                            "timestamp": float(node_data.get("timestamp", 0.0)),
+                            "importance": float(node_data.get("importance", 0.5)),
+                        })
+            else:
+                # No query, just get recent memories
+                for node_id, node_data in self.graph.nodes(data=True) if NETWORKX_AVAILABLE and isinstance(self.graph, nx.DiGraph) else self.graph.items():
+                    if not isinstance(node_data, dict):
+                        continue
+                    candidates.append({
+                        "id": node_id,
+                        "type": node_data.get("type", "memory"),
+                        "content": node_data.get("content", "")[:200],
+                        "timestamp": float(node_data.get("timestamp", 0.0)),
+                        "importance": float(node_data.get("importance", 0.5)),
+                    })
+
+            # Sort strictly by timestamp (newest first)
+            candidates.sort(key=lambda x: x["timestamp"], reverse=True)
+
+            return {
+                "success": True,
+                "result": {"temporal_sequence": candidates[:limit], "count": len(candidates[:limit])},
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}

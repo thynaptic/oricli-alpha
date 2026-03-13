@@ -108,6 +108,25 @@ class OricliAlphaJITDaemon:
                 self.last_sync_time = time.time()
                 self.last_sync_count = current_count
                 self._save_state()
+                
+                # Update memory graph with the timestamp of absorption
+                try:
+                    from oricli_core.brain.registry import ModuleRegistry
+                    ModuleRegistry.discover_modules()
+                    memory_graph = ModuleRegistry.get_module("memory_graph")
+                    if memory_graph:
+                        # Add a meta-node indicating JIT absorption occurred
+                        memory_graph.execute("add_node", {
+                            "node_id": f"jit_sync_{int(self.last_sync_time)}",
+                            "node_data": {
+                                "type": "meta_event",
+                                "content": f"JIT Knowledge Absorption completed for {current_count} lessons.",
+                                "timestamp": self.last_sync_time,
+                                "importance": 0.9
+                            }
+                        })
+                except Exception as e:
+                    logger.error(f"Failed to update memory graph with JIT sync event: {e}")
             else:
                 logger.error(f"❌ JIT Training failed (code {process.returncode})")
                 logger.error(f"STDOUT: {process.stdout[-1000:]}")

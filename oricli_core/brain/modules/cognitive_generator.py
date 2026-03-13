@@ -3531,7 +3531,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
             if not hasattr(self, "_conversation_history"):
                 self._conversation_history = []
             self._conversation_history.append(
-                {"input": input_text, "response": generated_text, "context": context}
+                {"input": input_text, "response": generated_text, "context": context, "timestamp": time.time()}
             )
             if len(self._conversation_history) > 20:
                 self._conversation_history.pop(0)
@@ -4699,8 +4699,22 @@ class CognitiveGeneratorModule(BaseBrainModule):
         return enriched
     
     def _enrich_context(self, input_text: str, context: str) -> str:
-        """Enrich context with memory retrieval if available"""
-        enriched = context
+        """Enrich context with memory retrieval and temporal grounding if available"""
+        import time
+        from datetime import datetime
+        
+        current_time = datetime.now()
+        enriched = f"[SYSTEM TIME: {current_time.strftime('%Y-%m-%d %H:%M:%S')}]\n" + context
+        
+        # Calculate time since last interaction if conversation history exists
+        if hasattr(self, "_conversation_history") and self._conversation_history:
+            last_turn = self._conversation_history[-1]
+            last_time = last_turn.get("timestamp", time.time())
+            elapsed_seconds = time.time() - last_time
+            
+            if elapsed_seconds > 86400 * 7:  # More than a week
+                weeks = int(elapsed_seconds / (86400 * 7))
+                enriched += f"\n[TEMPORAL AWARENESS: It has been {weeks} weeks since our last interaction. Consider asking the user for updates or suggesting a re-index of the workspace.]\n"
         
         if self.memory_graph:
             try:
@@ -4716,11 +4730,21 @@ class CognitiveGeneratorModule(BaseBrainModule):
                             item.get("content", "")[:200] for item in similar[:2]
                         ]
                         if memory_contexts:
-                            enriched = (
-                                context
-                                + "\n\nRelevant context: "
-                                + " ".join(memory_contexts)
-                            )
+                            enriched += "\n\nRelevant context: " + " ".join(memory_contexts)
+                            
+                # Add temporal context
+                temporal_result = self.memory_graph.execute(
+                    "get_temporal_context", {"query": input_text, "limit": 3}
+                )
+                if temporal_result and temporal_result.get("success"):
+                    temporal_seq = temporal_result.get("result", {}).get("temporal_sequence", [])
+                    if temporal_seq:
+                        seq_contexts = []
+                        for item in temporal_seq:
+                            dt = datetime.fromtimestamp(item.get("timestamp", 0))
+                            seq_contexts.append(f"[{dt.strftime('%Y-%m-%d')}] {item.get('content', '')[:100]}")
+                        if seq_contexts:
+                            enriched += "\n\nChronological Evolution:\n" + "\n".join(seq_contexts)
             except Exception:
                 pass
         
