@@ -163,6 +163,30 @@ Modules live in `oricli_core/brain/modules/` and are auto-discovered by the regi
 - Full module list: see `MODULES.md`
 - Module development guide: see `docs/module_development.md`
 
+### Example: game theory solver
+
+The `game_theory_solver` module provides symbolic reasoning over finite normal-form games:
+
+- Pure-strategy Nash equilibrium search via best-response enumeration
+- Best-response computation for a player given others’ fixed strategies
+- Canonical 2-player scenarios (`prisoners_dilemma`, `stag_hunt`, `chicken`, `coordination`)
+
+Basic usage from Python:
+
+```python
+from oricli_core.brain.registry import ModuleRegistry
+
+ModuleRegistry.discover_modules()
+solver = ModuleRegistry.get_module("game_theory_solver")
+
+result = solver.execute(
+    "analyze_scenario",
+    {"scenario": "prisoners_dilemma"},
+)
+
+print(result["equilibria"])
+```
+
 ## API docs
 
 When the API server is running:

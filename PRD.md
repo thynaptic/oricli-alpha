@@ -16,6 +16,7 @@ Founders, developers, and researchers building high-stakes, privacy-first cognit
 - **Formal Verification Bridge**: Translates generated Python into Lean 4 and verifies correctness via local Lean compiler or LLM semantic check.
 - **Code Translation Engine**: AST-based cross-language porting (e.g. Python→Rust) with strict Big-O complexity preservation.
 - **Knowledge Graph Builder**: Extracts entities and relationships from unstructured text into queryable RDF-style graphs, integrated with `world_knowledge`.
+- **Game Theory Solver**: Symbolic normal-form game engine (`game_theory_solver` module) for multi-agent strategic reasoning (Nash equilibria, best responses, and canonical dilemmas such as Prisoner’s Dilemma, Stag Hunt, Chicken, and coordination games).
 
 ### 3.2 Proactive Agency
 - **Sovereign Goals**: Supports multi-step, multi-day objectives with persistent state storage and automatic resumption across restarts.
