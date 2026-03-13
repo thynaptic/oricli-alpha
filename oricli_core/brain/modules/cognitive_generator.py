@@ -75,6 +75,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         self.adversarial_auditor = None
         self.skill_manager = None
         self.ollama_provider = None
+        self.strategic_planner = None
         # Conversation tracking
         self._conversation_history = []
         self._last_responses = []
@@ -305,6 +306,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
             
             try:
                 self.ollama_provider = ModuleRegistry.get_module("ollama_provider")
+            except Exception:
+                pass
+            
+            try:
+                self.strategic_planner = ModuleRegistry.get_module("strategic_planner")
             except Exception:
                 pass
             
@@ -2950,6 +2956,29 @@ class CognitiveGeneratorModule(BaseBrainModule):
                 except Exception as e:
                     _rich_log(f"Skill injection failed: {e}", "yellow", "⚠")
             
+            # STRATEGIC PLANNING (New Step)
+            strategic_plan = None
+            if self.strategic_planner:
+                # Only plan for complex intents or long queries
+                if len(input_text) > 100 or intent_info.get("intent") in ["code", "reasoning", "research"]:
+                    try:
+                        plan_res = self.strategic_planner.execute("create_strategic_plan", {"goal": input_text})
+                        if plan_res.get("success"):
+                            strategic_plan = plan_res
+                            _rich_log(f"Planner: Formulated strategic plan with {len(plan_res.get('steps', []))} steps", "magenta", "📋")
+                            
+                            # Inject plan into context to guide all downstream modules
+                            plan_text = "\n\n[Strategic Plan]\n"
+                            plan_text += f"STRATEGY: {plan_res.get('selected_strategy')}\n"
+                            plan_text += "STEPS:\n"
+                            for i, step in enumerate(plan_res.get("steps", [])):
+                                plan_text += f"{i+1}. {step}\n"
+                            context += plan_text
+                            
+                            diagnostic_info["strategic_plan"] = plan_res
+                    except Exception as e:
+                        _rich_log(f"Strategic planning failed: {e}", "yellow", "⚠")
+
             # DYNAMIC GRAPH EXECUTION (New Path)
             use_dge = False
             module_result = None

@@ -17,7 +17,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement ARC Induction & Transduction Reasoning System.**
+- [x] **Track: Implement Strategic Pre-Execution Planner (ToT + MCTS + CoT).**
+  *Link: [./tracks/strategic_planner_20260306/](./tracks/strategic_planner_20260306/)*
+
+---\n\n- [ ] **Track: Implement ARC Induction & Transduction Reasoning System.**
   *Link: [./tracks/arc_reasoning_20260306/](./tracks/arc_reasoning_20260306/)*
 
 ---\n\n- [ ] **Track: Implement Dynamic Skills Framework (.ori).**
