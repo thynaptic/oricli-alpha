@@ -8,13 +8,13 @@ Uses existing modules: memory, reasoning, MCTS results, safety, style, and thoug
 from typing import Any
 import os
 import json
+from pathlib import Path
 import re
 import random
 import time
 import traceback
 import logging
 import uuid
-from pathlib import Path
 
 from mavaia_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from mavaia_core.exceptions import InvalidParameterError
@@ -72,6 +72,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         self.graph_executor = None
         self.sensory_router = None
         self.metacognitive_sentinel = None
+        self.adversarial_auditor = None
         # Conversation tracking
         self._conversation_history = []
         self._last_responses = []
@@ -287,6 +288,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
             
             try:
                 self.metacognitive_sentinel = ModuleRegistry.get_module("metacognitive_sentinel")
+            except Exception:
+                pass
+            
+            try:
+                self.adversarial_auditor = ModuleRegistry.get_module("adversarial_auditor")
             except Exception:
                 pass
             
@@ -2901,6 +2907,25 @@ class CognitiveGeneratorModule(BaseBrainModule):
                     })
                     if arch_res.get("success"):
                         graph = arch_res.get("graph")
+                        
+                        # 1. ADVERSARIAL AUDIT (New Step)
+                        if self.adversarial_auditor:
+                            audit_res = self.adversarial_auditor.execute("audit_plan", {"graph": graph})
+                            if not audit_res.get("passed"):
+                                _rich_log("DGE: Proposed graph failed adversarial audit. Re-architecting with safety constraints...", "red", "🛡")
+                                # Re-architect with adversarial constraints
+                                arch_res = self.pathway_architect.execute("architect_graph", {
+                                    "intent_info": intent_info,
+                                    "query": input_text,
+                                    "vision_context": vision_context,
+                                    "audio_context": audio_context,
+                                    "adversarial_constraints": audit_res.get("findings")
+                                })
+                                if arch_res.get("success"):
+                                    graph = arch_res.get("graph")
+                                else:
+                                    raise RuntimeError("Failed to re-architect safe graph")
+
                         _rich_log(f"DGE: Bespoke execution graph created for intent '{intent_info.get('intent')}'", "cyan", "🕸")
                         
                         graph_res = self.graph_executor.execute("execute_graph", {

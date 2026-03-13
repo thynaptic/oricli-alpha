@@ -17,8 +17,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement Metacognitive Sentience Layer (Cognitive Self-Regulation).**
-  *Link: [./tracks/metacognitive_sentience_20260306/](./tracks/metacognitive_sentience_20260306/)*
+- [ ] **Track: Implement Adversarial Sentinel (Red-Team Cognition).**
+  *Link: [./tracks/adversarial_sentinel_20260306/](./tracks/adversarial_sentinel_20260306/)*
+
+---\n\n- [ ] **Track: Implement Metacognitive Sentience Layer (Cognitive Self-Regulation).**
 
 ---\n\n- [ ] **Track: [VAULTED] Distributed "Swarm" Intelligence (The Hive).**
   *Link: [./tracks/swarm_hive_20260306/](./tracks/swarm_hive_20260306/)*

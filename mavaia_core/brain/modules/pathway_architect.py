@@ -37,8 +37,9 @@ class PathwayArchitectModule(BaseBrainModule):
         query = params.get("query", "")
         vision_context = params.get("vision_context")
         audio_context = params.get("audio_context")
+        adversarial_constraints = params.get("adversarial_constraints")
         
-        graph = self._architect_graph(intent_info, query, vision_context, audio_context)
+        graph = self._architect_graph(intent_info, query, vision_context, audio_context, adversarial_constraints)
         
         return {
             "success": True,
@@ -46,10 +47,16 @@ class PathwayArchitectModule(BaseBrainModule):
             "intent": intent_info.get("intent", "general")
         }
 
-    def _architect_graph(self, intent_info: Dict[str, Any], query: str, vision_context: Optional[Dict] = None, audio_context: Optional[Dict] = None) -> Dict[str, Any]:
+    def _architect_graph(self, intent_info: Dict[str, Any], query: str, vision_context: Optional[Dict] = None, audio_context: Optional[Dict] = None, adversarial_constraints: Optional[List] = None) -> Dict[str, Any]:
         intent = intent_info.get("intent", "general")
         
-        # 1. CORE GRAPH TEMPLATES
+        # 1. ADVERSARIAL OVERRIDE
+        if adversarial_constraints:
+            _rich_log(f"Architect: Applying security constraints for {len(adversarial_constraints)} issues.", "yellow", "🛡")
+            # Force a safe, reasoning-only graph without external tool access
+            return self._build_general_graph(query)
+
+        # 2. CORE GRAPH TEMPLATES
         if intent == "search":
             graph = self._build_search_graph(query)
         elif intent == "code":

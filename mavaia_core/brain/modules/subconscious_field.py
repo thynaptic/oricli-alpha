@@ -159,9 +159,16 @@ class SubconsciousFieldModule(BaseBrainModule):
             avg_vector = [0.0] * dim
             total_weight = sum(v["weight"] for v in self._buffer)
             
-            for v in self._buffer:
-                for i in range(dim):
-                    avg_vector[i] += v["vector"][i] * (v["weight"] / total_weight)
+            if abs(total_weight) < 1e-9:
+                # If weights cancel out, use simple average
+                total_weight = len(self._buffer)
+                for v in self._buffer:
+                    for i in range(dim):
+                        avg_vector[i] += v["vector"][i] * (1.0 / total_weight)
+            else:
+                for v in self._buffer:
+                    for i in range(dim):
+                        avg_vector[i] += v["vector"][i] * (v["weight"] / total_weight)
             
             self._mental_state_vector = avg_vector
 
