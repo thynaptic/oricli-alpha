@@ -91,6 +91,7 @@ class WorldKnowledgeModule(BaseBrainModule):
                 "build_knowledge_graph",
                 "verify_fact_chain",
                 "get_knowledge_path",
+                "get_knowledge_gaps",
             ],
             dependencies=["networkx", "sentence-transformers"],
             model_required=True,
@@ -172,7 +173,8 @@ class WorldKnowledgeModule(BaseBrainModule):
             fact = params.get("fact", "")
             entities = params.get("entities", [])
             relationships = params.get("relationships", {})
-            return self.add_knowledge(fact, entities, relationships)
+            confidence = params.get("confidence", 1.0)
+            return self.add_knowledge(fact, entities, relationships, confidence)
         elif operation == "validate_fact":
             fact = params.get("fact", "")
             context = params.get("context", "")
@@ -207,6 +209,9 @@ class WorldKnowledgeModule(BaseBrainModule):
             source = params.get("source", "")
             target = params.get("target", "")
             return self.get_knowledge_path(source, target)
+        elif operation == "get_knowledge_gaps":
+            limit = params.get("limit", 5)
+            return self.get_knowledge_gaps(limit)
         else:
             raise InvalidParameterError(
                 parameter="operation",
@@ -329,6 +334,7 @@ class WorldKnowledgeModule(BaseBrainModule):
         fact: str,
         entities: List[str] = None,
         relationships: Dict[str, str] = None,
+        confidence: float = 1.0,
     ) -> Dict[str, Any]:
         """Add knowledge to the knowledge base"""
         if entities is None:
@@ -342,6 +348,7 @@ class WorldKnowledgeModule(BaseBrainModule):
             "fact": fact,
             "entities": entities,
             "relationships": relationships,
+            "confidence": confidence,
             "added_at": str(Path(__file__).stat().st_mtime),  # Simple timestamp
         }
 
@@ -353,18 +360,18 @@ class WorldKnowledgeModule(BaseBrainModule):
                     self.knowledge_graph.add_node(entity, label=entity, type="entity")
 
             # Add fact as node
-            self.knowledge_graph.add_node(fact_id, label=fact, type="fact")
+            self.knowledge_graph.add_node(fact_id, label=fact, type="fact", confidence=confidence)
 
             # Add relationships
             for entity in entities:
-                self.knowledge_graph.add_edge(entity, fact_id, relationship="describes")
+                self.knowledge_graph.add_edge(entity, fact_id, relationship="describes", confidence=confidence)
 
             for source, relation in relationships.items():
                 if source in entities:
                     for target in entities:
                         if target != source:
                             self.knowledge_graph.add_edge(
-                                source, target, relationship=relation
+                                source, target, relationship=relation, confidence=confidence
                             )
 
         # Lazy load memory_graph if needed
@@ -709,10 +716,11 @@ class WorldKnowledgeModule(BaseBrainModule):
             entities = fact_data.get("entities", [])
             relationships = fact_data.get("relationships", {})
             domain = fact_data.get("domain", "general")
+            confidence = fact_data.get("confidence", 1.0)
 
             # Add fact node
             self.knowledge_graph.add_node(
-                fact_id, label=fact, type="fact", domain=domain
+                fact_id, label=fact, type="fact", domain=domain, confidence=confidence
             )
 
             # Add entity nodes
@@ -724,7 +732,7 @@ class WorldKnowledgeModule(BaseBrainModule):
 
                 # Link entity to fact
                 self.knowledge_graph.add_edge(
-                    entity, fact_id, relationship="describes"
+                    entity, fact_id, relationship="describes", confidence=confidence
                 )
 
             # Add relationships between entities
@@ -736,18 +744,19 @@ class WorldKnowledgeModule(BaseBrainModule):
                             # Only add edge if it doesn't exist or update with relationship
                             if not self.knowledge_graph.has_edge(source, target):
                                 self.knowledge_graph.add_edge(
-                                    source, target, relationship=relation
+                                    source, target, relationship=relation, confidence=confidence
                                 )
                             else:
                                 # Update existing edge with relationship
                                 self.knowledge_graph[source][target]["relationship"] = relation
+                                self.knowledge_graph[source][target]["confidence"] = confidence
                     # Also create reverse edges for bidirectional relationships
                     if relation in ["knows", "works_at", "related_to"]:
                         for target in entities:
                             if target != source:
                                 if not self.knowledge_graph.has_edge(target, source):
                                     self.knowledge_graph.add_edge(
-                                        target, source, relationship=f"{relation}_reverse"
+                                        target, source, relationship=f"{relation}_reverse", confidence=confidence
                                     )
 
         return {
@@ -1012,3 +1021,56 @@ class WorldKnowledgeModule(BaseBrainModule):
             return True
         else:
             return True
+
+    def get_knowledge_gaps(self, limit: int = 5) -> Dict[str, Any]:
+        """Find gaps in the knowledge graph for epistemic foraging"""
+        if not self.knowledge_graph or self.knowledge_graph.number_of_nodes() == 0:
+            self.build_knowledge_graph()
+
+        if not self.knowledge_graph or not NETWORKX_AVAILABLE:
+            return {"gaps": [], "count": 0, "error": "Graph not available"}
+
+        gaps = []
+        
+        # 1. Find edges with low confidence
+        for u, v, data in self.knowledge_graph.edges(data=True):
+            confidence = data.get("confidence", 1.0)
+            if confidence < 0.5:
+                u_label = self.knowledge_graph.nodes[u].get("label", u)
+                v_label = self.knowledge_graph.nodes[v].get("label", v)
+                gaps.append({
+                    "type": "low_confidence_edge",
+                    "source": u_label,
+                    "target": v_label,
+                    "relationship": data.get("relationship", "unknown"),
+                    "confidence": confidence
+                })
+                if len(gaps) >= limit:
+                    return {"gaps": gaps, "count": len(gaps)}
+
+        # 2. Find unconnected entities (potential relationships)
+        import random
+        entities = [n for n, d in self.knowledge_graph.nodes(data=True) if d.get("type") == "entity"]
+        
+        # Try random pairs to find unconnected ones
+        attempts = 0
+        max_attempts = 50
+        
+        while len(gaps) < limit and attempts < max_attempts and len(entities) >= 2:
+            attempts += 1
+            u, v = random.sample(entities, 2)
+            
+            try:
+                if not nx.has_path(self.knowledge_graph, u, v) and not nx.has_path(self.knowledge_graph, v, u):
+                    # Check if they share any domain or context to make it a meaningful gap
+                    # For now, just add it
+                    gaps.append({
+                        "type": "unconnected_entities",
+                        "source": u,
+                        "target": v,
+                        "reason": "No known relationship exists between these entities"
+                    })
+            except Exception:
+                pass
+
+        return {"gaps": gaps, "count": len(gaps)}

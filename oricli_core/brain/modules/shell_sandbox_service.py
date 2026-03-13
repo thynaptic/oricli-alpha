@@ -99,6 +99,7 @@ class ShellSandboxServiceModule(BaseBrainModule):
                 "list_running_processes",
                 "read_file_metadata",
                 "execute_safe_command",
+                "execute_python_script",
             ],
             dependencies=[],
             model_required=False,
@@ -118,6 +119,8 @@ class ShellSandboxServiceModule(BaseBrainModule):
             return self._read_file_metadata(params)
         elif operation == "execute_safe_command":
             return self._execute_safe_command(params)
+        elif operation == "execute_python_script":
+            return self._execute_python_script(params)
         else:
             raise InvalidParameterError("operation", str(operation), "Unknown operation for shell_sandbox_service")
 
@@ -385,3 +388,60 @@ class ShellSandboxServiceModule(BaseBrainModule):
 
         return False
 
+
+    def _execute_python_script(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a Python script in a secure temporary file"""
+        script_content = params.get("script_content", "")
+        timeout = params.get("timeout", 10)
+        
+        if not isinstance(script_content, str):
+            raise InvalidParameterError("script_content", str(type(script_content).__name__), "script_content must be a string")
+            
+        if not script_content.strip():
+            return {
+                "success": False,
+                "error": "Script content is empty",
+            }
+            
+        import tempfile
+        import sys
+        
+        # Create a temporary file to hold the script
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as temp_file:
+            temp_file.write(script_content)
+            temp_path = temp_file.name
+            
+        try:
+            # Execute the script
+            result = subprocess.run(
+                [sys.executable, temp_path],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            
+            return {
+                "success": result.returncode == 0,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "returncode": result.returncode,
+            }
+        except subprocess.TimeoutExpired as e:
+            return {
+                "success": False,
+                "error": f"Script execution timed out after {timeout} seconds",
+                "stdout": e.stdout if hasattr(e, 'stdout') and e.stdout else "",
+                "stderr": e.stderr if hasattr(e, 'stderr') and e.stderr else "",
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to execute script: {str(e)}",
+            }
+        finally:
+            # Clean up the temporary file
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception as e:
+                logger.warning(f"Failed to remove temporary script file {temp_path}: {e}")
