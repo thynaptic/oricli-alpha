@@ -9,6 +9,7 @@ Founders, developers, and researchers building high-stakes, privacy-first cognit
 ## 3. Core Functional Requirements
 
 ### 3.1 Cognitive Infrastructure
+- **Ollama Utility Bridge**: Offloads general text generation and light reasoning to local Ollama models to maximize system performance and focus internal compute on high-level orchestration.
 - **Dynamic Reasoning**: Replaces linear pipelines with Graph-based execution (DGE) tailored to each query.
 - **Neural Subconscious**: Maintains a vectorized influence field to ensure consistency and persistent bias without bloating prompt context.
 - **Multi-Modal Native**: Processes vision (image) and auditory (voice) inputs as first-class citizens in the cognitive graph.

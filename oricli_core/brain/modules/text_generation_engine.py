@@ -27,6 +27,7 @@ class TextGenerationEngineModule(BaseBrainModule):
         self.thought_to_text = None
         self.neural_grammar = None
         self.neural_text_generator = None
+        self.ollama_provider = None
         self._modules_loaded = False
 
     @property
@@ -92,6 +93,11 @@ class TextGenerationEngineModule(BaseBrainModule):
                 self.neural_text_generator = ModuleRegistry.get_module(
                     "neural_text_generator_core"
                 )
+            except Exception:
+                pass
+
+            try:
+                self.ollama_provider = ModuleRegistry.get_module("ollama_provider")
             except Exception:
                 pass
 
@@ -570,45 +576,45 @@ class TextGenerationEngineModule(BaseBrainModule):
 
     def _generate_with_neural(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate text using neural model as primary method
-        
-        Args:
-            params:
-                - prompt: Starting prompt/text
-                - voice_context: Voice context for style adaptation
-                - max_length: Maximum generation length
-                - temperature: Sampling temperature
-        
-        Returns:
-            Generated text
+        Generate text using neural model as primary method.
+        Strategic Pivot: Prioritize local Ollama provider for prose.
         """
         self._ensure_modules_loaded()
         
-        if not self.neural_text_generator:
-            print(f"[DEBUG] TextGenerationEngine: neural_text_generator STILL not available after lazy load")
-            return {
-                "success": False,
-                "error": "Neural text generator not available",
-                "text": "",
-            }
-
         prompt = params.get("prompt", "")
         voice_context = params.get("voice_context", {})
         max_length = params.get("max_length", 1024)
         temperature = params.get("temperature", 0.7)
 
-        try:
-            print(f"[DEBUG] TextGenerationEngine: Checking self.neural_text_generator state: {self.neural_text_generator}")
-            if not self.neural_text_generator:
-                 from oricli_core.brain.registry import ModuleRegistry
-                 self.neural_text_generator = ModuleRegistry.get_module("neural_text_generator_core")
-                 print(f"[DEBUG] TextGenerationEngine: After registry fetch: {self.neural_text_generator}")
-            
-            if not self.neural_text_generator:
-                print(f"[DEBUG] TextGenerationEngine: ERROR - neural_text_generator_core STILL not found in registry")
-                return {"success": False, "error": "neural_text_generator_core not found in registry"}
+        # 1. TRY OLLAMA FIRST
+        if self.ollama_provider:
+            try:
+                print(f"[DEBUG] TextGenerationEngine: Attempting generation via Ollama...")
+                res = self.ollama_provider.execute("generate", {
+                    "prompt": prompt,
+                    "max_tokens": max_length,
+                    "temperature": temperature
+                })
+                if res.get("success"):
+                    return {
+                        "success": True,
+                        "text": res.get("text", "").strip(),
+                        "method": "ollama",
+                        "confidence": 0.9,
+                    }
+            except Exception as e:
+                print(f"[DEBUG] TextGenerationEngine: Ollama attempt failed: {e}")
 
-            print(f"[DEBUG] TextGenerationEngine: Calling neural_text_generator.execute('generate_text')")
+        # 2. FALLBACK TO INTERNAL NEURAL
+        if not self.neural_text_generator:
+            return {
+                "success": False,
+                "error": "No text generator available (Ollama and Internal both failed)",
+                "text": "",
+            }
+
+        try:
+            print(f"[DEBUG] TextGenerationEngine: Falling back to internal neural_text_generator")
             result = self.neural_text_generator.execute(
                 "generate_text",
                 {

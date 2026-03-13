@@ -74,6 +74,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         self.metacognitive_sentinel = None
         self.adversarial_auditor = None
         self.skill_manager = None
+        self.ollama_provider = None
         # Conversation tracking
         self._conversation_history = []
         self._last_responses = []
@@ -299,6 +300,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
             
             try:
                 self.skill_manager = ModuleRegistry.get_module("skill_manager")
+            except Exception:
+                pass
+            
+            try:
+                self.ollama_provider = ModuleRegistry.get_module("ollama_provider")
             except Exception:
                 pass
             
@@ -2792,6 +2798,32 @@ class CognitiveGeneratorModule(BaseBrainModule):
                             elif s_res.get("input_type") == "audio":
                                 audio_context = {"audio_info": s_res.get("info"), "path": pot_path}
 
+            # Step -0.5: OLLAMA DIRECT SYNTHESIS (Instruction Bypass Pivot)
+            if self.ollama_provider:
+                try:
+                    # Quick synthesis/bypass for straightforward queries
+                    bypass_res = self.ollama_provider.execute("generate", {
+                        "prompt": input_text,
+                        "system": f"CONTEXT: {context}\nPERSONALITY: oricli",
+                        "max_tokens": max_tokens or 512,
+                        "temperature": temperature
+                    })
+                    if bypass_res.get("success") and bypass_res.get("text"):
+                        resp_text = bypass_res["text"].strip()
+                        if self._validate_response(resp_text) and len(resp_text) > 10:
+                            _rich_log("Ollama: Direct synthesis successful (Bypass active)", "magenta", "🚀")
+                            return {
+                                "success": True,
+                                "trace_id": trace_id,
+                                "text": resp_text,
+                                "response": resp_text,
+                                "confidence": 0.95,
+                                "method": "ollama_direct",
+                                "diagnostic": diagnostic_info
+                            }
+                except Exception as e:
+                    _rich_log(f"Ollama direct synthesis failed: {e}", "yellow", "⚠")
+
             # Step 0: Long-horizon memory refresh
             memory_context = ""
             try:
@@ -4431,6 +4463,24 @@ class CognitiveGeneratorModule(BaseBrainModule):
         
         # Default
         return "casual_conversation"
+
+    def _ollama_reason(self, system_prompt: str, user_input: str) -> str:
+        """Use Ollama for high-level reasoning or synthesis."""
+        if not self.ollama_provider:
+            return ""
+            
+        try:
+            res = self.ollama_provider.execute("generate", {
+                "system": system_prompt,
+                "prompt": user_input,
+                "temperature": 0.3 # Lower temp for reasoning/synthesis
+            })
+            if res.get("success"):
+                return res.get("text", "").strip()
+        except Exception as e:
+            logger.warning(f"Ollama reasoning failed: {e}")
+            
+        return ""
 
     def _detect_audience_intent(
         self,

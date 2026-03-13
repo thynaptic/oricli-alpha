@@ -10,6 +10,7 @@ Oricli-Alpha is a **Sovereign, Local-First Agent OS**. It is designed to move be
 - **Orchestration**: **Async Virtual Clustering**. We do NOT use native RunPod Cluster APIs (broken/unstable). Instead, we orchestrate multiple single pods in parallel, coordinated via an **S3 Hybrid Strategy** (Local NVMe for speed, S3 for persistent state).
 
 ## 3. Cognitive Architecture (The Thynaptic Way)
+- **Ollama Strategic Pivot**: We offload general text generation (prose) and light reasoning to local Ollama models (e.g., Phi-4). This frees up Oricli-Alpha's internal neural compute for orchestration, tool-use precision, and autonomous agency.
 - **Subconscious Field**: A persistent vectorized buffer that influences tonal and logical generation via neural bias, bypassing simple RAG.
 - **Dynamic Graph Execution (DGE)**: Bespoke Directed Acyclic Graphs (DAGs) are architected for every query. Linear pipelines are the fallback, not the standard.
 - **Metacognitive Sentience**: A self-regulation layer using DBT/CBT-inspired heuristics (Radical Acceptance) to detect and cure looping or hallucinations.
