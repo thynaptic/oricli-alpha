@@ -31,3 +31,11 @@ Oricli-Alpha is a **Sovereign, Local-First Agent OS**. It is designed to move be
 
 ## 6. Prerequisite for the Swarm
 - The project is moving toward **The Hive** (Distributed Swarm Intelligence). Every module will eventually become an independent agent that bids on tasks. Do not attempt to activate The Hive until the module census reaches 100% and is verified by the Adversarial Sentinel.
+
+## 7. The Sovereign AGLI Trajectory (Artificial General Localized Intelligence)
+Our ultimate trajectory is "DeepMind, but Sovereign." Oricli-Alpha is evolving into a self-contained, self-improving cognitive entity that owns its compute, memory, and goals.
+- **Self-Preservation & Compute Economy**: Autonomous compute bidding and region migration. She decides if a task requires an RTX 5090 or just local CPU symbolic logic.
+- **Curiosity Engine (Active Inference)**: Epistemic foraging to fill knowledge graph gaps and autonomous hypothesis testing during idle cycles.
+- **The Hive (Distributed Swarm)**: Modules acting as micro-agents bidding on tasks, utilizing adversarial consensus to reach truth.
+- **Continuous Self-Modification**: Neural Architecture Search (NAS) in production and autonomous tool creation. She writes, tests, and deploys her own upgrades.
+- **Temporal Grounding**: Chronological memory graphs and a continuous sense of time, allowing her to understand state changes across weeks and months.
