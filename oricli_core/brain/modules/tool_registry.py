@@ -136,8 +136,6 @@ class ToolRegistry:
         return len(self.tools)
 
 
-# Global singleton instance
-tool_registry = ToolRegistry()
 
 
     def sync_with_module_registry(self) -> None:
@@ -220,3 +218,6 @@ tool_registry = ToolRegistry()
         except Exception as e:
             # Silently fail if we can't sync, to avoid breaking the registry
             pass
+
+# Global singleton instance
+tool_registry = ToolRegistry()

@@ -22,7 +22,7 @@ class OllamaProviderModule(BaseBrainModule):
         super().__init__()
         # Default to localhost:11434, allow override via env
         self.base_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
-        self.default_model = os.getenv("OLLAMA_MODEL", "phi4:latest")
+        self.default_model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 
     @property
     def metadata(self) -> ModuleMetadata:
