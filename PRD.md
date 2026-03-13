@@ -29,6 +29,15 @@ Founders, developers, and researchers building high-stakes, privacy-first cognit
 - **Metacognitive Regulation**: Internal DBT/CBT-based sentinel to detect and self-correct looping, hallucinations, or cognitive entropy.
 - **Self-Modification**: Autonomous analysis of execution traces to propose and test codebase optimizations.
 
+### 3.4 Skill Personas
+Oricli-Alpha exposes a set of **builtin skills** (role presets) that shape how she thinks, writes, and evaluates work, layered on top of the core brain modules:
+- **Senior Python Engineer** (`senior_python_dev`): Deep Python refactors, performance tuning, exception safety, and testable designs.
+- **DevOps/SRE** (`devops_sre`): CI/CD, observability, infra-as-code, and high-availability deployment design.
+- **System Architect** (`system_architect`): Distributed systems, storage selection, and large-scale topology design.
+- **Technical Writer** (`technical_writer`): READMEs, API specs, tutorials, and migration docs with working examples.
+- **Data Scientist** (`data_scientist`): EDA, statistical modeling, visualizations, and data-driven recommendations.
+- **Offensive Security Researcher** (`offensive_security`): Attack-surface analysis, vuln discovery, and mitigation guidance.
+
 ## 4. Technical Architecture Requirements
 
 ### 4.1 Orchestration

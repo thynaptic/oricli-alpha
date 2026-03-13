@@ -1,0 +1,42 @@
+---
+description: Documentation cadence standards for Oricli-Alpha
+alwaysApply: true
+---
+
+# Documentation Cadence Standards
+
+To keep Oricli-Alpha’s mental model in sync with reality, documentation must evolve alongside implementations.
+
+## 1. Cadence Rule
+
+- After **every 3–4 meaningful implementations or module-level changes**, update at least the relevant high-level docs:
+  - `PRD.md` for product-/system-level capabilities
+  - `README.md` and/or `MODULES.md` for developer-facing surfaces
+  - Any module-specific docs in `docs/` that describe the behavior you changed
+
+## 2. Definition of “implementation”
+
+Treat each of the following as one “implementation” for cadence counting:
+
+- New brain module or major new operation on an existing module
+- Significant behavior change to an existing module (new reasoning mode, new tool, new safety behavior)
+- New external integration (API, tool, daemon) that affects capabilities exposed to users/planners
+
+Trivial refactors, bug fixes, or internal-only plumbing do **not** count toward the 3–4 implementation window unless they materially change external behavior.
+
+## 3. What to update
+
+When the cadence rule hits (3–4 implementations since the last meaningful doc pass), ensure that:
+
+- **Capabilities**: New abilities are reflected in `PRD.md` under the correct section (Cognitive Infrastructure, Proactive Agency, Security & Reliability, etc.).
+- **Surfaces**: New modules/operations are discoverable from `README.md`/`MODULES.md` with:
+  - Module name and purpose
+  - Key operations
+  - One short usage example where appropriate
+- **Constraints**: Any new limits, safety behaviors, or caveats are captured in the relevant docs.
+
+## 4. Enforcement in workflows
+
+- When adding the **3rd or 4th substantial implementation** since the last doc update, **bundle a documentation change into the same PR/commit set**.
+- If you intentionally defer documentation, call it out explicitly in the commit/PR description with a follow-up task, and clear that debt within the next implementation cycle.
+

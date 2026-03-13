@@ -163,6 +163,12 @@ Modules live in `oricli_core/brain/modules/` and are auto-discovered by the regi
 - Full module list: see `MODULES.md`
 - Module development guide: see `docs/module_development.md`
 
+## Skills
+
+In addition to brain modules, Oricli-Alpha has a library of **skills** (role presets) defined in `oricli_core/skills/*.ori`. These shape how she reasons and communicates for specific jobs (e.g., Senior Python Engineer, DevOps/SRE, System Architect, Data Scientist).
+
+See `docs/SKILLS.md` for the current skill catalog.
+
 ### Example: game theory solver
 
 The `game_theory_solver` module provides symbolic reasoning over finite normal-form games:
