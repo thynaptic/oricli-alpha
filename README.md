@@ -387,7 +387,7 @@ Oricli-Alpha uses a standardized cognitive system naming scheme (see TR-2025-01-
 
 ```python
 from oricli_core import SYSTEM_ID
-print(SYSTEM_ID)  # e.g., "oricli-208c"
+print(SYSTEM_ID)  # e.g., "oricli-250c"
 ```
 
 ### Sub-Naming Support
@@ -405,15 +405,15 @@ from oricli_core import (
 
 # Get identifier with specific subname
 alpha_id = get_system_identifier_with_subname("alpha")
-print(alpha_id)  # "oricli-208c-alpha"
+print(alpha_id)  # "oricli-250c-alpha"
 
 # Set default subname for session
 set_system_subname("Pro")
-print(SYSTEM_ID_FULL())  # "oricli-208c-Pro"
+print(SYSTEM_ID_FULL())  # "oricli-250c-Pro"
 
 # Clear subname
 set_system_subname(None)
-print(SYSTEM_ID_FULL())  # "oricli-208c"
+print(SYSTEM_ID_FULL())  # "oricli-250c"
 ```
 
 You can also set the subname via environment variable:

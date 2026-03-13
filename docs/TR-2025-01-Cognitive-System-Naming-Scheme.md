@@ -48,7 +48,7 @@ Where:
 - Counted via `ModuleRegistry.discover_modules()` discovery process
 - Includes all registered `BaseBrainModule` instances discovered from filesystem
 - Count is determined at runtime through module discovery protocol
-- Example: `oricli-208c` indicates 208 cognitive modules
+- Example: `oricli-250c` indicates 250 cognitive modules
 
 **For Parameter Systems (`p` suffix):**
 - Quantifier represents parameter count in billions
@@ -103,8 +103,8 @@ The module discovery process follows this procedure:
 7. Count total registered modules via `len(ModuleRegistry.list_modules())`
 
 **Current System Assignment:**
-- **System Identifier:** `oricli-208c`
-- **Module Count:** 208 (discovered via ModuleRegistry)
+- **System Identifier:** `oricli-250c`
+- **Module Count:** 250 (discovered via ModuleRegistry)
 - **Architecture Type:** Cognitive (`c` suffix)
 - **LLM Count:** 0
 - **Architecture Composition:** 100% cognitive module-based
@@ -177,13 +177,13 @@ All system identifiers in code must use the standardized naming scheme:
 from oricli_core import SYSTEM_ID, SYSTEM_ID_FULL, get_system_identifier_with_subname
 
 # Base identifier
-SYSTEM_ID  # "oricli-208c"
+SYSTEM_ID  # "oricli-250c"
 
 # Full identifier with subname (if set)
-SYSTEM_ID_FULL()  # "oricli-208c-alpha" (if subname set)
+SYSTEM_ID_FULL()  # "oricli-250c-alpha" (if subname set)
 
 # Generate identifier with specific subname
-get_system_identifier_with_subname("alpha")  # "oricli-208c-alpha"
+get_system_identifier_with_subname("alpha")  # "oricli-250c-alpha"
 ```
 
 **Environment Variable:**
@@ -198,7 +198,7 @@ export MAVAIA_SYSTEM_SUBNAME="Pro"
 from oricli_core import set_system_subname, SYSTEM_ID_FULL
 
 set_system_subname("Flash")
-SYSTEM_ID_FULL()  # Returns "oricli-208c-Flash"
+SYSTEM_ID_FULL()  # Returns "oricli-250c-Flash"
 ```
 
 ### Documentation References
@@ -228,10 +228,10 @@ This section documents current system validation results and compliance verifica
 ### Current System Validation
 
 **Oricli-Alpha Cognitive Architecture:**
-- **Current Label:** `oricli-208c`
+- **Current Label:** `oricli-250c`
 - **Validation Date:** 2026-03-13
 - **Discovery Method:** `oricli_core.brain.modules.module_registry.ModuleRegistry.discover_modules()`
-- **Module Count:** 208 registered `BaseBrainModule` instances
+- **Module Count:** 250 registered `BaseBrainModule` instances
 - **Architecture Verification:** 100% cognitive module-based, 0 LLMs
 - **Subname Support:** Implemented via `oricli_core.system_identifier` module
 
@@ -239,8 +239,8 @@ This section documents current system validation results and compliance verifica
 
 **Implementation Status:**
 
-- Base identifier format: `oricli-208c` (verified)
-- Quantifier matches discovered module count (208 modules confirmed)
+- Base identifier format: `oricli-250c` (verified)
+- Quantifier matches discovered module count (250 modules confirmed)
 - Architecture type suffix (`c`) matches system composition (100% cognitive modules)
 - Sub-naming protocol implemented and validated (tested via `get_system_identifier_with_subname()`)
 - Code references use standardized constants (`SYSTEM_ID`, `SYSTEM_ID_FULL`)
@@ -301,5 +301,5 @@ This section documents current system validation results and compliance verifica
 **Document Status:** Active  
 **Last Updated:** 2026-03-13  
 **Next Review:** 2026-06-13  
-**Current System Identifier:** `oricli-208c`
+**Current System Identifier:** `oricli-250c`
 
