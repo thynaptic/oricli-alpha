@@ -91,6 +91,7 @@ Thumbs.db
 .cursor/*
 !.cursor/rules/
 !.cursor/plans/
+!.cursor/mcp.json
 
 # Logs
 *.log
@@ -114,6 +115,7 @@ checkpoints/
 # Data files (if large)
 *.csv
 *.json
+!.cursor/mcp.json
 !**/config.json
 !**/*_config.json
 !**/package.json
