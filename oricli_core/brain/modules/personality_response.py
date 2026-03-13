@@ -1,7 +1,7 @@
 from __future__ import annotations
 """
 Personality Response Module - Generate personality-specific responses using example-based selection
-Plug-and-play module that generates responses in each Oricli-Alpha personality's voice
+Plug-and-play module that generates responses in each OricliAlpha personality's voice
 No LLM dependencies - uses example-based selection and template generation
 
 DEPRECATED: This module is deprecated. Use universal_voice_engine and text_generation_engine instead.

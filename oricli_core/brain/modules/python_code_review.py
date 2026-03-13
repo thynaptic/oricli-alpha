@@ -6,7 +6,7 @@ Automated code review with reasoning, code quality scoring, best practice
 enforcement, style consistency checking, architecture pattern compliance,
 design pattern detection, code smell identification, and technical debt analysis.
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 intelligent code reviews that understand context, not just syntax.
 """
 

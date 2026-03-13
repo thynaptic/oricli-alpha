@@ -5,7 +5,7 @@ Code Optimization Reasoning Module
 Identify optimization opportunities, reason about performance implications,
 suggest algorithmic improvements, analyze complexity, and propose refactoring strategies.
 
-This module is part of Oricli-Alpha's Python LLM capabilities, enabling
+This module is part of OricliAlpha's Python LLM capabilities, enabling
 reasoning about code optimization and performance improvements.
 """
 

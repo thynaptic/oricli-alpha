@@ -5,7 +5,7 @@ Reasoning Code Completion Module
 Context-aware code completion with reasoning. Provides multi-line completion
 with explanation, completion verification, and style-consistent completion.
 
-This module is part of Oricli-Alpha's Python LLM capabilities, enabling
+This module is part of OricliAlpha's Python LLM capabilities, enabling
 intelligent code completion through cognitive reasoning.
 """
 

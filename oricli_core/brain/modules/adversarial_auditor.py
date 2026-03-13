@@ -18,7 +18,7 @@ from oricli_core.exceptions import InvalidParameterError
 logger = logging.getLogger(__name__)
 
 class AdversarialAuditorModule(BaseBrainModule):
-    """Offensive security auditor for Oricli-Alpha's reasoning."""
+    """Offensive security auditor for OricliAlpha's reasoning."""
 
     def __init__(self) -> None:
         super().__init__()

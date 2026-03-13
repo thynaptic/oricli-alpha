@@ -1,7 +1,7 @@
 from __future__ import annotations
 """
-Oricli-Alpha Core - Modular AI Core Package
-Provides unified interface for all Oricli-Alpha capabilities
+OricliAlpha Core - Modular AI Core Package
+Provides unified interface for all OricliAlpha capabilities
 """
 
 __version__ = "1.0.0"
@@ -10,8 +10,8 @@ __version__ = "1.0.0"
 # Import these classes only when actually needed
 
 __all__ = [
-    "Oricli-AlphaClient",
-    "Oricli-AlphaError",
+    "OricliAlphaClient",
+    "OricliAlphaError",
     "ModuleError",
     "ModuleNotFoundError",
     "ModuleInitializationError",
@@ -35,17 +35,17 @@ __all__ = [
 
 def __getattr__(name: str):
     """Lazy import of oricli_core classes and functions"""
-    if name == "Oricli-AlphaClient":
-        from oricli_core.client import Oricli-AlphaClient
-        return Oricli-AlphaClient
+    if name == "OricliAlphaClient":
+        from oricli_core.client import OricliAlphaClient
+        return OricliAlphaClient
     elif name in [
-        "Oricli-AlphaError", "ModuleError", "ModuleNotFoundError", "ModuleInitializationError",
+        "OricliAlphaError", "ModuleError", "ModuleNotFoundError", "ModuleInitializationError",
         "ModuleOperationError", "InvalidParameterError", "APIError", "AuthenticationError",
         "ValidationError", "ClientError", "ClientInitializationError", "RegistryError",
         "ModuleDiscoveryError"
     ]:
         from oricli_core.exceptions import (
-            Oricli-AlphaError, ModuleError, ModuleNotFoundError, ModuleInitializationError,
+            OricliAlphaError, ModuleError, ModuleNotFoundError, ModuleInitializationError,
             ModuleOperationError, InvalidParameterError, APIError, AuthenticationError,
             ValidationError, ClientError, ClientInitializationError, RegistryError,
             ModuleDiscoveryError

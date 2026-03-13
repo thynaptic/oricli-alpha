@@ -6,7 +6,7 @@ Reason about Python program behavior: predict execution outcomes,
 trace execution paths, identify edge cases, analyze side effects,
 and verify correctness.
 
-This module is part of Oricli-Alpha's Python LLM capabilities, enabling
+This module is part of OricliAlpha's Python LLM capabilities, enabling
 deep reasoning about what Python code will do when executed.
 """
 

@@ -273,12 +273,12 @@ def oricli_tools_invoke(tool_name, **kwargs):
         return {{"status": "pending", "tool_call_id": tool_call_id}}
 
 # Make available as oricli.tools.invoke
-class Oricli-AlphaTools:
+class OricliAlphaTools:
     def invoke(self, tool_name, **kwargs):
         return oricli_tools_invoke(tool_name, **kwargs)
 
-class Oricli-Alpha:
-    tools = Oricli-AlphaTools()
+class OricliAlpha:
+    tools = OricliAlphaTools()
 
 # User code
 {code}

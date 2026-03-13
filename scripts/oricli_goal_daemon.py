@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Oricli-Alpha Sovereign Goal Daemon - Persistent Proactive Execution.
+OricliAlpha Sovereign Goal Daemon - Persistent Proactive Execution.
 Monitors global_objectives.jsonl and orchestrates execution across available resources.
 """
 
@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("oricli-goals")
 
-class Oricli-AlphaGoalDaemon:
+class OricliAlphaGoalDaemon:
     def __init__(self):
         self.running = True
         self.check_interval = 300  # Check every 5 minutes
@@ -108,7 +108,7 @@ class Oricli-AlphaGoalDaemon:
             logger.error(f"Failed to launch goal execution: {e}")
 
     def run(self):
-        logger.info("Oricli-Alpha Sovereign Goal Daemon started.")
+        logger.info("OricliAlpha Sovereign Goal Daemon started.")
         while self.running:
             try:
                 self.process_pending_goals()
@@ -125,5 +125,5 @@ def handle_sigterm(signum, frame):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, handle_sigterm)
-    daemon = Oricli-AlphaGoalDaemon()
+    daemon = OricliAlphaGoalDaemon()
     daemon.run()

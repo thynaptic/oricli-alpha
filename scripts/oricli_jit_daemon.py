@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Oricli-Alpha JIT Knowledge Daemon - Autonomous Learning Orchestrator.
+OricliAlpha JIT Knowledge Daemon - Autonomous Learning Orchestrator.
 Monitors jit_absorption.jsonl and triggers remote RunPod cluster training.
 """
 
@@ -31,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("oricli-jit")
 
-class Oricli-AlphaJITDaemon:
+class OricliAlphaJITDaemon:
     def __init__(self):
         self.running = True
         self.sync_threshold = 5  # Trigger training every 5 new verified facts
@@ -117,7 +117,7 @@ class Oricli-AlphaJITDaemon:
             logger.error(f"Exception during JIT training trigger: {e}")
 
     def run(self):
-        logger.info("Oricli-Alpha JIT Knowledge Daemon started.")
+        logger.info("OricliAlpha JIT Knowledge Daemon started.")
         # Check every 5 minutes
         while self.running:
             try:
@@ -148,5 +148,5 @@ def handle_sigterm(signum, frame):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, handle_sigterm)
-    daemon = Oricli-AlphaJITDaemon()
+    daemon = OricliAlphaJITDaemon()
     daemon.run()

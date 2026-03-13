@@ -26,7 +26,7 @@ if VENV_DIR.exists() and sys.prefix != str(VENV_DIR.resolve()):
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# Try to import Oricli-Alpha parser
+# Try to import OricliAlpha parser
 try:
     from oricli_core.evaluation.livebench_parser import LiveBenchResultParser
 except ImportError:
@@ -173,7 +173,7 @@ load_dotenv(REPO_ROOT / ".env")
 load_dotenv(Path.cwd() / ".env")
 
 # RunPod API configuration
-RUNPOD_API_KEY = os.environ.get("Oricli-Alpha_Key")
+RUNPOD_API_KEY = os.environ.get("OricliAlpha_Key")
 
 
 def _redact_secrets(text: str) -> str:
@@ -1679,7 +1679,7 @@ def _display_cluster_status(pods: List[Dict]):
             print(f"Pod {p['id']}: {p.get('desiredStatus', 'UNKNOWN')}")
         return
 
-    table = Table(title="Oricli-Alpha Cluster Orchestration Status", box=box.ROUNDED, border_style="cyan")
+    table = Table(title="OricliAlpha Cluster Orchestration Status", box=box.ROUNDED, border_style="cyan")
     table.add_column("Pod ID", style="magenta")
     table.add_column("Type", style="blue")
     table.add_column("IP Address", style="green")
@@ -2900,7 +2900,7 @@ def _resolve_topic_datasets(topics: List[str]) -> Dict[str, str]:
 
 def register_trained_adapters(local_path: Path):
     """Scan for trained adapters and register them with the AdapterRouter."""
-    _rich_log("Scanning for new adapters to register with Oricli-Alpha Core...", "cyan", "🛰")
+    _rich_log("Scanning for new adapters to register with OricliAlpha Core...", "cyan", "🛰")
     
     # Standard location for remote model weights
     remote_models_dir = local_path / "models" / "neural_text_generator_remote"
@@ -2926,10 +2926,10 @@ def register_trained_adapters(local_path: Path):
         _rich_log("No new adapters found to register.", "dim", "ℹ")
         return
 
-    # 2. Try to register via Oricli-AlphaClient (Preferred)
+    # 2. Try to register via OricliAlphaClient (Preferred)
     try:
-        from oricli_core.client import Oricli-AlphaClient
-        client = Oricli-AlphaClient()
+        from oricli_core.client import OricliAlphaClient
+        client = OricliAlphaClient()
         
         for name, path in new_adapters.items():
             _rich_log(f"Registering adapter '{name}' via client...", "dim", "🛰")
@@ -2943,7 +2943,7 @@ def register_trained_adapters(local_path: Path):
                 _rich_log(f"Failed to register adapter {name} via client: {e}", "yellow", "⚠")
         return
     except Exception as e:
-        _rich_log(f"Oricli-AlphaClient unavailable for registration ({e}). Falling back to direct config update.", "yellow", "⚠")
+        _rich_log(f"OricliAlphaClient unavailable for registration ({e}). Falling back to direct config update.", "yellow", "⚠")
 
     # 3. Direct JSON Fallback (Resilient Path)
     config_path = local_path / "oricli_core" / "brain" / "modules" / "adapter_router_config.json"
@@ -2982,7 +2982,7 @@ def register_trained_adapters(local_path: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Oricli-Alpha RunPod Training Bridge")
+    parser = argparse.ArgumentParser(description="OricliAlpha RunPod Training Bridge")
     parser.add_argument("--pod-id", help="Existing pod ID to use")
     parser.add_argument("--gpu", default=None, help="GPU type for new pod (defaults to auto-selection)")
     parser.add_argument(
@@ -3192,7 +3192,7 @@ def main():
     parser.add_argument(
         "--internal-bench",
         action="store_true",
-        help="Run Oricli-Alpha's internal knowledge benchmark (run_tests.py --internal-bench) on the pod.",
+        help="Run OricliAlpha's internal knowledge benchmark (run_tests.py --internal-bench) on the pod.",
     )
     parser.add_argument(
         "--curriculum",
@@ -3319,10 +3319,10 @@ def main():
 
     # Refresh API Key from environment (after load_dotenv)
     global RUNPOD_API_KEY
-    RUNPOD_API_KEY = os.environ.get("Oricli-Alpha_Key")
+    RUNPOD_API_KEY = os.environ.get("OricliAlpha_Key")
 
     if not RUNPOD_API_KEY:
-        _rich_log("Error: Oricli-Alpha_Key not found in .env", "red", "✗")
+        _rich_log("Error: OricliAlpha_Key not found in .env", "red", "✗")
         sys.exit(1)
 
     _rich_log(f"Initializing RunPod Bridge (API: {RUNPOD_ENDPOINT})...", "cyan", "🚀")
@@ -3331,7 +3331,7 @@ def main():
     # Pre-flight auth check
     balance = bridge.get_balance()
     if balance is None:
-        _rich_log("CRITICAL: Failed to authorize with RunPod API. Check your Oricli-Alpha_Key in .env", "red", "✗")
+        _rich_log("CRITICAL: Failed to authorize with RunPod API. Check your OricliAlpha_Key in .env", "red", "✗")
         sys.exit(1)
     _rich_log(f"Authorized! Account Balance: ${balance:.2f}", "green", "✓")
 
@@ -4296,7 +4296,7 @@ def main():
                     src=f"{args.volume_mount_path}/oricli",
                 )
         elif args.internal_bench:
-            _rich_log("Starting Oricli-Alpha Internal Knowledge Benchmark...", "bold green", "🚀")
+            _rich_log("Starting OricliAlpha Internal Knowledge Benchmark...", "bold green", "🚀")
             
             # Internal bench uses run_tests.py with --internal-bench
             script_rel = "run_tests.py"

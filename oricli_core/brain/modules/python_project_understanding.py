@@ -6,7 +6,7 @@ Understand entire codebases, cross-file dependency analysis, project architectur
 understanding, module relationship mapping, import dependency graphs,
 project-wide pattern recognition, codebase health analysis, and project structure recommendations.
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 comprehensive project-wide understanding that goes beyond individual files.
 """
 

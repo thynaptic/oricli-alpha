@@ -1,1 +1,1 @@
-"""CLI entry points for Oricli-Alpha tools."""
+"""CLI entry points for OricliAlpha tools."""

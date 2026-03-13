@@ -32,12 +32,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-from oricli_core.exceptions import InvalidParameterError, Oricli-AlphaError
+from oricli_core.exceptions import InvalidParameterError, OricliAlphaError
 
 logger = logging.getLogger(__name__)
 
 
-class MemoryBridgeError(Oricli-AlphaError):
+class MemoryBridgeError(OricliAlphaError):
     """Base exception for memory bridge errors."""
 
 

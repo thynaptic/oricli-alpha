@@ -81,13 +81,13 @@ class PersonalityBuilderStorageServiceModule(BaseBrainModule):
     def _get_plugins_path(self) -> Path:
         """Get path to plugins file"""
         # Use current directory or app support directory
-        base_dir = Path.home() / "Library" / "Application Support" / "Oricli-AlphaStandalone" / "PersonalityPlugins"
+        base_dir = Path.home() / "Library" / "Application Support" / "OricliAlphaStandalone" / "PersonalityPlugins"
         base_dir.mkdir(parents=True, exist_ok=True)
         return base_dir / self.plugins_file_name
 
     def _get_templates_path(self) -> Path:
         """Get path to templates file"""
-        base_dir = Path.home() / "Library" / "Application Support" / "Oricli-AlphaStandalone" / "PersonalityPlugins"
+        base_dir = Path.home() / "Library" / "Application Support" / "OricliAlphaStandalone" / "PersonalityPlugins"
         base_dir.mkdir(parents=True, exist_ok=True)
         return base_dir / self.templates_file_name
 

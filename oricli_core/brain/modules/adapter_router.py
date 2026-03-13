@@ -3,7 +3,7 @@ from __future__ import annotations
 Adapter Router Module
 
 Standalone module for dynamically selecting and loading specialized LoRA adapters
-based on semantic input analysis. Foundation for the Oricli-Alpha Model Family.
+based on semantic input analysis. Foundation for the OricliAlpha Model Family.
 """
 
 import json

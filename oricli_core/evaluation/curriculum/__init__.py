@@ -1,9 +1,9 @@
 from __future__ import annotations
 """
-Cognitive Curriculum Testing Framework for Oricli-Alpha
+Cognitive Curriculum Testing Framework for OricliAlpha
 
 A comprehensive testing framework that enables curriculum-based evaluation
-of Oricli-Alpha's cognitive capabilities through progressive difficulty testing
+of OricliAlpha's cognitive capabilities through progressive difficulty testing
 and selective testing via interactive menu system.
 """
 

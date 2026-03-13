@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Oricli-Alpha Dream Daemon - Cognitive Consolidation.
+OricliAlpha Dream Daemon - Cognitive Consolidation.
 Runs during idle periods to find novel connections between memories and facts.
 """
 
@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("oricli-dream")
 
-class Oricli-AlphaDreamDaemon:
+class OricliAlphaDreamDaemon:
     def __init__(self):
         self.running = True
         self.idle_threshold_seconds = 1800 # 30 minutes
@@ -103,7 +103,7 @@ class Oricli-AlphaDreamDaemon:
         logger.info(f"Dreaming about the connection between: '{fact_a[:50]}...' AND '{fact_b[:50]}...'")
 
         dream_prompt = f"""
-        ACT AS: Oricli-Alpha's Subconscious (Dream State)
+        ACT AS: OricliAlpha's Subconscious (Dream State)
         TASK: Find a novel, high-level correlation or insight between these two disparate pieces of information.
         
         FACT A: {fact_a}
@@ -139,7 +139,7 @@ class Oricli-AlphaDreamDaemon:
             logger.error(f"Dream cycle failed: {e}")
 
     def run(self):
-        logger.info("Oricli-Alpha Dream Daemon started.")
+        logger.info("OricliAlpha Dream Daemon started.")
         while self.running:
             try:
                 last_active = self._get_last_activity()
@@ -159,5 +159,5 @@ class Oricli-AlphaDreamDaemon:
                 time.sleep(60)
 
 if __name__ == "__main__":
-    daemon = Oricli-AlphaDreamDaemon()
+    daemon = OricliAlphaDreamDaemon()
     daemon.run()

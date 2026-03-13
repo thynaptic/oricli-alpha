@@ -1,6 +1,6 @@
 from __future__ import annotations
 """
-Oricli-Alpha Core API - OpenAI-compatible API and embedded server
+OricliAlpha Core API - OpenAI-compatible API and embedded server
 """
 
 # Lazy imports to avoid dependency issues at module level

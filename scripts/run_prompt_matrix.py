@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Tuple
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from oricli_core import Oricli-AlphaClient
+from oricli_core import OricliAlphaClient
 
 
 PROMPTS: List[Tuple[str, str]] = [
@@ -78,8 +78,8 @@ def _is_obviously_bad(text: str) -> bool:
 def main() -> int:
     per_prompt_timeout_s = 25
 
-    print("Initializing Oricli-Alpha client...", flush=True)
-    client = Oricli-AlphaClient()
+    print("Initializing OricliAlpha client...", flush=True)
+    client = OricliAlphaClient()
     print("Client ready. Running prompt matrix...\n", flush=True)
 
     # Use SIGALRM for per-prompt timeouts (Linux VPS).

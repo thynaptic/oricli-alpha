@@ -46,22 +46,22 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 
-# Step 3: Test Oricli-AlphaClient
-print("\n[3] Testing Oricli-AlphaClient initialization...")
+# Step 3: Test OricliAlphaClient
+print("\n[3] Testing OricliAlphaClient initialization...")
 try:
-    from oricli_core.client import Oricli-AlphaClient
-    print("  ✓ Oricli-AlphaClient imported")
+    from oricli_core.client import OricliAlphaClient
+    print("  ✓ OricliAlphaClient imported")
 except Exception as e:
-    print(f"  ✗ Oricli-AlphaClient import failed: {e}")
+    print(f"  ✗ OricliAlphaClient import failed: {e}")
     traceback.print_exc()
     sys.exit(1)
 
 try:
-    print("  Initializing Oricli-AlphaClient...")
-    client = Oricli-AlphaClient()
-    print("  ✓ Oricli-AlphaClient initialized")
+    print("  Initializing OricliAlphaClient...")
+    client = OricliAlphaClient()
+    print("  ✓ OricliAlphaClient initialized")
 except Exception as e:
-    print(f"  ✗ Oricli-AlphaClient initialization failed: {e}")
+    print(f"  ✗ OricliAlphaClient initialization failed: {e}")
     traceback.print_exc()
     sys.exit(1)
 

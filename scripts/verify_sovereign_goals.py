@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from oricli_core.services.goal_service import GoalService
-from scripts.oricli_goal_daemon import Oricli-AlphaGoalDaemon
+from scripts.oricli_goal_daemon import OricliAlphaGoalDaemon
 
 def verify_goal_lifecycle():
     print("--- Step 1: Verifying Goal Registration ---")
@@ -50,7 +50,7 @@ def verify_goal_lifecycle():
 
 def verify_goal_daemon():
     print("\n--- Step 3: Verifying Goal Daemon Orchestration ---")
-    daemon = Oricli-AlphaGoalDaemon()
+    daemon = OricliAlphaGoalDaemon()
     
     with patch("subprocess.Popen") as mock_popen:
         mock_popen.return_value = MagicMock(pid=12345)

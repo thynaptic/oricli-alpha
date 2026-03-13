@@ -6,7 +6,7 @@ Security vulnerability detection, security best practice checking, injection
 attack detection, authentication/authorization analysis, secret detection,
 dependency vulnerability scanning, security code review, and security recommendations.
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 security analysis that understands code semantics, not just patterns.
 """
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 """
-Oricli-Alpha Core Embedded HTTP Server
+OricliAlpha Core Embedded HTTP Server
 FastAPI-based server that can run standalone
 """
 
@@ -34,7 +34,7 @@ except ImportError:
     sys.exit(1)
 
 from oricli_core.api.openai_compatible import OpenAICompatibleAPI
-from oricli_core.client import Oricli-AlphaClient
+from oricli_core.client import OricliAlphaClient
 from oricli_core.brain.metrics import get_metrics_collector
 from oricli_core.brain.health import get_health_checker
 from oricli_core.system_identifier import SYSTEM_ID, SYSTEM_ID_FULL
@@ -418,8 +418,8 @@ def create_app(
         sys.stderr.write("[DEBUG] Creating FastAPI app...\n")
         sys.stderr.flush()
         app = FastAPI(
-            title="Oricli-Alpha Core API",
-            description=f"Oricli-Alpha Core - OpenAI-compatible API for Oricli-Alpha capabilities (System: {SYSTEM_ID_FULL()})",
+            title="OricliAlpha Core API",
+            description=f"OricliAlpha Core - OpenAI-compatible API for OricliAlpha capabilities (System: {SYSTEM_ID_FULL()})",
             version="1.0.0",
             docs_url="/docs",
             redoc_url="/redoc",
@@ -445,13 +445,13 @@ def create_app(
         """Lazy client initialization"""
         if app.state._client is None:
             try:
-                print("[DEBUG] Initializing Oricli-AlphaClient...", file=sys.stderr)
+                print("[DEBUG] Initializing OricliAlphaClient...", file=sys.stderr)
                 sys.stderr.flush()
-                app.state._client = Oricli-AlphaClient(modules_dir=app.state.modules_dir)
-                print("[DEBUG] Oricli-AlphaClient initialized", file=sys.stderr)
+                app.state._client = OricliAlphaClient(modules_dir=app.state.modules_dir)
+                print("[DEBUG] OricliAlphaClient initialized", file=sys.stderr)
                 sys.stderr.flush()
             except Exception as e:
-                print(f"[ERROR] Failed to initialize Oricli-AlphaClient: {e}", file=sys.stderr)
+                print(f"[ERROR] Failed to initialize OricliAlphaClient: {e}", file=sys.stderr)
                 import traceback
                 traceback.print_exc(file=sys.stderr)
                 sys.stderr.flush()
@@ -554,7 +554,7 @@ def create_app(
             if hasattr(result, "metadata") and isinstance(result.metadata, dict):
                 trace_id = result.metadata.get("trace_id")
             if trace_id:
-                response.headers["X-Oricli-Alpha-Trace-Id"] = str(trace_id)
+                response.headers["X-OricliAlpha-Trace-Id"] = str(trace_id)
         except Exception:
             pass
         return result
@@ -572,7 +572,7 @@ def create_app(
         """OpenAI-compatible models listing endpoint"""
         return await app.state.get_api().models(authorization)
     
-    # Module discovery endpoint (Oricli-Alpha-specific)
+    # Module discovery endpoint (OricliAlpha-specific)
     @app.get("/v1/modules")
     async def list_modules():
         """List available brain modules"""
@@ -593,7 +593,7 @@ def create_app(
         
         return {"modules": modules}
     
-    # Metrics endpoint (Oricli-Alpha-specific)
+    # Metrics endpoint (OricliAlpha-specific)
     @app.get("/v1/metrics")
     async def get_metrics():
         """Get module metrics"""
@@ -705,7 +705,7 @@ def create_app(
             },
         )
     
-    # Health check endpoint (Oricli-Alpha-specific)
+    # Health check endpoint (OricliAlpha-specific)
     @app.get("/v1/health/modules")
     async def get_module_health():
         """Get health status of all modules with fallback info"""
@@ -993,7 +993,7 @@ def create_app(
                 detail=f"Error getting modules status: {str(e)}"
             )
     
-    # Code execution endpoint (Oricli-Alpha-specific)
+    # Code execution endpoint (OricliAlpha-specific)
     @app.post("/v1/code_execution", response_model=CodeExecutionResponse)
     async def code_execution(
         request: CodeExecutionRequest,
@@ -1126,7 +1126,7 @@ def create_app(
                 detail=f"Code execution failed: {str(e)}"
             )
     
-    # Tool registry endpoints (Oricli-Alpha-specific)
+    # Tool registry endpoints (OricliAlpha-specific)
     @app.post("/v1/tools/register")
     async def register_tool(
         tool_def: ToolDefinition,
@@ -1294,7 +1294,7 @@ def create_app(
                 detail=f"Code execution with tools failed: {str(e)}"
             )
     
-    # Web fetch endpoint (Oricli-Alpha-specific)
+    # Web fetch endpoint (OricliAlpha-specific)
     @app.post("/v1/web_fetch", response_model=WebFetchResponse)
     async def web_fetch(
         request: WebFetchRequest,
@@ -1330,7 +1330,7 @@ def create_app(
                 detail=f"Web fetch failed: {str(e)}"
             )
     
-    # Python LLM endpoints (Oricli-Alpha-specific)
+    # Python LLM endpoints (OricliAlpha-specific)
     @app.post("/v1/python/understand", response_model=PythonUnderstandResponse)
     async def python_understand(
         request: PythonUnderstandRequest,
@@ -1764,7 +1764,7 @@ def run_server(
             print(f"Error finding available port: {e}", file=sys.stderr)
             raise
     
-    print(f"Starting Oricli-Alpha API server on {host}:{actual_port}", file=sys.stderr, flush=True)
+    print(f"Starting OricliAlpha API server on {host}:{actual_port}", file=sys.stderr, flush=True)
     print(f"API documentation available at http://{host}:{actual_port}/docs", file=sys.stderr, flush=True)
     
     try:
@@ -1809,7 +1809,7 @@ def main():
     """Main entry point for CLI"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Oricli-Alpha Core API Server")
+    parser = argparse.ArgumentParser(description="OricliAlpha Core API Server")
     parser.add_argument("--host", default="0.0.0.0", help="Server host")
     parser.add_argument("--port", type=int, default=8000, help="Server port (starting port if auto-port is enabled)")
     parser.add_argument("--modules-dir", type=str, help="Path to brain_modules directory")

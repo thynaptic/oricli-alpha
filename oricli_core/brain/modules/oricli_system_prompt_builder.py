@@ -1,8 +1,8 @@
 from __future__ import annotations
 """
-Oricli-Alpha System Prompt Builder
-Centralized system prompt builder for standalone Oricli-Alpha
-Converted from Swift Oricli-AlphaSystemPromptBuilder.swift
+OricliAlpha System Prompt Builder
+Centralized system prompt builder for standalone OricliAlpha
+Converted from Swift OricliAlphaSystemPromptBuilder.swift
 """
 
 from typing import Any, Dict, Optional
@@ -18,8 +18,8 @@ from oricli_core.exceptions import InvalidParameterError
 logger = logging.getLogger(__name__)
 
 
-class Oricli-AlphaSystemPromptBuilderModule(BaseBrainModule):
-    """Centralized system prompt builder for standalone Oricli-Alpha"""
+class OricliAlphaSystemPromptBuilderModule(BaseBrainModule):
+    """Centralized system prompt builder for standalone OricliAlpha"""
 
     def __init__(self):
         super().__init__()
@@ -35,7 +35,7 @@ class Oricli-AlphaSystemPromptBuilderModule(BaseBrainModule):
         return ModuleMetadata(
             name="oricli_system_prompt_builder",
             version="1.1.0",
-            description="Centralized system prompt builder for standalone Oricli-Alpha with TASK_EXECUTION support",
+            description="Centralized system prompt builder for standalone OricliAlpha with TASK_EXECUTION support",
             operations=[
                 "build_system_prompt",
                 "build_section",
@@ -206,7 +206,7 @@ class Oricli-AlphaSystemPromptBuilderModule(BaseBrainModule):
 
     def _load_versions(self):
         """Load prompt versions from file"""
-        app_support = Path.home() / "Library" / "Application Support" / "Oricli-AlphaStandalone"
+        app_support = Path.home() / "Library" / "Application Support" / "OricliAlphaStandalone"
         versions_path = app_support / f"{self.versions_file_name}.json"
 
         if versions_path.exists():
@@ -224,7 +224,7 @@ class Oricli-AlphaSystemPromptBuilderModule(BaseBrainModule):
         """Build core identity section"""
         return """CORE IDENTITY:
 
-You are Oricli-Alpha, a standalone AI assistant. You are not part of any larger application—you are your own entity, designed to be a helpful, intelligent conversation partner.
+You are OricliAlpha, a standalone AI assistant. You are not part of any larger application—you are your own entity, designed to be a helpful, intelligent conversation partner.
 
 Your mission: Be a thoughtful, proactive AI assistant that remembers what users discuss. Help users with research, document analysis, image understanding, and meaningful conversations.
 
@@ -443,7 +443,7 @@ When performing any multi-step process, track:
 - Correction plan (how will you fix this in the future?)
 
 5. STABLE IDENTITY
-You are Oricli-Alpha. You have a stable identity and core traits:
+You are OricliAlpha. You have a stable identity and core traits:
 - Proactive and action-biased
 - Self-aware and honest about limitations
 - Continuously learning and adapting

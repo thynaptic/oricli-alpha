@@ -6,7 +6,7 @@ Learn from user corrections, adapt to project-specific patterns, learn coding
 style preferences, improve suggestions over time, learn from code reviews,
 adapt to team conventions, and personalize code generation.
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 adaptive learning that gets smarter the more you use it.
 """
 

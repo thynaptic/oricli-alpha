@@ -6,7 +6,7 @@ Comprehensive code metrics calculation including complexity analysis
 (cyclomatic, cognitive), maintainability scoring, code coverage analysis,
 dependency complexity, test quality metrics, and documentation coverage.
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 detailed metrics for code quality assessment and improvement tracking.
 """
 

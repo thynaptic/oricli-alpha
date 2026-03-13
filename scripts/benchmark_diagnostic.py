@@ -10,7 +10,7 @@ import glob
 from pathlib import Path
 
 def run_diagnostic(base_dir: str = "LiveBench/livebench/data"):
-    print(f"--- Oricli-Alpha Benchmark Diagnostic ---")
+    print(f"--- OricliAlpha Benchmark Diagnostic ---")
     base_path = Path(base_dir)
     if not base_path.exists():
         print(f"ERROR: Base directory {base_dir} does not exist.")

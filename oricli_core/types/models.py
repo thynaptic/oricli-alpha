@@ -1,6 +1,6 @@
 from __future__ import annotations
 """
-Oricli-Alpha Core Types - OpenAI-compatible request/response models
+OricliAlpha Core Types - OpenAI-compatible request/response models
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -93,7 +93,7 @@ class ChatCompletionRequest(BaseModel):
     stop: Optional[Union[str, List[str]]] = Field(default=None, description="Stop sequences")
     user: Optional[str] = Field(default=None, description="User identifier")
     
-    # Oricli-Alpha-specific extensions
+    # OricliAlpha-specific extensions
     personality_id: Optional[str] = Field(default=None, description="Personality identifier")
     use_memory: Optional[bool] = Field(default=True, description="Use conversation memory")
     use_reasoning: Optional[bool] = Field(default=True, description="Use reasoning layer")
@@ -136,7 +136,7 @@ class ChatCompletionResponse(BaseModel):
     choices: List[ChatCompletionChoice] = Field(..., description="Completion choices")
     usage: Optional[ChatCompletionUsage] = Field(default=None, description="Token usage")
     
-    # Oricli-Alpha-specific extensions
+    # OricliAlpha-specific extensions
     reasoning_steps: Optional[List[str]] = Field(default=None, description="Reasoning steps")
     confidence: Optional[float] = Field(default=None, description="Confidence score")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")

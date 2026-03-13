@@ -5,7 +5,7 @@ Python Style Adaptation Module
 Detect project coding style, adapt code generation to style, enforce style consistency,
 learn style from examples, apply style transformations, and migrate between styles.
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 intelligent style detection and adaptation.
 """
 

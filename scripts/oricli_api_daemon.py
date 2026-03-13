@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Oricli-Alpha API Daemon - Persistent interface for completions and routing.
+OricliAlpha API Daemon - Persistent interface for completions and routing.
 """
 
 import os
@@ -25,12 +25,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("oricli-api")
 
-class Oricli-AlphaAPIDaemon:
+class OricliAlphaAPIDaemon:
     def __init__(self):
         self.process = None
 
     def start(self):
-        logger.info("Starting Oricli-Alpha API server...")
+        logger.info("Starting OricliAlpha API server...")
         
         env = os.environ.copy()
         env["MAVAIA_ENABLE_HEAVY_MODULES"] = "true"
@@ -67,7 +67,7 @@ class Oricli-AlphaAPIDaemon:
             
             threading.Thread(target=log_output, daemon=True).start()
             
-            logger.info("Oricli-Alpha API server process started.")
+            logger.info("OricliAlpha API server process started.")
             self.process.wait()
             
         except Exception as e:
@@ -75,7 +75,7 @@ class Oricli-AlphaAPIDaemon:
 
     def stop(self):
         if self.process:
-            logger.info("Stopping Oricli-Alpha API server...")
+            logger.info("Stopping OricliAlpha API server...")
             self.process.terminate()
             try:
                 self.process.wait(timeout=10)
@@ -88,7 +88,7 @@ def handle_sigterm(signum, frame):
     sys.exit(0)
 
 if __name__ == "__main__":
-    daemon = Oricli-AlphaAPIDaemon()
+    daemon = OricliAlphaAPIDaemon()
     signal.signal(signal.SIGTERM, handle_sigterm)
     signal.signal(signal.SIGINT, handle_sigterm)
     daemon.start()

@@ -6,7 +6,7 @@ Assist with code migration including Python version migration (2→3, 3.x upgrad
 library migration (deprecated → modern), framework migration, API migration,
 dependency migration, migration verification, and migration planning.
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 intelligent migration assistance that understands code context and dependencies.
 """
 

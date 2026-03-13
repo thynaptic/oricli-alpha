@@ -239,7 +239,7 @@ def _summarize_livebench(livebench):
     return {"summary": summary, "category_rates": category_rates, "gaps": gaps}
 
 def main():
-    ap = argparse.ArgumentParser(description="Generate a Rich Report Card for Oricli-Alpha")
+    ap = argparse.ArgumentParser(description="Generate a Rich Report Card for OricliAlpha")
     ap.add_argument("--progress", default="")
     ap.add_argument("--format", choices=["text", "json", "rich"], default="rich")
     ap.add_argument("--output", default="", help="JSON output path")
@@ -340,7 +340,7 @@ def main():
     
     report = {
         "report_date": _now_iso(),
-        "student": "Oricli-Alpha",
+        "student": "OricliAlpha",
         "stage_title": progress.get("current_stage_title", "General Training"),
         "school": progress.get("current_school", "Independent Study"),
         "actual_age": progress.get("current_age", "N/A"),
@@ -360,7 +360,7 @@ def main():
         text_report = _format_rich_report(report)
     else:
         # Fallback to simple print if no rich
-        text_report = f"Oricli-Alpha Report Card - {report['report_date']}\n"
+        text_report = f"OricliAlpha Report Card - {report['report_date']}\n"
         text_report += f"Loss: {report['training_loss']} | Trend: {report['training_loss_trend']}\n"
         print(text_report)
 

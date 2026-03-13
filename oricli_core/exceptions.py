@@ -1,17 +1,17 @@
 from __future__ import annotations
 """
-Oricli-Alpha Core Custom Exceptions
+OricliAlpha Core Custom Exceptions
 
 Custom exception hierarchy for better error handling and context.
 """
 
 
-class Oricli-AlphaError(Exception):
-    """Base exception for all Oricli-Alpha Core errors"""
+class OricliAlphaError(Exception):
+    """Base exception for all OricliAlpha Core errors"""
     
     def __init__(self, message: str, context: dict[str, str] | None = None):
         """
-        Initialize Oricli-Alpha error
+        Initialize OricliAlpha error
         
         Args:
             message: Error message
@@ -29,7 +29,7 @@ class Oricli-AlphaError(Exception):
         return self.message
 
 
-class ModuleError(Oricli-AlphaError):
+class ModuleError(OricliAlphaError):
     """Base exception for module-related errors"""
     pass
 
@@ -95,7 +95,7 @@ class ModuleOperationError(ModuleError):
         self.reason = reason
 
 
-class InvalidParameterError(Oricli-AlphaError):
+class InvalidParameterError(OricliAlphaError):
     """Raised when invalid parameters are provided"""
     
     def __init__(self, parameter: str, value: str, reason: str):
@@ -116,7 +116,7 @@ class InvalidParameterError(Oricli-AlphaError):
         self.reason = reason
 
 
-class APIError(Oricli-AlphaError):
+class APIError(OricliAlphaError):
     """Base exception for API-related errors"""
     pass
 
@@ -157,7 +157,7 @@ class ValidationError(APIError):
         self.reason = reason
 
 
-class ClientError(Oricli-AlphaError):
+class ClientError(OricliAlphaError):
     """Base exception for client-related errors"""
     pass
 
@@ -179,7 +179,7 @@ class ClientInitializationError(ClientError):
         self.reason = reason
 
 
-class RegistryError(Oricli-AlphaError):
+class RegistryError(OricliAlphaError):
     """Base exception for registry-related errors"""
     pass
 

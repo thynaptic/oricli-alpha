@@ -111,7 +111,7 @@ class PersonalityConfigurationLoaderModule(BaseBrainModule):
     def _load_enhanced_configurations(self) -> Optional[Dict[str, Any]]:
         """Load configurations from enhanced JSON file"""
         # Try to find the enhanced config file
-        app_support = Path.home() / "Library" / "Application Support" / "Oricli-AlphaStandalone"
+        app_support = Path.home() / "Library" / "Application Support" / "OricliAlphaStandalone"
         config_path = app_support / "personality_config_enhanced.json"
 
         if config_path.exists():

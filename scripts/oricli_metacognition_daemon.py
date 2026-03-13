@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Oricli-Alpha Metacognition Daemon - Autonomic Self-Modification.
+OricliAlpha Metacognition Daemon - Autonomic Self-Modification.
 Monitors execution traces for errors/inefficiencies and proposes codebase patches.
 """
 
@@ -167,7 +167,7 @@ Review the patch above. If approved, apply to the codebase.
             logger.warning("Drafted patch failed validation. Discarding.")
 
     def run(self):
-        logger.info("Oricli-Alpha Metacognition Daemon started.")
+        logger.info("OricliAlpha Metacognition Daemon started.")
         while self.running:
             try:
                 self.run_cycle()

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Oricli-Alpha Cognitive Engine - General Purpose Query Interface
+OricliAlpha Cognitive Engine - General Purpose Query Interface
 
-This script provides a complete interface to query Oricli-Alpha using the full
+This script provides a complete interface to query OricliAlpha using the full
 cognitive generator system, which orchestrates ALL modules in oricli_core/brain/modules/
 dynamically based on intent detection and module discovery.
 
@@ -40,7 +40,7 @@ from typing import Any, Dict
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from oricli_core import Oricli-AlphaClient
+from oricli_core import OricliAlphaClient
 
 
 def format_reasoning_trace(result: Dict[str, Any], indent: int = 0) -> str:
@@ -501,8 +501,8 @@ def main():
     
     try:
         # Initialize client
-        print("Initializing Oricli-Alpha client...")
-        client = Oricli-AlphaClient()
+        print("Initializing OricliAlpha client...")
+        client = OricliAlphaClient()
         print("Client initialized successfully.\n")
         
         # PRIMARY METHOD: Use cognitive_generator which orchestrates ALL modules

@@ -12,7 +12,7 @@ long_description = readme_file.read_text(encoding="utf-8") if readme_file.exists
 setup(
     name="oricli-core",
     version="1.0.0",
-    description="Oricli-Alpha Core - Modular AI Core Package with OpenAI-compatible API",
+    description="OricliAlpha Core - Modular AI Core Package with OpenAI-compatible API",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Thynaptic Research",

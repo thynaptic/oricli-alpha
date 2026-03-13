@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Oricli-Alpha ToolBench Daemon - Autonomous Tool-Efficacy Orchestrator.
+OricliAlpha ToolBench Daemon - Autonomous Tool-Efficacy Orchestrator.
 Monitors tool_corrections.jsonl and triggers remote RunPod cluster training.
 """
 
@@ -31,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("oricli-tool")
 
-class Oricli-AlphaToolDaemon:
+class OricliAlphaToolDaemon:
     def __init__(self):
         self.running = True
         self.sync_threshold = 10  # Trigger training every 10 tool-use corrections
@@ -116,7 +116,7 @@ class Oricli-AlphaToolDaemon:
             logger.error(f"Exception during tool training trigger: {e}")
 
     def run(self):
-        logger.info("Oricli-Alpha ToolBench Daemon started.")
+        logger.info("OricliAlpha ToolBench Daemon started.")
         while self.running:
             try:
                 current_count = self.get_correction_count()
@@ -142,5 +142,5 @@ def handle_sigterm(signum, frame):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, handle_sigterm)
-    daemon = Oricli-AlphaToolDaemon()
+    daemon = OricliAlphaToolDaemon()
     daemon.run()

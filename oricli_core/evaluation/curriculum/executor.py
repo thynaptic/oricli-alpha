@@ -2,7 +2,7 @@ from __future__ import annotations
 """
 Test Execution Engine
 
-Executes curriculum tests against Oricli-Alpha's cognitive stack, captures reasoning
+Executes curriculum tests against OricliAlpha's cognitive stack, captures reasoning
 traces, monitors safety posture, and applies constraints.
 """
 
@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from oricli_core import Oricli-AlphaClient
+from oricli_core import OricliAlphaClient
 from oricli_core.evaluation.curriculum.models import (
     TestConfiguration,
     TestResult,
@@ -27,17 +27,17 @@ class TestExecutor:
     
     def __init__(
         self,
-        client: Optional[Oricli-AlphaClient] = None,
+        client: Optional[OricliAlphaClient] = None,
         data_source_manager: Optional[DataSourceManager] = None,
     ):
         """
         Initialize test executor
         
         Args:
-            client: Oricli-AlphaClient instance (creates new if not provided)
+            client: OricliAlphaClient instance (creates new if not provided)
             data_source_manager: DataSourceManager instance (creates new if not provided)
         """
-        self.client = client or Oricli-AlphaClient()
+        self.client = client or OricliAlphaClient()
         self.scorer = RubricScorer()
         self.data_dir = Path(__file__).parent / "data"
         # Lazy initialization of data source manager to avoid hanging

@@ -1,6 +1,6 @@
 from __future__ import annotations
 """
-Oricli-Alpha Core Client - Unified interface for all Oricli-Alpha capabilities
+OricliAlpha Core Client - Unified interface for all OricliAlpha capabilities
 """
 
 import time
@@ -37,12 +37,12 @@ from oricli_core.types.models import (
 class BrainModuleProxy:
     """Proxy for accessing brain modules dynamically"""
     
-    def __init__(self, client: "Oricli-AlphaClient") -> None:
+    def __init__(self, client: "OricliAlphaClient") -> None:
         """
         Initialize brain module proxy
         
         Args:
-            client: Oricli-AlphaClient instance
+            client: OricliAlphaClient instance
         """
         self._client = client
     
@@ -106,7 +106,7 @@ class BrainModuleWrapper:
 class ChatCompletions:
     """Chat completions API"""
     
-    def __init__(self, client: "Oricli-AlphaClient"):
+    def __init__(self, client: "OricliAlphaClient"):
         self._client = client
     
     def create(
@@ -143,7 +143,7 @@ class ChatCompletions:
 class Embeddings:
     """Embeddings API"""
     
-    def __init__(self, client: "Oricli-AlphaClient"):
+    def __init__(self, client: "OricliAlphaClient"):
         self._client = client
     
     def create(
@@ -169,7 +169,7 @@ class PythonLLM:
     - Code completion (Phase 3)
     """
     
-    def __init__(self, client: "Oricli-AlphaClient"):
+    def __init__(self, client: "OricliAlphaClient"):
         self._client = client
     
     def understand(self, code: str, analysis_type: str = "full") -> Dict[str, Any]:
@@ -2149,13 +2149,13 @@ class PythonLLM:
 class Chat:
     """Chat API namespace"""
     
-    def __init__(self, client: "Oricli-AlphaClient"):
+    def __init__(self, client: "OricliAlphaClient"):
         self.completions = ChatCompletions(client)
 
 
-class Oricli-AlphaClient:
+class OricliAlphaClient:
     """
-    Oricli-Alpha Core Client - Main interface for all Oricli-Alpha capabilities
+    OricliAlpha Core Client - Main interface for all OricliAlpha capabilities
     
     Provides:
     - OpenAI-compatible API (chat.completions, embeddings)
@@ -2164,9 +2164,9 @@ class Oricli-AlphaClient:
     
     Example:
         ```python
-        from oricli_core import Oricli-AlphaClient
+        from oricli_core import OricliAlphaClient
         
-        client = Oricli-AlphaClient()
+        client = OricliAlphaClient()
         
         # Chat completion
         response = client.chat.completions.create(
@@ -2181,7 +2181,7 @@ class Oricli-AlphaClient:
     
     def __init__(self, modules_dir: Optional[Union[str, Path]] = None) -> None:
         """
-        Initialize Oricli-Alpha client
+        Initialize OricliAlpha client
         
         Args:
             modules_dir: Optional path to brain_modules directory.
@@ -2192,7 +2192,7 @@ class Oricli-AlphaClient:
         """
         import sys
         try:
-            print("[DEBUG] Oricli-AlphaClient.__init__ called", file=sys.stderr)
+            print("[DEBUG] OricliAlphaClient.__init__ called", file=sys.stderr)
             sys.stderr.flush()
             
             if modules_dir is not None:
@@ -2207,10 +2207,10 @@ class Oricli-AlphaClient:
             self.brain = BrainModuleProxy(self)
             self.python = PythonLLM(self)
             
-            print("[DEBUG] Oricli-AlphaClient initialized successfully", file=sys.stderr)
+            print("[DEBUG] OricliAlphaClient initialized successfully", file=sys.stderr)
             sys.stderr.flush()
         except Exception as e:
-            print(f"[ERROR] Oricli-AlphaClient initialization failed: {e}", file=sys.stderr)
+            print(f"[ERROR] OricliAlphaClient initialization failed: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc(file=sys.stderr)
             sys.stderr.flush()
@@ -2490,7 +2490,7 @@ class Oricli-AlphaClient:
                                 chatter_patterns = [
                                     r"^I'm here to help\. What would you like to know\?",
                                     r"^I'm here to help\.",
-                                    r"^Hello! I'm Oricli-Alpha.*",
+                                    r"^Hello! I'm OricliAlpha.*",
                                     r"^As an AI assistant.*",
                                 ]
                                 for pattern in chatter_patterns:
@@ -2530,7 +2530,7 @@ class Oricli-AlphaClient:
                             chatter_patterns = [
                                 r"^I'm here to help\. What would you like to know\?",
                                 r"^I'm here to help\.",
-                                r"^Hello! I'm Oricli-Alpha.*",
+                                r"^Hello! I'm OricliAlpha.*",
                                 r"^As an AI assistant.*",
                             ]
                             for pattern in chatter_patterns:

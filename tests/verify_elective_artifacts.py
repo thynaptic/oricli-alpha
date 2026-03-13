@@ -36,7 +36,7 @@ def verify_registration():
     mock_router = MagicMock()
     
     with patch("oricli_core.brain.registry.ModuleRegistry.get_module", return_value=mock_router):
-        with patch("oricli_core.client.Oricli-AlphaClient") as mock_client_cls:
+        with patch("oricli_core.client.OricliAlphaClient") as mock_client_cls:
             # Setup client mock
             mock_client = mock_client_cls.return_value
             mock_client.brain.adapter_router = mock_router

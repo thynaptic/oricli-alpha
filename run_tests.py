@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Oricli-Alpha Core Test Suite - CLI Wrapper
+OricliAlpha Core Test Suite - CLI Wrapper
 ===================================
-A high-performance wrapper for the Oricli-Alpha evaluation framework.
+A high-performance wrapper for the OricliAlpha evaluation framework.
 Supports both interactive and non-interactive (argument-based) execution.
 
 Usage:
   # Run all tests
   ./run_tests.py
 
-  # Run Oricli-Alpha's internal knowledge benchmark (Science, Logic, History)
+  # Run OricliAlpha's internal knowledge benchmark (Science, Logic, History)
   ./run_tests.py --internal-bench
 
   # Run tests for a specific module
@@ -41,7 +41,7 @@ def main():
     # then we pass everything to the core test_runner.
     
     parser = argparse.ArgumentParser(
-        description="Oricli-Alpha Core Test Suite Wrapper",
+        description="OricliAlpha Core Test Suite Wrapper",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False # We handle help manually to show BOTH wrapper and core options
     )
@@ -74,7 +74,7 @@ def main():
         # Only print header if not quiet
         if "--quiet" not in sys.argv:
             print("=" * 70, flush=True)
-            print("Oricli-Alpha Core Evaluation System".center(70), flush=True)
+            print("OricliAlpha Core Evaluation System".center(70), flush=True)
             print(f"Time: {os.popen('date').read().strip()}".center(70), flush=True)
             print("=" * 70, flush=True)
             print(flush=True)

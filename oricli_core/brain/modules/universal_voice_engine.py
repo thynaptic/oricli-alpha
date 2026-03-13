@@ -29,7 +29,7 @@ class UniversalVoiceEngineModule(BaseBrainModule):
         self._modules_loaded = False
         # Voice profiles per user/session
         self._voice_profiles: Dict[str, Dict[str, Any]] = {}
-        # Base Oricli-Alpha personality traits
+        # Base OricliAlpha personality traits
         self._base_personality = {
             "curious": True,
             "helpful": True,
@@ -510,7 +510,7 @@ class UniversalVoiceEngineModule(BaseBrainModule):
         return max(0.3, min(1.0, confidence))
 
     def _get_default_voice_context(self) -> Dict[str, Any]:
-        """Get default voice context (Oricli-Alpha base)"""
+        """Get default voice context (OricliAlpha base)"""
         return {
             "success": True,
             "voice_context": {

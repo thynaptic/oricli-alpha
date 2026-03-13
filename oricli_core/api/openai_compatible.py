@@ -11,7 +11,7 @@ from fastapi import HTTPException, Header, Request
 from fastapi.responses import StreamingResponse
 import json
 
-from oricli_core.client import Oricli-AlphaClient
+from oricli_core.client import OricliAlphaClient
 from oricli_core.exceptions import AuthenticationError
 from oricli_core.services.tool_registry import ToolRegistry
 from oricli_core.types.models import (
@@ -29,7 +29,7 @@ class OpenAICompatibleAPI:
     
     def __init__(
         self,
-        client: Optional[Oricli-AlphaClient] = None,
+        client: Optional[OricliAlphaClient] = None,
         api_key: Optional[str] = None,
         require_auth: bool = False
     ):
@@ -37,11 +37,11 @@ class OpenAICompatibleAPI:
         Initialize OpenAI-compatible API
         
         Args:
-            client: Optional Oricli-AlphaClient instance (creates new one if not provided)
+            client: Optional OricliAlphaClient instance (creates new one if not provided)
             api_key: Optional API key for validation (defaults to MAVAIA_API_KEY env var)
             require_auth: Whether to require authentication (defaults to False)
         """
-        self.client = client or Oricli-AlphaClient()
+        self.client = client or OricliAlphaClient()
         # Get API key from parameter, environment variable, or None
         self.api_key = api_key or os.getenv("MAVAIA_API_KEY")
         self.require_auth = require_auth or os.getenv("MAVAIA_REQUIRE_AUTH", "false").lower() == "true"
@@ -321,7 +321,7 @@ class OpenAICompatibleAPI:
             "Connection": "keep-alive",
         }
         if trace_id:
-            headers["X-Oricli-Alpha-Trace-Id"] = str(trace_id)
+            headers["X-OricliAlpha-Trace-Id"] = str(trace_id)
 
         return StreamingResponse(
             generate(),

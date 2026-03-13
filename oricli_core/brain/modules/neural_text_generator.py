@@ -685,7 +685,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # Load and preprocess data
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Loading training data from source(s): [green]{source}[/green]...")
+                _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] Loading training data from source(s): [green]{source}[/green]...")
             else:
                 logger.info(
                     "Loading training data from source(s)",
@@ -708,7 +708,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     anchor_text = anchor_path.read_text(encoding="utf-8")
                     if anchor_text:
                         if RICH_AVAILABLE:
-                            _trainer_log(f"[bold magenta][Oricli-Alpha-Data][/bold magenta] [anchor] Mixing in {len(anchor_text)} chars of Experience Replay data")
+                            _trainer_log(f"[bold magenta][OricliAlpha-Data][/bold magenta] [anchor] Mixing in {len(anchor_text)} chars of Experience Replay data")
                         else:
                             logger.info(f"Mixing in {len(anchor_text)} chars of Experience Replay data")
                         raw_text = (raw_text or "") + "\n\n" + anchor_text
@@ -731,7 +731,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     f"  - Try a different data source"
                 )
                 if RICH_AVAILABLE:
-                    _trainer_log(f"[bold red][Oricli-Alpha-Trainer][/bold red] [red]✗[/red] {error_msg}")
+                    _trainer_log(f"[bold red][OricliAlpha-Trainer][/bold red] [red]✗[/red] {error_msg}")
                 else:
                     logger.error(
                         "No data loaded from source(s)",
@@ -747,7 +747,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 text_length = int(len(raw_text) * data_percentage)
                 raw_text = raw_text[:text_length]
                 if RICH_AVAILABLE:
-                    _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Using [yellow]{data_percentage*100:.1f}%[/yellow] of data ([cyan]{text_length:,}[/cyan] characters)")
+                    _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] Using [yellow]{data_percentage*100:.1f}%[/yellow] of data ([cyan]{text_length:,}[/cyan] characters)")
                 else:
                     logger.info(
                         "Using subset of data",
@@ -769,7 +769,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if not text or len(text.strip()) == 0:
                 error_msg = "No text remaining after preprocessing. Check your data source and preprocessing settings."
                 if RICH_AVAILABLE:
-                    _trainer_log(f"[bold red][Oricli-Alpha-Trainer][/bold red] [red]✗[/red] {error_msg}")
+                    _trainer_log(f"[bold red][OricliAlpha-Trainer][/bold red] [red]✗[/red] {error_msg}")
                 else:
                     logger.error(
                         "No text remaining after preprocessing",
@@ -784,7 +784,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             policy = self._get_adaptive_policy(device, model_type, source, data_size, categories)
             if policy:
                 if RICH_AVAILABLE:
-                    _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]✓[/green] Applying learned adaptive policy for [cyan]{device}[/cyan] + [cyan]{model_type}[/cyan] (success count: {policy.get('success_count', 0)})")
+                    _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]✓[/green] Applying learned adaptive policy for [cyan]{device}[/cyan] + [cyan]{model_type}[/cyan] (success count: {policy.get('success_count', 0)})")
                 else:
                     logger.info(
                         "Applying learned adaptive policy",
@@ -921,7 +921,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     results["character"] = {"success": False, "error": "NumPy not available for character model. Install with: pip install numpy"}
                 else:
                     if RICH_AVAILABLE:
-                        _trainer_log("[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Training [green]character-level[/green] model...")
+                        _trainer_log("[bold cyan][OricliAlpha-Trainer][/bold cyan] Training [green]character-level[/green] model...")
                     else:
                         logger.info(
                             "Training character-level model",
@@ -943,7 +943,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     results["word"] = {"success": False, "error": "NumPy not available for word model. Install with: pip install numpy"}
                 else:
                     if RICH_AVAILABLE:
-                        _trainer_log("[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Training [green]word-level[/green] model...")
+                        _trainer_log("[bold cyan][OricliAlpha-Trainer][/bold cyan] Training [green]word-level[/green] model...")
                     else:
                         logger.info(
                             "Training word-level model",
@@ -1003,7 +1003,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     remaining_time_limit = max(0, time_limit_seconds - elapsed)
                     if remaining_time_limit <= 0:
                         if RICH_AVAILABLE:
-                            _trainer_log(f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] Time limit reached ([cyan]{elapsed:.1f}s[/cyan]), skipping transformer model")
+                            _trainer_log(f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] Time limit reached ([cyan]{elapsed:.1f}s[/cyan]), skipping transformer model")
                         else:
                             logger.info(
                                 "Time limit reached; skipping transformer model",
@@ -1016,7 +1016,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         }
                     else:
                         if RICH_AVAILABLE:
-                            _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Remaining time for transformer model: [yellow]{remaining_time_limit:.1f}s[/yellow]")
+                            _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] Remaining time for transformer model: [yellow]{remaining_time_limit:.1f}s[/yellow]")
                         else:
                             logger.info(
                                 "Remaining time for transformer model",
@@ -1025,7 +1025,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 
                 if remaining_time_limit is None or remaining_time_limit > 0:
                     if RICH_AVAILABLE:
-                        _trainer_log("[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Training [green]transformer[/green] model...")
+                        _trainer_log("[bold cyan][OricliAlpha-Trainer][/bold cyan] Training [green]transformer[/green] model...")
                     else:
                         logger.info(
                             "Training transformer model",
@@ -1044,7 +1044,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             f"Install with: pip install {' '.join(missing)}"
                         )
                         if RICH_AVAILABLE:
-                            _trainer_log(f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] {error_msg}")
+                            _trainer_log(f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] {error_msg}")
                         else:
                             logger.warning(
                                 "Transformer training dependencies unavailable",
@@ -1068,7 +1068,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             "The transformers and torch libraries are available, but the training function needs to be added."
                         )
                         if RICH_AVAILABLE:
-                            _trainer_log(f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] {error_msg}")
+                            _trainer_log(f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] {error_msg}")
                         else:
                             logger.warning(
                                 "Transformer training not implemented in this module",
@@ -1093,7 +1093,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     f"Failed models:\n" + "\n".join(f"  - {m}" for m in failed_models)
                 )
                 if RICH_AVAILABLE:
-                    _trainer_log(f"[bold red][Oricli-Alpha-Trainer][/bold red] [red]✗[/red] {error_msg}")
+                    _trainer_log(f"[bold red][OricliAlpha-Trainer][/bold red] [red]✗[/red] {error_msg}")
                 else:
                     logger.error(
                         "No models trained successfully",
@@ -1134,7 +1134,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     )
                 
                 if RICH_AVAILABLE:
-                    _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]✓[/green] Saved adaptive policy for future training")
+                    _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]✓[/green] Saved adaptive policy for future training")
                 else:
                     logger.info(
                         "Saved adaptive policy for future training",
@@ -1281,7 +1281,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         f_stop = float(self.stop_at_loss)
                         if f_current <= f_stop:
                             if model_type != "transformer": # Keras models
-                                 _trainer_log(f"[bold green][Oricli-Alpha-Sentinel][/bold green] Loss floor reached ({f_current:.4f} <= {f_stop:.4f}). Ending training early.")
+                                 _trainer_log(f"[bold green][OricliAlpha-Sentinel][/bold green] Loss floor reached ({f_current:.4f} <= {f_stop:.4f}). Ending training early.")
                             self.model.stop_training = True
                             self.should_stop = True
                     except (ValueError, TypeError):
@@ -1496,7 +1496,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         f_stop = float(self.stop_at_loss)
                         if f_current <= f_stop:
                             if model_type != "transformer": # Keras models
-                                 _trainer_log(f"[bold green][Oricli-Alpha-Sentinel][/bold green] Loss floor reached ({f_current:.4f} <= {f_stop:.4f}). Ending training early.")
+                                 _trainer_log(f"[bold green][OricliAlpha-Sentinel][/bold green] Loss floor reached ({f_current:.4f} <= {f_stop:.4f}). Ending training early.")
                             self.model.stop_training = True
                             self.should_stop = True
                     except (ValueError, TypeError):
@@ -1704,7 +1704,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                    f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                     f"Dataset augmentation failed: {str(e)}. Using original dataset."
                 )
             else:
@@ -1742,7 +1742,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                    f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                     f"Mini-head injection note: {str(e)}"
                 )
             else:
@@ -1826,7 +1826,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                    f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                     f"Dataset quality analysis failed: {str(e)}"
                 )
             else:
@@ -2117,7 +2117,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                    f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                     f"Head-only fine-tuning setup failed: {str(e)}"
                 )
             else:
@@ -2204,7 +2204,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                    f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                     f"Synthetic continuation generation failed: {str(e)}. Using original data."
                 )
             else:
@@ -2402,7 +2402,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         bnb_4bit_use_double_quant=True,
                     )
                     if RICH_AVAILABLE:
-                        _trainer_log("[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [lock] Loading model in [yellow]4-bit[/yellow] quantization")
+                        _trainer_log("[bold cyan][OricliAlpha-Trainer][/bold cyan] [lock] Loading model in [yellow]4-bit[/yellow] quantization")
                 except ImportError:
                     logger.warning("bitsandbytes not installed, skipping 4-bit quantization")
             elif transformer_config.get("_load_8bit"):
@@ -2410,7 +2410,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     from transformers import BitsAndBytesConfig
                     quantization_config = BitsAndBytesConfig(load_in_8bit=True)
                     if RICH_AVAILABLE:
-                        _trainer_log("[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [lock] Loading model in [yellow]8-bit[/yellow] quantization")
+                        _trainer_log("[bold cyan][OricliAlpha-Trainer][/bold cyan] [lock] Loading model in [yellow]8-bit[/yellow] quantization")
                 except ImportError:
                     logger.warning("bitsandbytes not installed, skipping 8-bit quantization")
 
@@ -2482,7 +2482,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 device = "mps"
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
-                    _trainer_log("[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]🍎[/green] MPS (Apple Silicon GPU) detected")
+                    _trainer_log("[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]🍎[/green] MPS (Apple Silicon GPU) detected")
                 else:
                     logger.info(
                         "MPS device detected",
@@ -2492,7 +2492,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 device = "cuda"
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
-                    _trainer_log("[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]CUDA[/green] GPU detected")
+                    _trainer_log("[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]CUDA[/green] GPU detected")
                 else:
                     logger.info(
                         "CUDA device detected",
@@ -2509,7 +2509,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if policy:
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]✓[/green] Applying learned adaptive policy for transformer on [cyan]{device}[/cyan] (success count: {policy.get('success_count', 0)})")
+                _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]✓[/green] Applying learned adaptive policy for transformer on [cyan]{device}[/cyan] (success count: {policy.get('success_count', 0)})")
             else:
                 logger.info(
                     "Applying learned adaptive policy (transformer)",
@@ -2542,7 +2542,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             model_name = "distilgpt2"
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                _trainer_log("[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] Switching to distilgpt2 for MPS compatibility")
+                _trainer_log("[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] Switching to distilgpt2 for MPS compatibility")
             else:
                 logger.warning(
                     "Switching to distilgpt2 for MPS compatibility",
@@ -2560,7 +2560,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             block_size = 256
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                _trainer_log(f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] Capping sequence length to 256 for MPS")
+                _trainer_log(f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] Capping sequence length to 256 for MPS")
             else:
                 logger.warning(
                     "Capping sequence length to 256 for MPS",
@@ -2578,7 +2578,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             batch_size = 1
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                _trainer_log(f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] Reducing batch size to 1 for MPS")
+                _trainer_log(f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] Reducing batch size to 1 for MPS")
             else:
                 logger.warning(
                     "Reducing batch size to 1 for MPS",
@@ -2598,7 +2598,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             gradient_accumulation_steps = 4
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Using gradient accumulation (steps={gradient_accumulation_steps}) to maintain effective batch size")
+                _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] Using gradient accumulation (steps={gradient_accumulation_steps}) to maintain effective batch size")
             else:
                 logger.info(
                     "Using gradient accumulation for MPS",
@@ -2664,7 +2664,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [magenta]🔬[/magenta] "
+                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [magenta]🔬[/magenta] "
                     f"[bold]TINY-DATA MODE[/bold] activated ({len(tokens)} tokens) - Training on scraps!"
                 )
             else:
@@ -2683,7 +2683,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if model_name not in ["distilgpt2", "gpt2"]:
                 model_name = "distilgpt2"
                 if RICH_AVAILABLE:
-                    _trainer_log(f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] Using [cyan]distilgpt2[/cyan] for tiny-data mode")
+                    _trainer_log(f"[bold magenta][OricliAlpha-Trainer][/bold magenta] Using [cyan]distilgpt2[/cyan] for tiny-data mode")
                 else:
                     logger.info(
                         "Using distilgpt2 for tiny-data mode",
@@ -2701,7 +2701,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 device = "cpu"
                 use_mps = False
                 if RICH_AVAILABLE:
-                    _trainer_log(f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] Auto-fallback to [cyan]CPU[/cyan] for tiny-data stability")
+                    _trainer_log(f"[bold magenta][OricliAlpha-Trainer][/bold magenta] Auto-fallback to [cyan]CPU[/cyan] for tiny-data stability")
                 else:
                     logger.info(
                         "Auto-fallback to CPU for tiny-data stability",
@@ -2710,7 +2710,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             if RICH_AVAILABLE:
                 _trainer_log(
-                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] "
+                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] "
                     f"Tiny-data config: block_size={block_size}, batch_size={batch_size}, "
                     f"grad_accum={gradient_accumulation_steps}, device={device}"
                 )
@@ -2741,7 +2741,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     if RICH_AVAILABLE:
                         console = Console(stderr=True)
                         _trainer_log(
-                            f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                            f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                             f"Reducing block_size from {old_block_size} to {block_size} to fit available data ({len(tokens)} tokens)"
                         )
                     else:
@@ -2791,7 +2791,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [magenta]🔄[/magenta] "
+                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [magenta]🔄[/magenta] "
                     f"Micro-dataset augmentation: Permuting substrings for tiny dataset"
                 )
             else:
@@ -2807,7 +2807,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             if RICH_AVAILABLE:
                 _trainer_log(
-                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] "
+                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] "
                     f"Augmented dataset: {original_token_count} → {len(tokens)} tokens "
                     f"(+{len(tokens) - original_token_count} from permutations)"
                 )
@@ -2877,7 +2877,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] "
+                    f"[bold cyan][OricliAlpha-Trainer][/bold cyan] "
                     f"Precomputing teacher cache ({teacher_model}). Training starts after cache build."
                 )
             else:
@@ -2903,7 +2903,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]📊[/green] "
+                    f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]📊[/green] "
                     f"Dataset quality: {quality_metrics.get('vocab_diversity', 0):.2%} diversity, "
                     f"{quality_metrics.get('repetition_rate', 0):.2%} repetition, "
                     f"{quality_metrics.get('unique_tokens', 0)} unique tokens"
@@ -2930,7 +2930,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Time limit: [yellow]{time_limit_seconds:.1f}s[/yellow], "
+                    f"[bold cyan][OricliAlpha-Trainer][/bold cyan] Time limit: [yellow]{time_limit_seconds:.1f}s[/yellow], "
                     f"adjusting to [cyan]{effective_epochs}[/cyan] epochs max"
                 )
             else:
@@ -2953,7 +2953,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if RICH_AVAILABLE:
             console = Console(stderr=True)
             _trainer_log(
-                f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]✓[/green] "
+                f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]✓[/green] "
                 f"Learning rate scheduling: cosine decay with {warmup_steps} warmup steps "
                 f"(total steps: {total_steps})"
             )
@@ -3004,7 +3004,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if device != "cpu":
                     if RICH_AVAILABLE:
                         console = Console(stderr=True)
-                        _trainer_log(f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] {device.upper()} out of memory, falling back to CPU")
+                        _trainer_log(f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] {device.upper()} out of memory, falling back to CPU")
                     else:
                         logger.warning(
                             f"{device.upper()} out of memory; falling back to CPU",
@@ -3037,7 +3037,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
                     _trainer_log(
-                        f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]✓[/green] "
+                        f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]✓[/green] "
                         f"Resuming training from checkpoint: {checkpoint_dirs[0].name}"
                     )
                 else:
@@ -3110,7 +3110,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 console = Console(stderr=True)
                 precision_type = "BF16" if use_bf16 else "FP16"
                 _trainer_log(
-                    f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]✓[/green] "
+                    f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]✓[/green] "
                     f"Mixed precision training enabled: {precision_type}"
                 )
             else:
@@ -3187,12 +3187,12 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                        (hasattr(self.transformer_model, "config") and getattr(self.transformer_model.config, "quantization_config", None) is not None)
 
         if RICH_AVAILABLE:
-            _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Model quantization status: [yellow]{is_quantized}[/yellow]")
+            _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] Model quantization status: [yellow]{is_quantized}[/yellow]")
 
         if is_quantized and not enable_lora:
             enable_lora = True
             if RICH_AVAILABLE:
-                _trainer_log("[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [rocket] Automatically enabling LoRA for quantized model")
+                _trainer_log("[bold cyan][OricliAlpha-Trainer][/bold cyan] [rocket] Automatically enabling LoRA for quantized model")
 
         if enable_lora:
             try:
@@ -3201,7 +3201,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 # Prepare for kbit training if quantized
                 if is_quantized:
                     if RICH_AVAILABLE:
-                        _trainer_log("[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Preparing quantized model for kbit training...")
+                        _trainer_log("[bold cyan][OricliAlpha-Trainer][/bold cyan] Preparing quantized model for kbit training...")
                     self.transformer_model = prepare_model_for_kbit_training(self.transformer_model)
 
                 # Better default target modules for modern models
@@ -3217,8 +3217,8 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         target_modules = ["c_attn", "c_proj"]
 
                 if RICH_AVAILABLE:
-                    _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [rocket] Initializing LoRA fine-tuning (r={int(transformer_config.get('_lora_r', 16))})")
-                    _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Target modules: [yellow]{target_modules}[/yellow]")
+                    _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [rocket] Initializing LoRA fine-tuning (r={int(transformer_config.get('_lora_r', 16))})")
+                    _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] Target modules: [yellow]{target_modules}[/yellow]")
 
                 lora_config = LoraConfig(
                     r=int(transformer_config.get("_lora_r", 16)),
@@ -3235,7 +3235,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 trainable_params = sum(p.numel() for p in self.transformer_model.parameters() if p.requires_grad)
                 if trainable_params == 0:
                     if RICH_AVAILABLE:
-                        _trainer_log("[bold red][Oricli-Alpha-Trainer][/bold red] ✗ LoRA failed to find any matching modules! Retrying with all-linear layers...")
+                        _trainer_log("[bold red][OricliAlpha-Trainer][/bold red] ✗ LoRA failed to find any matching modules! Retrying with all-linear layers...")
 
                     # Fallback: target all linear layers
                     lora_config.target_modules = "all-linear"
@@ -3243,7 +3243,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     trainable_params = sum(p.numel() for p in self.transformer_model.parameters() if p.requires_grad)
 
                 if RICH_AVAILABLE:
-                    _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] Trainable parameters: [green]{trainable_params:,}[/green]")
+                    _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] Trainable parameters: [green]{trainable_params:,}[/green]")
 
                 if trainable_params == 0 and is_quantized:
                     raise ModuleOperationError("neural_text_generator", "fine-tuning", "LoRA failed to attach to any modules. Fine-tuning a quantized model requires LoRA adapters.")
@@ -3304,7 +3304,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
                             _trainer_log(
-                                f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                                f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                                 f"Time limit reached ([cyan]{elapsed:.1f}s[/cyan]), stopping training"
                             )
                         else:
@@ -3340,7 +3340,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
                             _trainer_log(
-                                f"[bold green][Oricli-Alpha-Trainer][/bold green] [green]✓[/green] "
+                                f"[bold green][OricliAlpha-Trainer][/bold green] [green]✓[/green] "
                                 f"Validation loss improved to {eval_loss:.4f} (best: {self.best_eval_loss:.4f})"
                             )
                         else:
@@ -3354,7 +3354,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
                             _trainer_log(
-                                f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⏸[/yellow] "
+                                f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⏸[/yellow] "
                                 f"Validation loss did not improve ({eval_loss:.4f}). "
                                 f"Patience: {self.patience_counter}/{self.patience}"
                             )
@@ -3378,7 +3378,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
                             _trainer_log(
-                                f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]🛑[/yellow] "
+                                f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]🛑[/yellow] "
                                 f"Early stopping triggered: No improvement for {self.patience} evaluations. "
                                 f"Best validation loss: {self.best_eval_loss:.4f}"
                             )
@@ -3434,7 +3434,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
                             _trainer_log(
-                                f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                                f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                                 f"CSV logging failed: {str(e)}"
                             )
                         else:
@@ -3494,7 +3494,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     if self.time_limit:
                         elapsed = time.time() - self.start_time
                         if elapsed >= self.time_limit:
-                            print(f"\n[Oricli-Alpha-Sentinel] ⏱ Time limit reached ({elapsed:.0f}s). Stopping training.")
+                            print(f"\n[OricliAlpha-Sentinel] ⏱ Time limit reached ({elapsed:.0f}s). Stopping training.")
                             control.should_training_stop = True
                             return control
 
@@ -3504,7 +3504,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             f_current = float(current_loss)
                             f_floor = float(self.loss_floor)
                             if f_current < f_floor:
-                                print(f"\n[Oricli-Alpha-Sentinel] 🚀 Loss floor reached ({f_current:.4f} < {f_floor}). Ending stage early.")
+                                print(f"\n[OricliAlpha-Sentinel] 🚀 Loss floor reached ({f_current:.4f} < {f_floor}). Ending stage early.")
                                 control.should_training_stop = True
                                 return control
                         except (ValueError, TypeError):
@@ -3599,7 +3599,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             self.stagnant_count = 0
                         
                         if self.stagnant_count >= self.patience:
-                            print(f"\n[Oricli-Alpha-Sentinel] ☕ Plateau detected (no improvement for {self.plateau_steps} steps). Moving to next stage.")
+                            print(f"\n[OricliAlpha-Sentinel] ☕ Plateau detected (no improvement for {self.plateau_steps} steps). Moving to next stage.")
                             control.should_training_stop = True
                 
                 return control
@@ -3616,7 +3616,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             break
                     
                     if train_loss and val_loss > (train_loss * 2.0) and state.global_step > 100:
-                        print(f"\n[Oricli-Alpha-Sentinel] ⚠ Overfit detected! (Val: {val_loss:.4f}, Train: {train_loss:.4f}). Ending stage.")
+                        print(f"\n[OricliAlpha-Sentinel] ⚠ Overfit detected! (Val: {val_loss:.4f}, Train: {train_loss:.4f}). Ending stage.")
                         control.should_training_stop = True
                 
                 return control
@@ -3653,7 +3653,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             if RICH_AVAILABLE:
                                 console = Console(stderr=True)
                                 _trainer_log(
-                                    f"[bold green][Oricli-Alpha-Trainer][/bold green] [green]💾[/green] "
+                                    f"[bold green][OricliAlpha-Trainer][/bold green] [green]💾[/green] "
                                     f"Saved best model: eval_loss {old_best:.4f} → {eval_loss:.4f}"
                                 )
                             else:
@@ -3669,7 +3669,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             if RICH_AVAILABLE:
                                 console = Console(stderr=True)
                                 _trainer_log(
-                                    f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                                    f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                                     f"Failed to save best model checkpoint: {str(e)}"
                                 )
                             else:
@@ -3818,7 +3818,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [magenta]🎯[/magenta] "
+                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [magenta]🎯[/magenta] "
                     f"Head-only fine-tuning mode: Freezing all layers except output head"
                 )
             else:
@@ -3838,7 +3838,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [magenta]🛡️[/magenta] "
+                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [magenta]🛡️[/magenta] "
                     f"KL-Regularization enabled: Preventing overfitting on tiny dataset"
                 )
             else:
@@ -3860,7 +3860,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 except Exception as e:
                     if RICH_AVAILABLE:
                         _trainer_log(
-                            f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                            f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                             f"Could not create initial model copy for KL reg: {str(e)}"
                         )
                     else:
@@ -4039,7 +4039,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]✓[/green] "
+                    f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]✓[/green] "
                     f"Early stopping enabled: patience={patience}, min_delta=0.001"
                 )
             else:
@@ -4067,7 +4067,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
         if RICH_AVAILABLE:
             console = Console(stderr=True)
             _trainer_log(
-                f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]✓[/green] "
+                f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]✓[/green] "
                 f"CSV metrics logging enabled: {csv_logging_callback.csv_file}"
             )
         else:
@@ -4093,7 +4093,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]✓[/green] "
+                    f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]✓[/green] "
                     f"TensorBoard logging enabled: {tensorboard_log_dir}"
                     f"\n  View logs with: tensorboard --logdir {tensorboard_log_dir}"
                 )
@@ -4177,7 +4177,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
                     _trainer_log(
-                        f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                        f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                         f"Rich progress bar initialization failed: {str(e)}"
                     )
                 else:
@@ -4218,7 +4218,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
                 _trainer_log(
-                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [magenta]📚[/magenta] "
+                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [magenta]📚[/magenta] "
                     f"[bold]CURRICULUM TRAINING PHASE 2[/bold] activated - Adaptive context stretching from 32 → {block_size}"
                 )
             else:
@@ -4230,7 +4230,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             # MINI-TRANSFORMER HEAD INJECTION: Add custom tiny head for tiny datasets
             if RICH_AVAILABLE:
                 _trainer_log(
-                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [magenta]🧠[/magenta] "
+                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [magenta]🧠[/magenta] "
                     f"Injecting mini-transformer head for tiny-data optimization"
                 )
             else:
@@ -4255,7 +4255,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if len(tokens) < 100:  # Only for ultra-scarce data
                 if RICH_AVAILABLE:
                     _trainer_log(
-                        f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [magenta]🔄[/magenta] "
+                        f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [magenta]🔄[/magenta] "
                         f"Synthetic-continuation generator: Will generate synthetic data after initial training"
                     )
                 else:
@@ -4278,7 +4278,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             if RICH_AVAILABLE:
                 _trainer_log(
-                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] "
+                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] "
                     f"Adaptive curriculum: Starting at block_size={current_block_size}, "
                     f"max={max_allowed}, stretch_threshold={stretch_threshold}"
                 )
@@ -4294,7 +4294,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 stage_idx += 1
                 if RICH_AVAILABLE:
                     _trainer_log(
-                        f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] "
+                        f"[bold magenta][OricliAlpha-Trainer][/bold magenta] "
                         f"[cyan]Stage {stage_idx}[/cyan]: "
                         f"Training with block_size={current_block_size} (adaptive curriculum)"
                     )
@@ -4312,7 +4312,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if len(stage_train_dataset) == 0:
                     if RICH_AVAILABLE:
                         _trainer_log(
-                            f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                            f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                             f"Stage {stage_idx}: Dataset too small for block_size={current_block_size} "
                             f"(need > {current_block_size} tokens, have {len(train_tokens)}). "
                             f"Skipping to next stage or ending curriculum."
@@ -4527,7 +4527,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         loss_str = f"{raw_loss:.4f}" if raw_loss is not None else "N/A"
                         smoothed_str = f"{smoothed_loss:.4f}" if smoothed_loss is not None else "N/A"
                         _trainer_log(
-                            f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [green]✓[/green] "
+                            f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [green]✓[/green] "
                             f"Stage {stage_idx} complete: loss={loss_str} "
                             f"(EMA-smoothed: {smoothed_str}), "
                             f"epochs={stage_epochs}, block_size={current_block_size}"
@@ -4550,7 +4550,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         try:
                             if RICH_AVAILABLE:
                                 _trainer_log(
-                                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [magenta]🔄[/magenta] "
+                                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [magenta]🔄[/magenta] "
                                     f"Generating synthetic continuations to extend dataset..."
                                 )
                             else:
@@ -4581,7 +4581,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                                 
                                 if RICH_AVAILABLE:
                                     _trainer_log(
-                                        f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] "
+                                        f"[bold magenta][OricliAlpha-Trainer][/bold magenta] "
                                         f"Synthetic data added: {original_train_len} → {len(train_tokens)} tokens "
                                         f"(+{len(train_tokens) - original_train_len} synthetic)"
                                     )
@@ -4597,7 +4597,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         except Exception as e:
                             if RICH_AVAILABLE:
                                 _trainer_log(
-                                    f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                                    f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                                     f"Synthetic continuation generation failed: {str(e)}. Continuing with original data."
                                 )
                             else:
@@ -4630,7 +4630,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                                 
                                 if RICH_AVAILABLE:
                                     _trainer_log(
-                                        f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [cyan]📈[/cyan] "
+                                        f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [cyan]📈[/cyan] "
                                         f"EMA-smoothed {loss_type_label} loss slope: {loss_slope:.4f} - Model stabilized, stretching context..."
                                     )
                                 else:
@@ -4645,7 +4645,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             else:
                                 if RICH_AVAILABLE:
                                     _trainer_log(
-                                        f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [yellow]⏸[/yellow] "
+                                        f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [yellow]⏸[/yellow] "
                                         f"EMA-smoothed {loss_type_label} loss slope: {loss_slope:.4f} - Still improving, continuing at current size..."
                                     )
                                 else:
@@ -4687,7 +4687,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             current_block_size = max_allowed
                             if RICH_AVAILABLE:
                                 _trainer_log(
-                                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] "
+                                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] "
                                     f"Reached maximum block_size ({max_allowed}) allowed by data"
                                 )
                             else:
@@ -4712,7 +4712,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     # If a stage fails, try to stretch and continue (never error out in tiny-data mode)
                     if RICH_AVAILABLE:
                         _trainer_log(
-                            f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [yellow]⚠[/yellow] "
+                            f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [yellow]⚠[/yellow] "
                             f"Stage {stage_idx} encountered error: {str(e)}. Attempting to stretch and continue..."
                         )
                     else:
@@ -4745,7 +4745,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             if RICH_AVAILABLE:
                 _trainer_log(
-                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [green]✓[/green] "
+                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [green]✓[/green] "
                     f"Adaptive curriculum training complete! Final block_size: {block_size}, "
                     f"Total epochs: {sum(completed_epochs)}, Stages: {stage_idx}"
                 )
@@ -4778,7 +4778,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     if RICH_AVAILABLE:
                         console = Console(stderr=True)
                         _trainer_log(
-                            f"[bold green][Oricli-Alpha-Trainer][/bold green] [green]💾[/green] "
+                            f"[bold green][OricliAlpha-Trainer][/bold green] [green]💾[/green] "
                             f"Loading best model from checkpoint (best validation loss)"
                         )
                     else:
@@ -4793,7 +4793,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     if RICH_AVAILABLE:
                         console = Console(stderr=True)
                         _trainer_log(
-                            f"[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
+                            f"[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] "
                             f"Could not load best model checkpoint: {str(e)}. Using final model instead."
                         )
                     else:
@@ -4869,7 +4869,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 
                 if metrics_panel:
                     _trainer_log(
-                        f"[bold green][Oricli-Alpha-Trainer][/bold green] [green]📊[/green] "
+                        f"[bold green][OricliAlpha-Trainer][/bold green] [green]📊[/green] "
                         f"Final Metrics: {' | '.join(metrics_panel)}"
                     )
             else:
@@ -4916,7 +4916,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             
             if RICH_AVAILABLE:
                 console = Console(stderr=True)
-                _trainer_log(f"[bold cyan][Oricli-Alpha-Trainer][/bold cyan] [green]✓[/green] Saved adaptive policy for transformer training")
+                _trainer_log(f"[bold cyan][OricliAlpha-Trainer][/bold cyan] [green]✓[/green] Saved adaptive policy for transformer training")
             else:
                 logger.info(
                     "Saved adaptive policy for transformer training",
@@ -4930,7 +4930,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
             if use_mps and ("mps" in str(e).lower() or "out of memory" in str(e).lower()):
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
-                    _trainer_log("[bold yellow][Oricli-Alpha-Trainer][/bold yellow] [yellow]⚠[/yellow] MPS out of memory during training, retrying with CPU")
+                    _trainer_log("[bold yellow][OricliAlpha-Trainer][/bold yellow] [yellow]⚠[/yellow] MPS out of memory during training, retrying with CPU")
                 else:
                     logger.warning(
                         "MPS out of memory during training; retrying with CPU",
@@ -5054,7 +5054,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                         if RICH_AVAILABLE:
                             console = Console(stderr=True)
                             _trainer_log(
-                                f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [yellow]⚠[/yellow] "
+                                f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [yellow]⚠[/yellow] "
                                 f"CPU fallback error in tiny-data mode: {str(e2)}. Attempting final fallback..."
                             )
                         else:
@@ -5151,7 +5151,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             
                             if RICH_AVAILABLE:
                                 _trainer_log(
-                                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [green]✓[/green] "
+                                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [green]✓[/green] "
                                     f"Tiny-data mode fallback succeeded!"
                                 )
                             else:
@@ -5178,7 +5178,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                             if RICH_AVAILABLE:
                                 console = Console(stderr=True)
                                 _trainer_log(
-                                    f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [yellow]⚠[/yellow] "
+                                    f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [yellow]⚠[/yellow] "
                                     f"Tiny-data mode: All fallbacks exhausted. Returning minimal success."
                                 )
                             else:
@@ -5217,7 +5217,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                 if RICH_AVAILABLE:
                     console = Console(stderr=True)
                     _trainer_log(
-                        f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [yellow]⚠[/yellow] "
+                        f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [yellow]⚠[/yellow] "
                         f"Error in tiny-data mode: {str(e)}. Attempting final fallback..."
                     )
                 else:
@@ -5312,7 +5312,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     
                     if RICH_AVAILABLE:
                         _trainer_log(
-                            f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [green]✓[/green] "
+                            f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [green]✓[/green] "
                             f"Tiny-data mode fallback succeeded!"
                         )
                     else:
@@ -5339,7 +5339,7 @@ class NeuralTextGeneratorModule(BaseBrainModule):
                     if RICH_AVAILABLE:
                         console = Console(stderr=True)
                         _trainer_log(
-                            f"[bold magenta][Oricli-Alpha-Trainer][/bold magenta] [yellow]⚠[/yellow] "
+                            f"[bold magenta][OricliAlpha-Trainer][/bold magenta] [yellow]⚠[/yellow] "
                             f"Tiny-data mode: All fallbacks exhausted. Returning minimal success."
                         )
                     else:

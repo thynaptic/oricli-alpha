@@ -1,7 +1,7 @@
 from __future__ import annotations
 """
 Reaction Memory Service
-Service to track user reactions and store them in Oricli-Alpha's memory for learning
+Service to track user reactions and store them in OricliAlpha's memory for learning
 Converted from Swift ReactionMemoryService.swift
 """
 
@@ -94,7 +94,7 @@ class ReactionMemoryServiceModule(BaseBrainModule):
         return ModuleMetadata(
             name="reaction_memory_service",
             version="1.0.0",
-            description="Service to track user reactions and store them in Oricli-Alpha's memory for learning",
+            description="Service to track user reactions and store them in OricliAlpha's memory for learning",
             operations=[
                 "record_reaction",
                 "get_reactions",
@@ -139,7 +139,7 @@ class ReactionMemoryServiceModule(BaseBrainModule):
             )
 
     def _record_reaction(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Record a reaction to a message in Oricli-Alpha's memory"""
+        """Record a reaction to a message in OricliAlpha's memory"""
         reaction_type = params.get("reaction", "")
         message_data = params.get("message", {})
         conversation_data = params.get("conversation", {})

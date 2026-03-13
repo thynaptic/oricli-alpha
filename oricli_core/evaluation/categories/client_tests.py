@@ -8,7 +8,7 @@ Tests Python client interface and module access patterns.
 import time
 from typing import Any, Dict, List, Optional
 
-from oricli_core.client import Oricli-AlphaClient
+from oricli_core.client import OricliAlphaClient
 from oricli_core.exceptions import (
     ModuleNotFoundError,
     ModuleOperationError,
@@ -34,7 +34,7 @@ class ClientTestRunner:
     def _get_client(self):
         """Get or create client instance (lazy initialization)"""
         if self.client is None:
-            self.client = Oricli-AlphaClient(modules_dir=self.modules_dir)
+            self.client = OricliAlphaClient(modules_dir=self.modules_dir)
         return self.client
     
     def run_test_case(

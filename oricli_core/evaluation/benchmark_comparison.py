@@ -3,7 +3,7 @@ from __future__ import annotations
 Benchmark Comparison Tool
 
 Generates industry-standard metrics and comparisons for Python coding benchmarks.
-Compares Oricli-Alpha's performance against reference benchmarks (HumanEval, MBPP, APPS).
+Compares OricliAlpha's performance against reference benchmarks (HumanEval, MBPP, APPS).
 """
 
 import json
@@ -314,7 +314,7 @@ class BenchmarkComparison:
             comparison = self.compare_with_references(benchmark_name)
             if "error" not in comparison:
                 report_lines.append(f"\n{benchmark_name}:")
-                report_lines.append(f"  Oricli-Alpha Pass Rate: {self.metrics.pass_rate*100:.2f}%")
+                report_lines.append(f"  OricliAlpha Pass Rate: {self.metrics.pass_rate*100:.2f}%")
                 for model, comp in comparison["comparison"].items():
                     ref_score = comp["reference_score"]
                     diff = comp["difference"]

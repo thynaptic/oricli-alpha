@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.oricli_dream_daemon import Oricli-AlphaDreamDaemon
+from scripts.oricli_dream_daemon import OricliAlphaDreamDaemon
 from oricli_core.services.insight_service import InsightService
 
 def verify_dream_cycle():
@@ -19,7 +19,7 @@ def verify_dream_cycle():
     
     # Add mock facts to dream about
     facts = [
-        {"response": "Oricli-Alpha uses a modular cognitive framework."},
+        {"response": "OricliAlpha uses a modular cognitive framework."},
         {"response": "Biological neurons use electrochemical signals for communication."},
         {"response": "Blockchain technology uses distributed consensus."}
     ]
@@ -31,11 +31,11 @@ def verify_dream_cycle():
     print(f"✓ Mock JIT buffer populated with {len(facts)} facts.")
 
     print("\n--- Step 2: Running Mock Dream Cycle ---")
-    daemon = Oricli-AlphaDreamDaemon()
+    daemon = OricliAlphaDreamDaemon()
     daemon.cog_gen = MagicMock()
     
     # Mock successful insight generation
-    mock_insight = "Oricli-Alpha's modular framework can be optimized using a blockchain-inspired consensus for cross-module validation."
+    mock_insight = "OricliAlpha's modular framework can be optimized using a blockchain-inspired consensus for cross-module validation."
     daemon.cog_gen.execute.return_value = {
         "success": True,
         "text": json.dumps({"insight": mock_insight, "score": 0.9})

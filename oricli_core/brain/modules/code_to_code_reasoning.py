@@ -6,7 +6,7 @@ Understand relationships between code pieces, reason about code dependencies,
 identify code similarities and differences, understand code evolution,
 and map code to requirements.
 
-This module is part of Oricli-Alpha's Python LLM capabilities, enabling
+This module is part of OricliAlpha's Python LLM capabilities, enabling
 reasoning about how different pieces of code relate to each other.
 """
 

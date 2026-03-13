@@ -17,7 +17,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement Adversarial Sentinel (Red-Team Cognition).**
+- [ ] **Track: Implement Dynamic Skills Framework (.ori).**
+  *Link: [./tracks/dynamic_skills_20260306/](./tracks/dynamic_skills_20260306/)*
+
+---\n\n- [x] **Track: Implement Adversarial Sentinel (Red-Team Cognition).**
   *Link: [./tracks/adversarial_sentinel_20260306/](./tracks/adversarial_sentinel_20260306/)*
 
 ---\n\n- [ ] **Track: Implement Metacognitive Sentience Layer (Cognitive Self-Regulation).**

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.oricli_tool_daemon import Oricli-AlphaToolDaemon
+from scripts.oricli_tool_daemon import OricliAlphaToolDaemon
 
 def verify_scenario_file():
     print("--- Step 1: Verifying Scenario File ---")
@@ -42,7 +42,7 @@ def verify_correction_logging():
 
 def verify_tool_daemon():
     print("\n--- Step 3: Verifying Tool Daemon Trigger ---")
-    daemon = Oricli-AlphaToolDaemon()
+    daemon = OricliAlphaToolDaemon()
     daemon.sync_threshold = 1 # Set low for test
     daemon.last_sync_count = 0
     

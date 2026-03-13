@@ -45,10 +45,10 @@ try:
 except ImportError:
     PDFPLUMBER_AVAILABLE = False
 
-from oricli_core.exceptions import Oricli-AlphaError
+from oricli_core.exceptions import OricliAlphaError
 
 
-class WebFetchError(Oricli-AlphaError):
+class WebFetchError(OricliAlphaError):
     """Base exception for web fetch errors."""
     pass
 

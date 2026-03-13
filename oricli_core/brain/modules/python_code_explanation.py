@@ -6,7 +6,7 @@ Explain code in natural language, answer questions about code, explain code
 to different audiences (beginners, experts), generate code walkthroughs,
 create code tutorials, explain design decisions, and clarify complex code sections.
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 intelligent code explanation and communication that adapts to different audiences.
 """
 

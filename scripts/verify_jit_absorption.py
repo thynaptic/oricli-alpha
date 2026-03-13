@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from oricli_core.services.absorption_service import AbsorptionService
-from scripts.oricli_jit_daemon import Oricli-AlphaJITDaemon
+from scripts.oricli_jit_daemon import OricliAlphaJITDaemon
 
 def verify_data_recording():
     print("--- Step 1: Verifying Data Recording ---")
@@ -38,13 +38,13 @@ def verify_data_recording():
 
 def verify_daemon_trigger():
     print("\n--- Step 2: Verifying Daemon Detection ---")
-    daemon = Oricli-AlphaJITDaemon()
+    daemon = OricliAlphaJITDaemon()
     daemon.sync_threshold = 2 # Set low for testing
     daemon.last_sync_count = 0
     
     service = AbsorptionService()
     # Add one more lesson to hit the threshold of 2
-    service.record_lesson("Who is Oricli-Alpha?", "Oricli-Alpha is a modular cognitive framework.")
+    service.record_lesson("Who is OricliAlpha?", "OricliAlpha is a modular cognitive framework.")
     
     print(f"Current buffer count: {service.get_buffer_count()}")
     

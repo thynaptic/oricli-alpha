@@ -12,7 +12,7 @@ from oricli_core.evaluation.test_runner import TestRunner
 
 def main():
     print("=" * 80)
-    print("Running Oricli-Alpha Test Suite")
+    print("Running OricliAlpha Test Suite")
     print("=" * 80)
     print()
     

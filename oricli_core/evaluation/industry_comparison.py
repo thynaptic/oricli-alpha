@@ -2,7 +2,7 @@ from __future__ import annotations
 """
 Industry Comparison Tool for All Test Categories
 
-Compares Oricli-Alpha's test results across all categories (functional, reasoning, safety, etc.)
+Compares OricliAlpha's test results across all categories (functional, reasoning, safety, etc.)
 against industry benchmarks and standards.
 """
 
@@ -72,7 +72,7 @@ class OverallMetrics:
 
 
 class IndustryComparison:
-    """Compare Oricli-Alpha test results against industry standards"""
+    """Compare OricliAlpha test results against industry standards"""
     
     # Industry benchmark reference scores for different test categories
     # These are approximate industry standards based on typical AI system performance
@@ -441,7 +441,7 @@ class IndustryComparison:
             comparison = self.compare_category(category)
             if "error" not in comparison:
                 report_lines.append(f"{category.upper()}:")
-                report_lines.append(f"  Oricli-Alpha Pass Rate: {comparison['oricli_pass_rate']*100:.2f}%")
+                report_lines.append(f"  OricliAlpha Pass Rate: {comparison['oricli_pass_rate']*100:.2f}%")
                 report_lines.append(f"  Performance Level: {comparison['performance_level'].upper()}")
                 report_lines.append("")
                 report_lines.append("  vs Industry Models:")

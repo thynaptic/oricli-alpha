@@ -11,10 +11,10 @@ import uuid
 from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass, field
 
-from oricli_core.exceptions import Oricli-AlphaError
+from oricli_core.exceptions import OricliAlphaError
 
 
-class ToolRegistryError(Oricli-AlphaError):
+class ToolRegistryError(OricliAlphaError):
     """Raised when tool registry operations fail."""
     pass
 

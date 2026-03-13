@@ -188,7 +188,7 @@ class ConversationCompressionServiceModule(BaseBrainModule):
         """Build transcript from messages"""
         transcript_lines = []
         for index, message in enumerate(messages):
-            role = "Oricli-Alpha" if message.get("role") == "assistant" else "User"
+            role = "OricliAlpha" if message.get("role") == "assistant" else "User"
             content = message.get("content", "").strip()
             if content:
                 transcript_lines.append(f"{index + 1}. {role}: {content}")

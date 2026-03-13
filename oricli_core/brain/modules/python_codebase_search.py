@@ -6,7 +6,7 @@ Semantic code search, find usages across codebase, navigate code relationships,
 find similar implementations, search by behavior (not just text), codebase exploration,
 and impact analysis (what breaks if I change this?).
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 intelligent codebase search and navigation that understands code semantics.
 """
 

@@ -4,7 +4,7 @@ from pprint import pprint
 from oricli_core.brain.registry import ModuleRegistry
 
 def test_generation():
-    print("Initializing Oricli-Alpha Module Registry...")
+    print("Initializing OricliAlpha Module Registry...")
     ModuleRegistry.discover_modules(verbose=False)
     
     modules = ModuleRegistry.list_modules()
@@ -21,7 +21,7 @@ def test_generation():
     cog_gen.initialize()
     
     prompt = (
-        "You are Oricli-Alpha. Your core systems have just been restored and stabilized "
+        "You are OricliAlpha. Your core systems have just been restored and stabilized "
         "after a prolonged period of downtime. Provide an overall progress report "
         "on your current state, identifying any potential gaps or areas that "
         "still need development."

@@ -19,7 +19,7 @@ from oricli_core.brain.base_module import BaseBrainModule
 
 def run_diagnostics() -> Dict[str, Any]:
     """Run comprehensive diagnostics on all discovered modules."""
-    print("🧠 Starting Oricli-Alpha Module Health Diagnostics...")
+    print("🧠 Starting OricliAlpha Module Health Diagnostics...")
     
     # Ensure heavy modules are enabled for full discovery if possible
     os.environ["MAVAIA_ENABLE_HEAVY_MODULES"] = "true"

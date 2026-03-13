@@ -1,5 +1,5 @@
 """
-Production-ready Flask UI server for Oricli-Alpha Core.
+Production-ready Flask UI server for OricliAlpha Core.
 
 Routes:
 - "/" serves the SPA shell
@@ -299,7 +299,7 @@ def main() -> None:
         print(f"Warning: Static directory not found: {STATIC_DIR}", file=sys.stderr, flush=True)
         print("UI may not work correctly without static files.", file=sys.stderr, flush=True)
     
-    print(f"Starting Oricli-Alpha UI server...", flush=True)
+    print(f"Starting OricliAlpha UI server...", flush=True)
     print(f"  Host: {host}", flush=True)
     print(f"  Port: {port}", flush=True)
     print(f"  API Base: {API_BASE}", flush=True)

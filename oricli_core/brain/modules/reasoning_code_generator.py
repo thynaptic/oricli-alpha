@@ -6,7 +6,7 @@ Generate Python code through cognitive reasoning processes (CoT, ToT, MCTS).
 Provides code generation with verification, iterative refinement, and
 context-aware generation.
 
-This module is part of Oricli-Alpha's Python LLM capabilities, enabling
+This module is part of OricliAlpha's Python LLM capabilities, enabling
 code generation as a cognitive reasoning process rather than pattern matching.
 """
 

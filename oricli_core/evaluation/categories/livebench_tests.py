@@ -2,7 +2,7 @@ from __future__ import annotations
 """
 LiveBench Test Executor
 
-Integrates LiveBench benchmark suite into Oricli-Alpha's evaluation framework.
+Integrates LiveBench benchmark suite into OricliAlpha's evaluation framework.
 Tests all brain modules against LiveBench's diverse tasks across 6 categories:
 reasoning, math, coding, language, data analysis, and instruction following.
 """
@@ -49,7 +49,7 @@ except ImportError as e:
     else:
         MatchSingle = None  # type: ignore
 
-# Oricli-Alpha imports
+# OricliAlpha imports
 from oricli_core.brain.base_module import BaseBrainModule
 from oricli_core.exceptions import (
     ModuleNotFoundError,
@@ -109,7 +109,7 @@ class LiveBenchTestRunner:
     
     def _map_module_to_category(self, module_name: str, metadata: Any) -> Optional[str]:
         """
-        Map a Oricli-Alpha module to LiveBench category based on module metadata
+        Map a OricliAlpha module to LiveBench category based on module metadata
         
         Args:
             module_name: Module name
@@ -296,7 +296,7 @@ class LiveBenchTestRunner:
         operation: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Convert LiveBench question to Oricli-Alpha module execution parameters
+        Convert LiveBench question to OricliAlpha module execution parameters
         
         Args:
             question: LiveBench question dictionary

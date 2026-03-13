@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Oricli-Alpha Trainer Daemon - Background RFAL Alignment Orchestrator.
+OricliAlpha Trainer Daemon - Background RFAL Alignment Orchestrator.
 Monitors rfal_lessons.jsonl and triggers local CPU training passes.
 """
 
@@ -31,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("oricli-trainer")
 
-class Oricli-AlphaTrainerDaemon:
+class OricliAlphaTrainerDaemon:
     def __init__(self):
         self.running = True
         self.sync_threshold = 20  # Trigger training every 20 new lessons
@@ -118,7 +118,7 @@ class Oricli-AlphaTrainerDaemon:
             logger.error(f"Exception during training trigger: {e}")
 
     def run(self):
-        logger.info("Oricli-Alpha Trainer Daemon started.")
+        logger.info("OricliAlpha Trainer Daemon started.")
         while self.running:
             try:
                 current_count = self.get_lesson_count()
@@ -146,5 +146,5 @@ def handle_sigterm(signum, frame):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, handle_sigterm)
-    daemon = Oricli-AlphaTrainerDaemon()
+    daemon = OricliAlphaTrainerDaemon()
     daemon.run()

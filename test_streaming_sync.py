@@ -9,7 +9,7 @@ def test_streaming():
     payload = {
         "model": "oricli-cognitive",
         "messages": [
-            {"role": "user", "content": "How does Oricli-Alpha handle complex reasoning?"}
+            {"role": "user", "content": "How does OricliAlpha handle complex reasoning?"}
         ],
         "stream": True
     }
@@ -20,7 +20,7 @@ def test_streaming():
         response.raise_for_status()
     except Exception as e:
         print(f"Error connecting to server: {e}")
-        print("Make sure the Oricli-Alpha API server is running on localhost:8001")
+        print("Make sure the OricliAlpha API server is running on localhost:8001")
         return False
 
     thought_count = 0

@@ -6,7 +6,7 @@ Intelligent refactoring with reasoning: suggest refactoring opportunities,
 execute safe refactorings, verify refactorings, handle multi-file refactoring,
 extract methods/classes, rename with scope awareness, and restructure code.
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 refactoring that understands codebase context and maintains correctness.
 """
 

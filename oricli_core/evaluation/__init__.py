@@ -1,6 +1,6 @@
 from __future__ import annotations
 """
-Oricli-Alpha Core Evaluation Framework
+OricliAlpha Core Evaluation Framework
 
 MMLU-style test suite for comprehensive evaluation of all brain modules
 and system components.

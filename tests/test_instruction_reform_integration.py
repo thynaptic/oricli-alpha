@@ -38,7 +38,7 @@ class TestInstructionReformIntegration(unittest.TestCase):
 
     def test_standard_conversational_routing(self):
         # A standard conversational prompt that should NOT trigger the bypass
-        prompt = "Hello Oricli-Alpha, how are you today?"
+        prompt = "Hello OricliAlpha, how are you today?"
         
         result = self.cog_gen.execute(
             operation="generate_response",

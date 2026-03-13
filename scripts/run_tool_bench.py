@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Dynamic ToolBench Runner
-Executes tool-use scenarios and evaluates Oricli-Alpha's efficacy.
+Executes tool-use scenarios and evaluates OricliAlpha's efficacy.
 """
 
 import os

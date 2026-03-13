@@ -32,7 +32,7 @@ from oricli_core.evaluation.curriculum.data_sources.manager import DataSourceMan
 
 
 if TYPER_AVAILABLE:
-    app = typer.Typer(help="Oricli-Alpha Curriculum Testing Framework")
+    app = typer.Typer(help="OricliAlpha Curriculum Testing Framework")
     console = Console()
 else:
     app = None

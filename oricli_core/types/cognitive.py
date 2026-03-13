@@ -1,6 +1,6 @@
 from __future__ import annotations
 """
-Oricli-Alpha Cognitive Types - Structured models for internal cognitive state
+OricliAlpha Cognitive Types - Structured models for internal cognitive state
 """
 
 from typing import Any, Dict, List, Optional, Union

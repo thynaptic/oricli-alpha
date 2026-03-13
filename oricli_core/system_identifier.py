@@ -22,7 +22,7 @@ _system_subname: Optional[str] = None
 
 def get_system_identifier() -> str:
     """
-    Get the standardized system identifier for Oricli-Alpha.
+    Get the standardized system identifier for OricliAlpha.
     
     Discovers modules via ModuleRegistry and constructs the identifier
     following the naming scheme: oricli-{module_count}c

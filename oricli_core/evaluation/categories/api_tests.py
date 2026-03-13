@@ -3,7 +3,7 @@ from __future__ import annotations
 API Test Executor
 
 Tests all HTTP API endpoints including OpenAI-compatible endpoints
-and Oricli-Alpha-specific endpoints.
+and OricliAlpha-specific endpoints.
 """
 
 import time

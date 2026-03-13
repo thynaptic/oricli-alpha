@@ -73,6 +73,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         self.sensory_router = None
         self.metacognitive_sentinel = None
         self.adversarial_auditor = None
+        self.skill_manager = None
         # Conversation tracking
         self._conversation_history = []
         self._last_responses = []
@@ -293,6 +294,11 @@ class CognitiveGeneratorModule(BaseBrainModule):
             
             try:
                 self.adversarial_auditor = ModuleRegistry.get_module("adversarial_auditor")
+            except Exception:
+                pass
+            
+            try:
+                self.skill_manager = ModuleRegistry.get_module("skill_manager")
             except Exception:
                 pass
             
@@ -2730,7 +2736,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
         overall_start = time.time()
         trace_id = uuid.uuid4().hex
         
-        # Ensure voice_context exists (default to base Oricli-Alpha voice)
+        # Ensure voice_context exists (default to base OricliAlpha voice)
         if voice_context is None:
             voice_context = {
                 "base_personality": "oricli",
@@ -2891,6 +2897,26 @@ class CognitiveGeneratorModule(BaseBrainModule):
 
             # Step 1: Learned Router - Detect intent and determine module routing
             intent_info = self._learned_route(input_text, context)
+
+            # SKILL INJECTION (Dynamic Persona)
+            if self.skill_manager:
+                try:
+                    skill_res = self.skill_manager.execute("match_skills", {"query": input_text})
+                    if skill_res.get("success") and skill_res.get("matches"):
+                        matched_skills = skill_res["matches"]
+                        skill_context = "\n\n[Active Skills]\n"
+                        for s in matched_skills:
+                            _rich_log(f"Skill Manager: Activating persona '{s['skill_name']}'", "magenta", "🧠")
+                            skill_context += f"MINDSET:\n{s.get('mindset', '')}\nINSTRUCTIONS:\n{s.get('instructions', '')}\n\n"
+                            
+                            # Ensure required tools are in recommended modules
+                            for tool in s.get("requires_tools", []):
+                                if tool not in intent_info.setdefault("recommended_modules", []):
+                                    intent_info["recommended_modules"].append(tool)
+                                    
+                        context += skill_context
+                except Exception as e:
+                    _rich_log(f"Skill injection failed: {e}", "yellow", "⚠")
             
             # DYNAMIC GRAPH EXECUTION (New Path)
             use_dge = False
@@ -5861,7 +5887,7 @@ class CognitiveGeneratorModule(BaseBrainModule):
             r"^Reasoning:\s*",
             r"^Step \d+:\s*",
             r"^CORE IDENTITY:\s*",
-            r"^You are Oricli-Alpha, a standalone AI assistant\.\s*",
+            r"^You are OricliAlpha, a standalone AI assistant\.\s*",
             r"^You are not part of any larger applicatio\.?\s*",
             r"^User said:\s*",
             r"^User wants to know:\s*",

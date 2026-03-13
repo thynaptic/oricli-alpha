@@ -5,7 +5,7 @@ Python Documentation Generator Module
 Generate comprehensive documentation including docstrings, API documentation,
 README files, code examples, architecture diagrams, migration guides, and changelogs.
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 intelligent documentation generation that understands code structure and semantics.
 """
 

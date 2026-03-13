@@ -6,7 +6,7 @@ Generate semantic embeddings for Python code.
 Provides code-specific embedding generation, similarity detection,
 semantic search, and pattern clustering in embedding space.
 
-This module is part of Oricli-Alpha's Python LLM capabilities, enabling
+This module is part of OricliAlpha's Python LLM capabilities, enabling
 semantic understanding of Python code through vector representations.
 """
 

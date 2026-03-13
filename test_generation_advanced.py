@@ -4,9 +4,9 @@ from pprint import pprint
 from oricli_core.brain.registry import ModuleRegistry
 
 def test_generation():
-    print("=== Oricli-Alpha Text Generation Readiness Report ===")
+    print("=== OricliAlpha Text Generation Readiness Report ===")
     
-    print("\n1. Initializing Oricli-Alpha Module Registry...")
+    print("\n1. Initializing OricliAlpha Module Registry...")
     ModuleRegistry.discover_modules(verbose=False)
     
     print("\n2. Retrieving neural_text_generator module...")

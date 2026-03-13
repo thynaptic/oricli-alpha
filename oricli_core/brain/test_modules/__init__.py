@@ -1,7 +1,7 @@
 from __future__ import annotations
 """
-Brain Modules - All Oricli-Alpha brain modules are located here
-This directory contains all the intelligence modules that power Oricli-Alpha.
+Brain Modules - All OricliAlpha brain modules are located here
+This directory contains all the intelligence modules that power OricliAlpha.
 """
 
 # This file allows the modules directory to be treated as a Python package

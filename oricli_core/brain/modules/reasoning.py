@@ -260,7 +260,7 @@ class ReasoningModule(BaseBrainModule):
             if re.match(r"^(give me|provide|list|create|write|draft|generate)\b", query_lower):
                 if ("introspection" in query_lower) and ("endpoint" in query_lower or "endpoints" in query_lower):
                     reasoning = (
-                        "Introspection endpoints let you inspect what Oricli-Alpha did internally for a request: intent detection, routing, module execution path, timings, and verification. "
+                        "Introspection endpoints let you inspect what OricliAlpha did internally for a request: intent detection, routing, module execution path, timings, and verification. "
                         "They store a per-request trace (keyed by trace_id) in an in-memory ring buffer and expose it via authenticated endpoints like:\n"
                         "- GET /v1/introspection\n"
                         "- GET /v1/introspection/traces?limit=...\n"

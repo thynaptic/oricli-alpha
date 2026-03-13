@@ -5,7 +5,7 @@ Test Generation Reasoning Module
 Generate tests from code understanding through reasoning. Identifies test cases,
 generates edge case tests, property-based tests, and analyzes test coverage.
 
-This module is part of Oricli-Alpha's Python LLM capabilities, enabling
+This module is part of OricliAlpha's Python LLM capabilities, enabling
 intelligent test generation from code understanding.
 """
 

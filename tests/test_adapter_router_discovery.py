@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from oricli_core.brain.registry import ModuleRegistry
-from oricli_core.client import Oricli-AlphaClient
+from oricli_core.client import OricliAlphaClient
 
 def test_discovery():
     """Verify that the adapter_router is discovered and registered."""
@@ -60,10 +60,10 @@ def test_instantiation():
         sys.exit(1)
 
 def test_client_dispatch():
-    """Verify that basic operations can be dispatched via Oricli-AlphaClient."""
+    """Verify that basic operations can be dispatched via OricliAlphaClient."""
     print("\nTesting client dispatch...")
     
-    client = Oricli-AlphaClient()
+    client = OricliAlphaClient()
     
     try:
         # Access module via proxy

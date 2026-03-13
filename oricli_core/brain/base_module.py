@@ -39,7 +39,7 @@ class BaseBrainModule(ABC):
     
     All brain modules must inherit from this class and implement the required
     abstract methods. Modules are automatically discovered by the ModuleRegistry
-    and made available via the Oricli-AlphaClient.
+    and made available via the OricliAlphaClient.
     """
 
     @property

@@ -1,6 +1,6 @@
 from __future__ import annotations
 """
-Personality Quirks Service - Manages Oricli-Alpha's personality quirks, signature phrases, and response style
+Personality Quirks Service - Manages OricliAlpha's personality quirks, signature phrases, and response style
 Converted from Swift PersonalityQuirksService.swift
 
 DEPRECATED: This module is deprecated. Use universal_voice_engine instead.
@@ -23,7 +23,7 @@ except ImportError:
 
 
 class PersonalityQuirksServiceModule(BaseBrainModule):
-    """Manages Oricli-Alpha's personality quirks, signature phrases, and response style"""
+    """Manages OricliAlpha's personality quirks, signature phrases, and response style"""
 
     def __init__(self):
         super().__init__()
@@ -41,7 +41,7 @@ class PersonalityQuirksServiceModule(BaseBrainModule):
         return ModuleMetadata(
             name="personality_quirks_service",
             version="1.0.0",
-            description="[DEPRECATED] Manages Oricli-Alpha's personality quirks, signature phrases, and response style. Use universal_voice_engine instead.",
+            description="[DEPRECATED] Manages OricliAlpha's personality quirks, signature phrases, and response style. Use universal_voice_engine instead.",
             operations=[
                 "apply_quirks",
                 "adapt_personality",

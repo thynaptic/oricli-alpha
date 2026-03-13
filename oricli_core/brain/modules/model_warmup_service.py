@@ -1,6 +1,6 @@
 from __future__ import annotations
 """
-Model Warmup Service - Service to warm up all AI models before Oricli-Alpha becomes available
+Model Warmup Service - Service to warm up all AI models before OricliAlpha becomes available
 Converted from Swift ModelWarmupService.swift
 """
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class ModelWarmupServiceModule(BaseBrainModule):
-    """Service to warm up all AI models before Oricli-Alpha becomes available"""
+    """Service to warm up all AI models before OricliAlpha becomes available"""
 
     def __init__(self):
         super().__init__()
@@ -36,7 +36,7 @@ class ModelWarmupServiceModule(BaseBrainModule):
         return ModuleMetadata(
             name="model_warmup_service",
             version="1.0.0",
-            description="Service to warm up all AI models before Oricli-Alpha becomes available",
+            description="Service to warm up all AI models before OricliAlpha becomes available",
             operations=[
                 "warmup_models",
                 "preload_models",

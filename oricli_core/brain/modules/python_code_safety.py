@@ -6,7 +6,7 @@ Runtime safety analysis, resource leak detection, exception handling analysis,
 thread safety analysis, memory safety checks, error handling best practices,
 and safe code patterns.
 
-This module is part of Oricli-Alpha's Python LLM Phase 4 capabilities, providing
+This module is part of OricliAlpha's Python LLM Phase 4 capabilities, providing
 comprehensive code safety analysis to prevent runtime errors and resource issues.
 """
 

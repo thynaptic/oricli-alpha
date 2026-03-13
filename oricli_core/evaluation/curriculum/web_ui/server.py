@@ -30,7 +30,7 @@ def create_app() -> Any:
     if not FASTAPI_AVAILABLE:
         raise ImportError("fastapi and uvicorn are required. Install with: pip install fastapi uvicorn")
     
-    app = FastAPI(title="Oricli-Alpha Curriculum Testing Framework")
+    app = FastAPI(title="OricliAlpha Curriculum Testing Framework")
     
     # CORS
     app.add_middleware(

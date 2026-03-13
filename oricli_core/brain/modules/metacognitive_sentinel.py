@@ -17,7 +17,7 @@ from oricli_core.exceptions import InvalidParameterError
 logger = logging.getLogger(__name__)
 
 class MetacognitiveSentinelModule(BaseBrainModule):
-    """Monitors and regulates Oricli-Alpha's cognitive state."""
+    """Monitors and regulates OricliAlpha's cognitive state."""
 
     def __init__(self) -> None:
         super().__init__()

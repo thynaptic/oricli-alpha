@@ -70,7 +70,7 @@ class SpeculatorModule(BaseBrainModule):
         prediction_prompt = f"""
         CONTEXT:
         User: {last_input}
-        Oricli-Alpha: {last_output}
+        OricliAlpha: {last_output}
         
         TASK: Predict the 2 most likely follow-up questions or requests the user might have.
         Output exactly 2 questions, one per line. No other text.

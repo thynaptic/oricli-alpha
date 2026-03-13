@@ -6,7 +6,7 @@ Persistent storage and retrieval of Python code patterns, project structures,
 coding styles, and code idioms. Enables learning from codebases and
 maintaining persistent code knowledge across sessions.
 
-This module is part of Oricli-Alpha's Python LLM capabilities, providing
+This module is part of OricliAlpha's Python LLM capabilities, providing
 long-term memory for code patterns and project-specific knowledge.
 """
 

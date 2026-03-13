@@ -6,7 +6,7 @@ Deep semantic analysis of Python code beyond syntax parsing.
 Provides semantic understanding including variable flow, type inference,
 dependency analysis, call graphs, and scope understanding.
 
-This module is part of Oricli-Alpha's Python LLM capabilities, enabling
+This module is part of OricliAlpha's Python LLM capabilities, enabling
 deep understanding of Python code semantics as a foundation for
 reasoning and code generation.
 """

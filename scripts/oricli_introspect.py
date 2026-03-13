@@ -26,7 +26,7 @@ def _pretty(obj: Any) -> str:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Oricli-Alpha introspection CLI helper")
+    ap = argparse.ArgumentParser(description="OricliAlpha introspection CLI helper")
     ap.add_argument("--base", default=os.getenv("MAVAIA_API_BASE", "http://localhost:8000"))
 
     sub = ap.add_subparsers(dest="cmd", required=True)

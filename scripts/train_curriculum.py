@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Curriculum-style training runner for Oricli-Alpha.
+Curriculum-style training runner for OricliAlpha.
 Runs sequential training stages over a fixed list of datasets to build a baseline.
 """
 import argparse
@@ -535,7 +535,7 @@ def _interactive_select(results):
         print("[ERROR] No datasets found for the given query.")
         return None
 
-    print("\n[Oricli-Alpha-Discovery] Top dataset matches found:")
+    print("\n[OricliAlpha-Discovery] Top dataset matches found:")
     print("-" * 90)
     print(f"{'Idx':<5} {'Source':<15} {'Name':<40} {'Score':<10} {'Status'}")
     print("-" * 90)

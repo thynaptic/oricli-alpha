@@ -224,7 +224,7 @@ class CoreResponseServiceModule(BaseBrainModule):
             except Exception:
                 pass
         
-        # Default voice context (Oricli-Alpha base)
+        # Default voice context (OricliAlpha base)
         return {
             "base_personality": "oricli",
             "tone": "neutral",

@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from oricli_core.brain.registry import ModuleRegistry
-from oricli_core.client import Oricli-AlphaClient
+from oricli_core.client import OricliAlphaClient
 
 def test_intent_registration():
     """Verify that intents can be registered and listed."""

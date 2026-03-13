@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test asynchronous loop integration of RFAL in Oricli-AlphaClient.
+Test asynchronous loop integration of RFAL in OricliAlphaClient.
 """
 
 import sys
@@ -13,17 +13,17 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from oricli_core.client import Oricli-AlphaClient
+from oricli_core.client import OricliAlphaClient
 from oricli_core.types.models import ChatCompletionRequest, ChatMessage
 
 def test_async_rfal_trigger():
-    """Verify that Oricli-AlphaClient triggers RFAL in the background on user correction."""
-    print("Testing async RFAL trigger in Oricli-AlphaClient...")
+    """Verify that OricliAlphaClient triggers RFAL in the background on user correction."""
+    print("Testing async RFAL trigger in OricliAlphaClient...")
     
     # Enable heavy modules for registration
     os.environ["MAVAIA_ENABLE_HEAVY_MODULES"] = "true"
     
-    client = Oricli-AlphaClient()
+    client = OricliAlphaClient()
     
     # Mock the RFAL engine
     mock_rfal = MagicMock()
