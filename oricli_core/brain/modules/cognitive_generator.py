@@ -6121,6 +6121,18 @@ class CognitiveGeneratorModule(BaseBrainModule):
             # Step 1: Analyze input to determine if tools are needed
             tools_needed = self._determine_tools_needed(input_text, tools, context)
             
+            # Step 1.5: Autonomous Tool Creation (Singularity Loop)
+            # If the user asks to do something but no tool exists, create it
+            if not tools_needed and "tool" in input_text.lower() and ("create" in input_text.lower() or "need" in input_text.lower() or "missing" in input_text.lower()):
+                creation_result = self._autonomously_create_tool(input_text)
+                if creation_result.get("success"):
+                    return {
+                        "success": True,
+                        "text": f"I realized I didn't have a tool for this, so I wrote one myself. {creation_result.get('message', '')}",
+                        "tool_calls": [],
+                        "confidence": 0.9,
+                    }
+            
             if not tools_needed:
                 # No tools needed, generate normal response
                 response = self.generate_response(
@@ -6500,3 +6512,75 @@ class CognitiveGeneratorModule(BaseBrainModule):
         elif operation == "generate_response_with_tools":
             return "input" in params and "tools" in params
         return True
+
+    def _autonomously_create_tool(self, requirement_text: str) -> dict[str, Any]:
+        """
+        Autonomous Tool Creation (Singularity Loop)
+        Writes, tests, and registers a new tool dynamically.
+        """
+        try:
+            # 1. Generate Tool Code
+            prompt = f"""
+            You need a new Python tool to fulfill this requirement: "{requirement_text}"
+            
+            Write a complete, self-contained Python script that implements this as a BaseBrainModule.
+            The class MUST inherit from BaseBrainModule and implement `metadata` and `execute`.
+            
+            Output ONLY the raw Python code, no markdown blocks.
+            """
+            
+            code_res = self.generate_response(input_text=prompt)
+            tool_code = code_res.get("text", "").strip()
+            
+            # Clean up markdown if it leaked in
+            if tool_code.startswith("```python"):
+                tool_code = tool_code[9:]
+            if tool_code.endswith("```"):
+                tool_code = tool_code[:-3]
+            tool_code = tool_code.strip()
+            
+            if not tool_code:
+                return {"success": False, "error": "Failed to generate tool code."}
+                
+            # 2. Test in Sandbox
+            from oricli_core.brain.registry import ModuleRegistry
+            sandbox = ModuleRegistry.get_module("shell_sandbox_service")
+            if not sandbox:
+                return {"success": False, "error": "Sandbox not available for testing."}
+                
+            test_res = sandbox.execute("execute_python_script", {"script_content": tool_code, "timeout": 5})
+            
+            # If it compiles and runs (even if it does nothing without being called), we consider it syntactically valid
+            if not test_res.get("success") and "SyntaxError" in test_res.get("stderr", ""):
+                return {"success": False, "error": f"Generated code has syntax errors: {test_res.get('stderr')}"}
+                
+            # 3. Save and Register
+            import re
+            import uuid
+            from pathlib import Path
+            
+            # Extract class name to use as filename
+            class_match = re.search(r"class\s+([A-Za-z0-9_]+)\(BaseBrainModule\):", tool_code)
+            if not class_match:
+                return {"success": False, "error": "Could not find a valid BaseBrainModule class in generated code."}
+                
+            class_name = class_match.group(1)
+            # Convert CamelCase to snake_case for filename
+            file_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower() + f"_{uuid.uuid4().hex[:6]}.py"
+            
+            module_dir = Path(__file__).parent
+            file_path = module_dir / file_name
+            
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(tool_code)
+                
+            # 4. Trigger Discovery
+            ModuleRegistry.discover_modules()
+            
+            return {
+                "success": True, 
+                "message": f"Successfully created, tested, and registered new tool module: {file_name}"
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}

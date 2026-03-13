@@ -139,3 +139,84 @@ class ToolRegistry:
 # Global singleton instance
 tool_registry = ToolRegistry()
 
+
+    def sync_with_module_registry(self) -> None:
+        """
+        Dynamically discover and register tools from the ModuleRegistry.
+        This allows autonomously created tools (BaseBrainModules) to be used immediately.
+        """
+        try:
+            from oricli_core.brain.registry import ModuleRegistry
+            
+            # Ensure ModuleRegistry has discovered all modules
+            ModuleRegistry.discover_modules()
+            
+            # Find all modules that look like tools (have operations)
+            for module_name, module in ModuleRegistry._modules.items():
+                if module_name not in self.tools and hasattr(module, "metadata"):
+                    meta = module.metadata
+                    
+                    # Create a Tool definition
+                    tool_def = Tool(
+                        name=meta.name,
+                        description=meta.description,
+                        parameters={
+                            "type": "object",
+                            "properties": {
+                                "operation": {
+                                    "type": "string",
+                                    "description": f"The operation to perform. Supported: {', '.join(meta.operations)}",
+                                    "enum": meta.operations
+                                },
+                                "params": {
+                                    "type": "object",
+                                    "description": "Parameters for the operation"
+                                }
+                            },
+                            "required": ["operation"]
+                        }
+                    )
+                    
+                    # Create an executor that calls the module
+                    async def make_executor(mod):
+                        async def executor(args: Dict[str, Any]) -> ToolResult:
+                            try:
+                                op = args.get("operation")
+                                params = args.get("params", {})
+                                if not op:
+                                    return ToolResult.failure_result("Missing 'operation' parameter", mod.metadata.name)
+                                    
+                                res = mod.execute(op, params)
+                                return ToolResult.success_result(res)
+                            except Exception as e:
+                                return ToolResult.failure_result(str(e), mod.metadata.name)
+                        return executor
+                    
+                    # Register it
+                    # We need to run the async factory synchronously to get the coroutine function
+                    import asyncio
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # If we're already in an event loop, we can't use run_until_complete easily here
+                        # We'll just create the closure directly
+                        def create_closure(mod):
+                            async def executor(args: Dict[str, Any]) -> ToolResult:
+                                try:
+                                    op = args.get("operation")
+                                    params = args.get("params", {})
+                                    if not op:
+                                        return ToolResult.failure_result("Missing 'operation' parameter", mod.metadata.name)
+                                        
+                                    res = mod.execute(op, params)
+                                    return ToolResult.success_result(res)
+                                except Exception as e:
+                                    return ToolResult.failure_result(str(e), mod.metadata.name)
+                            return executor
+                            
+                        self.register_tool(tool_def, create_closure(module))
+                    else:
+                        self.register_tool(tool_def, loop.run_until_complete(make_executor(module)))
+                        
+        except Exception as e:
+            # Silently fail if we can't sync, to avoid breaking the registry
+            pass
