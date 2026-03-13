@@ -223,11 +223,24 @@ class WorldKnowledgeModule(BaseBrainModule):
 
         results = []
 
-        if query_type == "semantic" and self.embeddings:
-            # Use semantic search
-            semantic_result = self.semantic_search(query, limit)
-            results = semantic_result.get("results", [])
-        elif query_type == "graph":
+        if query_type == "semantic":
+            # Lazy load embeddings if needed
+            if self.embeddings is None and EMBEDDINGS_AVAILABLE:
+                try:
+                    from oricli_core.brain.registry import ModuleRegistry
+                    self.embeddings = ModuleRegistry.get_module("embeddings")
+                except Exception as e:
+                    logger.debug(f"Failed to load embeddings module: {e}")
+
+            if self.embeddings:
+                # Use semantic search
+                semantic_result = self.semantic_search(query, limit)
+                results = semantic_result.get("results", [])
+            else:
+                # Fallback to text search if embeddings not available
+                query_type = "text"
+                
+        if query_type == "graph":
             # Ensure graph is built
             if not self.knowledge_graph or self.knowledge_graph.number_of_nodes() == 0:
                 self.build_knowledge_graph()
@@ -354,6 +367,14 @@ class WorldKnowledgeModule(BaseBrainModule):
                                 source, target, relationship=relation
                             )
 
+        # Lazy load memory_graph if needed
+        if self.memory_graph is None and MEMORY_GRAPH_AVAILABLE:
+            try:
+                from oricli_core.brain.registry import ModuleRegistry
+                self.memory_graph = ModuleRegistry.get_module("memory_graph")
+            except Exception as e:
+                logger.debug(f"Failed to load memory_graph module: {e}")
+
         # Optionally add to memory graph
         if self.memory_graph:
             try:
@@ -432,8 +453,19 @@ class WorldKnowledgeModule(BaseBrainModule):
         self, query: str, limit: int = 10, threshold: float = 0.7
     ) -> Dict[str, Any]:
         """Semantic search over knowledge base using embeddings"""
-        if not self.embeddings or not query:
+        if not query:
             return {"results": [], "count": 0, "query": query}
+
+        # Lazy load embeddings if needed
+        if self.embeddings is None and EMBEDDINGS_AVAILABLE:
+            try:
+                from oricli_core.brain.registry import ModuleRegistry
+                self.embeddings = ModuleRegistry.get_module("embeddings")
+            except Exception as e:
+                logger.debug(f"Failed to load embeddings module: {e}")
+
+        if not self.embeddings:
+            return {"results": [], "count": 0, "query": query, "error": "Embeddings module not available"}
 
         try:
             # Get query embedding
