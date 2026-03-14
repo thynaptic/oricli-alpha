@@ -4,11 +4,14 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from oricli_core.brain.modules.agent_coordinator import AgentCoordinatorModule
 from oricli_core.brain.modules.multi_agent_orchestrator import MultiAgentOrchestratorModule
+from oricli_core.exceptions import InvalidParameterError
 from oricli_core.services.agent_profile_service import AgentProfileService
 
 
@@ -28,7 +31,14 @@ def _write_profile_config(path: Path) -> None:
     path.write_text(
         json.dumps(
             {
-                "task_type_profiles": {"research": "research_only"},
+                "task_type_profiles": {
+                    "research": "research_only",
+                    "debug": "debug_agent_profile",
+                    "benchmark": "benchmark_agent_profile",
+                    "security": "security_agent_profile",
+                    "memory": "memory_agent_profile",
+                    "orchestration": "orchestrator_agent_profile",
+                },
                 "profiles": [
                     {
                         "name": "research_only",
@@ -42,6 +52,104 @@ def _write_profile_config(path: Path) -> None:
                         "allowed_modules": ["answer_agent"],
                         "allowed_operations": {"answer_agent": ["format_answer"]},
                         "system_instructions": "Answer tersely and precisely.",
+                    },
+                    {
+                        "name": "debug_agent_profile",
+                        "allowed_modules": [
+                            "analysis_agent",
+                            "answer_agent",
+                            "search_agent",
+                            "query_agent",
+                            "research_agent",
+                            "adversarial_auditor",
+                        ],
+                        "allowed_operations": {
+                            "analysis_agent": ["analyze"],
+                            "answer_agent": ["format_answer"],
+                            "search_agent": ["search"],
+                            "query_agent": ["normalize_query", "extract_keywords", "analyze_query_intent", "process_query"],
+                            "research_agent": ["research"],
+                            "adversarial_auditor": ["fuzz_reasoning", "detect_manipulation"],
+                        },
+                        "system_instructions": "Debug by reproducing failures and isolating root causes.",
+                        "model_preference": "qwen2.5:7b",
+                    },
+                    {
+                        "name": "benchmark_agent_profile",
+                        "allowed_modules": [
+                            "analysis_agent",
+                            "answer_agent",
+                            "search_agent",
+                            "query_agent",
+                            "research_agent",
+                        ],
+                        "allowed_operations": {
+                            "analysis_agent": ["analyze"],
+                            "answer_agent": ["format_answer"],
+                            "search_agent": ["search"],
+                            "query_agent": ["extract_keywords", "analyze_query_intent", "process_query"],
+                            "research_agent": ["research"],
+                        },
+                        "system_instructions": "Interpret performance measurements carefully.",
+                        "model_preference": "qwen2.5:7b",
+                    },
+                    {
+                        "name": "security_agent_profile",
+                        "allowed_modules": [
+                            "analysis_agent",
+                            "answer_agent",
+                            "search_agent",
+                            "research_agent",
+                            "adversarial_auditor",
+                        ],
+                        "allowed_operations": {
+                            "analysis_agent": ["analyze"],
+                            "answer_agent": ["format_answer"],
+                            "search_agent": ["search"],
+                            "research_agent": ["research"],
+                            "adversarial_auditor": ["audit_plan", "fuzz_reasoning", "detect_manipulation"],
+                        },
+                        "blocked_operations": {"answer_agent": ["answer"]},
+                        "system_instructions": "Audit attack surface and propose mitigations.",
+                        "model_preference": "qwen2.5:7b",
+                    },
+                    {
+                        "name": "memory_agent_profile",
+                        "allowed_modules": [
+                            "retriever_agent",
+                            "query_agent",
+                            "search_agent",
+                            "research_agent",
+                            "answer_agent",
+                        ],
+                        "allowed_operations": {
+                            "retriever_agent": ["retrieve_documents", "retrieve_from_sources", "expand_query", "filter_candidates", "process_retrieval"],
+                            "query_agent": ["normalize_query", "extract_keywords", "formulate_search_queries", "analyze_query_intent", "process_query"],
+                            "search_agent": ["search"],
+                            "research_agent": ["research"],
+                            "answer_agent": ["format_answer"],
+                        },
+                        "system_instructions": "Preserve long-horizon retrieval context.",
+                        "model_preference": "qwen2.5:7b",
+                    },
+                    {
+                        "name": "orchestrator_agent_profile",
+                        "allowed_modules": [
+                            "agent_coordinator",
+                            "multi_agent_orchestrator",
+                            "research_agent",
+                            "analysis_agent",
+                            "answer_agent",
+                        ],
+                        "allowed_operations": {
+                            "agent_coordinator": ["execute_task", "execute_parallel", "spawn_agent", "get_result", "get_all_results"],
+                            "multi_agent_orchestrator": ["orchestrate_agents", "coordinate_agents", "execute_pipeline"],
+                            "research_agent": ["research"],
+                            "analysis_agent": ["analyze"],
+                            "answer_agent": ["format_answer"],
+                        },
+                        "system_instructions": "Decompose work and route it explicitly.",
+                        "model_preference": "qwen2.5:7b",
                     },
                 ],
             },
@@ -170,6 +278,78 @@ def test_agent_coordinator_blocks_disallowed_agent(tmp_path, monkeypatch):
 
     assert result["success"] is False
     assert "not permitted" in result["result"]["error"]
+
+
+def test_agent_profile_service_resolves_new_profile_types(tmp_path):
+    config_path = tmp_path / "agent_profiles.json"
+    _write_profile_config(config_path)
+
+    service = AgentProfileService(config_path=config_path)
+
+    assert service.resolve_profile(task_type="debug").name == "debug_agent_profile"
+    assert service.resolve_profile(task_type="benchmark").name == "benchmark_agent_profile"
+    assert service.resolve_profile(task_type="security").name == "security_agent_profile"
+    assert service.resolve_profile(task_type="memory").name == "memory_agent_profile"
+    assert service.resolve_profile(task_type="orchestration").name == "orchestrator_agent_profile"
+
+
+def test_agent_profile_service_blocks_explicit_security_operation(tmp_path):
+    config_path = tmp_path / "agent_profiles.json"
+    _write_profile_config(config_path)
+
+    service = AgentProfileService(config_path=config_path)
+    profile = service.get_profile("security_agent_profile")
+
+    with pytest.raises(InvalidParameterError):
+        service.ensure_allowed(profile, module_name="answer_agent", operation="answer")
+
+
+def test_agent_coordinator_spawn_agent_resolves_orchestrator_profile(tmp_path, monkeypatch):
+    config_path = tmp_path / "agent_profiles.json"
+    _write_profile_config(config_path)
+    service = AgentProfileService(config_path=config_path)
+
+    coordinator = AgentCoordinatorModule()
+
+    monkeypatch.setattr(
+        "oricli_core.brain.modules.agent_coordinator.get_agent_profile_service",
+        lambda: service,
+    )
+
+    result = coordinator.execute(
+        "spawn_agent",
+        {
+            "agent_type": "analysis",
+            "task_type": "orchestration",
+            "instructions": "Break the work into stages.",
+        },
+    )
+
+    assert result["success"] is True
+    assert result["agent_profile"] == "orchestrator_agent_profile"
+    assert result["model"] == "qwen2.5:7b"
+    assert result["instructions"].startswith("Decompose work and route it explicitly.")
+    assert "Break the work into stages." in result["instructions"]
+
+
+def test_repository_agent_profiles_include_expansion_wave():
+    service = AgentProfileService(config_path=REPO_ROOT / "oricli_core" / "data" / "agent_profiles.json")
+
+    expected_profiles = {
+        "debug_agent_profile",
+        "benchmark_agent_profile",
+        "security_agent_profile",
+        "memory_agent_profile",
+        "orchestrator_agent_profile",
+    }
+
+    names = {profile["name"] for profile in service.list_profiles()}
+    assert expected_profiles.issubset(names)
+    assert service.resolve_profile(task_type="debug").name == "debug_agent_profile"
+    assert service.resolve_profile(task_type="benchmark").name == "benchmark_agent_profile"
+    assert service.resolve_profile(task_type="security").name == "security_agent_profile"
+    assert service.resolve_profile(task_type="memory").name == "memory_agent_profile"
+    assert service.resolve_profile(task_type="orchestration").name == "orchestrator_agent_profile"
 
 
 def test_multi_agent_orchestrator_applies_stage_profile(tmp_path, monkeypatch):

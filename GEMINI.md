@@ -14,6 +14,8 @@ Oricli-Alpha is a **Sovereign, Local-First Agent OS**. It is designed to move be
 - **Subconscious Field**: A persistent vectorized buffer that influences tonal and logical generation via neural bias, bypassing simple RAG.
 - **Dynamic Graph Execution (DGE)**: Bespoke Directed Acyclic Graphs (DAGs) are architected for every query. Linear pipelines are the fallback, not the standard.
 - **Agent Profiles**: Task-specific agents are now governed by declarative profiles that constrain modules, operations, instruction overlays, and model preferences.
+- **Expanded Agent Profile Library**: Built-in execution profiles now cover `research`, `code`, `compliance`, `debug`, `benchmark`, `security`, `memory`, and `orchestrator` workloads.
+- **Declarative Task-Type Routing**: Task categories like `debug`, `benchmark`, `security`, `memory`, and `orchestration` can now resolve directly into the appropriate agent profile.
 - **Skill-Composed Swarm Nodes**: Swarm participants can now combine a hard `agent_profile` with a soft `skill_manager` overlay, producing structured instruction layers and traceable specialization metadata.
 - **Collaborative Swarm Intelligence**: Distributed nodes can now collaborate through shared blackboard state, peer review one another's outputs, route participants by utility-scored bids, and produce a consensus answer before final delivery.
 - **Metacognitive Sentience**: A self-regulation layer using DBT/CBT-inspired heuristics (Radical Acceptance) to detect and cure looping or hallucinations.

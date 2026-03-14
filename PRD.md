@@ -12,6 +12,7 @@ Founders, developers, and researchers building high-stakes, privacy-first cognit
 - **Ollama Utility Bridge**: Offloads general text generation and light reasoning to local Ollama models (e.g. qwen2.5:7b) to maximize system performance and focus internal compute on high-level orchestration.
 - **Dynamic Reasoning**: Replaces linear pipelines with Graph-based execution (DGE) tailored to each query.
 - **Profile-Governed Agents**: Task-specific agent profiles constrain which modules, operations, instructions, and model preferences an agent may use, enabling safer specialization without duplicating module logic.
+- **Expanded Built-In Profiles**: The profile library now includes dedicated `research`, `code`, `compliance`, `debug`, `benchmark`, `security`, `memory`, and `orchestrator` profiles for safer task-specific routing.
 - **Collaborative Swarm Layer**: Distributed node coordination now supports shared blackboard state, peer review, consensus scoring, bid-based participant routing, and final synthesis before an overall answer is returned.
 - **Persistent Swarm Sessions**: Collaborative runs persist message logs, shared state, contributions, reviews, and final consensus for resumable multi-round deliberation.
 - **Skill-Aware Swarm Nodes**: Swarm participants can now combine a hard `agent_profile` policy with a soft `skill_manager` overlay, yielding inspectable instruction layers and skill-aware bidding without relaxing execution constraints.
@@ -42,6 +43,18 @@ Oricli-Alpha exposes a set of **builtin skills** (role presets) that shape how s
 - **Technical Writer** (`technical_writer`): READMEs, API specs, tutorials, and migration docs with working examples.
 - **Data Scientist** (`data_scientist`): EDA, statistical modeling, visualizations, and data-driven recommendations.
 - **Offensive Security Researcher** (`offensive_security`): Attack-surface analysis, vuln discovery, and mitigation guidance.
+
+### 3.5 Agent Profile Library
+Oricli-Alpha also exposes a set of **builtin agent execution profiles** that govern which modules and operations are allowed for a task:
+- **Research** (`research_agent_profile`): Retrieval-grounded search, ranking, synthesis, and evidence verification.
+- **Code** (`code_agent_profile`): Implementation-focused engineering analysis and answer formatting.
+- **Compliance** (`compliance_agent_profile`): Control mapping and regulatory evidence analysis.
+- **Debug** (`debug_agent_profile`): Failure isolation, reproduction, and root-cause-oriented diagnosis.
+- **Benchmark** (`benchmark_agent_profile`): Performance measurement, timing interpretation, and regression analysis.
+- **Security** (`security_agent_profile`): Threat modeling, adversarial review, and hardening guidance.
+- **Memory** (`memory_agent_profile`): Retrieval, recall, and long-horizon context stitching.
+- **Orchestrator** (`orchestrator_agent_profile`): Delegation, routing, and multi-agent stage coordination.
+These profiles can also be resolved declaratively from task types such as `debug`, `benchmark`, `security`, `memory`, and `orchestration`, reducing ad hoc policy selection at runtime.
 
 ## 4. Technical Architecture Requirements
 

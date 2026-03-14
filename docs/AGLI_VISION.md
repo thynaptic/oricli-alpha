@@ -24,6 +24,8 @@ A true AGLI does not wait for a prompt.
 ### 3. "The Hive" (Distributed Swarm Intelligence)
 Scaling intelligence horizontally.
 *   **Profile-Governed Swarm:** Agents are no longer only conceptual roles. They can now run under explicit profiles that restrict modules, operations, instructions, and preferred models.
+*   **Expanded Profile Library:** Those profiles now cover research, code, compliance, debug, benchmark, security, memory, and orchestration workloads instead of a minimal first trio.
+*   **Declarative Profile Routing:** Task types can now resolve to the appropriate execution profile up front, tightening policy before a swarm or coordinator starts work.
 *   **Skill-Composed Nodes:** A swarm node can now pair that hard profile with a soft `skill_manager` overlay, giving it a specific mindset and instruction bundle while keeping policy enforcement intact.
 *   **Shared Blackboard Deliberation:** Swarm sessions persist `shared_state`, message logs, contributions, reviews, and final consensus, enabling resumable multi-round collaboration.
 *   **Adversarial Consensus:** If specialists disagree, the swarm can arbitrate via `weighted_vote`, `majority`, `merge_top`, or `verifier_wins`, moving the system closer to rigorous truth over single-model fluency.
@@ -43,6 +45,7 @@ LLMs are frozen in time; Oricli-Alpha experiences it.
 ## Current Capabilities (Summary)
 *   **Strategic Planner:** Long-horizon goal decomposition and track execution.
 *   **Agent Profiles:** Declarative agent specialization through allowlisted modules, operation constraints, injected instructions, and model preferences.
+*   **Profile Expansion Wave:** Dedicated built-in profiles now exist for debugging, benchmarking, security review, memory-centric retrieval, and orchestration/routing in addition to the original research/code/compliance set.
 *   **Collaborative Swarm Orchestration:** Multi-node deliberation with peer review, conflict reporting, persisted blackboard sessions, bid-based routing, and consensus synthesis.
 *   **Skill-Aware Specialization:** Swarm nodes can persist selected-skill metadata and inspectable instruction layers, making specialization traceable instead of burying it in prompt text.
 *   **Knowledge Graph Builder:** Entity/relationship extraction from text into queryable RDF-style graphs; integration with `world_knowledge`.
