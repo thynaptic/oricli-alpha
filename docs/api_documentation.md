@@ -235,20 +235,20 @@ When API key authentication is required but fails:
 **Example:**
 ```bash
 # Missing header
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "oricli-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
 # Returns 401 if authentication required
 
 # Invalid format
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
   -H "Authorization: invalid-format" \
   -H "Content-Type: application/json" \
   -d '{"model": "oricli-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
 # Returns 401: "Invalid authorization format. Expected 'Bearer <token>'"
 
 # Wrong API key
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
   -H "Authorization: Bearer wrong-key" \
   -H "Content-Type: application/json" \
   -d '{"model": "oricli-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
@@ -278,13 +278,13 @@ When request parameters are invalid:
 **Example:**
 ```bash
 # Missing messages
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "oricli-cognitive"}'
 # Returns 400: "messages is required"
 
 # Invalid temperature
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "oricli-cognitive",
@@ -317,7 +317,7 @@ When an internal error occurs:
 **Example:**
 ```bash
 # Module unavailable
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "oricli-cognitive",
@@ -339,7 +339,7 @@ from oricli_core.exceptions import (
 
 try:
     response = httpx.post(
-        "http://localhost:8000/v1/chat/completions",
+        "https://oricli.thynaptic.com/v1/chat/completions",
         json={"model": "oricli-cognitive", "messages": [...]},
         headers={"Authorization": "Bearer your-key"}
     )
@@ -357,7 +357,7 @@ except httpx.HTTPStatusError as e:
 **JavaScript:**
 ```javascript
 try {
-  const response = await fetch('http://localhost:8000/v1/chat/completions', {
+  const response = await fetch('https://oricli.thynaptic.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -419,7 +419,7 @@ import httpx
 
 # Chat completion
 response = httpx.post(
-    "http://localhost:8000/v1/chat/completions",
+    "https://oricli.thynaptic.com/v1/chat/completions",
     json={
         "model": "oricli-cognitive",
         "messages": [{"role": "user", "content": "Hello"}]
@@ -429,7 +429,7 @@ print(response.json())
 
 # Embeddings
 response = httpx.post(
-    "http://localhost:8000/v1/embeddings",
+    "https://oricli.thynaptic.com/v1/embeddings",
     json={
         "input": "text to embed",
         "model": "oricli-embeddings"
@@ -442,7 +442,7 @@ print(response.json())
 
 ```bash
 # Chat completion
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "oricli-cognitive",
@@ -450,7 +450,7 @@ curl -X POST http://localhost:8000/v1/chat/completions \
   }'
 
 # Embeddings
-curl -X POST http://localhost:8000/v1/embeddings \
+curl -X POST https://oricli.thynaptic.com/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{
     "input": "text to embed",
@@ -462,7 +462,7 @@ curl -X POST http://localhost:8000/v1/embeddings \
 
 ```javascript
 // Chat completion
-const response = await fetch('http://localhost:8000/v1/chat/completions', {
+const response = await fetch('https://oricli.thynaptic.com/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -488,7 +488,7 @@ API versioning is handled via the URL path (`/v1/`). Future versions will use `/
 ## OpenAPI Specification
 
 The API includes an OpenAPI specification available at:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-- OpenAPI JSON: `http://localhost:8000/openapi.json`
+- Swagger UI: `https://oricli.thynaptic.com/docs`
+- ReDoc: `https://oricli.thynaptic.com/redoc`
+- OpenAPI JSON: `https://oricli.thynaptic.com/openapi.json`
 

@@ -92,6 +92,27 @@ client.knowledge.extract(text="Oricli-Alpha was developed by Mavaia in 2025.")
 result = client.knowledge.query(entity_id="Oricli-Alpha", depth=2)
 ```
 
+### D. Knowledge Companion (Casual RAG)
+Discuss ingested knowledge in a natural, conversational way without providing strict directives.
+
+**Python:**
+```python
+# Use the 'knowledge_assistant' model for a conversational guide to your data
+response = client.chat.completions.create(
+    model="knowledge_assistant",
+    messages=[{"role": "user", "content": "Hey, what was in that research paper I uploaded?"}]
+)
+```
+
+**REST API:**
+`POST /v1/chat/completions`
+```json
+{
+  "model": "knowledge_assistant",
+  "messages": [{"role": "user", "content": "Tell me more about the project we discussed."}]
+}
+```
+
 ---
 
 ## 4. Ollama Parity & Compatibility
@@ -123,4 +144,4 @@ Oricli-Alpha provides **Ollama-style aliases** to enable instant integration wit
 1. **Ollama-First Strategy:** Oricli offloads prose to her internal Ollama instance (`frob/qwen3.5-instruct 4B`). When calling Oricli, rely on her for **orchestration, tool-use, and graph reasoning**, rather than just raw text generation.
 2. **Handle Timeouts:** Sovereign operations (like Swarm deliberation) can take time. Ensure your HTTP client has a timeout of at least **300s**.
 3. **Use the Subconscious:** All API calls influence Oricli's `subconscious_field`. Repeated interactions build a "tonal bias" that improves context-awareness over time.
-4. **Agent Profiles:** Use the `model` field in chat completions to specify a profile (e.g., `code_agent_profile`, `security_agent_profile`) to constrain the Hive's bidding process.
+4. **Agent Profiles:** Use the `model` field in chat completions to specify a profile (e.g., `code_agent_profile`, `security_agent_profile`, `knowledge_assistant`) to constrain the Hive's bidding process.
