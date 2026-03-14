@@ -4,7 +4,7 @@ OricliAlpha Core - Modular AI Core Package
 Provides unified interface for all OricliAlpha capabilities
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # Lazy imports to avoid import-time execution and expensive import chains
 # Import these classes only when actually needed

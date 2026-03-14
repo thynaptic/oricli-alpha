@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "oricli-alpha"
-version = "1.0.0"
+version = "1.1.0"
 description = "Oricli-Alpha - Modular AI Core Package with OpenAI-compatible API"
 readme = "README.md"
 requires-python = ">=3.8"
