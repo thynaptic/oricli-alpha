@@ -16,6 +16,8 @@ from oricli_core.exceptions import InvalidParameterError
 
 logger = logging.getLogger(__name__)
 
+from oricli_core.brain.swarm_bus import get_swarm_bus, SwarmMessage, MessageProtocol
+
 class MetacognitiveSentinelModule(BaseBrainModule):
     """Monitors and regulates OricliAlpha's cognitive state."""
 
@@ -24,22 +26,30 @@ class MetacognitiveSentinelModule(BaseBrainModule):
         self.volatility_threshold = 0.7
         self.repetition_threshold = 0.4
         self.subconscious_field = None
+        self.bus = get_swarm_bus()
+        self._monitored_sessions: Dict[str, List[str]] = {} # session_id -> message contents
 
     @property
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="metacognitive_sentinel",
-            version="1.0.0",
+            version="1.1.0",
             description="Cognitive executive function: monitors for loops/hallucinations and applies DBT/CBT recovery skills",
             operations=[
                 "assess_cognitive_health",
                 "apply_radical_acceptance",
                 "apply_wise_mind",
-                "trigger_reset"
+                "trigger_reset",
+                "start_monitoring"
             ],
-            dependencies=["subconscious_field"],
+            dependencies=["subconscious_field", "swarm_bus"],
             model_required=False,
         )
+
+    def initialize(self) -> bool:
+        # We don't start monitoring by default to avoid noise, 
+        # but it can be triggered by the Broker or Coordinator.
+        return True
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         if operation == "assess_cognitive_health":
@@ -50,8 +60,47 @@ class MetacognitiveSentinelModule(BaseBrainModule):
             return self._apply_wise_mind(params)
         elif operation == "trigger_reset":
             return self._trigger_reset(params)
+        elif operation == "start_monitoring":
+            self.bus.subscribe("tasks.result.*", self._on_bus_message)
+            return {"success": True, "status": "monitoring_bus"}
         else:
             raise InvalidParameterError(parameter="operation", value=operation, reason="Unsupported operation")
+
+    def _on_bus_message(self, message: SwarmMessage):
+        """Monitor Swarm Bus results for entropy."""
+        topic = message.topic
+        # Extract task_id/session_id from topic (e.g. tasks.result.<id>)
+        task_id = topic.split(".")[-1]
+        
+        if task_id not in self._monitored_sessions:
+            self._monitored_sessions[task_id] = []
+            
+        content = str(message.payload.get("result", ""))
+        self._monitored_sessions[task_id].append(content)
+        
+        # Periodically assess
+        if len(self._monitored_sessions[task_id]) >= 3:
+            full_trace = "\n\n".join(self._monitored_sessions[task_id])
+            health = self._assess_health({"trace": full_trace})
+            
+            if health.get("requires_intervention"):
+                logger.warning(f"[SENTINEL] Cognitive entropy detected in task {task_id}! Triggering intervention.")
+                self._trigger_intervention(task_id, health)
+
+    def _trigger_intervention(self, task_id: str, health: Dict[str, Any]):
+        """Publish intervention to the bus to reset agents."""
+        intervention_message = SwarmMessage(
+            protocol=MessageProtocol.ERROR, # Using ERROR protocol to stop current logic
+            topic=f"tasks.error.{task_id}",
+            sender_id="metacognitive_sentinel",
+            payload={
+                "task_id": task_id,
+                "error": f"METACOGNITIVE INTERVENTION: {health['cognitive_state']} detected. Reasoning path reset.",
+                "intervention_type": "radical_acceptance",
+                "instruction": "Your previous reasoning path was circular or high-entropy. Reset your context and approach the goal from a different angle."
+            }
+        )
+        self.bus.publish(intervention_message)
 
     def _assess_health(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """

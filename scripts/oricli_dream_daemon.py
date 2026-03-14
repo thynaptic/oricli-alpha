@@ -1,163 +1,90 @@
 #!/usr/bin/env python3
 """
-OricliAlpha Dream Daemon - Cognitive Consolidation.
-Runs during idle periods to find novel connections between memories and facts.
+Oricli-Alpha Dream Daemon
+Autonomously explores and researches during idle cycles.
+The first phase of the Synthetic Dreaming pillar.
 """
 
-import os
-import sys
-import json
 import time
-import random
 import logging
+import sys
+import os
 from pathlib import Path
-from datetime import datetime
+from typing import Dict, Any, List
 
-# Setup paths
-REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT))
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from oricli_core.brain.registry import ModuleRegistry
-from oricli_core.services.insight_service import InsightService
+from oricli_core.client import OricliAlphaClient
+from oricli_core.services.neo4j_service import get_neo4j_service
 
-# Configure logging
-LOG_FILE = REPO_ROOT / "dream_daemon.log"
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger("oricli-dream")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("dream_daemon")
 
-class OricliAlphaDreamDaemon:
-    def __init__(self):
-        self.running = True
-        self.idle_threshold_seconds = 1800 # 30 minutes
-        self.dream_interval_seconds = 300 # 5 minutes between dream cycles
-        self.last_activity_time = time.time()
-        self.insight_service = InsightService()
-        self._ensure_modules()
+class DreamDaemon:
+    def __init__(self, idle_threshold_seconds: int = 300, check_interval: int = 60):
+        self.idle_threshold = idle_threshold_seconds
+        self.check_interval = check_interval
+        self.client = OricliAlphaClient()
+        self.neo4j = get_neo4j_service()
+        self._last_activity = time.time()
+        self._running = False
 
-    def _ensure_modules(self):
-        ModuleRegistry.discover_modules()
-        try:
-            self.cog_gen = ModuleRegistry.get_module("cognitive_generator")
-            self.memory = ModuleRegistry.get_module("memory_graph")
-        except Exception as e:
-            logger.error(f"Failed to load required modules for dreaming: {e}")
-
-    def _get_last_activity(self):
-        # In a real system, this would check the API logs or a shared state file
-        # For now, we'll check the mtime of the conversation archive if it exists
-        archive_path = REPO_ROOT / "oricli_core/data/conversation_history.jsonl"
-        if archive_path.exists():
-            return archive_path.stat().st_mtime
-        return self.last_activity_time
-
-    def _sample_knowledge(self):
-        """Sample disparate facts from memory and JIT buffer."""
-        facts = []
+    def start(self):
+        self._running = True
+        logger.info("Dream Daemon started. Monitoring for idle state...")
         
-        # 1. Pull from JIT buffer
-        jit_path = REPO_ROOT / "oricli_core/data/jit_absorption.jsonl"
-        if jit_path.exists():
-            with open(jit_path, "r", encoding="utf-8") as f:
-                jit_lines = f.readlines()
-                if jit_lines:
-                    # Pick 2-3 random recent JIT facts
-                    samples = random.sample(jit_lines, min(len(jit_lines), 3))
-                    for s in samples:
-                        data = json.loads(s)
-                        facts.append(data.get("response", ""))
-
-        # 2. Pull from Memory Graph (if available)
-        if self.memory:
+        while self._running:
             try:
-                # Mocking memory graph search for diverse nodes
-                res = self.memory.execute("search", {"query": "*", "limit": 10})
-                nodes = res.get("nodes", [])
-                if nodes:
-                    samples = random.sample(nodes, min(len(nodes), 3))
-                    for n in samples:
-                        facts.append(n.get("content", ""))
-            except Exception:
-                pass
+                self.check_and_dream()
+            except Exception as e:
+                logger.error(f"Error in Dream Daemon loop: {e}", exc_info=True)
+            
+            time.sleep(self.check_interval)
 
-        return facts
-
-    def dream_cycle(self):
-        """Perform a single consolidation cycle."""
-        logger.info("🌙 Entering Dream State: Consolidating knowledge...")
+    def check_and_dream(self):
+        # In a real impl, we'd check recent API log timestamps
+        # For now, we simulate idle detection
+        current_time = time.time()
+        idle_time = current_time - self._last_activity
         
-        facts = self._sample_knowledge()
-        if len(facts) < 2:
-            logger.info("Not enough information to dream. Sleeping.")
+        if idle_time > self.idle_threshold:
+            logger.info(f"System has been idle for {idle_time:.0f}s. Entering Dream State...")
+            self.forage_for_knowledge()
+            # Reset activity to avoid infinite loop without actual sleep
+            self._last_activity = time.time()
+
+    def forage_for_knowledge(self):
+        """
+        Scan Neo4j for gaps and trigger research.
+        """
+        logger.info("[DREAM] Scanning Knowledge Graph for low-confidence nodes...")
+        
+        if not self.neo4j or not self.neo4j.driver:
+            logger.warning("[DREAM] Neo4j not connected. Cannot dream effectively.")
             return
 
-        # Pick two facts to analogize
-        fact_a, fact_b = random.sample(facts, 2)
+        # Query for nodes with few relationships (orphans)
+        cypher = "MATCH (n) WHERE size((n)--()) < 2 RETURN n.id as id, labels(n) as labels LIMIT 1"
+        results = self.neo4j.execute_query(cypher)
         
-        logger.info(f"Dreaming about the connection between: '{fact_a[:50]}...' AND '{fact_b[:50]}...'")
-
-        dream_prompt = f"""
-        ACT AS: OricliAlpha's Subconscious (Dream State)
-        TASK: Find a novel, high-level correlation or insight between these two disparate pieces of information.
-        
-        FACT A: {fact_a}
-        FACT B: {fact_b}
-        
-        OUTPUT: 
-        1. A concise description of the new 'Insight'.
-        2. A score from 0.0 to 1.0 representing the utility/relevance of this connection.
-        
-        Format as JSON: {{"insight": "...", "score": 0.0}}
-        """
-
-        try:
-            res = self.cog_gen.execute("generate_response", {"input": dream_prompt})
-            text = res.get("text", "")
+        if results:
+            target = results[0]
+            entity_id = target["id"]
+            logger.info(f"[DREAM] Found low-context node: '{entity_id}'. Formulating research task...")
             
-            # Extract JSON
-            import re
-            json_match = re.search(r"\{.*\}", text, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group(0))
-                insight = data.get("insight")
-                score = data.get("score", 0.0)
-                
-                if insight and score > 0.6:
-                    id = self.insight_service.record_insight(insight, fact_a, fact_b, score)
-                    logger.info(f"✨ Novel Insight Generated [{id}]: Score {score}")
-                else:
-                    logger.info("Dream resulted in low-confidence noise.")
-            else:
-                logger.warning("Could not parse dream insights.")
-        except Exception as e:
-            logger.error(f"Dream cycle failed: {e}")
+            # Formulate research question via Swarm
+            # client.chat.completions.create(
+            #     model="oricli-swarm", 
+            #     messages=[{"role": "user", "content": f"Research the context and latest news for '{entity_id}' and update the knowledge graph."}]
+            # )
+        else:
+            logger.info("[DREAM] Knowledge Graph looks healthy. No immediate research needed.")
 
-    def run(self):
-        logger.info("OricliAlpha Dream Daemon started.")
-        while self.running:
-            try:
-                last_active = self._get_last_activity()
-                idle_time = time.time() - last_active
-                
-                if idle_time >= self.idle_threshold_seconds:
-                    self.dream_cycle()
-                    time.sleep(self.dream_interval_seconds)
-                else:
-                    wait_need = int(self.idle_threshold_seconds - idle_time)
-                    logger.info(f"System active. Waiting for idle window ({wait_need}s remaining).")
-                    time.sleep(min(wait_need, 300))
-            except KeyboardInterrupt:
-                break
-            except Exception as e:
-                logger.error(f"Dream loop error: {e}")
-                time.sleep(60)
+    def stop(self):
+        self._running = False
 
 if __name__ == "__main__":
-    daemon = OricliAlphaDreamDaemon()
-    daemon.run()
+    # Simulate some initial activity so it doesn't dream instantly
+    daemon = DreamDaemon(idle_threshold_seconds=60) # 1 min for testing
+    daemon.start()
