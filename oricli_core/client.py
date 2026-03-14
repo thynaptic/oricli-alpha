@@ -2422,6 +2422,72 @@ class Rules:
         return True
 
 
+class Agents:
+    """External Agents API (Agent Factory)"""
+    
+    def __init__(self, client: "OricliAlphaClient"):
+        self._client = client
+    
+    def list(self) -> List[Dict[str, Any]]:
+        """List all loaded agent profiles"""
+        if self._client.base_url:
+            res = self._client._make_remote_request("GET", "/v1/agents")
+            return res.get("agents", [])
+            
+        from oricli_core.services.agent_profile_service import get_agent_profile_service
+        service = get_agent_profile_service()
+        return service.list_profiles()
+        
+    def get(self, agent_name: str) -> Dict[str, Any]:
+        """Get details of a specific agent profile"""
+        if self._client.base_url:
+            return self._client._make_remote_request("GET", f"/v1/agents/{agent_name}")
+            
+        from oricli_core.services.agent_profile_service import get_agent_profile_service
+        service = get_agent_profile_service()
+        profile = service.get_profile(agent_name)
+        if not profile:
+            raise ClientError(f"Agent profile '{agent_name}' not found")
+        return profile.to_dict()
+        
+    def create(self, agent_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new agent profile"""
+        if self._client.base_url:
+            return self._client._make_remote_request("POST", "/v1/agents", agent_data)
+            
+        from oricli_core.services.agent_profile_service import get_agent_profile_service
+        service = get_agent_profile_service()
+        try:
+            return service.create_profile(agent_data)
+        except Exception as e:
+            raise ClientError(str(e))
+        
+    def update(self, agent_name: str, agent_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing agent profile"""
+        payload = {"name": agent_name, **agent_data}
+        if self._client.base_url:
+            return self._client._make_remote_request("PUT", f"/v1/agents/{agent_name}", payload)
+            
+        from oricli_core.services.agent_profile_service import get_agent_profile_service
+        service = get_agent_profile_service()
+        try:
+            return service.update_profile(agent_name, payload)
+        except Exception as e:
+            raise ClientError(str(e))
+        
+    def delete(self, agent_name: str) -> bool:
+        """Delete an agent profile"""
+        if self._client.base_url:
+            res = self._client._make_remote_request("DELETE", f"/v1/agents/{agent_name}")
+            return res.get("success", False)
+            
+        from oricli_core.services.agent_profile_service import get_agent_profile_service
+        service = get_agent_profile_service()
+        if not service.delete_profile(agent_name):
+            raise ClientError(f"Agent profile '{agent_name}' not found or could not be deleted")
+        return True
+
+
 class AgentProfiles:
     """Client namespace for agent profile discovery and resolution."""
 
@@ -2528,6 +2594,7 @@ class OricliAlphaClient:
             self.knowledge = Knowledge(self)
             self.skills = Skills(self)
             self.rules = Rules(self)
+            self.agents = Agents(self)
             
             print("[DEBUG] OricliAlphaClient initialized successfully", file=sys.stderr)
             sys.stderr.flush()
@@ -2741,18 +2808,31 @@ class OricliAlphaClient:
             params["tools"] = expanded_tools
 
         use_swarm = request.model in ["oricli-swarm", "oricli-hive"]
+        
+        # If model name doesn't match standard prefixes, it might be a custom agent name
+        profile_name = None
+        if not use_swarm and request.model not in ["oricli-cognitive", "oricli-embeddings"]:
+            # Check if it's a known agent profile
+            from oricli_core.services.agent_profile_service import get_agent_profile_service
+            service = get_agent_profile_service()
+            if service.get_profile(request.model):
+                use_swarm = True
+                profile_name = request.model
+
         if use_swarm:
+            # Drop query onto the Swarm Bus via the broker
             broker = ModuleRegistry.get_module("swarm_broker")
             if broker:
-                # Delegate to swarm
-                swarm_res = broker.execute("delegate_task", {
+                # The task is to "generate_response" which multiple agents might bid on
+                result = broker.execute("delegate_task", {
                     "operation": "generate_response",
+                    "profile_name": profile_name,
                     "params": params,
-                    "timeout": 30.0,
-                    "bid_timeout": 1.0
+                    "timeout": 60.0,
+                    "bid_timeout": 2.0
                 })
-                if swarm_res.get("success") and swarm_res.get("result", {}).get("success"):
-                    result = swarm_res["result"]
+                if result.get("success") and result.get("result", {}).get("success"):
+                    result = result["result"]
                 else:
                     # Fallback to normal execution if swarm fails
                     operation_to_use = mapped_operation if mapped_operation else "generate_response"

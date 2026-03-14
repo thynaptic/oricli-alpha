@@ -21,6 +21,7 @@ class AgentProfile:
     system_instructions: str = ""
     model_preference: Optional[str] = None
     task_tags: list[str] = field(default_factory=list)
+    skill_overlays: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AgentProfile":
@@ -42,6 +43,7 @@ class AgentProfile:
             system_instructions=str(data.get("system_instructions", "")).strip(),
             model_preference=str(data.get("model_preference")).strip() if data.get("model_preference") else None,
             task_tags=[str(tag).strip() for tag in data.get("task_tags", []) if str(tag).strip()],
+            skill_overlays=[str(skill).strip() for skill in data.get("skill_overlays", []) if str(skill).strip()],
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -55,6 +57,7 @@ class AgentProfile:
             "system_instructions": self.system_instructions,
             "model_preference": self.model_preference,
             "task_tags": list(self.task_tags),
+            "skill_overlays": list(self.skill_overlays),
         }
 
 
@@ -63,37 +66,100 @@ class AgentProfileService:
 
     def __init__(self, config_path: Optional[Path] = None) -> None:
         self.config_path = config_path or (Path(__file__).resolve().parent.parent / "data" / "agent_profiles.json")
+        self.custom_config_path = self.config_path.parent / "custom_profiles.json"
         self._profiles: dict[str, AgentProfile] = {}
+        self._custom_profiles: dict[str, AgentProfile] = {}
         self._task_type_profiles: dict[str, str] = {}
         self._agent_type_profiles: dict[str, str] = {}
         self.reload()
 
     def reload(self) -> None:
-        if not self.config_path.exists():
-            self._profiles = {}
-            self._task_type_profiles = {}
-            self._agent_type_profiles = {}
-            return
-
-        with self.config_path.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
-
+        """Reload both built-in and custom profiles from disk."""
         self._profiles = {}
-        for raw_profile in data.get("profiles", []):
-            profile = AgentProfile.from_dict(raw_profile)
-            if profile.name:
-                self._profiles[profile.name] = profile
+        self._custom_profiles = {}
+        
+        # 1. Load Built-in Profiles
+        if self.config_path.exists():
+            with self.config_path.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
 
-        self._task_type_profiles = {
-            str(task_type).strip(): str(profile_name).strip()
-            for task_type, profile_name in data.get("task_type_profiles", {}).items()
-            if str(task_type).strip() and str(profile_name).strip()
+            for raw_profile in data.get("profiles", []):
+                profile = AgentProfile.from_dict(raw_profile)
+                if profile.name:
+                    self._profiles[profile.name] = profile
+
+            self._task_type_profiles = {
+                str(task_type).strip(): str(profile_name).strip()
+                for task_type, profile_name in data.get("task_type_profiles", {}).items()
+                if str(task_type).strip() and str(profile_name).strip()
+            }
+            self._agent_type_profiles = {
+                str(agent_type).strip(): str(profile_name).strip()
+                for agent_type, profile_name in data.get("agent_type_profiles", {}).items()
+                if str(agent_type).strip() and str(profile_name).strip()
+            }
+
+        # 2. Load Custom Profiles
+        if self.custom_config_path.exists():
+            try:
+                with self.custom_config_path.open("r", encoding="utf-8") as handle:
+                    custom_data = json.load(handle)
+                for raw_profile in custom_data.get("profiles", []):
+                    profile = AgentProfile.from_dict(raw_profile)
+                    if profile.name:
+                        self._custom_profiles[profile.name] = profile
+                        # Custom profiles can override built-in ones if names collide
+                        self._profiles[profile.name] = profile
+            except Exception as e:
+                logger.error(f"Failed to load custom profiles: {e}")
+
+    def _save_custom_profiles(self) -> None:
+        """Persist custom profiles to disk."""
+        data = {
+            "profiles": [p.to_dict() for p in self._custom_profiles.values()]
         }
-        self._agent_type_profiles = {
-            str(agent_type).strip(): str(profile_name).strip()
-            for agent_type, profile_name in data.get("agent_type_profiles", {}).items()
-            if str(agent_type).strip() and str(profile_name).strip()
-        }
+        try:
+            with self.custom_config_path.open("w", encoding="utf-8") as handle:
+                json.dump(data, handle, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save custom profiles: {e}")
+
+    def create_profile(self, profile_data: dict[str, Any]) -> dict[str, Any]:
+        """Create a new custom agent profile."""
+        profile = AgentProfile.from_dict(profile_data)
+        if not profile.name:
+            raise ValueError("Profile name is required")
+            
+        self._custom_profiles[profile.name] = profile
+        self._profiles[profile.name] = profile
+        self._save_custom_profiles()
+        return profile.to_dict()
+
+    def update_profile(self, name: str, profile_data: dict[str, Any]) -> dict[str, Any]:
+        """Update an existing custom agent profile."""
+        if name not in self._custom_profiles:
+            # Check if trying to override a built-in
+            if name not in self._profiles:
+                raise ValueError(f"Profile '{name}' not found")
+        
+        # Ensure name consistency
+        profile_data["name"] = name
+        profile = AgentProfile.from_dict(profile_data)
+        
+        self._custom_profiles[name] = profile
+        self._profiles[name] = profile
+        self._save_custom_profiles()
+        return profile.to_dict()
+
+    def delete_profile(self, name: str) -> bool:
+        """Delete a custom agent profile."""
+        if name in self._custom_profiles:
+            del self._custom_profiles[name]
+            self._save_custom_profiles()
+            # Reload to properly restore built-in if it was overridden
+            self.reload()
+            return True
+        return False
 
     def list_profiles(self) -> list[dict[str, Any]]:
         return [profile.to_dict() for profile in self._profiles.values()]

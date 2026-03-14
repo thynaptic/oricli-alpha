@@ -56,6 +56,7 @@ class SwarmBrokerModule(BaseBrainModule):
     def _delegate_task(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Broadcast CFP, collect bids, and award contract"""
         operation = params.get("operation")
+        profile_name = params.get("profile_name")
         task_params = params.get("params", {})
         timeout = params.get("timeout", 5.0)  # Total wait time for result
         bid_timeout = params.get("bid_timeout", 1.0)  # Time to wait for bids
@@ -69,6 +70,7 @@ class SwarmBrokerModule(BaseBrainModule):
         task_state = {
             "id": task_id,
             "operation": operation,
+            "profile_name": profile_name,
             "params": task_params,
             "bids": [],
             "status": "bidding",
@@ -85,11 +87,12 @@ class SwarmBrokerModule(BaseBrainModule):
             sender_id=self.broker_id,
             payload={
                 "task_id": task_id,
-                "operation": operation
+                "operation": operation,
+                "profile_name": profile_name
             }
         )
         self.bus.publish(cfp_message)
-        logger.debug(f"Broker published CFP for {operation} (Task: {task_id})")
+        logger.debug(f"Broker published CFP for {operation} (Profile: {profile_name}, Task: {task_id})")
 
         # 2. Wait for bids
         time.sleep(bid_timeout)
@@ -106,11 +109,15 @@ class SwarmBrokerModule(BaseBrainModule):
             # Pick highest confidence, break ties by lowest compute cost
             best_bid = sorted(bids, key=lambda b: (b["confidence"], -b["compute_cost"]), reverse=True)[0]
             winning_node = best_bid["sender_id"]
+            winning_overlays = best_bid.get("skill_overlays", [])
             
             task_state["status"] = "executing"
             task_state["winner"] = winning_node
 
         # 4. Award contract
+        # Inject skill overlays from bid into task params
+        task_params_with_skills = {**task_params, "_skill_overlays": winning_overlays}
+        
         accept_message = SwarmMessage(
             protocol=MessageProtocol.ACCEPT,
             topic=f"tasks.accept.{winning_node}",
@@ -119,7 +126,7 @@ class SwarmBrokerModule(BaseBrainModule):
             payload={
                 "task_id": task_id,
                 "operation": operation,
-                "params": task_params
+                "params": task_params_with_skills
             }
         )
         self.bus.publish(accept_message)
@@ -159,7 +166,8 @@ class SwarmBrokerModule(BaseBrainModule):
                     self._active_tasks[task_id]["bids"].append({
                         "sender_id": message.sender_id,
                         "confidence": payload.get("confidence", 0),
-                        "compute_cost": payload.get("compute_cost", 100)
+                        "compute_cost": payload.get("compute_cost", 100),
+                        "skill_overlays": payload.get("skill_overlays", [])
                     })
 
     def _on_result(self, message: SwarmMessage):

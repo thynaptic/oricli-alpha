@@ -618,3 +618,36 @@ class RuleListResponse(BaseModel):
     success: bool = Field(..., description="Whether operation succeeded")
     rules: List[RuleResponse] = Field(default_factory=list, description="List of rules")
 
+# Agent Profile Models
+
+class AgentCreateRequest(BaseModel):
+    """Request to create a new agent profile"""
+    name: str = Field(..., description="Name of the agent profile")
+    description: str = Field(default="", description="Description of the agent")
+    allowed_modules: List[str] = Field(default_factory=list, description="List of permitted modules")
+    blocked_modules: List[str] = Field(default_factory=list, description="List of explicitly forbidden modules")
+    skill_overlays: List[str] = Field(default_factory=list, description="List of skill names to adopt")
+    system_instructions: str = Field(default="", description="Base system instructions")
+    model_preference: Optional[str] = Field(default=None, description="Preferred model for this agent")
+    task_tags: List[str] = Field(default_factory=list, description="Tags for auto-resolution")
+
+class AgentUpdateRequest(AgentCreateRequest):
+    """Request to update an existing agent profile"""
+    pass
+
+class AgentResponse(BaseModel):
+    """Details of an agent profile"""
+    name: str = Field(..., description="Name of the agent profile")
+    description: str = Field(default="", description="Description of the agent")
+    allowed_modules: List[str] = Field(default_factory=list, description="List of permitted modules")
+    blocked_modules: List[str] = Field(default_factory=list, description="List of explicitly forbidden modules")
+    skill_overlays: List[str] = Field(default_factory=list, description="List of skill names to adopt")
+    system_instructions: str = Field(default="", description="Base system instructions")
+    model_preference: Optional[str] = Field(default=None, description="Preferred model for this agent")
+    task_tags: List[str] = Field(default_factory=list, description="Tags for auto-resolution")
+
+class AgentListResponse(BaseModel):
+    """List of all available agent profiles"""
+    success: bool = Field(..., description="Whether operation succeeded")
+    agents: List[AgentResponse] = Field(default_factory=list, description="List of agents")
+

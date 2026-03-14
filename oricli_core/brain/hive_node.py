@@ -21,6 +21,8 @@ class HiveNode:
     def __init__(self, module: BaseBrainModule):
         self.module = module
         self.bus = get_swarm_bus()
+        from oricli_core.services.agent_profile_service import get_agent_profile_service
+        self.profile_service = get_agent_profile_service()
         self.node_id = f"hive_node_{self.module.metadata.name}"
         self._active = False
         
@@ -52,13 +54,27 @@ class HiveNode:
 
         payload = message.payload
         operation = payload.get("operation")
+        profile_name = payload.get("profile_name")
         
         # Check if we can handle this operation
         if operation not in self.module.metadata.operations:
             return
 
+        # Profile-aware constraint checking
+        if profile_name:
+            try:
+                profile = self.profile_service.get_profile(profile_name)
+                if profile:
+                    # Use existing validation logic
+                    try:
+                        self.profile_service.ensure_allowed(profile, module_name=self.module.metadata.name, operation=operation)
+                    except Exception:
+                        # Module/Operation blocked by profile
+                        return
+            except Exception:
+                pass
+
         # Simple bidding logic: confidence based on module health/status, cost based on operation complexity
-        # In a more advanced version, this would be learned or use the dynamic skills framework.
         confidence = 0.95
         compute_cost = 10  # Arbitrary baseline
 
@@ -67,7 +83,8 @@ class HiveNode:
             "operation": operation,
             "confidence": confidence,
             "compute_cost": compute_cost,
-            "capabilities": self.module.metadata.operations
+            "capabilities": self.module.metadata.operations,
+            "skill_overlays": profile.skill_overlays if profile_name and 'profile' in locals() and profile else []
         }
 
         bid_message = SwarmMessage(
@@ -100,6 +117,29 @@ class HiveNode:
     def _execute_task(self, task_id: str, operation: str, params: Dict[str, Any], broker_id: str):
         """Execute the module operation and publish the result"""
         try:
+            # Adopt skill overlays if present in params (sent by broker from winning bid)
+            skill_overlays = params.pop("_skill_overlays", [])
+            if skill_overlays:
+                try:
+                    from oricli_core.brain.registry import ModuleRegistry
+                    skill_manager = ModuleRegistry.get_module("skill_manager")
+                    if skill_manager:
+                        mindsets = []
+                        instructions = []
+                        for skill_name in skill_overlays:
+                            res = skill_manager.execute("get_skill", {"skill_name": skill_name})
+                            if res.get("success"):
+                                skill = res["skill"]
+                                if skill.get("mindset"): mindsets.append(skill["mindset"])
+                                if skill.get("instructions"): instructions.append(skill["instructions"])
+                        
+                        if mindsets or instructions:
+                            # Inject into params for the module to use (e.g. cognitive_generator)
+                            params["_persona_extension"] = "\n\n".join(mindsets)
+                            params["_instruction_extension"] = "\n\n".join(instructions)
+                except Exception as e:
+                    logger.debug(f"Failed to apply skill overlays: {e}")
+
             logger.debug(f"{self.node_id} executing {operation} for task {task_id}")
             result = self.module.execute(operation, params)
             

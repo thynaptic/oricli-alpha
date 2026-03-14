@@ -86,6 +86,10 @@ from oricli_core.types.models import (
     RuleUpdateRequest,
     RuleResponse,
     RuleListResponse,
+    AgentCreateRequest,
+    AgentUpdateRequest,
+    AgentResponse,
+    AgentListResponse,
 )
 
 
@@ -893,6 +897,74 @@ def create_app(
         if not success:
             raise HTTPException(status_code=404, detail="Rule not found or could not be deleted")
         return {"success": True, "message": f"Rule '{rule_name}' deleted."}
+
+    # --- Agents API ---
+    @app.get("/v1/agents", response_model=AgentListResponse)
+    async def list_agents(authorization: Optional[str] = Header(None, alias="Authorization")):
+        """List all available agent profiles"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.services.agent_profile_service import get_agent_profile_service
+        service = get_agent_profile_service()
+        profiles = service.list_profiles()
+        return AgentListResponse(success=True, agents=[AgentResponse(**p) for p in profiles])
+
+    @app.get("/v1/agents/{agent_name}", response_model=AgentResponse)
+    async def get_agent(
+        agent_name: str,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Retrieve details of a specific agent profile"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.services.agent_profile_service import get_agent_profile_service
+        service = get_agent_profile_service()
+        profile = service.get_profile(agent_name)
+        if not profile:
+            raise HTTPException(status_code=404, detail="Agent profile not found")
+        return AgentResponse(**profile.to_dict())
+
+    @app.post("/v1/agents", response_model=AgentResponse)
+    async def create_agent(
+        request: AgentCreateRequest,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Create a new agent profile"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.services.agent_profile_service import get_agent_profile_service
+        service = get_agent_profile_service()
+        try:
+            profile = service.create_profile(request.dict())
+            return AgentResponse(**profile)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.put("/v1/agents/{agent_name}", response_model=AgentResponse)
+    async def update_agent(
+        agent_name: str,
+        request: AgentUpdateRequest,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Update an existing agent profile"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.services.agent_profile_service import get_agent_profile_service
+        service = get_agent_profile_service()
+        try:
+            profile = service.update_profile(agent_name, request.dict())
+            return AgentResponse(**profile)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+    @app.delete("/v1/agents/{agent_name}")
+    async def delete_agent(
+        agent_name: str,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Delete an agent profile"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.services.agent_profile_service import get_agent_profile_service
+        service = get_agent_profile_service()
+        if not service.delete_profile(agent_name):
+            raise HTTPException(status_code=404, detail="Agent profile not found or could not be deleted")
+        return {"success": True, "message": f"Agent profile '{agent_name}' deleted."}
 
     # --- Ollama-style API Aliases ---
 

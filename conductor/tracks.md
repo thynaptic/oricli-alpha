@@ -68,4 +68,4 @@ This file tracks all major tracks for the project. Each track has its own detail
   *Link: [./tracks/cluster_s3_sync_20260306/](./tracks/cluster_s3_sync_20260306/)*
 
 
----\n\n- [x] **Track: Fix persistent SSH 255 errors during pod stabilization in runpod_bridge.py (Regression/Unresolved).**\n  *Link: [./tracks/ssh_stability_20260302/](./tracks/ssh_stability_20260302/)*\n\n---\n\n- [x] **Track: Implement External Rules API.**\n  *Link: [./tracks/rules_api_20260314/](./tracks/rules_api_20260314/)*
+---\n\n- [x] **Track: Fix persistent SSH 255 errors during pod stabilization in runpod_bridge.py (Regression/Unresolved).**\n  *Link: [./tracks/ssh_stability_20260302/](./tracks/ssh_stability_20260302/)*\n\n---\n\n- [x] **Track: Implement External Rules API.**\n  *Link: [./tracks/rules_api_20260314/](./tracks/rules_api_20260314/)*\n\n---\n\n- [x] **Track: Implement External Agents API (Agent Factory).**\n  *Link: [./tracks/agents_api_20260314/](./tracks/agents_api_20260314/)*
