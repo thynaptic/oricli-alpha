@@ -9,11 +9,15 @@ Founders, developers, and researchers building high-stakes, privacy-first cognit
 ## 3. Core Functional Requirements
 
 ### 3.1 Cognitive Infrastructure
-- **Ollama Utility Bridge**: Offloads general text generation and light reasoning to local Ollama models (e.g. qwen2.5:7b) to maximize system performance and focus internal compute on high-level orchestration.
+- **Ollama Utility Bridge**: Offloads general text generation and light reasoning to local Ollama models (e.g. frob/qwen3.5-instruct 4B) to maximize system performance and focus internal compute on high-level orchestration.
 - **Dynamic Reasoning**: Replaces linear pipelines with Graph-based execution (DGE) tailored to each query.
 - **Profile-Governed Agents**: Task-specific agent profiles constrain which modules, operations, instructions, and model preferences an agent may use, enabling safer specialization without duplicating module logic.
-- **Expanded Built-In Profiles**: The profile library now includes dedicated `research`, `code`, `compliance`, `debug`, `benchmark`, `security`, `memory`, and `orchestrator` profiles for safer task-specific routing.
+- **Distributed "Hive" Swarm**: A decentralized multi-agent system where 269+ modules operate as independent micro-agents. Features a real-time Swarm Bus (Pub/Sub) and Contract Net Protocol (Broker/Bidding) for dynamic task allocation.
+- **Native Sovereign API**: A dedicated, remote-capable interface exposing Oricli's core OS functions (Goals, Swarms, Knowledge Graph) alongside OpenAI-compatible endpoints.
+- **Dual-Mode Client**: `OricliAlphaClient` supports both local module proxying and remote REST API orchestration via a `base_url`.
+- **Hybrid Memory Layer**: Uses Pandas for high-speed vectorized data processing and Neo4j for persistent, scalable relationship management across the knowledge graph.
 - **Collaborative Swarm Layer**: Distributed node coordination now supports shared blackboard state, peer review, consensus scoring, bid-based participant routing, and final synthesis before an overall answer is returned.
+
 - **Persistent Swarm Sessions**: Collaborative runs persist message logs, shared state, contributions, reviews, and final consensus for resumable multi-round deliberation.
 - **Skill-Aware Swarm Nodes**: Swarm participants can now combine a hard `agent_profile` policy with a soft `skill_manager` overlay, yielding inspectable instruction layers and skill-aware bidding without relaxing execution constraints.
 - **Neural Subconscious**: Maintains a vectorized influence field to ensure consistency and persistent bias without bloating prompt context.

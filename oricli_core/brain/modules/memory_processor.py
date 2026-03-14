@@ -526,35 +526,31 @@ class MemoryProcessor(BaseBrainModule):
         return df
 
     def _score_relevance_to_query(self, df: pd.DataFrame, query: str) -> pd.DataFrame:
-        """Score memories by relevance to query"""
+        """Score memories by relevance to query using vectorized Pandas operations"""
         df = df.copy()
-
         query_lower = query.lower()
-        scores = []
+        query_words = query_lower.split()
 
-        for _, row in df.iterrows():
-            score = 0.0
-            content = str(row.get("content", "")).lower()
+        # Vectorized content scoring
+        content_lower = df["content"].astype(str).str.lower()
+        
+        # Exact match (0.5)
+        df["relevance_score"] = np.where(content_lower.str.contains(query_lower, regex=False), 0.5, 0.0)
 
-            # Exact match
-            if query_lower in content:
-                score += 0.5
+        # Keyword matches (up to 0.3)
+        if query_words:
+            word_matches = sum(content_lower.str.contains(re.escape(word), regex=True) for word in query_words)
+            df["relevance_score"] += (word_matches / len(query_words)) * 0.3
 
-            # Keyword matches
-            query_words = query_lower.split()
-            matches = sum(1 for word in query_words if word in content)
-            score += (matches / len(query_words)) * 0.3 if query_words else 0
+        # Tag/Keyword matches (up to 0.2)
+        all_terms = (df["tags"] + df["keywords"]).apply(lambda x: [str(t).lower() for t in x])
+        if query_words:
+            def count_matches(terms_list):
+                return sum(1 for word in query_words if word in terms_list)
+            
+            term_matches = all_terms.apply(count_matches)
+            df["relevance_score"] += (term_matches / len(query_words)) * 0.2
 
-            # Tag/keyword matches
-            tags = row.get("tags", [])
-            keywords = row.get("keywords", [])
-            all_terms = [str(t).lower() for t in tags + keywords]
-            tag_matches = sum(1 for word in query_words if word in all_terms)
-            score += (tag_matches / len(query_words)) * 0.2 if query_words else 0
-
-            scores.append(score)
-
-        df["relevance_score"] = scores
         return df
 
     def _score_by_importance_recency(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -591,39 +587,38 @@ class MemoryProcessor(BaseBrainModule):
         return df
 
     def _generate_relationships(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
-        """Generate relationships between memories based on similarity"""
+        """Generate relationships between memories based on similarity using set intersections"""
         relationships = []
+        if df.empty:
+            return relationships
 
-        # Simple relationship: memories with shared keywords/tags
-        for i, row1 in df.iterrows():
-            id1 = row1.get("id", "")
-            tags1 = set(row1.get("tags", []))
-            keywords1 = set(row1.get("keywords", []))
+        # Pre-calculate sets for faster intersection
+        df["term_set"] = (df["tags"] + df["keywords"]).apply(set)
+        
+        records = df[["id", "term_set"]].to_dict("records")
+        num_records = len(records)
 
-            for j, row2 in df.iterrows():
-                if i >= j:  # Avoid duplicates
-                    continue
+        for i in range(num_records):
+            r1 = records[i]
+            id1 = r1["id"]
+            set1 = r1["term_set"]
+            if not set1:
+                continue
 
-                id2 = row2.get("id", "")
-                tags2 = set(row2.get("tags", []))
-                keywords2 = set(row2.get("keywords", []))
-
-                # Calculate similarity
-                shared_tags = len(tags1 & tags2)
-                shared_keywords = len(keywords1 & keywords2)
-
-                if shared_tags > 0 or shared_keywords > 0:
-                    strength = (shared_tags * 0.5 + shared_keywords * 0.3) / 10.0
-                    strength = min(1.0, strength)
-
-                    relationships.append(
-                        {
-                            "source": id1,
-                            "target": id2,
-                            "type": "related",
-                            "strength": float(strength),
-                        }
-                    )
+            for j in range(i + 1, num_records):
+                r2 = records[j]
+                set2 = r2["term_set"]
+                
+                # Intersection strength
+                intersection = set1 & set2
+                if intersection:
+                    strength = min(1.0, len(intersection) / 5.0)
+                    relationships.append({
+                        "source": id1,
+                        "target": r2["id"],
+                        "type": "related",
+                        "strength": float(strength),
+                    })
 
         return relationships
 

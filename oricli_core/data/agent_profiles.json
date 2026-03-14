@@ -46,7 +46,7 @@
         "verifier_agent": ["verify_facts", "check_citations", "validate_consistency", "assess_confidence", "process_verification"]
       },
       "system_instructions": "Prioritize retrieval quality, source traceability, and synthesis grounded in the returned evidence.",
-      "model_preference": "qwen2.5:7b",
+      "model_preference": "frob/qwen3.5-instruct",
       "task_tags": ["research", "search", "synthesis"]
     },
     {
@@ -71,7 +71,7 @@
         "research_agent": ["research"]
       },
       "system_instructions": "Stay implementation-focused, be explicit about constraints, and optimize for correct engineering actions over prose.",
-      "model_preference": "qwen2.5:7b",
+      "model_preference": "frob/qwen3.5-instruct",
       "task_tags": ["code", "engineering", "analysis"]
     },
     {
@@ -96,7 +96,7 @@
         "regulatory_compliance_auditor": ["audit_compliance", "audit_plan"]
       },
       "system_instructions": "Bias toward explicit control mapping, cited evidence, and clear distinction between compliant, partial, and missing coverage.",
-      "model_preference": "qwen2.5:7b",
+      "model_preference": "frob/qwen3.5-instruct",
       "task_tags": ["compliance", "policy", "audit"]
     },
     {
@@ -119,7 +119,7 @@
         "adversarial_auditor": ["fuzz_reasoning", "detect_manipulation"]
       },
       "system_instructions": "Bias toward reproduction steps, root-cause isolation, failed-assumption checks, and concrete next debugging actions over generic explanations.",
-      "model_preference": "qwen2.5:7b",
+      "model_preference": "frob/qwen3.5-instruct",
       "task_tags": ["debug", "diagnosis", "incident"]
     },
     {
@@ -140,7 +140,7 @@
         "research_agent": ["research"]
       },
       "system_instructions": "Focus on measurement fidelity, units, baselines, and regression interpretation. Be explicit about confidence and avoid overstating causality.",
-      "model_preference": "qwen2.5:7b",
+      "model_preference": "frob/qwen3.5-instruct",
       "task_tags": ["benchmark", "performance", "latency"]
     },
     {
@@ -164,7 +164,7 @@
         "answer_agent": ["answer"]
       },
       "system_instructions": "Prioritize attack surface, exploitability, privilege boundaries, and concrete mitigations. Separate verified findings from hypotheses.",
-      "model_preference": "qwen2.5:7b",
+      "model_preference": "frob/qwen3.5-instruct",
       "task_tags": ["security", "audit", "hardening"]
     },
     {
@@ -185,7 +185,7 @@
         "answer_agent": ["format_answer"]
       },
       "system_instructions": "Optimize for recall, context stitching, and preservation of temporal or source relationships across retrieved state.",
-      "model_preference": "qwen2.5:7b",
+      "model_preference": "frob/qwen3.5-instruct",
       "task_tags": ["memory", "recall", "retrieval"]
     },
     {
@@ -206,7 +206,7 @@
         "answer_agent": ["format_answer"]
       },
       "system_instructions": "Prefer explicit decomposition, dependency-aware routing, and structured handoffs between agents and stages.",
-      "model_preference": "qwen2.5:7b",
+      "model_preference": "frob/qwen3.5-instruct",
       "task_tags": ["orchestration", "routing", "delegation"]
     }
   ]

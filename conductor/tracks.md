@@ -31,7 +31,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---\n\n- [x] **Track: Implement Metacognitive Sentience Layer (Cognitive Self-Regulation).**
 
----\n\n- [ ] **Track: [VAULTED] Distributed "Swarm" Intelligence (The Hive).**
+---\n\n- [x] **Track: Distributed "Swarm" Intelligence (The Hive).**
   *Link: [./tracks/swarm_hive_20260306/](./tracks/swarm_hive_20260306/)*
 
 ---\n\n- [x] **Track: Implement Pre-Cog Cache (Predictive Speculation).**
@@ -57,7 +57,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 ---\n\n- [x] **Track: Implement Dynamic ToolBench Framework (Efficacy & Self-Correction).**
   *Link: [./tracks/tool_bench_20260306/](./tracks/tool_bench_20260306/)*
 
----\n\n- [x] **Track: Implement Just-In-Time (JIT) Knowledge Absorption (Autonomous Learning).**
+---\n\n- [ ] **Track: Implement Remote Client Capability (OricliAlphaClient).**\n  *Link: [./tracks/remote_client_20260314/](./tracks/remote_client_20260314/)*\n\n- [ ] **Track: Implement Hybrid Data Strategy (Pandas & Neo4j Migration).**\n  *Link: [./tracks/hybrid_data_strategy_20260314/](./tracks/hybrid_data_strategy_20260314/)*\n\n- [ ] **Track: Implement Text Generation Strategy Reform (Ollama-First).**\n  *Link: [./tracks/text_gen_reform_20260314/](./tracks/text_gen_reform_20260314/)*\n\n- [ ] **Track: Implement Oricli Native API (Sovereign Interface).**\n  *Link: [./tracks/oricli_api_native_20260314/](./tracks/oricli_api_native_20260314/)*\n\n- [x] **Track: Implement Just-In-Time (JIT) Knowledge Absorption (Autonomous Learning).**
   *Link: [./tracks/jit_absorption_20260306/](./tracks/jit_absorption_20260306/)*
 
 ---\n\n- [x] **Track: Implement Async Virtual Clustering (Alternative Orchestration).**

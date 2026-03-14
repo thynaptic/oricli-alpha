@@ -578,6 +578,7 @@ class TextGenerationEngineModule(BaseBrainModule):
         """
         Generate text using neural model as primary method.
         Strategic Pivot: Prioritize local Ollama provider for prose.
+        Implement robust retries and selective fallback.
         """
         self._ensure_modules_loaded()
         
@@ -585,27 +586,50 @@ class TextGenerationEngineModule(BaseBrainModule):
         voice_context = params.get("voice_context", {})
         max_length = params.get("max_length", 1024)
         temperature = params.get("temperature", 0.7)
+        
+        # New: Use explicit fallback parameter or check environment
+        use_local_fallback = params.get("use_local_fallback", False)
+        max_ollama_retries = params.get("max_ollama_retries", 2)
 
-        # 1. TRY OLLAMA FIRST
+        # 1. TRY OLLAMA FIRST (with retries)
         if self.ollama_provider:
-            try:
-                print(f"[DEBUG] TextGenerationEngine: Attempting generation via Ollama...")
-                res = self.ollama_provider.execute("generate", {
-                    "prompt": prompt,
-                    "max_tokens": max_length,
-                    "temperature": temperature
-                })
-                if res.get("success"):
-                    return {
-                        "success": True,
-                        "text": res.get("text", "").strip(),
-                        "method": "ollama",
-                        "confidence": 0.9,
-                    }
-            except Exception as e:
-                print(f"[DEBUG] TextGenerationEngine: Ollama attempt failed: {e}")
+            for attempt in range(max_ollama_retries + 1):
+                try:
+                    if attempt > 0:
+                        print(f"[DEBUG] TextGenerationEngine: Ollama retry {attempt}/{max_ollama_retries}...")
+                    else:
+                        print(f"[DEBUG] TextGenerationEngine: Attempting generation via Ollama...")
+                        
+                    res = self.ollama_provider.execute("generate", {
+                        "prompt": prompt,
+                        "max_tokens": max_length,
+                        "temperature": temperature
+                    })
+                    if res.get("success"):
+                        return {
+                            "success": True,
+                            "text": res.get("text", "").strip(),
+                            "method": "ollama",
+                            "confidence": 0.9,
+                        }
+                    else:
+                        print(f"[DEBUG] TextGenerationEngine: Ollama returned failure: {res.get('error')}")
+                except Exception as e:
+                    print(f"[DEBUG] TextGenerationEngine: Ollama attempt {attempt} failed: {e}")
+                
+                # Optional: backoff if not last attempt
+                if attempt < max_ollama_retries:
+                    import time
+                    time.sleep(1.0 * (attempt + 1))
 
-        # 2. FALLBACK TO INTERNAL NEURAL
+        # 2. SELECTIVE FALLBACK TO INTERNAL NEURAL
+        if not use_local_fallback:
+            return {
+                "success": False,
+                "error": "Ollama generation failed and local fallback is disabled or unavailable.",
+                "text": "",
+            }
+
         if not self.neural_text_generator:
             return {
                 "success": False,
@@ -624,10 +648,7 @@ class TextGenerationEngineModule(BaseBrainModule):
                     "voice_context": voice_context,
                 },
             )
-            print(f"[DEBUG] TextGenerationEngine: Result success: {result.get('success')}")
-            if not result.get("success"):
-                print(f"[DEBUG] TextGenerationEngine: Error: {result.get('error')}")
-
+            
             if result.get("success"):
                 generated_text = result.get("text", "")
                 
@@ -643,7 +664,7 @@ class TextGenerationEngineModule(BaseBrainModule):
                 return {
                     "success": True,
                     "text": generated_text.strip(),
-                    "method": "neural",
+                    "method": "neural_fallback",
                     "confidence": 0.8,
                 }
             else:
@@ -653,7 +674,7 @@ class TextGenerationEngineModule(BaseBrainModule):
                     "text": "",
                 }
         except Exception as e:
-            print(f"[DEBUG] TextGenerationEngine: Exception: {e}")
+            print(f"[DEBUG] TextGenerationEngine: Local fallback exception: {e}")
             return {
                 "success": False,
                 "error": f"Neural generation error: {str(e)}",

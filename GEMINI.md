@@ -10,15 +10,15 @@ Oricli-Alpha is a **Sovereign, Local-First Agent OS**. It is designed to move be
 - **Orchestration**: **Async Virtual Clustering**. We do NOT use native RunPod Cluster APIs (broken/unstable). Instead, we orchestrate multiple single pods in parallel, coordinated via an **S3 Hybrid Strategy** (Local NVMe for speed, S3 for persistent state).
 
 ## 3. Cognitive Architecture (The Thynaptic Way)
-- **Ollama Strategic Pivot**: We offload general text generation (prose) and light reasoning to local Ollama models, with `qwen2.5:7b` pinned as the primary local generation model. This frees up Oricli-Alpha's internal neural compute for orchestration, tool-use precision, and autonomous agency.
+- **Ollama Strategic Pivot**: We offload general text generation (prose) and light reasoning to local Ollama models, with `frob/qwen3.5-instruct 4B` pinned as the primary local generation model. This frees up Oricli-Alpha's internal neural compute for orchestration, tool-use precision, and autonomous agency.
+- **The Hive (Distributed Swarm Intelligence)**: Moving beyond static registries, Oricli-Alpha now operates as a decentralized swarm where 269+ modules are independent micro-agents. They communicate via a Pub/Sub Swarm Bus and use the Contract Net Protocol (Broker/Bidding) for dynamic, peer-to-peer task allocation.
+- **Native Sovereign API**: A dedicated REST interface exposing Goal management, Hive orchestration, and Knowledge Graph queries, supported by a dual-mode `OricliAlphaClient`.
+- **Hybrid Data Strategy**: Leveraging Pandas for high-speed vectorized processing and Neo4j for persistent, scalable relationship management.
 - **Subconscious Field**: A persistent vectorized buffer that influences tonal and logical generation via neural bias, bypassing simple RAG.
 - **Dynamic Graph Execution (DGE)**: Bespoke Directed Acyclic Graphs (DAGs) are architected for every query. Linear pipelines are the fallback, not the standard.
-- **Agent Profiles**: Task-specific agents are now governed by declarative profiles that constrain modules, operations, instruction overlays, and model preferences.
-- **Expanded Agent Profile Library**: Built-in execution profiles now cover `research`, `code`, `compliance`, `debug`, `benchmark`, `security`, `memory`, and `orchestrator` workloads.
-- **Declarative Task-Type Routing**: Task categories like `debug`, `benchmark`, `security`, `memory`, and `orchestration` can now resolve directly into the appropriate agent profile.
-- **Skill-Composed Swarm Nodes**: Swarm participants can now combine a hard `agent_profile` with a soft `skill_manager` overlay, producing structured instruction layers and traceable specialization metadata.
-- **Collaborative Swarm Intelligence**: Distributed nodes can now collaborate through shared blackboard state, peer review one another's outputs, route participants by utility-scored bids, and produce a consensus answer before final delivery.
+- **Collaborative Swarm Intelligence**: Distributed nodes collaborate through shared blackboard state, peer review one another's outputs, and produce a consensus answer.
 - **Metacognitive Sentience**: A self-regulation layer using DBT/CBT-inspired heuristics (Radical Acceptance) to detect and cure looping or hallucinations.
+
 - **Adversarial Sentinel**: A red-team auditor that attempts to "break" reasoning and security before a plan is executed.
 - **Sovereign Goals**: Persistence of will across sessions. Multi-day plans are stored, resumed, and executed autonomously.
 

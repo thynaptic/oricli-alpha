@@ -6,6 +6,7 @@ OricliAlpha Core Client - Unified interface for all OricliAlpha capabilities
 import time
 import uuid
 import threading
+import httpx
 from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
 
@@ -63,20 +64,22 @@ class BrainModuleProxy:
         module = ModuleRegistry.get_module(name)
         if module is None:
             raise ModuleNotFoundError(name)
-        return BrainModuleWrapper(module, name)
+        return BrainModuleWrapper(self._client, module, name)
 
 
 class BrainModuleWrapper:
     """Wrapper for brain module operations"""
     
-    def __init__(self, module: Any, module_name: str) -> None:
+    def __init__(self, client: "OricliAlphaClient", module: Any, module_name: str) -> None:
         """
         Initialize brain module wrapper
         
         Args:
+            client: OricliAlphaClient instance
             module: BaseBrainModule instance
             module_name: Name of the module
         """
+        self._client = client
         self._module = module
         self._module_name = module_name
     
@@ -100,6 +103,12 @@ class BrainModuleWrapper:
             Returns:
                 Operation result dictionary
             """
+            if self._client.base_url:
+                return self._client._make_remote_request(
+                    "POST", 
+                    f"/v1/modules/{self._module_name}/{operation}", 
+                    kwargs
+                )
             return self._module.execute(operation, kwargs)
         return execute_operation
 
@@ -2148,6 +2157,132 @@ class PythonLLM:
         })
 
 
+class Goals:
+    """Sovereign Goal management API"""
+    
+    def __init__(self, client: "OricliAlphaClient"):
+        self._client = client
+        if not self._client.base_url:
+            from oricli_core.services.goal_service import GoalService
+            self._service = GoalService()
+    
+    def create(self, goal: str, priority: int = 1, metadata: Optional[Dict[str, Any]] = None) -> str:
+        """Create a new sovereign goal"""
+        if self._client.base_url:
+            res = self._client._make_remote_request("POST", "/v1/goals", {
+                "goal": goal,
+                "priority": priority,
+                "metadata": metadata
+            })
+            return res.get("id")
+        return self._service.add_objective(goal, priority, metadata)
+    
+    def list(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List sovereign goals"""
+        if self._client.base_url:
+            res = self._client._make_remote_request("GET", "/v1/goals", params={"status": status})
+            return res.get("goals", [])
+        return self._service.list_objectives(status)
+    
+    def get_status(self, goal_id: str) -> Dict[str, Any]:
+        """Get detailed status of a sovereign goal"""
+        if self._client.base_url:
+            return self._client._make_remote_request("GET", f"/v1/goals/{goal_id}")
+            
+        objectives = self._service.list_objectives()
+        goal = next((obj for obj in objectives if obj["id"] == goal_id), None)
+        if not goal:
+            raise ClientError(f"Goal {goal_id} not found")
+        
+        return {
+            "goal": goal,
+            "plan_state": self._service.load_plan_state(goal_id)
+        }
+
+
+class Swarm:
+    """Hive Swarm deliberation API"""
+    
+    def __init__(self, client: "OricliAlphaClient"):
+        self._client = client
+        if not self._client.base_url:
+            from oricli_core.services.swarm_blackboard_service import get_swarm_blackboard_service
+            self._blackboard = get_swarm_blackboard_service()
+    
+    def run(self, query: str, max_rounds: int = 3, participants: Optional[List[str]] = None, consensus_policy: str = "weighted_vote") -> Dict[str, Any]:
+        """Trigger a collaborative swarm session"""
+        if self._client.base_url:
+            return self._client._make_remote_request("POST", "/v1/swarm/run", {
+                "query": query,
+                "max_rounds": max_rounds,
+                "participants": participants,
+                "consensus_policy": consensus_policy
+            })
+            
+        swarm_coordinator = ModuleRegistry.get_module("swarm_coordinator")
+        if not swarm_coordinator:
+            raise ModuleNotFoundError("swarm_coordinator")
+        
+        result = swarm_coordinator.execute("coordinate_task", {
+            "query": query,
+            "round_limit": max_rounds,
+            "participants": participants,
+            "consensus_policy": consensus_policy
+        })
+        
+        if not result.get("success"):
+            raise ModuleOperationError("swarm_coordinator", "coordinate_task", result.get("error", "Unknown error"))
+            
+        return result
+
+    def get_session(self, session_id: str) -> Dict[str, Any]:
+        """Get detailed swarm session state"""
+        if self._client.base_url:
+            return self._client._make_remote_request("GET", f"/v1/swarm/sessions/{session_id}")
+            
+        session = self._blackboard.load_session(session_id)
+        if not session:
+            raise ClientError(f"Swarm session {session_id} not found")
+        return session
+
+
+class Knowledge:
+    """Knowledge Graph API"""
+    
+    def __init__(self, client: "OricliAlphaClient"):
+        self._client = client
+    
+    def extract(self, text: str, domain: Optional[str] = None) -> Dict[str, Any]:
+        """Extract entities and relationships from text"""
+        if self._client.base_url:
+            return self._client._make_remote_request("POST", "/v1/knowledge/extract", {
+                "text": text,
+                "domain": domain
+            })
+            
+        module = ModuleRegistry.get_module("knowledge_graph_builder")
+        if not module:
+            raise ModuleNotFoundError("knowledge_graph_builder")
+        return module.execute("build_from_text", {"text": text, "domain": domain})
+    
+    def query(self, entity_id: Optional[str] = None, query_string: Optional[str] = None, depth: int = 1) -> Dict[str, Any]:
+        """Query the knowledge graph"""
+        if self._client.base_url:
+            return self._client._make_remote_request("POST", "/v1/knowledge/query", {
+                "entity_id": entity_id,
+                "query_string": query_string,
+                "depth": depth
+            })
+            
+        module = ModuleRegistry.get_module("knowledge_graph_builder")
+        if not module:
+            raise ModuleNotFoundError("knowledge_graph_builder")
+            
+        if entity_id:
+            return module.execute("query_graph", {"entity_id": entity_id, "depth": depth})
+        raise InvalidParameterError("entity_id", str(entity_id), "entity_id is required for query")
+
+
 class AgentProfiles:
     """Client namespace for agent profile discovery and resolution."""
 
@@ -2210,13 +2345,20 @@ class OricliAlphaClient:
         ```
     """
     
-    def __init__(self, modules_dir: Optional[Union[str, Path]] = None) -> None:
+    def __init__(
+        self,
+        modules_dir: Optional[Union[str, Path]] = None,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ) -> None:
         """
         Initialize OricliAlpha client
         
         Args:
             modules_dir: Optional path to brain_modules directory.
                         If not provided, uses default module discovery.
+            base_url: Optional base URL for remote API calls.
+            api_key: Optional API key for remote authentication.
         
         Note:
             Module discovery is deferred until first use to avoid blocking startup.
@@ -2225,6 +2367,10 @@ class OricliAlphaClient:
         try:
             print("[DEBUG] OricliAlphaClient.__init__ called", file=sys.stderr)
             sys.stderr.flush()
+            
+            self.base_url = base_url.rstrip("/") if base_url else None
+            self.api_key = api_key
+            self._http_client = httpx.Client(timeout=300.0) if self.base_url else None
             
             if modules_dir is not None:
                 ModuleRegistry.set_modules_dir(Path(modules_dir))
@@ -2238,6 +2384,9 @@ class OricliAlphaClient:
             self.brain = BrainModuleProxy(self)
             self.python = PythonLLM(self)
             self.agent_profiles = AgentProfiles(AgentProfileService())
+            self.goals = Goals(self)
+            self.swarm = Swarm(self)
+            self.knowledge = Knowledge(self)
             
             print("[DEBUG] OricliAlphaClient initialized successfully", file=sys.stderr)
             sys.stderr.flush()
@@ -2248,6 +2397,42 @@ class OricliAlphaClient:
             sys.stderr.flush()
             raise
             
+    def _make_remote_request(
+        self, 
+        method: str, 
+        path: str, 
+        data: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Make a request to the remote Oricli API"""
+        if not self._http_client or not self.base_url:
+            raise ClientError("Client is not configured for remote calls (base_url missing)")
+            
+        headers = {}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+            
+        url = f"{self.base_url}{path}"
+        try:
+            response = self._http_client.request(
+                method=method,
+                url=url,
+                json=data,
+                params=params,
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            error_detail = ""
+            try:
+                error_detail = e.response.json().get("detail", str(e))
+            except Exception:
+                error_detail = str(e)
+            raise ClientError(f"Remote API error: {error_detail}")
+        except Exception as e:
+            raise ClientError(f"Connection error: {str(e)}")
+
     def _process_rfal_async(self, **kwargs: Any) -> None:
         """Trigger RFAL processing in a background thread."""
         def run():
@@ -2302,20 +2487,13 @@ class OricliAlphaClient:
     ) -> ChatCompletionResponse:
         """
         Internal method to generate chat completion
-        
-        Args:
-            request: Chat completion request with messages and parameters
-        
-        Returns:
-            ChatCompletionResponse with generated response
-        
-        Raises:
-            ModuleNotFoundError: If cognitive_generator module is not available
-            ModuleOperationError: If generation fails or returns empty response
         """
+        if self.base_url:
+            res = self._make_remote_request("POST", "/v1/chat/completions", request.dict())
+            return ChatCompletionResponse(**res)
+
         # Get cognitive generator module with fallback support
         from oricli_core.brain.registry import ModuleRegistry
-        
         # Use get_module_or_fallback to handle degraded modules
         module_result = ModuleRegistry.get_module_or_fallback(
             "cognitive_generator",
@@ -2420,26 +2598,48 @@ class OricliAlphaClient:
         # Add tools if present
         if expanded_tools:
             params["tools"] = expanded_tools
-        
-        # Use mapped operation if available, otherwise use original
-        operation_to_use = mapped_operation if mapped_operation else "generate_response"
-        
-        # Adjust params for fallback modules if needed
-        if is_fallback and actual_module_name == "text_generation_engine":
-            # text_generation_engine might need different params
-            if operation_to_use == "generate_response" or operation_to_use == "generate_full_response":
-                operation_to_use = "generate_with_neural"
-                
-            input_val = params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else params.get("input", "")
-            fallback_params = {
-                "prompt": input_val,
-                "input": input_val,
-                "text": input_val,
-                "context": params.get("context", ""),
-            }
-            params = fallback_params
-        
-        result = cognitive_module.execute(operation_to_use, params)
+
+        use_swarm = request.model in ["oricli-swarm", "oricli-hive"]
+        if use_swarm:
+            broker = ModuleRegistry.get_module("swarm_broker")
+            if broker:
+                # Delegate to swarm
+                swarm_res = broker.execute("delegate_task", {
+                    "operation": "generate_response",
+                    "params": params,
+                    "timeout": 30.0,
+                    "bid_timeout": 1.0
+                })
+                if swarm_res.get("success") and swarm_res.get("result", {}).get("success"):
+                    result = swarm_res["result"]
+                else:
+                    # Fallback to normal execution if swarm fails
+                    operation_to_use = mapped_operation if mapped_operation else "generate_response"
+                    result = cognitive_module.execute(operation_to_use, params)
+            else:
+                operation_to_use = mapped_operation if mapped_operation else "generate_response"
+                result = cognitive_module.execute(operation_to_use, params)
+        else:
+            # Use mapped operation if available, otherwise use original
+            operation_to_use = mapped_operation if mapped_operation else "generate_response"
+            
+            # Adjust params for fallback modules if needed
+            if is_fallback and actual_module_name == "text_generation_engine":
+                # text_generation_engine might need different params
+                if operation_to_use == "generate_response" or operation_to_use == "generate_full_response":
+                    operation_to_use = "generate_with_neural"
+                    
+                input_val = params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else params.get("input", "")
+                fallback_params = {
+                    "prompt": input_val,
+                    "input": input_val,
+                    "text": input_val,
+                    "context": params.get("context", ""),
+                }
+                params = fallback_params
+            
+            result = cognitive_module.execute(operation_to_use, params)
+
         
         # Extract response - check multiple possible fields
         response_text = (
@@ -2631,19 +2831,15 @@ class OricliAlphaClient:
     ) -> EmbeddingResponse:
         """
         Internal method to generate embeddings
-        
-        Args:
-            request: Embedding request with input text(s) and model
-        
-        Returns:
-            EmbeddingResponse with embedding vectors
-        
-        Raises:
-            ModuleNotFoundError: If embeddings module is not available
-            ModuleOperationError: If embedding generation fails
         """
+        if self.base_url:
+            res = self._make_remote_request("POST", "/v1/embeddings", request.dict())
+            return EmbeddingResponse(**res)
+
         # Get embeddings module
+        from oricli_core.brain.registry import ModuleRegistry
         embeddings_module = ModuleRegistry.get_module("embeddings")
+
         if embeddings_module is None:
             raise ModuleNotFoundError("embeddings")
         

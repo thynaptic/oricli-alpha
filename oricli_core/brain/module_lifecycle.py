@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Dict, Optional, Callable, Any
 from dataclasses import dataclass
 from datetime import datetime
+from collections import defaultdict
 
 from oricli_core.brain.base_module import BaseBrainModule
 

@@ -10,7 +10,7 @@ WorkingDirectory=/home/mike/Oricli-Alpha
 Environment=PYTHONPATH=/home/mike/Oricli-Alpha
 Environment=MAVAIA_ENABLE_HEAVY_MODULES=true
 Environment=OLLAMA_URL=http://localhost:11434
-Environment=OLLAMA_MODEL=qwen2.5:7b
+Environment=OLLAMA_MODEL=frob/qwen3.5-instruct
 ExecStart=/home/mike/Oricli-Alpha/.venv/bin/python3 /home/mike/Oricli-Alpha/scripts/oricli_trainer_daemon.py
 Restart=always
 RestartSec=30

@@ -26,6 +26,7 @@ class ModuleRegistry:
 
     _modules: dict[str, Type[BaseBrainModule]] = {}
     _instances: dict[str, BaseBrainModule] = {}
+    _hive_nodes: dict[str, Any] = {}
     _metadata: dict[str, ModuleMetadata] = {}
     _discovered: bool = False  # Track if discovery has run
     _discovering: bool = False  # Track if discovery is in progress
@@ -471,6 +472,16 @@ class ModuleRegistry:
                     pass
                 
                 cls._instances[name] = instance
+                
+                # Wrap as a HiveNode
+                try:
+                    from oricli_core.brain.hive_node import HiveNode
+                    hive_node = HiveNode(instance)
+                    hive_node.start()
+                    cls._hive_nodes[name] = hive_node
+                except Exception as e:
+                    # Silently fail or log if bus is not ready
+                    logger.debug(f"Failed to start HiveNode for {name}: {e}")
             except Exception as e:
                 raise ModuleInitializationError(
                     name,

@@ -15,28 +15,22 @@ from oricli_core.exceptions import InvalidParameterError
 
 logger = logging.getLogger(__name__)
 
+from oricli_core.services.neo4j_service import get_neo4j_service
+
 # Optional imports - will fail gracefully if dependencies not available
 try:
-    from neo4j import GraphDatabase
     import networkx as nx
-
-    NEO4J_AVAILABLE = True
+    NETWORKX_AVAILABLE = True
 except ImportError:
-    NEO4J_AVAILABLE = False
-    # Fallback: use NetworkX only if available
-    try:
-        import networkx as nx
-
-        NETWORKX_AVAILABLE = True
-    except ImportError:
-        NETWORKX_AVAILABLE = False
+    NETWORKX_AVAILABLE = False
 
 
 class MemoryGraph(BaseBrainModule):
-    """Graph operations for memory relationships using Neo4j"""
+    """Graph operations for memory relationships using Neo4j with NetworkX fallback"""
 
     def __init__(self):
-        self.driver = None
+        super().__init__()
+        self.neo4j = None
         self.graph = None  # NetworkX fallback graph
         self.is_initialized = False
 
@@ -44,8 +38,8 @@ class MemoryGraph(BaseBrainModule):
     def metadata(self) -> ModuleMetadata:
         return ModuleMetadata(
             name="memory_graph",
-            version="1.0.0",
-            description="Graph operations for memory relationships: entity linking, multi-hop reasoning, traversal",
+            version="1.1.0",
+            description="Graph operations for memory relationships: Neo4j (Primary) + NetworkX (Fallback)",
             operations=[
                 "build_graph",
                 "recall_memories",
@@ -65,34 +59,25 @@ class MemoryGraph(BaseBrainModule):
         )
 
     def initialize(self) -> bool:
-        """Initialize Neo4j driver (in-memory)"""
+        """Initialize Neo4j service and NetworkX fallback"""
         try:
-            # Use NetworkX as primary (simpler for in-memory)
+            # Initialize Neo4j Service
+            self.neo4j = get_neo4j_service()
+            
+            # Initialize NetworkX as fallback/secondary
             if NETWORKX_AVAILABLE:
                 self.graph = nx.DiGraph()
-                self.is_initialized = True
-                return True
-            # Fallback to Neo4j if NetworkX not available but Neo4j is
-            elif NEO4J_AVAILABLE:
-                # For in-memory, use NetworkX-style graph
-                # Neo4j doesn't have pure in-memory mode without a server
-                # So we'll use a simple dict-based graph structure
-                self.graph = {}  # Simple dict-based graph
-                self.is_initialized = True
-                return True
             else:
-                # Even without graph libraries, use simple dict-based graph
-                # Module can still function with basic operations
                 self.graph = {}  # Simple dict-based graph
-                self.is_initialized = True
-                return True
+                
+            self.is_initialized = True
+            return True
         except Exception as e:
             logger.warning(
                 "MemoryGraph initialization failed; falling back to dict-based graph",
                 exc_info=True,
                 extra={"module_name": "memory_graph", "error_type": type(e).__name__},
             )
-            # Fallback: use simple dict even if everything fails
             self.graph = {}
             self.is_initialized = True
             return True
@@ -102,10 +87,13 @@ class MemoryGraph(BaseBrainModule):
 
         if not self.is_initialized:
             self.initialize()
+            
+        # Use Neo4j if available and connected
+        use_neo4j = self.neo4j and self.neo4j.driver is not None
 
         if operation == "build_graph":
             processed_memories = params.get("processed_memories", "{}")
-            return self.build_graph(processed_memories)
+            return self.build_graph(processed_memories, use_neo4j)
 
         elif operation == "find_relationships":
             memory_id = params.get("memory_id", "")
@@ -160,14 +148,26 @@ class MemoryGraph(BaseBrainModule):
                 reason="Unknown operation for memory_graph",
             )
 
-    def recall_memories(self, query: str, limit: int = 5) -> Dict[str, Any]:
+    def recall_memories(self, query: str, limit: int = 5, use_neo4j: bool = False) -> Dict[str, Any]:
         """
-        Recall memories relevant to a query from the in-memory graph.
-
-        This is a lightweight heuristic retrieval used by other modules (e.g., MCTS).
+        Recall memories relevant to a query from Neo4j or in-memory graph.
         """
         if not isinstance(query, str) or not query.strip():
             return {"success": True, "memories": []}
+            
+        if use_neo4j and self.neo4j:
+            # Cypher-based full-text or keyword search
+            # Requires a full-text index on Memory(content)
+            cypher = (
+                "MATCH (n:Memory) "
+                "WHERE n.content CONTAINS $query OR n.summary CONTAINS $query "
+                "RETURN n "
+                "LIMIT $limit"
+            )
+            records = self.neo4j.execute_query(cypher, {"query": query, "limit": limit})
+            memories = [dict(r["n"]) for r in records if "n" in r]
+            return {"success": True, "memories": memories}
+
         try:
             limit_i = int(limit)
         except Exception as e:
@@ -179,7 +179,7 @@ class MemoryGraph(BaseBrainModule):
         if not tokens:
             return {"success": True, "memories": []}
 
-        # Gather candidate nodes
+        # Gather candidate nodes from fallback
         candidates: list[dict[str, Any]] = []
         if NETWORKX_AVAILABLE and isinstance(self.graph, nx.DiGraph):
             for node_id, data in self.graph.nodes(data=True):
@@ -204,7 +204,7 @@ class MemoryGraph(BaseBrainModule):
         memories = [{k: v for k, v in c.items() if k != "_score"} for c in candidates[:limit_i]]
         return {"success": True, "memories": memories}
 
-    def build_graph(self, processed_memories: str) -> Dict[str, Any]:
+    def build_graph(self, processed_memories: str, use_neo4j: bool = False) -> Dict[str, Any]:
         """Build graph from processed memories"""
         try:
             if not self.is_initialized:
@@ -219,7 +219,18 @@ class MemoryGraph(BaseBrainModule):
             nodes = data.get("nodes", [])
             relationships = data.get("relationships", [])
 
-            # Clear existing graph
+            if use_neo4j and self.neo4j:
+                for node in nodes:
+                    self.neo4j.add_node("Memory", node)
+                for rel in relationships:
+                    self.neo4j.add_relationship(
+                        rel.get("source"), 
+                        rel.get("target"), 
+                        rel.get("type", "RELATED_TO"),
+                        {"strength": rel.get("strength", 1.0)}
+                    )
+
+            # Fallback to local graph
             if self.graph:
                 if NETWORKX_AVAILABLE and isinstance(self.graph, nx.DiGraph):
                     self.graph.clear()
@@ -231,7 +242,7 @@ class MemoryGraph(BaseBrainModule):
                 else:
                     self.graph = {}
 
-            # Add nodes (memories)
+            # Add nodes (memories) to fallback
             import time
             for node in nodes:
                 node_id = node.get("id", "")
@@ -244,7 +255,7 @@ class MemoryGraph(BaseBrainModule):
                     elif isinstance(self.graph, dict):
                         self.graph[node_id] = node_data
 
-            # Add relationships (edges)
+            # Add relationships (edges) to fallback
             for rel in relationships:
                 source = rel.get("source", "")
                 target = rel.get("target", "")

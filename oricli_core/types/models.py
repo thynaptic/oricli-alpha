@@ -471,3 +471,90 @@ class PythonTestGenerationResponse(BaseModel):
     test_cases: Optional[List[Dict[str, Any]]] = Field(default=None, description="Identified test cases")
     error: Optional[str] = Field(default=None, description="Error message if failed")
 
+
+# Sovereign Goal Models
+
+class GoalCreateRequest(BaseModel):
+    """Request to create a new sovereign goal"""
+    goal: str = Field(..., description="High-level objective description")
+    priority: int = Field(default=1, ge=1, le=5, description="Priority level (1-5)")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional goal metadata")
+
+
+class GoalResponse(BaseModel):
+    """Sovereign goal information"""
+    id: str = Field(..., description="Goal unique identifier")
+    goal: str = Field(..., description="Objective description")
+    priority: int = Field(..., description="Priority level")
+    status: str = Field(..., description="Current status: pending, active, completed, failed, paused")
+    progress: float = Field(..., description="Progress percentage (0.0-100.0)")
+    created_at: str = Field(..., description="Creation timestamp")
+    updated_at: str = Field(..., description="Last update timestamp")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Metadata")
+
+
+class GoalListResponse(BaseModel):
+    """List of sovereign goals"""
+    goals: List[GoalResponse] = Field(..., description="List of goals")
+    count: int = Field(..., description="Total number of goals")
+
+
+class GoalStatusResponse(BaseModel):
+    """Detailed status of a sovereign goal"""
+    goal: GoalResponse = Field(..., description="Goal information")
+    plan_state: Optional[Dict[str, Any]] = Field(default=None, description="Detailed execution plan state")
+
+
+# Hive Swarm Models
+
+class SwarmRunRequest(BaseModel):
+    """Request to trigger a collaborative swarm session"""
+    query: str = Field(..., description="The problem or query to solve via swarm deliberation")
+    max_rounds: int = Field(default=3, ge=1, le=10, description="Maximum number of deliberation rounds")
+    participants: Optional[List[str]] = Field(default=None, description="List of participant profiles to include")
+    consensus_policy: str = Field(default="weighted_vote", description="Policy for reaching consensus: weighted_vote, majority, verifier_wins, merge_top")
+
+
+class SwarmSessionResponse(BaseModel):
+    """Swarm session information"""
+    session_id: str = Field(..., description="Session identifier")
+    query: str = Field(..., description="Original query")
+    status: str = Field(..., description="Current status: active, completed, failed")
+    participants: List[Dict[str, Any]] = Field(..., description="List of participants")
+    created_at: str = Field(..., description="Creation timestamp")
+    updated_at: str = Field(..., description="Last update timestamp")
+
+
+class SwarmSessionDetailResponse(SwarmSessionResponse):
+    """Detailed swarm session information with blackboard state"""
+    shared_state: Dict[str, Any] = Field(..., description="Shared blackboard state")
+    message_log: List[Dict[str, Any]] = Field(..., description="Full message log of deliberation")
+    contributions: List[Dict[str, Any]] = Field(..., description="Agent contributions")
+    reviews: List[Dict[str, Any]] = Field(..., description="Agent peer reviews")
+    rounds: List[Dict[str, Any]] = Field(..., description="Round-by-round state")
+    final_consensus: Optional[Dict[str, Any]] = Field(default=None, description="Final synthesized answer")
+
+
+# Knowledge Graph Models
+
+class KnowledgeExtractRequest(BaseModel):
+    """Request to extract entities and relationships from text"""
+    text: str = Field(..., description="Unstructured text to process")
+    domain: Optional[str] = Field(default=None, description="Optional domain context for extraction")
+
+
+class KnowledgeQueryRequest(BaseModel):
+    """Request to query the knowledge graph"""
+    entity_id: Optional[str] = Field(default=None, description="Entity to query")
+    query_string: Optional[str] = Field(default=None, description="Natural language or structured query")
+    depth: int = Field(default=1, ge=1, le=5, description="Traversal depth")
+
+
+class KnowledgeResponse(BaseModel):
+    """Knowledge graph query result"""
+    success: bool = Field(..., description="Whether operation succeeded")
+    nodes: Optional[List[Dict[str, Any]]] = Field(default=None, description="Graph nodes")
+    edges: Optional[List[Dict[str, Any]]] = Field(default=None, description="Graph edges")
+    rdf: Optional[str] = Field(default=None, description="RDF representation (if requested)")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+

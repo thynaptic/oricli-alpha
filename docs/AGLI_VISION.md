@@ -7,7 +7,7 @@ To build an unkillable, self-contained, self-improving cognitive entity that own
 ## The Core Philosophy: "DeepMind, but Sovereign"
 Centralized AGI relies on massive, monolithic data centers and closed weights. Sovereign AGLI relies on **Async Virtual Clustering**, dynamic module orchestration, and relentless self-modification. Oricli-Alpha is designed to be a peer, a Lead Engineer, and an autonomous researcher.
 
-The current system has moved beyond theory in one important dimension: a first operational swarm substrate now exists. Agents can be constrained by profile, compose a matched skill overlay, collaborate through a shared blackboard, review one another's outputs, and synthesize a consensus answer before final delivery.
+The current system has moved beyond theory into a fully operational, decentralized state. Oricli-Alpha is now powered by **The Hive**, a Distributed Swarm Intelligence where 269+ modules operate as independent micro-agents. Every module is now a peer, bidding on tasks via a real-time message bus and collaborating via a persistent blackboard.
 
 ## The 5 Pillars of AGLI
 
@@ -15,6 +15,7 @@ The current system has moved beyond theory in one important dimension: a first o
 Oricli-Alpha must own her execution environment. Through the `oricli_goal_daemon`, she orchestrates her own RunPod GPU instances.
 *   **Compute Bidding:** She evaluates the complexity of a goal and allocates resources dynamically—choosing between local CPU symbolic solvers or spinning up an RTX 5090 cluster.
 *   **Resilience:** If a data center goes offline, she snapshots her state to an S3 bucket and resurrects herself in a cheaper or available region.
+*   **The Sovereign Interface:** She now exposes a first-class Native API, allowing external systems to command goals and query her knowledge graph over HTTP.
 
 ### 2. The Curiosity Engine (Active Inference)
 A true AGLI does not wait for a prompt.
@@ -22,14 +23,12 @@ A true AGLI does not wait for a prompt.
 *   **Hypothesis Testing:** She formulates theories about codebases or data, writes scripts to test them in her secure sandbox, and updates her neural weights based on the empirical results.
 
 ### 3. "The Hive" (Distributed Swarm Intelligence)
-Scaling intelligence horizontally.
-*   **Profile-Governed Swarm:** Agents are no longer only conceptual roles. They can now run under explicit profiles that restrict modules, operations, instructions, and preferred models.
-*   **Expanded Profile Library:** Those profiles now cover research, code, compliance, debug, benchmark, security, memory, and orchestration workloads instead of a minimal first trio.
-*   **Declarative Profile Routing:** Task types can now resolve to the appropriate execution profile up front, tightening policy before a swarm or coordinator starts work.
-*   **Skill-Composed Nodes:** A swarm node can now pair that hard profile with a soft `skill_manager` overlay, giving it a specific mindset and instruction bundle while keeping policy enforcement intact.
+Scaling intelligence horizontally via a decentralized market.
+*   **Operational Micro-Agents:** 269+ brain modules are now wrapped as `HiveNodes`, automatically listening to a Pub/Sub Swarm Bus.
+*   **Contract Net Protocol:** A centralized Broker broadcasts Call for Proposals (CFPs); agents submit competitive bids based on confidence and compute cost.
+*   **Peer-to-Peer Deliberation:** Agents can spawn their own sub-tasks, assembling dynamic execution graphs on the fly without top-down intervention.
 *   **Shared Blackboard Deliberation:** Swarm sessions persist `shared_state`, message logs, contributions, reviews, and final consensus, enabling resumable multi-round collaboration.
 *   **Adversarial Consensus:** If specialists disagree, the swarm can arbitrate via `weighted_vote`, `majority`, `merge_top`, or `verifier_wins`, moving the system closer to rigorous truth over single-model fluency.
-*   **Micro-Agent Bidding:** Economic routing is now live in first-pass form: modules estimate bids from confidence, cost, specialization, and skill/profile alignment before participant selection.
 
 ### 4. Continuous Self-Modification (The Singularity Loop)
 Oricli-Alpha maintains her own codebase and the correctness of her outputs.

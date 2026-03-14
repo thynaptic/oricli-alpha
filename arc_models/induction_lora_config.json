@@ -1,0 +1,13 @@
+{
+  "lora_rank": 64,
+  "lora_alpha": 64,
+  "learning_rate": 0.0002,
+  "batch_size": 8,
+  "per_device_batch": 8,
+  "num_devices": 8,
+  "epochs": 3,
+  "training_type": "lora_finetune",
+  "weight_decay": 0,
+  "gradient_accumulate_steps": 2,
+  "scheduler": "cosine"
+}

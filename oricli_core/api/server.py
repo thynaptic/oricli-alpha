@@ -38,7 +38,10 @@ from oricli_core.client import OricliAlphaClient
 from oricli_core.brain.metrics import get_metrics_collector
 from oricli_core.brain.health import get_health_checker
 from oricli_core.system_identifier import SYSTEM_ID, SYSTEM_ID_FULL
+from oricli_core.services.goal_service import GoalService
+from oricli_core.services.swarm_blackboard_service import get_swarm_blackboard_service
 from oricli_core.types.models import (
+    ChatMessage,
     ChatCompletionRequest,
     ChatCompletionResponse,
     EmbeddingRequest,
@@ -65,6 +68,16 @@ from oricli_core.types.models import (
     PythonEmbedResponse,
     PythonTestGenerationRequest,
     PythonTestGenerationResponse,
+    GoalCreateRequest,
+    GoalResponse,
+    GoalListResponse,
+    GoalStatusResponse,
+    SwarmRunRequest,
+    SwarmSessionResponse,
+    SwarmSessionDetailResponse,
+    KnowledgeExtractRequest,
+    KnowledgeQueryRequest,
+    KnowledgeResponse,
 )
 
 
@@ -571,6 +584,217 @@ def create_app(
     async def models(authorization: Optional[str] = None):
         """OpenAI-compatible models listing endpoint"""
         return await app.state.get_api().models(authorization)
+    
+    # --- Oricli-Alpha Native API Endpoints ---
+    
+    # Sovereign Goals
+    @app.post("/v1/goals", response_model=GoalResponse)
+    async def create_goal(
+        request: GoalCreateRequest,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Create a new sovereign goal"""
+        app.state.get_api().verify_api_key(authorization)
+        goal_service = GoalService()
+        goal_id = goal_service.add_objective(
+            goal=request.goal,
+            priority=request.priority,
+            metadata=request.metadata
+        )
+        objectives = goal_service.list_objectives()
+        for obj in objectives:
+            if obj["id"] == goal_id:
+                return GoalResponse(**obj)
+        raise HTTPException(status_code=500, detail="Failed to retrieve created goal")
+
+    @app.get("/v1/goals", response_model=GoalListResponse)
+    async def list_goals(
+        status: Optional[str] = None,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """List sovereign goals"""
+        app.state.get_api().verify_api_key(authorization)
+        goal_service = GoalService()
+        goals = goal_service.list_objectives(status=status)
+        return GoalListResponse(
+            goals=[GoalResponse(**g) for g in goals],
+            count=len(goals)
+        )
+
+    @app.get("/v1/goals/{goal_id}", response_model=GoalStatusResponse)
+    async def get_goal_status(
+        goal_id: str,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Get detailed status of a sovereign goal"""
+        app.state.get_api().verify_api_key(authorization)
+        goal_service = GoalService()
+        objectives = goal_service.list_objectives()
+        goal_data = next((obj for obj in objectives if obj["id"] == goal_id), None)
+        if not goal_data:
+            raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
+        
+        plan_state = goal_service.load_plan_state(goal_id)
+        return GoalStatusResponse(
+            goal=GoalResponse(**goal_data),
+            plan_state=plan_state
+        )
+
+    # Hive Swarm
+    @app.post("/v1/swarm/run", response_model=SwarmSessionResponse)
+    async def run_swarm(
+        request: SwarmRunRequest,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Trigger a collaborative swarm session"""
+        app.state.get_api().verify_api_key(authorization)
+        
+        from oricli_core.brain.registry import ModuleRegistry
+        swarm_coordinator = ModuleRegistry.get_module("swarm_coordinator")
+        if not swarm_coordinator:
+            raise HTTPException(status_code=503, detail="swarm_coordinator module unavailable")
+        
+        # Swarm coordinator handles the session creation via SwarmBlackboardService
+        result = swarm_coordinator.execute("coordinate_task", {
+            "query": request.query,
+            "round_limit": request.max_rounds,
+            "participants": request.participants,
+            "consensus_policy": request.consensus_policy
+        })
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Swarm execution failed"))
+        
+        session_id = result.get("session_id")
+        blackboard = get_swarm_blackboard_service()
+        session = blackboard.load_session(session_id)
+        if not session:
+            raise HTTPException(status_code=500, detail="Failed to load created swarm session")
+            
+        return SwarmSessionResponse(**session)
+
+    @app.get("/v1/swarm/sessions/{session_id}", response_model=SwarmSessionDetailResponse)
+    async def get_swarm_session(
+        session_id: str,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Get detailed swarm session state"""
+        app.state.get_api().verify_api_key(authorization)
+        blackboard = get_swarm_blackboard_service()
+        session = blackboard.load_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Swarm session {session_id} not found")
+        return SwarmSessionDetailResponse(**session)
+
+    # Knowledge Graph
+    @app.post("/v1/knowledge/extract", response_model=KnowledgeResponse)
+    async def knowledge_extract(
+        request: KnowledgeExtractRequest,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Extract entities and relationships from text"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.brain.registry import ModuleRegistry
+        kg_builder = ModuleRegistry.get_module("knowledge_graph_builder")
+        if not kg_builder:
+            raise HTTPException(status_code=503, detail="knowledge_graph_builder module unavailable")
+            
+        result = kg_builder.execute("build_from_text", {
+            "text": request.text,
+            "domain": request.domain
+        })
+        return KnowledgeResponse(**result)
+
+    @app.post("/v1/knowledge/query", response_model=KnowledgeResponse)
+    async def knowledge_query(
+        request: KnowledgeQueryRequest,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Query the knowledge graph"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.brain.registry import ModuleRegistry
+        kg_builder = ModuleRegistry.get_module("knowledge_graph_builder")
+        if not kg_builder:
+            raise HTTPException(status_code=503, detail="knowledge_graph_builder module unavailable")
+            
+        if request.entity_id:
+            result = kg_builder.execute("query_graph", {
+                "entity_id": request.entity_id,
+                "depth": request.depth
+            })
+        else:
+            # If no entity_id, we can't search directly yet, return error or empty
+            raise HTTPException(status_code=400, detail="entity_id is required for query")
+        return KnowledgeResponse(**result)
+
+    # --- Ollama-style API Aliases ---
+
+    @app.post("/api/generate")
+    async def ollama_generate(
+        request: Dict[str, Any],
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Ollama-style generation alias"""
+        # Map Ollama 'prompt' to Oricli chat completion
+        prompt = request.get("prompt")
+        if not prompt:
+            raise HTTPException(status_code=400, detail="Missing 'prompt' in request")
+            
+        chat_req = ChatCompletionRequest(
+            model=request.get("model", "oricli-cognitive"),
+            messages=[ChatMessage(role="user", content=prompt)],
+            stream=request.get("stream", False)
+        )
+        
+        # Reuse existing chat_completions logic
+        return await app.state.get_api().chat_completions(chat_req, authorization)
+
+    @app.post("/api/chat")
+    async def ollama_chat(
+        request: ChatCompletionRequest,
+        response: Response,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Ollama-style chat alias"""
+        return await chat_completions(request, response, authorization)
+
+    @app.get("/api/tags")
+    async def ollama_tags(authorization: Optional[str] = Header(None, alias="Authorization")):
+        """Ollama-style tags (models) alias"""
+        models_resp = await models(authorization)
+        return {"models": models_resp.data}
+
+    @app.post("/api/show")
+    async def ollama_show(
+        request: Dict[str, Any],
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Ollama-style show model alias"""
+        name = request.get("name")
+        if not name:
+            raise HTTPException(status_code=400, detail="Missing 'name' in request")
+            
+        # Strip 'oricli-' prefix if present
+        module_name = name[7:] if name.startswith("oricli-") else name
+        
+        from oricli_core.brain.registry import ModuleRegistry
+        metadata = ModuleRegistry.get_metadata(module_name)
+        if not metadata:
+            raise HTTPException(status_code=404, detail=f"Module/Model {name} not found")
+            
+        return {
+            "name": name,
+            "details": {
+                "parent_model": "",
+                "format": "oricli-module",
+                "family": "oricli",
+                "parameter_size": "N/A",
+                "quantization_level": "N/A"
+            },
+            "modelfile": f"# Oricli-Alpha Module: {metadata.name}\n{metadata.description}",
+            "parameters": metadata.operations,
+            "template": ""
+        }
     
     # Module discovery endpoint (OricliAlpha-specific)
     @app.get("/v1/modules")
