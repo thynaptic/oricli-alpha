@@ -67,7 +67,7 @@ The `OricliAlphaClient` includes a `skills` namespace to interact programmatical
 ```python
 from oricli_core.client import OricliAlphaClient
 
-client = OricliAlphaClient(base_url="http://localhost:8081")
+client = OricliAlphaClient(base_url="https://oricli.thynaptic.com")
 
 # List all skills
 skills = client.skills.list()

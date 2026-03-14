@@ -19,7 +19,7 @@ Port: `8081` (default)
 
 **Example (cURL):**
 ```bash
-curl -X POST http://localhost:8081/v1/ingest \
+curl -X POST https://oricli.thynaptic.com/v1/ingest \
   -H "Authorization: Bearer test_key" \
   -F "file=@document.pdf" \
   -F "tags=[\"external\", \"research\"]" \
@@ -31,7 +31,7 @@ curl -X POST http://localhost:8081/v1/ingest \
 
 **Example (cURL):**
 ```bash
-curl -X POST http://localhost:8081/v1/ingest \
+curl -X POST https://oricli.thynaptic.com/v1/ingest \
   -H "Authorization: Bearer test_key" \
   -F "text=The new fusion reactor was successfully tested in Switzerland." \
   -F "source=lab_report_01"
@@ -50,7 +50,7 @@ Allows Oricli to autonomously crawl and ingest multiple pages from a site.
 
 **Example (cURL):**
 ```bash
-curl -X POST http://localhost:8081/v1/ingest/web \
+curl -X POST https://oricli.thynaptic.com/v1/ingest/web \
   -H "Authorization: Bearer test_key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -69,7 +69,7 @@ The `OricliAlphaClient` exposes the factory via the `knowledge` methods.
 ```python
 from oricli_core.client import OricliAlphaClient
 
-client = OricliAlphaClient(base_url="http://localhost:8081", api_key="your_key")
+client = OricliAlphaClient(base_url="https://oricli.thynaptic.com", api_key="your_key")
 
 # Ingest a PDF file
 res = client.knowledge.ingest(

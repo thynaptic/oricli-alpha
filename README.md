@@ -35,10 +35,9 @@ pip install -e ".[data,ml,memory,search,sandbox]"
 ### Infrastructure Setup
 Initialize the Neo4j Knowledge Vault:
 ```bash
-./scripts/setup_neo4j.sh
-```
+- **Native Sovereign API**: A dedicated interface exposing Goal management, Swarm orchestration, and Knowledge Graph queries (Production: https://oricli.thynaptic.com).
 
----
+...
 
 ## Quick Start
 
@@ -46,7 +45,7 @@ Initialize the Neo4j Knowledge Vault:
 ```bash
 ./scripts/start_servers.sh
 ```
-*Defaults: Native API (8081), UI (5000), Neo4j (7687).*
+*Defaults: API (8081), UI (5000), Neo4j (7687). Proximity Proxy: https://oricli.thynaptic.com*
 
 ---
 
@@ -54,7 +53,7 @@ Initialize the Neo4j Knowledge Vault:
 
 ### 1. Command a Sovereign Goal
 ```bash
-curl -X POST http://localhost:8081/v1/goals \
+curl -X POST https://oricli.thynaptic.com/v1/goals \
   -H "Content-Type: application/json" \
   -d '{
     "goal": "Analyze the repository for security vulnerabilities and propose fixes",
@@ -64,7 +63,7 @@ curl -X POST http://localhost:8081/v1/goals \
 
 ### 2. Trigger Hive Swarm Deliberation
 ```bash
-curl -X POST http://localhost:8081/v1/swarm/run \
+curl -X POST https://oricli.thynaptic.com/v1/swarm/run \
   -H "Content-Type: application/json" \
   -d '{
     "query": "Optimize the database schema for high-throughput writes",
@@ -74,7 +73,7 @@ curl -X POST http://localhost:8081/v1/swarm/run \
 
 ### 3. Knowledge Graph Query (Neo4j)
 ```bash
-curl -X POST http://localhost:8081/v1/knowledge/query \
+curl -X POST https://oricli.thynaptic.com/v1/knowledge/query \
   -H "Content-Type: application/json" \
   -d '{
     "entity_id": "Oricli-Alpha",
@@ -101,8 +100,10 @@ response = client.chat.completions.create(
 ### Remote Orchestration Mode
 ```python
 # Command Oricli across the network
-client = OricliAlphaClient(base_url="http://<vps-ip>:8081")
+client = OricliAlphaClient(base_url="https://oricli.thynaptic.com")
 goal_id = client.goals.create(goal="Deploy the new cluster nodes")
+```
+
 ```
 
 ---

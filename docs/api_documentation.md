@@ -4,8 +4,8 @@ Complete API documentation for Oricli-Alpha Core.
 
 ## Base URL
 
-- Local: `http://localhost:8000`
-- Production: `https://api.oricli.com` (when deployed)
+- Production: `https://oricli.thynaptic.com`
+- Local: `http://localhost:8081`
 
 ## Authentication
 

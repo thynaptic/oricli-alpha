@@ -27,7 +27,7 @@ from oricli_core.client import OricliAlphaClient
 
 # Remote Mode: Orchestrate Oricli across the network
 client = OricliAlphaClient(
-    base_url="http://<oricli-ip>:8081",
+    base_url="https://oricli.thynaptic.com",
     api_key="your_secure_key"
 )
 ```
@@ -110,7 +110,7 @@ Oricli-Alpha provides **Ollama-style aliases** to enable instant integration wit
       "title": "Oricli Sovereign",
       "provider": "ollama",
       "model": "oricli-cognitive",
-      "apiBase": "http://<oricli-ip>:8081"
+      "apiBase": "https://oricli.thynaptic.com"
     }
   ]
 }

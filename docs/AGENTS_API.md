@@ -46,7 +46,7 @@ The `OricliAlphaClient` includes an `agents` namespace for the factory.
 ```python
 from oricli_core.client import OricliAlphaClient
 
-client = OricliAlphaClient(base_url="http://localhost:8081", api_key="test_key")
+client = OricliAlphaClient(base_url="https://oricli.thynaptic.com", api_key="test_key")
 
 # 1. Craft a new agent in the factory
 client.agents.create({

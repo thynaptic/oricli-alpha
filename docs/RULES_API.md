@@ -69,7 +69,7 @@ The `OricliAlphaClient` includes a `rules` namespace to interact programmaticall
 ```python
 from oricli_core.client import OricliAlphaClient
 
-client = OricliAlphaClient(base_url="http://localhost:8081", api_key="your_key")
+client = OricliAlphaClient(base_url="https://oricli.thynaptic.com", api_key="your_key")
 
 # List all rules
 rules = client.rules.list()
