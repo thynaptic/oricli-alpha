@@ -2283,6 +2283,79 @@ class Knowledge:
         raise InvalidParameterError("entity_id", str(entity_id), "entity_id is required for query")
 
 
+class Skills:
+    """External Skills API"""
+    
+    def __init__(self, client: "OricliAlphaClient"):
+        self._client = client
+    
+    def list(self) -> List[Dict[str, Any]]:
+        """List all loaded skills"""
+        if self._client.base_url:
+            res = self._client._make_remote_request("GET", "/v1/skills")
+            return res.get("skills", [])
+            
+        module = ModuleRegistry.get_module("skill_manager")
+        if not module:
+            raise ModuleNotFoundError("skill_manager")
+        res = module.execute("list_skills", {})
+        return res.get("skills", [])
+        
+    def get(self, skill_name: str) -> Dict[str, Any]:
+        """Get details of a specific skill"""
+        if self._client.base_url:
+            return self._client._make_remote_request("GET", f"/v1/skills/{skill_name}")
+            
+        module = ModuleRegistry.get_module("skill_manager")
+        if not module:
+            raise ModuleNotFoundError("skill_manager")
+        res = module.execute("get_skill", {"skill_name": skill_name})
+        if not res.get("success"):
+            raise ClientError(res.get("error"))
+        return res.get("skill", {})
+        
+    def create(self, skill_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new skill"""
+        if self._client.base_url:
+            return self._client._make_remote_request("POST", "/v1/skills", skill_data)
+            
+        module = ModuleRegistry.get_module("skill_manager")
+        if not module:
+            raise ModuleNotFoundError("skill_manager")
+        res = module.execute("create_skill", skill_data)
+        if not res.get("success"):
+            raise ClientError(res.get("error"))
+        return res.get("skill", {})
+        
+    def update(self, skill_name: str, skill_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing skill"""
+        payload = {"skill_name": skill_name, **skill_data}
+        if self._client.base_url:
+            return self._client._make_remote_request("PUT", f"/v1/skills/{skill_name}", payload)
+            
+        module = ModuleRegistry.get_module("skill_manager")
+        if not module:
+            raise ModuleNotFoundError("skill_manager")
+        res = module.execute("update_skill", payload)
+        if not res.get("success"):
+            raise ClientError(res.get("error"))
+        return res.get("skill", {})
+        
+    def delete(self, skill_name: str) -> bool:
+        """Delete a skill"""
+        if self._client.base_url:
+            res = self._client._make_remote_request("DELETE", f"/v1/skills/{skill_name}")
+            return res.get("success", False)
+            
+        module = ModuleRegistry.get_module("skill_manager")
+        if not module:
+            raise ModuleNotFoundError("skill_manager")
+        res = module.execute("delete_skill", {"skill_name": skill_name})
+        if not res.get("success"):
+            raise ClientError(res.get("error"))
+        return res.get("success", False)
+
+
 class AgentProfiles:
     """Client namespace for agent profile discovery and resolution."""
 
@@ -2387,6 +2460,7 @@ class OricliAlphaClient:
             self.goals = Goals(self)
             self.swarm = Swarm(self)
             self.knowledge = Knowledge(self)
+            self.skills = Skills(self)
             
             print("[DEBUG] OricliAlphaClient initialized successfully", file=sys.stderr)
             sys.stderr.flush()

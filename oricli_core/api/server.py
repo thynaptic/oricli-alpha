@@ -78,6 +78,10 @@ from oricli_core.types.models import (
     KnowledgeExtractRequest,
     KnowledgeQueryRequest,
     KnowledgeResponse,
+    SkillCreateRequest,
+    SkillUpdateRequest,
+    SkillResponse,
+    SkillListResponse,
 )
 
 
@@ -726,6 +730,92 @@ def create_app(
             # If no entity_id, we can't search directly yet, return error or empty
             raise HTTPException(status_code=400, detail="entity_id is required for query")
         return KnowledgeResponse(**result)
+
+    # --- Skills API ---
+    @app.get("/v1/skills", response_model=SkillListResponse)
+    async def list_skills(authorization: Optional[str] = Header(None, alias="Authorization")):
+        """List all available skills"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.brain.registry import ModuleRegistry
+        skill_manager = ModuleRegistry.get_module("skill_manager")
+        if not skill_manager:
+            raise HTTPException(status_code=503, detail="skill_manager module unavailable")
+            
+        result = skill_manager.execute("list_skills", {})
+        return SkillListResponse(**result)
+
+    @app.get("/v1/skills/{skill_name}", response_model=SkillResponse)
+    async def get_skill(
+        skill_name: str,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Retrieve details of a specific skill"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.brain.registry import ModuleRegistry
+        skill_manager = ModuleRegistry.get_module("skill_manager")
+        if not skill_manager:
+            raise HTTPException(status_code=503, detail="skill_manager module unavailable")
+            
+        result = skill_manager.execute("get_skill", {"skill_name": skill_name})
+        if not result.get("success"):
+            raise HTTPException(status_code=404, detail=result.get("error", "Skill not found"))
+        return SkillResponse(**result.get("skill", {}))
+
+    @app.post("/v1/skills", response_model=SkillResponse)
+    async def create_skill(
+        request: SkillCreateRequest,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Create a new skill"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.brain.registry import ModuleRegistry
+        skill_manager = ModuleRegistry.get_module("skill_manager")
+        if not skill_manager:
+            raise HTTPException(status_code=503, detail="skill_manager module unavailable")
+            
+        result = skill_manager.execute("create_skill", request.dict())
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to create skill"))
+        return SkillResponse(**result.get("skill", {}))
+
+    @app.put("/v1/skills/{skill_name}", response_model=SkillResponse)
+    async def update_skill(
+        skill_name: str,
+        request: SkillUpdateRequest,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Update an existing skill"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.brain.registry import ModuleRegistry
+        skill_manager = ModuleRegistry.get_module("skill_manager")
+        if not skill_manager:
+            raise HTTPException(status_code=503, detail="skill_manager module unavailable")
+            
+        req_dict = request.dict()
+        if req_dict.get("skill_name") != skill_name:
+            req_dict["skill_name"] = skill_name
+            
+        result = skill_manager.execute("update_skill", req_dict)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to update skill"))
+        return SkillResponse(**result.get("skill", {}))
+
+    @app.delete("/v1/skills/{skill_name}")
+    async def delete_skill(
+        skill_name: str,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Delete a skill"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.brain.registry import ModuleRegistry
+        skill_manager = ModuleRegistry.get_module("skill_manager")
+        if not skill_manager:
+            raise HTTPException(status_code=503, detail="skill_manager module unavailable")
+            
+        result = skill_manager.execute("delete_skill", {"skill_name": skill_name})
+        if not result.get("success"):
+            raise HTTPException(status_code=404, detail=result.get("error", "Failed to delete skill"))
+        return {"success": True, "message": result.get("message")}
 
     # --- Ollama-style API Aliases ---
 

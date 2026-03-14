@@ -558,3 +558,32 @@ class KnowledgeResponse(BaseModel):
     rdf: Optional[str] = Field(default=None, description="RDF representation (if requested)")
     error: Optional[str] = Field(default=None, description="Error message if failed")
 
+# Skill Models
+
+class SkillCreateRequest(BaseModel):
+    """Request to create a new skill"""
+    skill_name: str = Field(..., description="Name of the skill (filename without .ori)")
+    description: str = Field(default="", description="Description of the skill")
+    triggers: List[str] = Field(default_factory=list, description="List of trigger phrases")
+    requires_tools: List[str] = Field(default_factory=list, description="List of required tools")
+    mindset: str = Field(default="", description="The persona/mindset block")
+    instructions: str = Field(default="", description="The specific instructions block")
+
+class SkillUpdateRequest(SkillCreateRequest):
+    """Request to update an existing skill"""
+    pass
+
+class SkillResponse(BaseModel):
+    """Details of a single skill"""
+    skill_name: str = Field(..., description="Name of the skill")
+    description: str = Field(default="", description="Description of the skill")
+    triggers: List[str] = Field(default_factory=list, description="List of trigger phrases")
+    requires_tools: List[str] = Field(default_factory=list, description="List of required tools")
+    mindset: str = Field(default="", description="The persona/mindset block")
+    instructions: str = Field(default="", description="The specific instructions block")
+
+class SkillListResponse(BaseModel):
+    """List of all available skills"""
+    success: bool = Field(..., description="Whether operation succeeded")
+    skills: List[SkillResponse] = Field(default_factory=list, description="List of skills")
+
