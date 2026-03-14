@@ -74,3 +74,19 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: Implement Sovereign Web Ingestion API (Crawler Bridge).**
   *Link: [./tracks/web_ingestion_api_20260314/](./tracks/web_ingestion_api_20260314/)*
+
+---
+
+- [ ] **Track: The Singularity Loop (Self-Modification).**
+  *Link: [./tracks/singularity_loop_20260314/](./tracks/singularity_loop_20260314/)*
+
+---
+
+- [ ] **Track: The Dream Daemon (Synthetic Dreaming).**
+  *Link: [./tracks/dream_daemon_20260314/](./tracks/dream_daemon_20260314/)*
+
+---
+
+- [ ] **Track: The Metacognitive Sentinel (Self-Correction).**
+  *Link: [./tracks/metacognitive_sentinel_20260314/](./tracks/metacognitive_sentinel_20260314/)*
+
