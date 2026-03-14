@@ -21,6 +21,8 @@ UI_PORT="${MAVAIA_UI_PORT:-5000}"
 API_HOST="${MAVAIA_API_HOST:-0.0.0.0}"
 UI_HOST="${MAVAIA_UI_HOST:-0.0.0.0}"
 OPEN_BROWSER="${MAVAIA_OPEN_BROWSER:-true}"
+export OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
+export OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5:7b}"
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -55,6 +57,7 @@ echo -e "${NC}"
 
 # Check for venv
 echo -e "${CYAN}[INFO] Checking environment...${NC}"
+echo -e "${CYAN}[INFO] Ollama model pinned to ${OLLAMA_MODEL}${NC}"
 VENV_ACTIVATED=false
 if [ -d "venv" ]; then
     echo -e "${GREEN}  [OK] Found venv, activating...${NC}"

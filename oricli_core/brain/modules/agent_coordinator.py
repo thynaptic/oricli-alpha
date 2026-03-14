@@ -13,6 +13,7 @@ import time
 from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from oricli_core.brain.registry import ModuleRegistry
 from oricli_core.exceptions import InvalidParameterError
+from oricli_core.services.agent_profile_service import AgentProfile, get_agent_profile_service
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class AgentTask:
         context: Dict[str, Any],
         dependencies: List[str] = None,
         priority: int = 0,
+        agent_profile: Optional[str] = None,
     ):
         self.id = task_id
         self.agent_type = agent_type
@@ -45,6 +47,7 @@ class AgentTask:
         self.context = context
         self.dependencies = dependencies or []
         self.priority = priority
+        self.agent_profile = agent_profile
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -54,6 +57,7 @@ class AgentTask:
             "context": self.context,
             "dependencies": self.dependencies,
             "priority": self.priority,
+            "agent_profile": self.agent_profile,
         }
 
     @classmethod
@@ -65,6 +69,7 @@ class AgentTask:
             context=data.get("context", {}),
             dependencies=data.get("dependencies", []),
             priority=data.get("priority", 0),
+            agent_profile=data.get("agent_profile"),
         )
 
 
@@ -179,6 +184,58 @@ class AgentCoordinatorModule(BaseBrainModule):
                     return ans
         return ""
 
+    def _normalize_agent_type(self, agent_type: Any) -> str:
+        agent_type_str = agent_type
+        if not isinstance(agent_type_str, str):
+            if hasattr(agent_type_str, "value"):
+                agent_type_str = agent_type_str.value
+            else:
+                agent_type_str = str(agent_type_str)
+        if agent_type_str.endswith("_agent"):
+            agent_type_str = agent_type_str[: -len("_agent")]
+        return agent_type_str
+
+    def _resolve_agent_profile(
+        self,
+        *,
+        params: Dict[str, Any],
+        task: AgentTask,
+        agent_type: str,
+    ) -> Optional[AgentProfile]:
+        profile_name = params.get("agent_profile") or task.agent_profile or task.context.get("agent_profile")
+        task_type = params.get("task_type") or task.context.get("task_type")
+        return get_agent_profile_service().resolve_profile(
+            profile_name=profile_name,
+            task_type=task_type,
+            agent_type=agent_type,
+        )
+
+    def _ensure_profile_allows(
+        self,
+        *,
+        profile: Optional[AgentProfile],
+        agent_type: str,
+        operation: str,
+    ) -> None:
+        module_name = f"{agent_type}_agent"
+        get_agent_profile_service().ensure_allowed(profile, module_name=module_name, operation=operation)
+
+    def _build_profiled_params(
+        self,
+        params: Dict[str, Any],
+        profile: Optional[AgentProfile],
+    ) -> Dict[str, Any]:
+        payload = dict(params)
+        if profile is None:
+            return payload
+        payload["agent_profile"] = profile.name
+        payload["profile_instructions"] = profile.system_instructions
+        if profile.system_instructions and not payload.get("instructions"):
+            payload["instructions"] = profile.system_instructions
+        if profile.model_preference:
+            payload["model"] = profile.model_preference
+        return payload
+
     def _execute_agent(
         self,
         *,
@@ -190,33 +247,70 @@ class AgentCoordinatorModule(BaseBrainModule):
     ) -> Dict[str, Any]:
         """Dispatch to the correct agent operation based on agent_type."""
         query = task.query or ""
+        profile: Optional[AgentProfile] = context.get("_resolved_agent_profile")
 
         if agent_type == AgentType.SEARCH:
             limit = context.get("limit", 10)
             sources = context.get("sources") or ["web", "memory"]
-            return agent.execute("search", {"query": query, "limit": limit, "sources": sources})
+            return agent.execute(
+                "search",
+                self._build_profiled_params(
+                    {"query": query, "limit": limit, "sources": sources},
+                    profile,
+                ),
+            )
 
         documents = context.get("documents")
         if not isinstance(documents, list):
             documents = self._extract_documents_from_results(previous_results)
 
         if agent_type == AgentType.RANKING:
-            return agent.execute("rank", {"query": query, "documents": documents})
+            return agent.execute(
+                "rank",
+                self._build_profiled_params(
+                    {"query": query, "documents": documents},
+                    profile,
+                ),
+            )
 
         if agent_type == AgentType.SYNTHESIS:
-            return agent.execute("synthesize", {"query": query, "documents": documents, "persona": context.get("persona", "oricli")})
+            return agent.execute(
+                "synthesize",
+                self._build_profiled_params(
+                    {"query": query, "documents": documents, "persona": context.get("persona", "oricli")},
+                    profile,
+                ),
+            )
 
         if agent_type == AgentType.RESEARCH:
-            return agent.execute("research", {"query": query, "max_passes": context.get("max_passes", 3), "limit": context.get("limit", 10)})
+            return agent.execute(
+                "research",
+                self._build_profiled_params(
+                    {"query": query, "max_passes": context.get("max_passes", 3), "limit": context.get("limit", 10)},
+                    profile,
+                ),
+            )
 
         if agent_type == AgentType.ANALYSIS:
-            return agent.execute("analyze", {"query": query, "documents": documents})
+            return agent.execute(
+                "analyze",
+                self._build_profiled_params(
+                    {"query": query, "documents": documents},
+                    profile,
+                ),
+            )
 
         if agent_type == AgentType.ANSWER:
             raw_answer = context.get("answer")
             if not isinstance(raw_answer, str) or not raw_answer:
                 raw_answer = self._extract_answer_from_results(previous_results)
-            return agent.execute("format_answer", {"query": query, "answer": raw_answer, "documents": documents})
+            return agent.execute(
+                "format_answer",
+                self._build_profiled_params(
+                    {"query": query, "answer": raw_answer, "documents": documents},
+                    profile,
+                ),
+            )
 
         raise InvalidParameterError("agent_type", agent_type, "Unknown agent_type for execution")
 
@@ -245,6 +339,21 @@ class AgentCoordinatorModule(BaseBrainModule):
         
         if not agent_type:
             return {"success": False, "error": "agent_type required"}
+
+        normalized_agent_type = self._normalize_agent_type(agent_type)
+        profile = get_agent_profile_service().resolve_profile(
+            profile_name=params.get("agent_profile"),
+            task_type=params.get("task_type"),
+            agent_type=normalized_agent_type,
+        )
+
+        resolved_instructions = instructions
+        if profile and profile.system_instructions:
+            resolved_instructions = (
+                f"{profile.system_instructions}\n\n{instructions}".strip()
+                if instructions
+                else profile.system_instructions
+            )
             
         # For now, we simulate spawning by returning a virtual agent ID
         # In a real implementation, this would create a new instance of BaseBrainModule
@@ -254,7 +363,9 @@ class AgentCoordinatorModule(BaseBrainModule):
         return {
             "success": True, 
             "agent_id": agent_id,
-            "instructions": instructions
+            "instructions": resolved_instructions,
+            "agent_profile": profile.name if profile else None,
+            "model": profile.model_preference if profile else None,
         }
 
     def _get_status(self) -> Dict[str, Any]:
@@ -311,16 +422,37 @@ class AgentCoordinatorModule(BaseBrainModule):
             for r in previous_results_data
         ]
 
-        # Ensure agent_type is a string
-        agent_type_str = task.agent_type
-        if not isinstance(agent_type_str, str):
-            if hasattr(agent_type_str, 'value'):
-                agent_type_str = agent_type_str.value
-            else:
-                agent_type_str = str(agent_type_str)
-        # Normalize common naming variants (e.g., "search_agent" -> "search")
-        if agent_type_str.endswith("_agent"):
-            agent_type_str = agent_type_str[: -len("_agent")]
+        agent_type_str = self._normalize_agent_type(task.agent_type)
+        profile = self._resolve_agent_profile(params=params, task=task, agent_type=agent_type_str)
+        operation_by_agent_type = {
+            AgentType.SEARCH: "search",
+            AgentType.RANKING: "rank",
+            AgentType.SYNTHESIS: "synthesize",
+            AgentType.RESEARCH: "research",
+            AgentType.ANALYSIS: "analyze",
+            AgentType.ANSWER: "format_answer",
+        }
+        requested_operation = operation_by_agent_type.get(agent_type_str)
+        if requested_operation:
+            try:
+                self._ensure_profile_allows(
+                    profile=profile,
+                    agent_type=agent_type_str,
+                    operation=requested_operation,
+                )
+            except Exception as e:
+                result = AgentResult(
+                    task_id=task.id,
+                    agent_type=agent_type_str,
+                    success=False,
+                    output="",
+                    error=str(e),
+                )
+                self.results[task.id] = result
+                return {
+                    "success": False,
+                    "result": result.to_dict(),
+                }
         
         agent = self.agents.get(agent_type_str)
         if not agent:
@@ -341,6 +473,12 @@ class AgentCoordinatorModule(BaseBrainModule):
         context = task.context.copy()
         if previous_results:
             context["previous_results"] = [r.to_dict() for r in previous_results]
+        if profile:
+            context["_resolved_agent_profile"] = profile
+            context["agent_profile"] = profile.name
+            context["profile_instructions"] = profile.system_instructions
+            if profile.model_preference:
+                context["model"] = profile.model_preference
 
         # Execute with retries
         max_retries = 3
@@ -381,7 +519,7 @@ class AgentCoordinatorModule(BaseBrainModule):
             agent_type=agent_type_str,
             success=False,
             output="",
-            error=type(last_error).__name__ if last_error else "Unknown error",
+            error=str(last_error) if last_error else "Unknown error",
         )
 
         self.results[task.id] = result
@@ -406,6 +544,8 @@ class AgentCoordinatorModule(BaseBrainModule):
             result_data = self._execute_task({
                 "task": task.to_dict(),
                 "previous_results": previous_results_data,
+                "agent_profile": getattr(task, "agent_profile", None) or params.get("agent_profile"),
+                "task_type": params.get("task_type"),
             })
             result = AgentResult(
                 task_id=result_data["result"]["task_id"],

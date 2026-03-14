@@ -27,6 +27,18 @@ import argparse
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
+
+def _maybe_reexec_in_venv() -> None:
+    """Prefer the repo virtualenv automatically for consistent deps."""
+    venv_python = os.path.join(BASE_DIR, ".venv", "bin", "python")
+    if not os.path.exists(venv_python):
+        return
+    venv_root = os.path.join(BASE_DIR, ".venv")
+    current = os.path.abspath(sys.executable)
+    if current.startswith(os.path.join(venv_root, "bin") + os.sep):
+        return
+    os.execv(venv_python, [venv_python, os.path.abspath(__file__), *sys.argv[1:]])
+
 # Unbuffer stdout for immediate feedback
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
@@ -34,6 +46,7 @@ if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(line_buffering=True)
 
 def main():
+    _maybe_reexec_in_venv()
     # If no arguments provided, we'll default to running all tests
     # unless the user wants to see help.
     

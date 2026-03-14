@@ -32,6 +32,7 @@ from oricli_core.types.models import (
     ToolDefinition,
     URLContextMetadata,
 )
+from oricli_core.services.agent_profile_service import AgentProfileService
 
 
 class BrainModuleProxy:
@@ -232,7 +233,7 @@ class PythonLLM:
             "codebase": codebase,
             "top_k": top_k,
         })
-    
+
     def remember_pattern(self, pattern: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Remember a code pattern in memory.
@@ -2146,6 +2147,36 @@ class PythonLLM:
             "new_style": new_style,
         })
 
+
+class AgentProfiles:
+    """Client namespace for agent profile discovery and resolution."""
+
+    def __init__(self, service: AgentProfileService):
+        self._service = service
+
+    def list(self) -> List[Dict[str, Any]]:
+        return self._service.list_profiles()
+
+    def get(self, name: str) -> Dict[str, Any]:
+        profile = self._service.get_profile(name)
+        if profile is None:
+            raise InvalidParameterError("agent_profile", name, "Profile not found")
+        return profile.to_dict()
+
+    def resolve(
+        self,
+        *,
+        profile_name: Optional[str] = None,
+        task_type: Optional[str] = None,
+        agent_type: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        profile = self._service.resolve_profile(
+            profile_name=profile_name,
+            task_type=task_type,
+            agent_type=agent_type,
+        )
+        return profile.to_dict() if profile else None
+
 class Chat:
     """Chat API namespace"""
     
@@ -2206,6 +2237,7 @@ class OricliAlphaClient:
             self.embeddings = Embeddings(self)
             self.brain = BrainModuleProxy(self)
             self.python = PythonLLM(self)
+            self.agent_profiles = AgentProfiles(AgentProfileService())
             
             print("[DEBUG] OricliAlphaClient initialized successfully", file=sys.stderr)
             sys.stderr.flush()
@@ -2824,4 +2856,3 @@ class OricliAlphaClient:
             )
         
         return module.execute(operation, params)
-

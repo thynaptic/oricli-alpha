@@ -1,0 +1,98 @@
+{
+  "task_type_profiles": {
+    "research": "research_agent_profile",
+    "code": "code_agent_profile",
+    "compliance": "compliance_agent_profile"
+  },
+  "agent_type_profiles": {
+    "search": "research_agent_profile",
+    "ranking": "research_agent_profile",
+    "synthesis": "research_agent_profile",
+    "analysis": "code_agent_profile",
+    "answer": "code_agent_profile",
+    "research": "research_agent_profile"
+  },
+  "profiles": [
+    {
+      "name": "research_agent_profile",
+      "description": "Research-focused agent profile for search, ranking, synthesis, and answer pipelines.",
+      "allowed_modules": [
+        "search_agent",
+        "ranking_agent",
+        "synthesis_agent",
+        "answer_agent",
+        "research_agent",
+        "analysis_agent",
+        "query_agent",
+        "reranker_agent",
+        "retriever_agent",
+        "verifier_agent"
+      ],
+      "allowed_operations": {
+        "search_agent": ["search"],
+        "ranking_agent": ["rank"],
+        "synthesis_agent": ["synthesize"],
+        "answer_agent": ["answer", "format_answer"],
+        "research_agent": ["research"],
+        "analysis_agent": ["analyze"],
+        "query_agent": ["query"],
+        "reranker_agent": ["rerank"],
+        "retriever_agent": ["retrieve"],
+        "verifier_agent": ["verify"]
+      },
+      "system_instructions": "Prioritize retrieval quality, source traceability, and synthesis grounded in the returned evidence.",
+      "model_preference": "qwen2.5:7b",
+      "task_tags": ["research", "search", "synthesis"]
+    },
+    {
+      "name": "code_agent_profile",
+      "description": "Code-focused agent profile for analysis, synthesis, and answer generation on engineering tasks.",
+      "allowed_modules": [
+        "search_agent",
+        "ranking_agent",
+        "synthesis_agent",
+        "answer_agent",
+        "analysis_agent",
+        "query_agent",
+        "research_agent"
+      ],
+      "allowed_operations": {
+        "search_agent": ["search"],
+        "ranking_agent": ["rank"],
+        "synthesis_agent": ["synthesize"],
+        "answer_agent": ["answer", "format_answer"],
+        "analysis_agent": ["analyze"],
+        "query_agent": ["query"],
+        "research_agent": ["research"]
+      },
+      "system_instructions": "Stay implementation-focused, be explicit about constraints, and optimize for correct engineering actions over prose.",
+      "model_preference": "qwen2.5:7b",
+      "task_tags": ["code", "engineering", "analysis"]
+    },
+    {
+      "name": "compliance_agent_profile",
+      "description": "Compliance-focused agent profile for evidence-driven policy and control analysis.",
+      "allowed_modules": [
+        "search_agent",
+        "ranking_agent",
+        "synthesis_agent",
+        "answer_agent",
+        "analysis_agent",
+        "research_agent",
+        "regulatory_compliance_auditor"
+      ],
+      "allowed_operations": {
+        "search_agent": ["search"],
+        "ranking_agent": ["rank"],
+        "synthesis_agent": ["synthesize"],
+        "answer_agent": ["answer", "format_answer"],
+        "analysis_agent": ["analyze"],
+        "research_agent": ["research"],
+        "regulatory_compliance_auditor": ["audit_compliance", "audit_plan"]
+      },
+      "system_instructions": "Bias toward explicit control mapping, cited evidence, and clear distinction between compliant, partial, and missing coverage.",
+      "model_preference": "qwen2.5:7b",
+      "task_tags": ["compliance", "policy", "audit"]
+    }
+  ]
+}

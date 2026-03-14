@@ -5,6 +5,7 @@ Adapter Router Module Wrapper
 
 from typing import Dict, Any
 from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
+from oricli_core.exceptions import InvalidParameterError
 
 class AdapterRouterModule(BaseBrainModule):
     """Module wrapper for AdapterRouter"""
@@ -21,4 +22,15 @@ class AdapterRouterModule(BaseBrainModule):
         )
 
     def execute(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        return {"success": False, "error": f"Unknown operation: {operation}"}
+        if operation == "noop":
+            return {
+                "success": True,
+                "status": "ok",
+                "module": self.metadata.name,
+                "operation": operation,
+            }
+        raise InvalidParameterError(
+            parameter="operation",
+            value=str(operation),
+            reason="Unsupported operation",
+        )

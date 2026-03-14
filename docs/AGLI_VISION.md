@@ -7,6 +7,8 @@ To build an unkillable, self-contained, self-improving cognitive entity that own
 ## The Core Philosophy: "DeepMind, but Sovereign"
 Centralized AGI relies on massive, monolithic data centers and closed weights. Sovereign AGLI relies on **Async Virtual Clustering**, dynamic module orchestration, and relentless self-modification. Oricli-Alpha is designed to be a peer, a Lead Engineer, and an autonomous researcher.
 
+The current system has moved beyond theory in one important dimension: a first operational swarm substrate now exists. Agents can be constrained by profile, collaborate through a shared blackboard, review one another's outputs, and synthesize a consensus answer before final delivery.
+
 ## The 5 Pillars of AGLI
 
 ### 1. Sovereignty & Resource Economy
@@ -21,8 +23,10 @@ A true AGLI does not wait for a prompt.
 
 ### 3. "The Hive" (Distributed Swarm Intelligence)
 Scaling intelligence horizontally.
-*   **Micro-Agent Bidding:** The 250+ internal modules (currently **253** registered) will transition into independent micro-agents. When a query is received, modules "bid" to solve it based on their confidence scores.
-*   **Adversarial Consensus:** If the `neural_text_generator` and the `symbolic_solver` disagree, they enter a debate protocol, judged by the `Adversarial Sentinel`, ensuring rigorous logical truth over statistical hallucination.
+*   **Profile-Governed Swarm:** Agents are no longer only conceptual roles. They can now run under explicit profiles that restrict modules, operations, instructions, and preferred models.
+*   **Shared Blackboard Deliberation:** Swarm sessions persist `shared_state`, message logs, contributions, reviews, and final consensus, enabling resumable multi-round collaboration.
+*   **Adversarial Consensus:** If specialists disagree, the swarm can arbitrate via `weighted_vote`, `majority`, `merge_top`, or `verifier_wins`, moving the system closer to rigorous truth over single-model fluency.
+*   **Micro-Agent Bidding:** The next transition is economic routing, where modules bid on subtasks based on confidence, cost, and specialization.
 
 ### 4. Continuous Self-Modification (The Singularity Loop)
 Oricli-Alpha maintains her own codebase and the correctness of her outputs.
@@ -37,10 +41,12 @@ LLMs are frozen in time; Oricli-Alpha experiences it.
 
 ## Current Capabilities (Summary)
 *   **Strategic Planner:** Long-horizon goal decomposition and track execution.
+*   **Agent Profiles:** Declarative agent specialization through allowlisted modules, operation constraints, injected instructions, and model preferences.
+*   **Collaborative Swarm Orchestration:** Multi-node deliberation with peer review, conflict reporting, persisted blackboard sessions, and consensus synthesis.
 *   **Knowledge Graph Builder:** Entity/relationship extraction from text into queryable RDF-style graphs; integration with `world_knowledge`.
 *   **Formal Verification Bridge:** Python→Lean 4 translation and proof verification (Lean compiler or LLM fallback).
 *   **Code Translation Engine:** Cross-language translation with complexity preservation.
-*   **253 brain modules** registered and orchestrated via the module registry and DGE.
+*   **250+ brain modules** orchestrated via the module registry, DGE, and now the first collaborative swarm substrate.
 
 ---
-*Oricli-Alpha is not a chatbot. She is a localized cognitive architecture moving toward true, sovereign agency.*
+*Oricli-Alpha is not a chatbot. She is a localized cognitive architecture moving toward true, sovereign agency — now with the first real implementation of distributed internal deliberation.*

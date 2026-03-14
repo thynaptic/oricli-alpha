@@ -10,6 +10,7 @@ import time
 
 from oricli_core.brain.base_module import BaseBrainModule, ModuleMetadata
 from oricli_core.exceptions import InvalidParameterError
+from oricli_core.services.agent_profile_service import AgentProfile, get_agent_profile_service
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,47 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
         """Coordinate agents (alias for execute_pipeline)"""
         return self._execute_pipeline(params)
 
+    def _resolve_profile_for_stage(
+        self,
+        *,
+        params: Dict[str, Any],
+        stage_name: str,
+    ) -> Optional[AgentProfile]:
+        stage_profiles = params.get("stage_profiles") or {}
+        profile_name = stage_profiles.get(stage_name) or params.get("agent_profile")
+        task_type = params.get("task_type")
+        return get_agent_profile_service().resolve_profile(
+            profile_name=profile_name,
+            task_type=task_type,
+            agent_type=stage_name,
+        )
+
+    def _ensure_stage_allowed(
+        self,
+        *,
+        profile: Optional[AgentProfile],
+        stage_name: str,
+        operation: str,
+    ) -> None:
+        module_name = f"{stage_name}_agent"
+        get_agent_profile_service().ensure_allowed(profile, module_name=module_name, operation=operation)
+
+    def _build_profiled_params(
+        self,
+        params: Dict[str, Any],
+        profile: Optional[AgentProfile],
+    ) -> Dict[str, Any]:
+        payload = dict(params)
+        if profile is None:
+            return payload
+        payload["agent_profile"] = profile.name
+        payload["profile_instructions"] = profile.system_instructions
+        if profile.system_instructions and not payload.get("instructions"):
+            payload["instructions"] = profile.system_instructions
+        if profile.model_preference:
+            payload["model"] = profile.model_preference
+        return payload
+
     def _execute_pipeline(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute multi-agent pipeline"""
         query = params.get("query", "") or params.get("input", "")
@@ -163,33 +205,51 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
         search_results = []
         search_value = AgentType.SEARCH.value if AgentType else "search"
         if search_value in agent_types and self.search_agent:
+            profile = self._resolve_profile_for_stage(params=params, stage_name=search_value)
             try:
-                result = self.search_agent.execute("search", {
-                    "query": query,
-                    "sources": sources,
-                })
+                self._ensure_stage_allowed(profile=profile, stage_name=search_value, operation="search")
+                result = self.search_agent.execute(
+                    "search",
+                    self._build_profiled_params(
+                        {
+                            "query": query,
+                            "sources": sources,
+                        },
+                        profile,
+                    ),
+                )
                 search_results = result.get("documents", [])
                 all_results.append({
                     "agent_type": search_value,
                     "success": True,
                     "output": {"documents": search_results},
+                    "agent_profile": profile.name if profile else None,
                 })
             except Exception as e:
                 all_results.append({
                     "agent_type": search_value,
                     "success": False,
                     "error": str(e),
+                    "agent_profile": profile.name if profile else None,
                 })
 
         # Step 2: Ranking (depends on search)
         ranked_documents = search_results
         ranking_value = AgentType.RANKING.value if AgentType else "ranking"
         if ranking_value in agent_types and self.ranking_agent and search_results:
+            profile = self._resolve_profile_for_stage(params=params, stage_name=ranking_value)
             try:
-                result = self.ranking_agent.execute("rank", {
-                    "documents": search_results,
-                    "query": query,
-                })
+                self._ensure_stage_allowed(profile=profile, stage_name=ranking_value, operation="rank")
+                result = self.ranking_agent.execute(
+                    "rank",
+                    self._build_profiled_params(
+                        {
+                            "documents": search_results,
+                            "query": query,
+                        },
+                        profile,
+                    ),
+                )
                 # Accept both snake_case and camelCase keys from shims.
                 ranked_documents = (
                     result.get("ranked_documents")
@@ -201,6 +261,7 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
                     "agent_type": ranking_value,
                     "success": True,
                     "output": {"ranked_documents": ranked_documents},
+                    "agent_profile": profile.name if profile else None,
                 })
             except Exception as e:
                 logger.debug(
@@ -214,11 +275,19 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
         synthesis_text = ""
         synthesis_value = AgentType.SYNTHESIS.value if AgentType else "synthesis"
         if synthesis_value in agent_types and self.synthesis_agent and ranked_documents:
+            profile = self._resolve_profile_for_stage(params=params, stage_name=synthesis_value)
             try:
-                result = self.synthesis_agent.execute("synthesize", {
-                    "documents": ranked_documents,
-                    "query": query,
-                })
+                self._ensure_stage_allowed(profile=profile, stage_name=synthesis_value, operation="synthesize")
+                result = self.synthesis_agent.execute(
+                    "synthesize",
+                    self._build_profiled_params(
+                        {
+                            "documents": ranked_documents,
+                            "query": query,
+                        },
+                        profile,
+                    ),
+                )
                 synthesis_text = (
                     result.get("synthesis")
                     or result.get("answer")
@@ -229,6 +298,7 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
                     "agent_type": synthesis_value,
                     "success": True,
                     "output": {"synthesis": synthesis_text},
+                    "agent_profile": profile.name if profile else None,
                 })
             except Exception as e:
                 logger.debug(
@@ -241,20 +311,35 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
         final_answer = ""
         answer_value = AgentType.ANSWER.value if AgentType else "answer"
         if answer_value in agent_types and self.answer_agent:
+            profile = self._resolve_profile_for_stage(params=params, stage_name=answer_value)
             try:
                 # Prefer standardized operation; accept older alias at module level.
-                result = self.answer_agent.execute("answer", {
-                    "query": query,
-                    "context": synthesis_text,
-                    "documents": ranked_documents,
-                })
+                self._ensure_stage_allowed(profile=profile, stage_name=answer_value, operation="answer")
+                result = self.answer_agent.execute(
+                    "answer",
+                    self._build_profiled_params(
+                        {
+                            "query": query,
+                            "context": synthesis_text,
+                            "documents": ranked_documents,
+                        },
+                        profile,
+                    ),
+                )
                 final_answer = result.get("answer", "")
                 all_results.append({
                     "agent_type": answer_value,
                     "success": True,
                     "output": {"answer": final_answer},
+                    "agent_profile": profile.name if profile else None,
                 })
             except Exception as e:
+                all_results.append({
+                    "agent_type": answer_value,
+                    "success": False,
+                    "error": str(e),
+                    "agent_profile": profile.name if profile else None,
+                })
                 logger.debug(
                     "Answer agent failed; continuing with empty final answer",
                     exc_info=True,
@@ -271,4 +356,6 @@ class MultiAgentOrchestratorModule(BaseBrainModule):
             "documents": ranked_documents,
             "agent_results": all_results,
             "execution_time": execution_time,
+            "agent_profile": params.get("agent_profile"),
+            "stage_profiles": params.get("stage_profiles", {}),
         }

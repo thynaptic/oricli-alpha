@@ -321,6 +321,9 @@ class ARCModelTraining:
         Returns:
             List of ARC tasks
         """
+        if not data_path:
+            return []
+
         try:
             with open(data_path, "r") as f:
                 data = json.load(f)

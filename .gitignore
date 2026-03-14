@@ -120,6 +120,7 @@ checkpoints/
 !**/*_config.json
 !**/package.json
 !**/pyproject.toml
+!oricli_core/data/agent_profiles.json
 !oricli_core/evaluation/test_data/**/*.json
 !oricli_core/evaluation/test_data/**/*.yaml
 !oricli_core/evaluation/test_data/**/*.yml

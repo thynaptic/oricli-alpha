@@ -11,6 +11,9 @@ Founders, developers, and researchers building high-stakes, privacy-first cognit
 ### 3.1 Cognitive Infrastructure
 - **Ollama Utility Bridge**: Offloads general text generation and light reasoning to local Ollama models (e.g. qwen2.5:7b) to maximize system performance and focus internal compute on high-level orchestration.
 - **Dynamic Reasoning**: Replaces linear pipelines with Graph-based execution (DGE) tailored to each query.
+- **Profile-Governed Agents**: Task-specific agent profiles constrain which modules, operations, instructions, and model preferences an agent may use, enabling safer specialization without duplicating module logic.
+- **Collaborative Swarm Layer**: Distributed node coordination now supports shared blackboard state, peer review, consensus scoring, and final synthesis before an overall answer is returned.
+- **Persistent Swarm Sessions**: Collaborative runs persist message logs, shared state, contributions, reviews, and final consensus for resumable multi-round deliberation.
 - **Neural Subconscious**: Maintains a vectorized influence field to ensure consistency and persistent bias without bloating prompt context.
 - **Multi-Modal Native**: Processes vision (image) and auditory (voice) inputs as first-class citizens in the cognitive graph.
 - **Formal Verification Bridge**: Translates generated Python into Lean 4 and verifies correctness via local Lean compiler or LLM semantic check.
@@ -23,6 +26,7 @@ Founders, developers, and researchers building high-stakes, privacy-first cognit
 - **Strategic Planner**: Long-horizon planning and decomposition of high-level goals into executable tracks.
 - **Predictive Speculation**: Anticipates follow-up queries and pre-computes reasoning paths to achieve near-zero latency.
 - **Synthetic Dreaming**: Autonomous memory consolidation and insight generation during system idle periods.
+- **Collaborative Deliberation**: Multiple specialized agents can now exchange interim findings, review one another, and produce a consensus answer instead of relying on a single-pass response.
 
 ### 3.3 Security & Reliability
 - **Adversarial Auditing**: Mandatory red-team pass on all execution plans before they are run.
@@ -43,6 +47,8 @@ Oricli-Alpha exposes a set of **builtin skills** (role presets) that shape how s
 ### 4.1 Orchestration
 - **Async Virtual Clustering**: Ability to scale horizontally across independent GPU nodes using an S3-hybrid coordination strategy.
 - **Resource Elasticity**: Automatic fallback to auto-selection if specific GPU requested is unavailable (Supply Constraint).
+- **Swarm Blackboard Coordination**: Multi-agent runs use a shared blackboard with persisted session state, round barriers, and consensus policies (`weighted_vote`, `majority`, `verifier_wins`, `merge_top`).
+- **Async Swarm Execution**: Collaborative nodes can execute concurrently within a round, then safely merge outputs into shared state before peer review and arbitration.
 
 ### 4.2 Training & Learning
 - **JIT Absorption**: Real-time Supervised Fine-Tuning (SFT) on verified web-search results.
@@ -51,9 +57,9 @@ Oricli-Alpha exposes a set of **builtin skills** (role presets) that shape how s
 
 ## 5. Roadmap & Future Vision (The Hive)
 The capstone of Oricli-Alpha is the transition from an "Orchestrated OS" to a "Distributed Hive," in line with the [AGLI Vision](docs/AGLI_VISION.md).
-- **Decentralization**: 250+ brain modules operating as independent micro-agents (current: 253 registered).
-- **Market Dynamics**: Agents bidding on sub-tasks via a Contract Net protocol.
-- **Collective Intelligence**: Emergent problem-solving through peer-to-peer module collaboration.
+- **Decentralization**: 250+ brain modules operating as independent micro-agents, with the first collaborative swarm substrate now implemented.
+- **Market Dynamics**: Next phase is agent bidding on sub-tasks via a Contract Net protocol.
+- **Collective Intelligence**: Emergent problem-solving through peer-to-peer module collaboration, verifier arbitration, and persistent shared blackboard state.
 
 ## 6. Metrics for Success
 - **Action-IQ**: Percentage of correct tool selection and syntax compliance (ToolBench).
