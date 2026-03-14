@@ -2921,6 +2921,9 @@ class OricliAlphaClient:
                 })
                 if result.get("success") and result.get("result", {}).get("success"):
                     result = result["result"]
+                elif not result.get("success") and isinstance(result.get("result"), dict) and result["result"].get("method") == "broker_fallback":
+                    # Special case: Broker fallback for simple prompts (no bids)
+                    result = result["result"]
                 else:
                     # Fallback to normal execution if swarm fails
                     operation_to_use = mapped_operation if mapped_operation else "generate_response"

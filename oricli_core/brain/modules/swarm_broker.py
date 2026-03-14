@@ -103,7 +103,16 @@ class SwarmBrokerModule(BaseBrainModule):
                 task_state["status"] = "failed"
                 task_state["error"] = "No bids received"
                 task_state["event"].set()
-                return {"success": False, "error": f"No bids received for operation: {operation}"}
+                # Return a valid structure even on failure to prevent generator crashes
+                return {
+                    "success": False, 
+                    "error": f"No micro-agents identified a cognitive task for: {operation}",
+                    "result": {
+                        "success": True,
+                        "text": "The Hive is silent. This usually happens with short greetings or simple prompts. Try providing more context or a specific task!",
+                        "method": "broker_fallback"
+                    }
+                }
 
             # 3. Evaluate bids (Arbitration)
             # Pick highest confidence, break ties by lowest compute cost
