@@ -45,7 +45,7 @@ class OricliAlphaAPIDaemon:
             str(python_exe),
             "-m", "oricli_core.api.server",
             "--host", "0.0.0.0",
-            "--port", "8000"
+            "--port", "8081"
         ]
 
         try:

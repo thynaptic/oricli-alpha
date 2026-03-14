@@ -1,0 +1,20 @@
+[Unit]
+Description=Oricli-Alpha UI Server Daemon
+After=network.target oricli-api.service
+
+[Service]
+Type=simple
+User=mike
+Group=mike
+WorkingDirectory=/home/mike/Mavaia
+Environment=PYTHONPATH=/home/mike/Mavaia
+Environment=MAVAIA_API_BASE=http://localhost:8081
+Environment=MAVAIA_UI_PORT=5000
+ExecStart=/home/mike/Mavaia/.venv/bin/python3 /home/mike/Mavaia/ui_app.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/mike/Mavaia/ui_daemon.log
+StandardError=append:/home/mike/Mavaia/ui_daemon.log
+
+[Install]
+WantedBy=multi-user.target

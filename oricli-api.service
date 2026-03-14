@@ -6,16 +6,16 @@ After=network.target
 Type=simple
 User=mike
 Group=mike
-WorkingDirectory=/home/mike/Oricli-Alpha
-Environment=PYTHONPATH=/home/mike/Oricli-Alpha
+WorkingDirectory=/home/mike/Mavaia
+Environment=PYTHONPATH=/home/mike/Mavaia
 Environment=MAVAIA_ENABLE_HEAVY_MODULES=true
 Environment=OLLAMA_URL=http://localhost:11434
 Environment=OLLAMA_MODEL=frob/qwen3.5-instruct
-ExecStart=/home/mike/Oricli-Alpha/.venv/bin/python3 /home/mike/Oricli-Alpha/scripts/oricli_api_daemon.py
+ExecStart=/home/mike/Mavaia/.venv/bin/python3 /home/mike/Mavaia/scripts/oricli_api_daemon.py
 Restart=always
 RestartSec=10
-StandardOutput=append:/home/mike/Oricli-Alpha/api_daemon.log
-StandardError=append:/home/mike/Oricli-Alpha/api_daemon.log
+StandardOutput=append:/home/mike/Mavaia/api_daemon.log
+StandardError=append:/home/mike/Mavaia/api_daemon.log
 
 [Install]
 WantedBy=multi-user.target
