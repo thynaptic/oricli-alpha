@@ -12,8 +12,9 @@ Founders, developers, and researchers building high-stakes, privacy-first cognit
 - **Ollama Utility Bridge**: Offloads general text generation and light reasoning to local Ollama models (e.g. qwen2.5:7b) to maximize system performance and focus internal compute on high-level orchestration.
 - **Dynamic Reasoning**: Replaces linear pipelines with Graph-based execution (DGE) tailored to each query.
 - **Profile-Governed Agents**: Task-specific agent profiles constrain which modules, operations, instructions, and model preferences an agent may use, enabling safer specialization without duplicating module logic.
-- **Collaborative Swarm Layer**: Distributed node coordination now supports shared blackboard state, peer review, consensus scoring, and final synthesis before an overall answer is returned.
+- **Collaborative Swarm Layer**: Distributed node coordination now supports shared blackboard state, peer review, consensus scoring, bid-based participant routing, and final synthesis before an overall answer is returned.
 - **Persistent Swarm Sessions**: Collaborative runs persist message logs, shared state, contributions, reviews, and final consensus for resumable multi-round deliberation.
+- **Skill-Aware Swarm Nodes**: Swarm participants can now combine a hard `agent_profile` policy with a soft `skill_manager` overlay, yielding inspectable instruction layers and skill-aware bidding without relaxing execution constraints.
 - **Neural Subconscious**: Maintains a vectorized influence field to ensure consistency and persistent bias without bloating prompt context.
 - **Multi-Modal Native**: Processes vision (image) and auditory (voice) inputs as first-class citizens in the cognitive graph.
 - **Formal Verification Bridge**: Translates generated Python into Lean 4 and verifies correctness via local Lean compiler or LLM semantic check.
@@ -49,6 +50,7 @@ Oricli-Alpha exposes a set of **builtin skills** (role presets) that shape how s
 - **Resource Elasticity**: Automatic fallback to auto-selection if specific GPU requested is unavailable (Supply Constraint).
 - **Swarm Blackboard Coordination**: Multi-agent runs use a shared blackboard with persisted session state, round barriers, and consensus policies (`weighted_vote`, `majority`, `verifier_wins`, `merge_top`).
 - **Async Swarm Execution**: Collaborative nodes can execute concurrently within a round, then safely merge outputs into shared state before peer review and arbitration.
+- **Economic Routing**: Swarm participants estimate utility-scored bids and can be selected by `auto`, `all`, `top_k`, or `threshold` policies before each collaborative run.
 
 ### 4.2 Training & Learning
 - **JIT Absorption**: Real-time Supervised Fine-Tuning (SFT) on verified web-search results.
@@ -58,8 +60,8 @@ Oricli-Alpha exposes a set of **builtin skills** (role presets) that shape how s
 ## 5. Roadmap & Future Vision (The Hive)
 The capstone of Oricli-Alpha is the transition from an "Orchestrated OS" to a "Distributed Hive," in line with the [AGLI Vision](docs/AGLI_VISION.md).
 - **Decentralization**: 250+ brain modules operating as independent micro-agents, with the first collaborative swarm substrate now implemented.
-- **Market Dynamics**: Next phase is agent bidding on sub-tasks via a Contract Net protocol.
-- **Collective Intelligence**: Emergent problem-solving through peer-to-peer module collaboration, verifier arbitration, and persistent shared blackboard state.
+- **Market Dynamics**: First-pass agent bidding and route selection are now implemented; the next phase is richer Contract Net-style negotiation and learned bid calibration.
+- **Collective Intelligence**: Emergent problem-solving now combines peer-to-peer module collaboration, verifier arbitration, persistent blackboard state, and skill/profile composition at the node level.
 
 ## 6. Metrics for Success
 - **Action-IQ**: Percentage of correct tool selection and syntax compliance (ToolBench).

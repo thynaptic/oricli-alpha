@@ -97,6 +97,51 @@ def test_agent_coordinator_injects_profile_instructions(tmp_path, monkeypatch):
     assert answer_agent.calls[0][1]["instructions"] == "Answer tersely and precisely."
 
 
+def test_agent_coordinator_preserves_context_instruction_layers(tmp_path, monkeypatch):
+    config_path = tmp_path / "agent_profiles.json"
+    _write_profile_config(config_path)
+    service = AgentProfileService(config_path=config_path)
+
+    answer_agent = RecordingAgent({"answer": "formatted"})
+    coordinator = AgentCoordinatorModule()
+    coordinator.agents = {"answer": answer_agent}
+
+    monkeypatch.setattr(
+        "oricli_core.brain.modules.agent_coordinator.get_agent_profile_service",
+        lambda: service,
+    )
+
+    result = coordinator.execute(
+        "execute_task",
+        {
+            "task": {
+                "id": "task-1b",
+                "agent_type": "answer",
+                "query": "hello",
+                "context": {
+                    "answer": "raw answer",
+                    "instructions": "Profile instructions:\nAnswer tersely and precisely.\n\nSkill mindset:\nThink like a python architect.",
+                    "instruction_layers": {
+                        "profile": "Answer tersely and precisely.",
+                        "skill_mindset": "Think like a python architect.",
+                    },
+                    "selected_skill": {
+                        "skill_name": "senior_python_dev",
+                        "match_strategy": "explicit",
+                    },
+                },
+                "agent_profile": "answer_only",
+            }
+        },
+    )
+
+    assert result["success"] is True
+    assert answer_agent.calls[0][1]["instructions"].startswith("Profile instructions:")
+    assert answer_agent.calls[0][1]["instruction_layers"]["skill_mindset"] == "Think like a python architect."
+    assert answer_agent.calls[0][1]["selected_skill"]["skill_name"] == "senior_python_dev"
+    assert answer_agent.calls[0][1]["profile_instructions"] == "Answer tersely and precisely."
+
+
 def test_agent_coordinator_blocks_disallowed_agent(tmp_path, monkeypatch):
     config_path = tmp_path / "agent_profiles.json"
     _write_profile_config(config_path)

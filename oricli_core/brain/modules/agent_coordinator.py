@@ -224,8 +224,20 @@ class AgentCoordinatorModule(BaseBrainModule):
         self,
         params: Dict[str, Any],
         profile: Optional[AgentProfile],
+        *,
+        context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         payload = dict(params)
+        if context:
+            instructions = context.get("instructions")
+            if instructions and not payload.get("instructions"):
+                payload["instructions"] = instructions
+            instruction_layers = context.get("instruction_layers")
+            if instruction_layers and not payload.get("instruction_layers"):
+                payload["instruction_layers"] = instruction_layers
+            selected_skill = context.get("selected_skill")
+            if selected_skill and not payload.get("selected_skill"):
+                payload["selected_skill"] = selected_skill
         if profile is None:
             return payload
         payload["agent_profile"] = profile.name
@@ -257,6 +269,7 @@ class AgentCoordinatorModule(BaseBrainModule):
                 self._build_profiled_params(
                     {"query": query, "limit": limit, "sources": sources},
                     profile,
+                    context=context,
                 ),
             )
 
@@ -270,6 +283,7 @@ class AgentCoordinatorModule(BaseBrainModule):
                 self._build_profiled_params(
                     {"query": query, "documents": documents},
                     profile,
+                    context=context,
                 ),
             )
 
@@ -279,6 +293,7 @@ class AgentCoordinatorModule(BaseBrainModule):
                 self._build_profiled_params(
                     {"query": query, "documents": documents, "persona": context.get("persona", "oricli")},
                     profile,
+                    context=context,
                 ),
             )
 
@@ -288,6 +303,7 @@ class AgentCoordinatorModule(BaseBrainModule):
                 self._build_profiled_params(
                     {"query": query, "max_passes": context.get("max_passes", 3), "limit": context.get("limit", 10)},
                     profile,
+                    context=context,
                 ),
             )
 
@@ -297,6 +313,7 @@ class AgentCoordinatorModule(BaseBrainModule):
                 self._build_profiled_params(
                     {"query": query, "documents": documents},
                     profile,
+                    context=context,
                 ),
             )
 
@@ -309,6 +326,7 @@ class AgentCoordinatorModule(BaseBrainModule):
                 self._build_profiled_params(
                     {"query": query, "answer": raw_answer, "documents": documents},
                     profile,
+                    context=context,
                 ),
             )
 

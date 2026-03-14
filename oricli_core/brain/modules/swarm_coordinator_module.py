@@ -129,8 +129,71 @@ class SwarmCoordinatorModule(BaseBrainModule):
             metadata={
                 "agent_profile": params.get("agent_profile"),
                 "task_type": params.get("task_type"),
+                "skill_name": params.get("skill_name"),
             },
         )
+
+    def _estimate_participant_bids(
+        self,
+        *,
+        participants: List[Dict[str, Any]],
+        query: str,
+        params: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        bids: List[Dict[str, Any]] = []
+        for participant in participants:
+            bid_result = self.swarm_node.execute(
+                "estimate_bid",
+                {
+                    "node_id": participant["node_id"],
+                    "agent_type": participant.get("agent_type"),
+                    "query": participant.get("query") or query,
+                    "task_type": participant.get("task_type") or params.get("task_type"),
+                    "agent_profile": participant.get("agent_profile") or params.get("agent_profile"),
+                    "skill_name": participant.get("skill_name") or params.get("skill_name"),
+                    "auto_skill_match": participant.get("auto_skill_match", params.get("auto_skill_match", True)),
+                    "priority": participant.get("priority", 0),
+                    "bid_hint": participant.get("bid_hint"),
+                },
+            )
+            bid = dict(bid_result.get("bid") or {})
+            bid["selected"] = False
+            bids.append(bid)
+        bids.sort(key=lambda item: (float(item.get("utility_score", 0.0)), float(item.get("estimated_confidence", 0.0))), reverse=True)
+        return bids
+
+    def _select_participants_by_bids(
+        self,
+        *,
+        participants: List[Dict[str, Any]],
+        bids: List[Dict[str, Any]],
+        params: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        route_policy = str(params.get("route_policy") or "auto")
+        top_k_default = min(len(participants), 3)
+        bid_top_k = max(1, int(params.get("bid_top_k", top_k_default)))
+        bid_threshold = float(params.get("bid_threshold", 0.0))
+
+        if route_policy == "all":
+            selected_node_ids = {participant["node_id"] for participant in participants}
+        elif route_policy == "threshold":
+            selected_node_ids = {
+                bid["node_id"]
+                for bid in bids
+                if float(bid.get("utility_score", 0.0)) >= bid_threshold
+            }
+            if not selected_node_ids and bids:
+                selected_node_ids = {bids[0]["node_id"]}
+        elif route_policy == "top_k":
+            selected_node_ids = {bid["node_id"] for bid in bids[:bid_top_k]}
+        else:
+            auto_top_k = len(participants) if len(participants) <= 3 else min(len(participants), 3)
+            selected_node_ids = {bid["node_id"] for bid in bids[:auto_top_k]}
+
+        for bid in bids:
+            bid["selected"] = bid["node_id"] in selected_node_ids
+
+        return [participant for participant in participants if participant["node_id"] in selected_node_ids]
 
     def _run_round_participant(
         self,
@@ -155,6 +218,8 @@ class SwarmCoordinatorModule(BaseBrainModule):
                 "agent_type": participant.get("agent_type"),
                 "agent_profile": participant.get("agent_profile") or params.get("agent_profile"),
                 "task_type": participant.get("task_type") or params.get("task_type"),
+                "skill_name": participant.get("skill_name") or params.get("skill_name"),
+                "auto_skill_match": participant.get("auto_skill_match", params.get("auto_skill_match", True)),
                 "query": participant.get("query") or query,
                 "context": participant_context,
                 "shared_state": shared_state_snapshot,
@@ -173,19 +238,34 @@ class SwarmCoordinatorModule(BaseBrainModule):
             raise InvalidParameterError("query", query, "query is required")
 
         participants = self._normalize_participants(params)
+        bids = self._estimate_participant_bids(
+            participants=participants,
+            query=query,
+            params=params,
+        )
+        selected_participants = self._select_participants_by_bids(
+            participants=participants,
+            bids=bids,
+            params=params,
+        )
         round_limit = max(1, int(params.get("round_limit", 1)))
         peer_review = bool(params.get("peer_review", True))
         async_execution = bool(params.get("async_execution", False))
         session = self._initialize_blackboard(
             session_id=params.get("session_id"),
             query=query,
-            participants=participants,
+            participants=selected_participants,
             params=params,
         )
         session_id = str(session["session_id"])
         shared_state = dict(session.get("shared_state") or {})
         shared_state.setdefault("query", query)
         shared_state.setdefault("contributions", [])
+        shared_state["routing"] = {
+            "policy": str(params.get("route_policy") or "auto"),
+            "bids": bids,
+            "selected_node_ids": [participant["node_id"] for participant in selected_participants],
+        }
         message_log = list(session.get("message_log") or [])
         contributions: List[Dict[str, Any]] = list(session.get("contributions") or [])
         reviews: List[Dict[str, Any]] = list(session.get("reviews") or [])
@@ -202,8 +282,8 @@ class SwarmCoordinatorModule(BaseBrainModule):
             shared_state_snapshot = dict(shared_state)
             message_log_snapshot = list(message_log)
             previous_results_snapshot = list(previous_results)
-            if async_execution and len(participants) > 1:
-                max_workers = min(len(participants), int(params.get("max_workers", len(participants))))
+            if async_execution and len(selected_participants) > 1:
+                max_workers = min(len(selected_participants), int(params.get("max_workers", len(selected_participants))))
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     futures = [
                         executor.submit(
@@ -216,12 +296,12 @@ class SwarmCoordinatorModule(BaseBrainModule):
                             message_log_snapshot=message_log_snapshot,
                             previous_results_snapshot=previous_results_snapshot,
                         )
-                        for participant in participants
+                        for participant in selected_participants
                     ]
                     for future in as_completed(futures):
                         round_entries.append(future.result())
             else:
-                for participant in participants:
+                for participant in selected_participants:
                     round_entries.append(
                         self._run_round_participant(
                             participant=participant,
@@ -246,6 +326,7 @@ class SwarmCoordinatorModule(BaseBrainModule):
                         "node_id": node_result.get("node_id"),
                         "agent_type": node_result.get("agent_type"),
                         "contribution": node_result.get("contribution"),
+                        "selected_skill": node_result.get("selected_skill"),
                     }
                 )
                 delta = node_result.get("shared_state_delta")
@@ -316,7 +397,9 @@ class SwarmCoordinatorModule(BaseBrainModule):
             "query": query,
             "answer": consensus.get("answer", ""),
             "consensus": consensus,
-            "participants": participants,
+            "participants": selected_participants,
+            "candidate_participants": participants,
+            "bids": bids,
             "message_log": message_log,
             "shared_state": shared_state,
             "contributions": contributions,

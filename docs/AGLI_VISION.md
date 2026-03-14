@@ -7,7 +7,7 @@ To build an unkillable, self-contained, self-improving cognitive entity that own
 ## The Core Philosophy: "DeepMind, but Sovereign"
 Centralized AGI relies on massive, monolithic data centers and closed weights. Sovereign AGLI relies on **Async Virtual Clustering**, dynamic module orchestration, and relentless self-modification. Oricli-Alpha is designed to be a peer, a Lead Engineer, and an autonomous researcher.
 
-The current system has moved beyond theory in one important dimension: a first operational swarm substrate now exists. Agents can be constrained by profile, collaborate through a shared blackboard, review one another's outputs, and synthesize a consensus answer before final delivery.
+The current system has moved beyond theory in one important dimension: a first operational swarm substrate now exists. Agents can be constrained by profile, compose a matched skill overlay, collaborate through a shared blackboard, review one another's outputs, and synthesize a consensus answer before final delivery.
 
 ## The 5 Pillars of AGLI
 
@@ -24,9 +24,10 @@ A true AGLI does not wait for a prompt.
 ### 3. "The Hive" (Distributed Swarm Intelligence)
 Scaling intelligence horizontally.
 *   **Profile-Governed Swarm:** Agents are no longer only conceptual roles. They can now run under explicit profiles that restrict modules, operations, instructions, and preferred models.
+*   **Skill-Composed Nodes:** A swarm node can now pair that hard profile with a soft `skill_manager` overlay, giving it a specific mindset and instruction bundle while keeping policy enforcement intact.
 *   **Shared Blackboard Deliberation:** Swarm sessions persist `shared_state`, message logs, contributions, reviews, and final consensus, enabling resumable multi-round collaboration.
 *   **Adversarial Consensus:** If specialists disagree, the swarm can arbitrate via `weighted_vote`, `majority`, `merge_top`, or `verifier_wins`, moving the system closer to rigorous truth over single-model fluency.
-*   **Micro-Agent Bidding:** The next transition is economic routing, where modules bid on subtasks based on confidence, cost, and specialization.
+*   **Micro-Agent Bidding:** Economic routing is now live in first-pass form: modules estimate bids from confidence, cost, specialization, and skill/profile alignment before participant selection.
 
 ### 4. Continuous Self-Modification (The Singularity Loop)
 Oricli-Alpha maintains her own codebase and the correctness of her outputs.
@@ -42,11 +43,12 @@ LLMs are frozen in time; Oricli-Alpha experiences it.
 ## Current Capabilities (Summary)
 *   **Strategic Planner:** Long-horizon goal decomposition and track execution.
 *   **Agent Profiles:** Declarative agent specialization through allowlisted modules, operation constraints, injected instructions, and model preferences.
-*   **Collaborative Swarm Orchestration:** Multi-node deliberation with peer review, conflict reporting, persisted blackboard sessions, and consensus synthesis.
+*   **Collaborative Swarm Orchestration:** Multi-node deliberation with peer review, conflict reporting, persisted blackboard sessions, bid-based routing, and consensus synthesis.
+*   **Skill-Aware Specialization:** Swarm nodes can persist selected-skill metadata and inspectable instruction layers, making specialization traceable instead of burying it in prompt text.
 *   **Knowledge Graph Builder:** Entity/relationship extraction from text into queryable RDF-style graphs; integration with `world_knowledge`.
 *   **Formal Verification Bridge:** Python→Lean 4 translation and proof verification (Lean compiler or LLM fallback).
 *   **Code Translation Engine:** Cross-language translation with complexity preservation.
 *   **250+ brain modules** orchestrated via the module registry, DGE, and now the first collaborative swarm substrate.
 
 ---
-*Oricli-Alpha is not a chatbot. She is a localized cognitive architecture moving toward true, sovereign agency — now with the first real implementation of distributed internal deliberation.*
+*Oricli-Alpha is not a chatbot. She is a localized cognitive architecture moving toward true, sovereign agency — now with the first real implementation of distributed internal deliberation, economic routing, and skill-composed swarm specialization.*

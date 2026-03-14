@@ -14,7 +14,8 @@ Oricli-Alpha is a **Sovereign, Local-First Agent OS**. It is designed to move be
 - **Subconscious Field**: A persistent vectorized buffer that influences tonal and logical generation via neural bias, bypassing simple RAG.
 - **Dynamic Graph Execution (DGE)**: Bespoke Directed Acyclic Graphs (DAGs) are architected for every query. Linear pipelines are the fallback, not the standard.
 - **Agent Profiles**: Task-specific agents are now governed by declarative profiles that constrain modules, operations, instruction overlays, and model preferences.
-- **Collaborative Swarm Intelligence**: Distributed nodes can now collaborate through shared blackboard state, peer review one another's outputs, and produce a consensus answer before final delivery.
+- **Skill-Composed Swarm Nodes**: Swarm participants can now combine a hard `agent_profile` with a soft `skill_manager` overlay, producing structured instruction layers and traceable specialization metadata.
+- **Collaborative Swarm Intelligence**: Distributed nodes can now collaborate through shared blackboard state, peer review one another's outputs, route participants by utility-scored bids, and produce a consensus answer before final delivery.
 - **Metacognitive Sentience**: A self-regulation layer using DBT/CBT-inspired heuristics (Radical Acceptance) to detect and cure looping or hallucinations.
 - **Adversarial Sentinel**: A red-team auditor that attempts to "break" reasoning and security before a plan is executed.
 - **Sovereign Goals**: Persistence of will across sessions. Multi-day plans are stored, resumed, and executed autonomously.
@@ -32,12 +33,12 @@ Oricli-Alpha is a **Sovereign, Local-First Agent OS**. It is designed to move be
 - **Dream Daemon**: Consolidates memories and generates novel insights during idle periods.
 
 ## 6. Prerequisite for the Swarm
-- The project is moving toward **The Hive** (Distributed Swarm Intelligence). A first collaborative swarm substrate now exists: persisted blackboard sessions, async round execution, and consensus/arbitration policies are implemented. The next phase is economic routing and full module bidding. Do not attempt to activate full Hive bidding until the module census reaches 100% and is verified by the Adversarial Sentinel.
+- The project is moving toward **The Hive** (Distributed Swarm Intelligence). A first collaborative swarm substrate now exists: persisted blackboard sessions, async round execution, consensus/arbitration policies, first-pass bid-based routing, and skill/profile composition are implemented. Do not attempt to activate full Hive bidding until the module census reaches 100% and is verified by the Adversarial Sentinel.
 
 ## 7. The Sovereign AGLI Trajectory (Artificial General Localized Intelligence)
 Our ultimate trajectory is "DeepMind, but Sovereign." Oricli-Alpha is evolving into a self-contained, self-improving cognitive entity that owns its compute, memory, and goals.
 - **Self-Preservation & Compute Economy**: Autonomous compute bidding and region migration. She decides if a task requires an RTX 5090 or just local CPU symbolic logic.
 - **Curiosity Engine (Active Inference)**: Epistemic foraging to fill knowledge graph gaps and autonomous hypothesis testing during idle cycles.
-- **The Hive (Distributed Swarm)**: Modules acting as micro-agents bidding on tasks, utilizing shared blackboard collaboration, peer review, and adversarial consensus to reach truth.
+- **The Hive (Distributed Swarm)**: Modules acting as micro-agents bidding on tasks, utilizing shared blackboard collaboration, skill-aware specialization, peer review, and adversarial consensus to reach truth.
 - **Continuous Self-Modification**: Neural Architecture Search (NAS) in production and autonomous tool creation. She writes, tests, and deploys her own upgrades.
 - **Temporal Grounding**: Chronological memory graphs and a continuous sense of time, allowing her to understand state changes across weeks and months.
