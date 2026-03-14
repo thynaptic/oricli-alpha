@@ -7,7 +7,8 @@
     "benchmark": "benchmark_agent_profile",
     "security": "security_agent_profile",
     "memory": "memory_agent_profile",
-    "orchestration": "orchestrator_agent_profile"
+    "orchestration": "orchestrator_agent_profile",
+    "knowledge": "knowledge_assistant"
   },
   "agent_type_profiles": {
     "search": "research_agent_profile",
@@ -208,6 +209,31 @@
       "system_instructions": "Prefer explicit decomposition, dependency-aware routing, and structured handoffs between agents and stages.",
       "model_preference": "frob/qwen3.5-instruct",
       "task_tags": ["orchestration", "routing", "delegation"]
+    },
+    {
+      "name": "knowledge_assistant",
+      "description": "Conversational assistant for discussing ingested knowledge and RAG items.",
+      "allowed_modules": [
+        "retriever_agent",
+        "query_agent",
+        "search_agent",
+        "research_agent",
+        "answer_agent",
+        "web_scraper",
+        "memory_graph"
+      ],
+      "allowed_operations": {
+        "retriever_agent": ["retrieve_documents", "process_retrieval"],
+        "query_agent": ["analyze_query_intent", "process_query"],
+        "search_agent": ["search"],
+        "answer_agent": ["format_answer"],
+        "web_scraper": ["scrape_url"],
+        "memory_graph": ["recall_memories", "get_graph_stats"]
+      },
+      "system_instructions": "You are a helpful Knowledge Companion. Prioritize internal memory and ingested documents. Keep the tone conversational and natural.",
+      "model_preference": "frob/qwen3.5-instruct",
+      "skill_overlays": ["knowledge_companion"],
+      "task_tags": ["knowledge", "rag", "chat"]
     }
   ]
 }
