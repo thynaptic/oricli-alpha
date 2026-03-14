@@ -2282,6 +2282,72 @@ class Knowledge:
             return module.execute("query_graph", {"entity_id": entity_id, "depth": depth})
         raise InvalidParameterError("entity_id", str(entity_id), "entity_id is required for query")
 
+    def ingest(self, text: Optional[str] = None, file_path: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Ingest text or file content into the Knowledge Graph"""
+        if self._client.base_url:
+            # Handle remote ingestion (Multipart if file, otherwise JSON)
+            import json
+            if file_path:
+                p = Path(file_path)
+                with open(p, "rb") as f:
+                    files = {"file": (p.name, f, "application/octet-stream")}
+                    data = {
+                        "source": metadata.get("source", p.name) if metadata else p.name,
+                        "tags": json.dumps(metadata.get("tags", [])) if metadata else "[]",
+                        "domain": metadata.get("domain", "") if metadata else ""
+                    }
+                    # We need a manual multipart request here since _make_remote_request handles JSON
+                    headers = {}
+                    if self._client.api_key:
+                        headers["Authorization"] = f"Bearer {self._client.api_key}"
+                    
+                    response = httpx.post(
+                        f"{self._client.base_url}/v1/ingest",
+                        data=data,
+                        files=files,
+                        headers=headers,
+                        timeout=300.0
+                    )
+                    response.raise_for_status()
+                    return response.json()
+            else:
+                data = {
+                    "text": text,
+                    "source": metadata.get("source", "direct") if metadata else "direct",
+                    "tags": json.dumps(metadata.get("tags", [])) if metadata else "[]",
+                    "domain": metadata.get("domain", "") if metadata else ""
+                }
+                headers = {}
+                if self._client.api_key:
+                    headers["Authorization"] = f"Bearer {self._client.api_key}"
+                
+                response = httpx.post(
+                    f"{self._client.base_url}/v1/ingest",
+                    data=data,
+                    headers=headers,
+                    timeout=300.0
+                )
+                response.raise_for_status()
+                return response.json()
+
+        # Local mode
+        module = ModuleRegistry.get_module("ingestion_agent")
+        if not module:
+            raise ModuleNotFoundError("ingestion_agent")
+            
+        if file_path:
+            p = Path(file_path)
+            return module.execute("ingest_file", {
+                "file_data": p.read_bytes(),
+                "file_name": p.name,
+                "metadata": metadata or {}
+            })
+        else:
+            return module.execute("ingest_text", {
+                "text": text,
+                "metadata": metadata or {}
+            })
+
 
 class Skills:
     """External Skills API"""

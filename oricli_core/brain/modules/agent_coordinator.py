@@ -273,6 +273,17 @@ class AgentCoordinatorModule(BaseBrainModule):
                 ),
             )
 
+        if agent_type == "retriever":
+            limit = context.get("limit", 10)
+            return agent.execute(
+                "process_retrieval",
+                self._build_profiled_params(
+                    {"query": query, "limit": limit},
+                    profile,
+                    context=context,
+                ),
+            )
+
         documents = context.get("documents")
         if not isinstance(documents, list):
             documents = self._extract_documents_from_results(previous_results)

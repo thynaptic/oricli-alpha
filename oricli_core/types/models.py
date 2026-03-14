@@ -651,3 +651,20 @@ class AgentListResponse(BaseModel):
     success: bool = Field(..., description="Whether operation succeeded")
     agents: List[AgentResponse] = Field(default_factory=list, description="List of agents")
 
+# Ingestion Models
+
+class IngestRequest(BaseModel):
+    """Request to ingest text or metadata"""
+    text: Optional[str] = Field(default=None, description="Raw text to ingest")
+    source: str = Field(default="direct_ingestion", description="Source name (e.g. file name)")
+    tags: List[str] = Field(default_factory=list, description="Tags for categorization")
+    domain: Optional[str] = Field(default=None, description="Knowledge domain")
+
+class IngestResponse(BaseModel):
+    """Response from ingestion process"""
+    success: bool = Field(..., description="Whether ingestion succeeded")
+    source: str = Field(..., description="Source name")
+    chunks_processed: int = Field(..., description="Number of chunks created")
+    memory_ids: List[str] = Field(default_factory=list, description="IDs of stored chunks")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+

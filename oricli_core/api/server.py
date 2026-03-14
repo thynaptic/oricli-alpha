@@ -21,7 +21,7 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from fastapi import FastAPI, HTTPException, Request, Header, Response
+    from fastapi import FastAPI, HTTPException, Request, Header, Response, UploadFile, File, Form
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse
     from fastapi.exceptions import RequestValidationError
@@ -90,6 +90,8 @@ from oricli_core.types.models import (
     AgentUpdateRequest,
     AgentResponse,
     AgentListResponse,
+    IngestRequest,
+    IngestResponse,
 )
 
 
@@ -965,6 +967,57 @@ def create_app(
         if not service.delete_profile(agent_name):
             raise HTTPException(status_code=404, detail="Agent profile not found or could not be deleted")
         return {"success": True, "message": f"Agent profile '{agent_name}' deleted."}
+
+    # --- Ingestion API ---
+    @app.post("/v1/ingest", response_model=IngestResponse)
+    async def ingest_content(
+        text: Optional[str] = Form(None),
+        source: Optional[str] = Form("direct_ingestion"),
+        tags: Optional[str] = Form("[]"), # JSON string of list
+        domain: Optional[str] = Form(None),
+        file: Optional[UploadFile] = File(None),
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Ingest text or file content into the Knowledge Graph"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.brain.registry import ModuleRegistry
+        import json
+        
+        agent = ModuleRegistry.get_module("ingestion_agent")
+        if not agent:
+            raise HTTPException(status_code=503, detail="ingestion_agent module unavailable")
+
+        try:
+            parsed_tags = json.loads(tags)
+        except Exception:
+            parsed_tags = []
+
+        metadata = {
+            "source": source,
+            "tags": parsed_tags,
+            "domain": domain
+        }
+
+        if file:
+            content = await file.read()
+            result = agent.execute("ingest_file", {
+                "file_data": content,
+                "file_name": file.filename,
+                "mime_type": file.content_type,
+                "metadata": metadata
+            })
+        elif text:
+            result = agent.execute("ingest_text", {
+                "text": text,
+                "metadata": metadata
+            })
+        else:
+            raise HTTPException(status_code=400, detail="Either 'file' or 'text' must be provided")
+
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Ingestion failed"))
+            
+        return IngestResponse(**result)
 
     # --- Ollama-style API Aliases ---
 
