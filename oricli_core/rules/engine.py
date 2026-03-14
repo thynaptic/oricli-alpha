@@ -189,6 +189,96 @@ class RulesEngine:
             resource_policies=resource_policies,
         )
 
+    def get_all_rules(self) -> List[Dict[str, Any]]:
+        """Return all parsed rules as a list of dictionaries."""
+        self.load_rules(force=True)
+        return [vars(r) for r in self._rules]
+
+    def get_rule_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+        """Return a specific rule by name as a dictionary."""
+        self.load_rules(force=True)
+        for r in self._rules:
+            if r.name == name:
+                return vars(r)
+        return None
+
+    def _write_rule_file(self, path: Path, rule_data: Dict[str, Any]) -> None:
+        """Serialize rule_data to .ori format and write to path."""
+        import json
+        name = rule_data.get("name")
+        desc = rule_data.get("description", "")
+        scope = rule_data.get("scope", "global")
+        cats = rule_data.get("categories", [])
+        constraints = rule_data.get("constraints", [])
+        routing = rule_data.get("routing_preferences", [])
+        resources = rule_data.get("resource_policies", [])
+
+        lines = []
+        lines.append(f"@rule_name: {name}")
+        if desc:
+            lines.append(f"@description: {desc}")
+        lines.append(f"@scope: {scope}")
+        lines.append(f"@categories: {json.dumps(cats)}")
+        lines.append("")
+
+        if constraints:
+            lines.append("<constraints>")
+            for c in constraints:
+                lines.append(f"- {c}")
+            lines.append("</constraints>\n")
+
+        if routing:
+            lines.append("<routing_preferences>")
+            for r in routing:
+                lines.append(f"- {r}")
+            lines.append("</routing_preferences>\n")
+
+        if resources:
+            lines.append("<resource_policies>")
+            for p in resources:
+                lines.append(f"- {p}")
+            lines.append("</resource_policies>\n")
+
+        path.write_text("\n".join(lines), encoding="utf-8")
+
+    def create_rule(self, rule_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new .ori rule file and reload rules."""
+        name = rule_data.get("name")
+        if not name:
+            raise ValueError("Rule name is required.")
+            
+        path = self._rules_dir / f"{name}.ori"
+        if path.exists():
+            raise ValueError(f"Rule '{name}' already exists.")
+            
+        if not self._rules_dir.exists():
+            self._rules_dir.mkdir(parents=True, exist_ok=True)
+            
+        self._write_rule_file(path, rule_data)
+        self.load_rules(force=True)
+        return self.get_rule_by_name(name) or rule_data
+
+    def update_rule(self, name: str, rule_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing .ori rule file and reload rules."""
+        path = self._rules_dir / f"{name}.ori"
+        if not path.exists():
+            raise ValueError(f"Rule '{name}' does not exist.")
+            
+        rule_data["name"] = name
+        self._write_rule_file(path, rule_data)
+        self.load_rules(force=True)
+        return self.get_rule_by_name(name) or rule_data
+
+    def delete_rule(self, name: str) -> bool:
+        """Delete an existing .ori rule file and reload rules."""
+        path = self._rules_dir / f"{name}.ori"
+        if not path.exists():
+            return False
+            
+        path.unlink()
+        self.load_rules(force=True)
+        return True
+
     def evaluate_request(self, context: RuleContext) -> RuleDecision:
         """
         Evaluate a context against loaded rules and return an allow/deny decision.

@@ -82,6 +82,10 @@ from oricli_core.types.models import (
     SkillUpdateRequest,
     SkillResponse,
     SkillListResponse,
+    RuleCreateRequest,
+    RuleUpdateRequest,
+    RuleResponse,
+    RuleListResponse,
 )
 
 
@@ -816,6 +820,79 @@ def create_app(
         if not result.get("success"):
             raise HTTPException(status_code=404, detail=result.get("error", "Failed to delete skill"))
         return {"success": True, "message": result.get("message")}
+
+    # --- Rules API ---
+    @app.get("/v1/rules", response_model=RuleListResponse)
+    async def list_rules(authorization: Optional[str] = Header(None, alias="Authorization")):
+        """List all available rules"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.rules.engine import get_rules_engine
+        engine = get_rules_engine()
+        rules = engine.get_all_rules()
+        return RuleListResponse(success=True, rules=[RuleResponse(**r) for r in rules])
+
+    @app.get("/v1/rules/{rule_name}", response_model=RuleResponse)
+    async def get_rule(
+        rule_name: str,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Retrieve details of a specific rule"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.rules.engine import get_rules_engine
+        engine = get_rules_engine()
+        rule = engine.get_rule_by_name(rule_name)
+        if not rule:
+            raise HTTPException(status_code=404, detail="Rule not found")
+        return RuleResponse(**rule)
+
+    @app.post("/v1/rules", response_model=RuleResponse)
+    async def create_rule(
+        request: RuleCreateRequest,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Create a new rule"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.rules.engine import get_rules_engine
+        engine = get_rules_engine()
+        try:
+            rule = engine.create_rule(request.dict())
+            return RuleResponse(**rule)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.put("/v1/rules/{rule_name}", response_model=RuleResponse)
+    async def update_rule(
+        rule_name: str,
+        request: RuleUpdateRequest,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Update an existing rule"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.rules.engine import get_rules_engine
+        engine = get_rules_engine()
+        try:
+            rule = engine.update_rule(rule_name, request.dict())
+            return RuleResponse(**rule)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.delete("/v1/rules/{rule_name}")
+    async def delete_rule(
+        rule_name: str,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Delete a rule"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.rules.engine import get_rules_engine
+        engine = get_rules_engine()
+        success = engine.delete_rule(rule_name)
+        if not success:
+            raise HTTPException(status_code=404, detail="Rule not found or could not be deleted")
+        return {"success": True, "message": f"Rule '{rule_name}' deleted."}
 
     # --- Ollama-style API Aliases ---
 

@@ -2356,6 +2356,72 @@ class Skills:
         return res.get("success", False)
 
 
+class Rules:
+    """External Rules API"""
+    
+    def __init__(self, client: "OricliAlphaClient"):
+        self._client = client
+    
+    def list(self) -> List[Dict[str, Any]]:
+        """List all loaded rules"""
+        if self._client.base_url:
+            res = self._client._make_remote_request("GET", "/v1/rules")
+            return res.get("rules", [])
+            
+        from oricli_core.rules.engine import get_rules_engine
+        engine = get_rules_engine()
+        return engine.get_all_rules()
+        
+    def get(self, rule_name: str) -> Dict[str, Any]:
+        """Get details of a specific rule"""
+        if self._client.base_url:
+            return self._client._make_remote_request("GET", f"/v1/rules/{rule_name}")
+            
+        from oricli_core.rules.engine import get_rules_engine
+        engine = get_rules_engine()
+        rule = engine.get_rule_by_name(rule_name)
+        if not rule:
+            raise ClientError(f"Rule '{rule_name}' not found")
+        return rule
+        
+    def create(self, rule_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new rule"""
+        if self._client.base_url:
+            return self._client._make_remote_request("POST", "/v1/rules", rule_data)
+            
+        from oricli_core.rules.engine import get_rules_engine
+        engine = get_rules_engine()
+        try:
+            return engine.create_rule(rule_data)
+        except Exception as e:
+            raise ClientError(str(e))
+        
+    def update(self, rule_name: str, rule_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing rule"""
+        payload = {"name": rule_name, **rule_data}
+        if self._client.base_url:
+            return self._client._make_remote_request("PUT", f"/v1/rules/{rule_name}", payload)
+            
+        from oricli_core.rules.engine import get_rules_engine
+        engine = get_rules_engine()
+        try:
+            return engine.update_rule(rule_name, payload)
+        except Exception as e:
+            raise ClientError(str(e))
+        
+    def delete(self, rule_name: str) -> bool:
+        """Delete a rule"""
+        if self._client.base_url:
+            res = self._client._make_remote_request("DELETE", f"/v1/rules/{rule_name}")
+            return res.get("success", False)
+            
+        from oricli_core.rules.engine import get_rules_engine
+        engine = get_rules_engine()
+        if not engine.delete_rule(rule_name):
+            raise ClientError(f"Rule '{rule_name}' not found or could not be deleted")
+        return True
+
+
 class AgentProfiles:
     """Client namespace for agent profile discovery and resolution."""
 
@@ -2461,6 +2527,7 @@ class OricliAlphaClient:
             self.swarm = Swarm(self)
             self.knowledge = Knowledge(self)
             self.skills = Skills(self)
+            self.rules = Rules(self)
             
             print("[DEBUG] OricliAlphaClient initialized successfully", file=sys.stderr)
             sys.stderr.flush()

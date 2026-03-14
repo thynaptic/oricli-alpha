@@ -587,3 +587,34 @@ class SkillListResponse(BaseModel):
     success: bool = Field(..., description="Whether operation succeeded")
     skills: List[SkillResponse] = Field(default_factory=list, description="List of skills")
 
+# Rule Models
+
+class RuleCreateRequest(BaseModel):
+    """Request to create a new rule"""
+    name: str = Field(..., description="Name of the rule (filename without .ori)")
+    description: str = Field(default="", description="Description of the rule")
+    scope: str = Field(default="global", description="Scope of the rule (usually 'global')")
+    categories: List[str] = Field(default_factory=list, description="List of categories (e.g., safety, routing)")
+    constraints: List[str] = Field(default_factory=list, description="List of constraint directives")
+    routing_preferences: List[str] = Field(default_factory=list, description="List of routing preference directives")
+    resource_policies: List[str] = Field(default_factory=list, description="List of resource policy directives")
+
+class RuleUpdateRequest(RuleCreateRequest):
+    """Request to update an existing rule"""
+    pass
+
+class RuleResponse(BaseModel):
+    """Details of a single rule"""
+    name: str = Field(..., description="Name of the rule")
+    description: str = Field(default="", description="Description of the rule")
+    scope: str = Field(default="global", description="Scope of the rule")
+    categories: List[str] = Field(default_factory=list, description="List of categories")
+    constraints: List[str] = Field(default_factory=list, description="List of constraint directives")
+    routing_preferences: List[str] = Field(default_factory=list, description="List of routing preference directives")
+    resource_policies: List[str] = Field(default_factory=list, description="List of resource policy directives")
+
+class RuleListResponse(BaseModel):
+    """List of all available rules"""
+    success: bool = Field(..., description="Whether operation succeeded")
+    rules: List[RuleResponse] = Field(default_factory=list, description="List of rules")
+
