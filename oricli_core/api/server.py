@@ -92,6 +92,8 @@ from oricli_core.types.models import (
     AgentListResponse,
     IngestRequest,
     IngestResponse,
+    WebIngestRequest,
+    WebIngestResponse,
 )
 
 
@@ -1018,6 +1020,26 @@ def create_app(
             raise HTTPException(status_code=500, detail=result.get("error", "Ingestion failed"))
             
         return IngestResponse(**result)
+
+    @app.post("/v1/ingest/web", response_model=WebIngestResponse)
+    async def ingest_web(
+        request: WebIngestRequest,
+        authorization: Optional[str] = Header(None, alias="Authorization")
+    ):
+        """Crawl and ingest a website"""
+        app.state.get_api().verify_api_key(authorization)
+        from oricli_core.brain.registry import ModuleRegistry
+        
+        agent = ModuleRegistry.get_module("web_ingestion_agent")
+        if not agent:
+            raise HTTPException(status_code=503, detail="web_ingestion_agent module unavailable")
+
+        result = agent.execute("crawl_and_ingest", request.dict())
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Web ingestion failed"))
+            
+        return WebIngestResponse(**result)
 
     # --- Ollama-style API Aliases ---
 

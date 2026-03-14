@@ -2348,6 +2348,28 @@ class Knowledge:
                 "metadata": metadata or {}
             })
 
+    def ingest_web(self, url: str, max_pages: int = 5, max_depth: int = 2, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Crawl and ingest a website into the Knowledge Graph"""
+        if self._client.base_url:
+            return self._client._make_remote_request("POST", "/v1/ingest/web", {
+                "url": url,
+                "max_pages": max_pages,
+                "max_depth": max_depth,
+                "metadata": metadata or {}
+            })
+
+        # Local mode
+        module = ModuleRegistry.get_module("web_ingestion_agent")
+        if not module:
+            raise ModuleNotFoundError("web_ingestion_agent")
+            
+        return module.execute("crawl_and_ingest", {
+            "url": url,
+            "max_pages": max_pages,
+            "max_depth": max_depth,
+            "metadata": metadata or {}
+        })
+
 
 class Skills:
     """External Skills API"""

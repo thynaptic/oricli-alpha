@@ -69,3 +69,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 
 ---\n\n- [x] **Track: Fix persistent SSH 255 errors during pod stabilization in runpod_bridge.py (Regression/Unresolved).**\n  *Link: [./tracks/ssh_stability_20260302/](./tracks/ssh_stability_20260302/)*\n\n---\n\n- [x] **Track: Implement External Rules API.**\n  *Link: [./tracks/rules_api_20260314/](./tracks/rules_api_20260314/)*\n\n---\n\n- [x] **Track: Implement External Agents API (Agent Factory).**\n  *Link: [./tracks/agents_api_20260314/](./tracks/agents_api_20260314/)*\n\n---\n\n- [ ] **Track: Implement Sovereign Ingestion API (RAG Bridge).**\n  *Link: [./tracks/ingestion_api_20260314/](./tracks/ingestion_api_20260314/)*
+
+---
+
+- [ ] **Track: Implement Sovereign Web Ingestion API (Crawler Bridge).**
+  *Link: [./tracks/web_ingestion_api_20260314/](./tracks/web_ingestion_api_20260314/)*

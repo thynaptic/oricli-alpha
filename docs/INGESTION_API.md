@@ -37,11 +37,34 @@ curl -X POST http://localhost:8081/v1/ingest \
   -F "source=lab_report_01"
 ```
 
+### Ingest a Website (Crawler)
+`POST /v1/ingest/web`
+
+Allows Oricli to autonomously crawl and ingest multiple pages from a site.
+
+**Parameters:**
+- `url`: (Required) Seed URL to start crawling.
+- `max_pages`: (Optional) Max pages to ingest (Default: 5).
+- `max_depth`: (Optional) Max clicks from seed (Default: 2).
+- `metadata`: (Optional) JSON object of metadata.
+
+**Example (cURL):**
+```bash
+curl -X POST http://localhost:8081/v1/ingest/web \
+  -H "Authorization: Bearer test_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://blog.oricli.com",
+    "max_pages": 10,
+    "metadata": {"tags": ["official", "news"]}
+  }'
+```
+
 ---
 
 ## 2. Using the Python Client
 
-The `OricliAlphaClient` exposes the factory via the `knowledge.ingest()` method.
+The `OricliAlphaClient` exposes the factory via the `knowledge` methods.
 
 ```python
 from oricli_core.client import OricliAlphaClient
@@ -54,10 +77,10 @@ res = client.knowledge.ingest(
     metadata={"tags": ["AI", "Paper"], "domain": "Science"}
 )
 
-# Ingest raw text
-client.knowledge.ingest(
-    text="Fact: Oricli uses a distributed swarm architecture.",
-    metadata={"source": "manual_entry"}
+# Ingest a Website
+client.knowledge.ingest_web(
+    url="https://docs.python.org/3/",
+    max_pages=5
 )
 ```
 

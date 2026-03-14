@@ -668,3 +668,21 @@ class IngestResponse(BaseModel):
     memory_ids: List[str] = Field(default_factory=list, description="IDs of stored chunks")
     error: Optional[str] = Field(default=None, description="Error message if failed")
 
+# Web Ingestion Models
+
+class WebIngestRequest(BaseModel):
+    """Request to crawl and ingest a website"""
+    url: str = Field(..., description="Seed URL to start crawling from")
+    max_pages: int = Field(default=5, ge=1, le=50, description="Max number of pages to ingest")
+    max_depth: int = Field(default=2, ge=1, le=5, description="Max crawl depth from seed")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+class WebIngestResponse(BaseModel):
+    """Response from web crawling process"""
+    success: bool = Field(..., description="Whether crawl succeeded")
+    seed_url: str = Field(..., description="Original seed URL")
+    pages_ingested: int = Field(..., description="Total pages processed")
+    total_chunks: int = Field(..., description="Total chunks stored across all pages")
+    urls: List[str] = Field(default_factory=list, description="List of all successfully ingested URLs")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
