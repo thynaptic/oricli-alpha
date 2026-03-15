@@ -233,6 +233,15 @@ class TextGenerationEngineModule(BaseBrainModule):
                 "method": "error_fallback"
             }
 
+
+        if not initial_text or not initial_text.strip() or initial_text == ".":
+            return {
+                "success": True,
+                "text": "The reasoning engine produced no thoughts for this prompt. Try rephrasing or providing more context.",
+                "confidence": 0.0,
+                "method": "error_fallback"
+            }
+
         # By-pass stylings to allow raw SLM output
         final_text = initial_text
 

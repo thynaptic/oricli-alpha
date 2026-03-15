@@ -3102,13 +3102,12 @@ class OricliAlphaClient:
                 except Exception:
                     pass
             
-            # If still empty, raise error with the module's error message if available
+            # If still empty, try one last time to extract from any result field
             if not response_text or not str(response_text).strip():
-                # LAST RESORT: Try to get any text from the result dictionary
                 response_text = str(result.get("error") or result.get("message") or "The Hive processed your request but produced no visible output.")
                 
-                # If still actually failing, raise the error
-                if not response_text or "no visible output" in response_text:
+                # If it's truly an error, raise it
+                if "no visible output" in response_text or result.get("error"):
                     error_detail = result.get("error") or "Returned empty response"
                     raise ModuleOperationError(
                         actual_module_name or "cognitive_generator",
