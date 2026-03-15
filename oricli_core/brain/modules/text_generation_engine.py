@@ -135,20 +135,11 @@ class TextGenerationEngineModule(BaseBrainModule):
     def _generate_full_response(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generate complete response from reasoning thoughts
-        
-        Args:
-            params:
-                - thoughts: List of reasoning thoughts/strings
-                - mcts_nodes: Optional MCTS nodes (alternative to thoughts)
-                - reasoning_tree: Optional reasoning tree (alternative to thoughts)
-                - voice_context: Voice context from universal_voice_engine
-                - context: Additional context
-                - original_input: Original user input
-        
-        Returns:
-            Dictionary with generated text and metadata
         """
         thoughts = params.get("thoughts", [])
+        if isinstance(thoughts, str):
+            thoughts = [thoughts]
+            
         mcts_nodes = params.get("mcts_nodes", [])
         reasoning_tree = params.get("reasoning_tree")
         voice_context = params.get("voice_context", {})
@@ -156,7 +147,7 @@ class TextGenerationEngineModule(BaseBrainModule):
         original_input = params.get("original_input", "")
 
         # Extract thoughts from various formats
-        if mcts_nodes:
+        if not thoughts and mcts_nodes:
             # Convert MCTS nodes to thoughts using thought_to_text
             if self.thought_to_text:
                 try:
@@ -174,7 +165,7 @@ class TextGenerationEngineModule(BaseBrainModule):
                 except Exception:
                     pass
 
-        if reasoning_tree and not thoughts:
+        if not thoughts and reasoning_tree:
             # Convert reasoning tree to thoughts
             if self.thought_to_text:
                 try:
@@ -192,10 +183,16 @@ class TextGenerationEngineModule(BaseBrainModule):
                 except Exception:
                     pass
 
+        # Check for direct text input as a final resort
+        if not thoughts:
+            fallback_text = params.get("text") or params.get("input") or params.get("prompt")
+            if fallback_text:
+                thoughts = [fallback_text]
+
         if not thoughts:
             return {
                 "success": False,
-                "error": "No thoughts provided",
+                "error": "No thoughts or text provided for generation",
                 "text": "",
                 "confidence": 0.0,
             }
