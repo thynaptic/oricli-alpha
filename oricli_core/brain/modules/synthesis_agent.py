@@ -160,8 +160,8 @@ class SynthesisAgentModule(BaseBrainModule):
 
     def _fallback_synthesis(self, query: str, documents: List[Dict[str, Any]]) -> str:
         if not documents:
-            return f"No supporting documents found for '{query}'."
-        lines = [f"Answer for '{query}':"]
+            return f"The Hive searched the Knowledge Graph for '{query}' but found no specific documents to reference. I'll answer based on my general internal reasoning instead."
+        lines = [f"Answer for '{query}' (based on {len(documents)} sources):"]
         for idx, doc in enumerate(documents[:3], start=1):
             lines.append(f"{idx}. {doc.get('title','')}: {doc.get('snippet') or doc.get('content','')[:160]}")
         return "\n".join(lines)

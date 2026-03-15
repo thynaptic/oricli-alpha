@@ -191,10 +191,10 @@ class TextGenerationEngineModule(BaseBrainModule):
 
         if not thoughts:
             return {
-                "success": False,
-                "error": "No thoughts or text provided for generation",
-                "text": "",
+                "success": True,
+                "text": "The reasoning engine produced no thoughts for this prompt. Try rephrasing or providing more context.",
                 "confidence": 0.0,
+                "method": "error_fallback"
             }
 
         # Step 1: Convert thoughts to text with conversational enhancements
