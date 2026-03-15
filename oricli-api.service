@@ -14,6 +14,7 @@ Environment=OLLAMA_MODEL=frob/qwen3.5-instruct
 ExecStart=/home/mike/Mavaia/.venv/bin/python3 /home/mike/Mavaia/scripts/oricli_api_daemon.py
 Restart=always
 RestartSec=10
+LimitNOFILE=65535
 StandardOutput=append:/home/mike/Mavaia/api_daemon.log
 StandardError=append:/home/mike/Mavaia/api_daemon.log
 
