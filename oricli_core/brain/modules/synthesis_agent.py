@@ -46,7 +46,7 @@ class SynthesisAgentModule(BaseBrainModule):
             version="1.0.1",
             description="Generates answers from ranked documents using neural grounding",
             # Keep `process_synthesis` as a compatibility alias (older pipeline modules may call it).
-            operations=["synthesize", "process_synthesis", "status"],
+            operations=["synthesize", "process_synthesis", "generate_response", "status"],
             dependencies=[],
             model_required=False,
         )
@@ -59,6 +59,10 @@ class SynthesisAgentModule(BaseBrainModule):
         """Execute operation"""
         if operation == "status":
             return self._get_status()
+
+        if operation == "generate_response":
+            # Map chat completions to synthesis
+            return self.execute("synthesize", params)
 
         if operation not in {"synthesize", "process_synthesis"}:
             return {"success": False, "error": f"Unknown operation: {operation}"}

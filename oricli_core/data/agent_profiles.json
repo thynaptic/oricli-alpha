@@ -33,19 +33,21 @@
         "query_agent",
         "reranker_agent",
         "retriever_agent",
-        "verifier_agent"
+        "verifier_agent",
+        "conversational_defaults"
       ],
       "allowed_operations": {
         "search_agent": ["search"],
         "ranking_agent": ["rank"],
-        "synthesis_agent": ["synthesize"],
-        "answer_agent": ["answer", "format_answer"],
+        "synthesis_agent": ["synthesize", "generate_response"],
+        "answer_agent": ["answer", "format_answer", "generate_response"],
         "research_agent": ["research"],
         "analysis_agent": ["analyze"],
         "query_agent": ["normalize_query", "extract_keywords", "formulate_search_queries", "analyze_query_intent", "process_query"],
         "reranker_agent": ["rerank_documents", "calculate_relevance", "select_top_k", "diversify_results", "process_reranking"],
-        "retriever_agent": ["retrieve_documents", "retrieve_from_sources", "expand_query", "filter_candidates", "process_retrieval"],
-        "verifier_agent": ["verify_facts", "check_citations", "validate_consistency", "assess_confidence", "process_verification"]
+        "retriever_agent": ["retrieve_documents", "retrieve_from_sources", "expand_query", "filter_candidates", "process_retrieval", "generate_response"],
+        "verifier_agent": ["verify_facts", "check_citations", "validate_consistency", "assess_confidence", "process_verification"],
+        "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Prioritize retrieval quality, source traceability, and synthesis grounded in the returned evidence.",
       "model_preference": "frob/qwen3.5-instruct",
@@ -61,16 +63,18 @@
         "answer_agent",
         "analysis_agent",
         "query_agent",
-        "research_agent"
+        "research_agent",
+        "conversational_defaults"
       ],
       "allowed_operations": {
         "search_agent": ["search"],
         "ranking_agent": ["rank"],
-        "synthesis_agent": ["synthesize"],
-        "answer_agent": ["answer", "format_answer"],
+        "synthesis_agent": ["synthesize", "generate_response"],
+        "answer_agent": ["answer", "format_answer", "generate_response"],
         "analysis_agent": ["analyze"],
         "query_agent": ["normalize_query", "extract_keywords", "formulate_search_queries", "analyze_query_intent", "process_query"],
-        "research_agent": ["research"]
+        "research_agent": ["research"],
+        "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Stay implementation-focused, be explicit about constraints, and optimize for correct engineering actions over prose.",
       "model_preference": "frob/qwen3.5-instruct",
@@ -86,16 +90,18 @@
         "answer_agent",
         "analysis_agent",
         "research_agent",
-        "regulatory_compliance_auditor"
+        "regulatory_compliance_auditor",
+        "conversational_defaults"
       ],
       "allowed_operations": {
         "search_agent": ["search"],
         "ranking_agent": ["rank"],
-        "synthesis_agent": ["synthesize"],
-        "answer_agent": ["answer", "format_answer"],
+        "synthesis_agent": ["synthesize", "generate_response"],
+        "answer_agent": ["answer", "format_answer", "generate_response"],
         "analysis_agent": ["analyze"],
         "research_agent": ["research"],
-        "regulatory_compliance_auditor": ["audit_compliance", "audit_plan"]
+        "regulatory_compliance_auditor": ["audit_compliance", "audit_plan"],
+        "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Bias toward explicit control mapping, cited evidence, and clear distinction between compliant, partial, and missing coverage.",
       "model_preference": "frob/qwen3.5-instruct",
@@ -110,15 +116,17 @@
         "search_agent",
         "query_agent",
         "research_agent",
-        "adversarial_auditor"
+        "adversarial_auditor",
+        "conversational_defaults"
       ],
       "allowed_operations": {
         "analysis_agent": ["analyze"],
-        "answer_agent": ["format_answer"],
+        "answer_agent": ["format_answer", "generate_response"],
         "search_agent": ["search"],
         "query_agent": ["normalize_query", "extract_keywords", "analyze_query_intent", "process_query"],
         "research_agent": ["research"],
-        "adversarial_auditor": ["fuzz_reasoning", "detect_manipulation"]
+        "adversarial_auditor": ["fuzz_reasoning", "detect_manipulation"],
+        "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Bias toward reproduction steps, root-cause isolation, failed-assumption checks, and concrete next debugging actions over generic explanations.",
       "model_preference": "frob/qwen3.5-instruct",
@@ -132,14 +140,16 @@
         "answer_agent",
         "search_agent",
         "query_agent",
-        "research_agent"
+        "research_agent",
+        "conversational_defaults"
       ],
       "allowed_operations": {
         "analysis_agent": ["analyze"],
-        "answer_agent": ["format_answer"],
+        "answer_agent": ["format_answer", "generate_response"],
         "search_agent": ["search"],
         "query_agent": ["extract_keywords", "analyze_query_intent", "process_query"],
-        "research_agent": ["research"]
+        "research_agent": ["research"],
+        "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Focus on measurement fidelity, units, baselines, and regression interpretation. Be explicit about confidence and avoid overstating causality.",
       "model_preference": "frob/qwen3.5-instruct",
@@ -153,14 +163,16 @@
         "answer_agent",
         "search_agent",
         "research_agent",
-        "adversarial_auditor"
+        "adversarial_auditor",
+        "conversational_defaults"
       ],
       "allowed_operations": {
         "analysis_agent": ["analyze"],
-        "answer_agent": ["format_answer"],
+        "answer_agent": ["format_answer", "generate_response"],
         "search_agent": ["search"],
         "research_agent": ["research"],
-        "adversarial_auditor": ["audit_plan", "fuzz_reasoning", "detect_manipulation"]
+        "adversarial_auditor": ["audit_plan", "fuzz_reasoning", "detect_manipulation"],
+        "conversational_defaults": ["generate_response"]
       },
       "blocked_operations": {
         "answer_agent": ["answer"]
@@ -177,14 +189,16 @@
         "query_agent",
         "search_agent",
         "research_agent",
-        "answer_agent"
+        "answer_agent",
+        "conversational_defaults"
       ],
       "allowed_operations": {
-        "retriever_agent": ["retrieve_documents", "retrieve_from_sources", "expand_query", "filter_candidates", "process_retrieval"],
+        "retriever_agent": ["retrieve_documents", "retrieve_from_sources", "expand_query", "filter_candidates", "process_retrieval", "generate_response"],
         "query_agent": ["normalize_query", "extract_keywords", "formulate_search_queries", "analyze_query_intent", "process_query"],
         "search_agent": ["search"],
         "research_agent": ["research"],
-        "answer_agent": ["format_answer"]
+        "answer_agent": ["format_answer", "generate_response"],
+        "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Optimize for recall, context stitching, and preservation of temporal or source relationships across retrieved state.",
       "model_preference": "frob/qwen3.5-instruct",
@@ -198,14 +212,16 @@
         "multi_agent_orchestrator",
         "research_agent",
         "analysis_agent",
-        "answer_agent"
+        "answer_agent",
+        "conversational_defaults"
       ],
       "allowed_operations": {
         "agent_coordinator": ["execute_task", "execute_parallel", "spawn_agent", "get_result", "get_all_results"],
         "multi_agent_orchestrator": ["orchestrate_agents", "coordinate_agents", "execute_pipeline"],
         "research_agent": ["research"],
         "analysis_agent": ["analyze"],
-        "answer_agent": ["format_answer"]
+        "answer_agent": ["format_answer", "generate_response"],
+        "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Prefer explicit decomposition, dependency-aware routing, and structured handoffs between agents and stages.",
       "model_preference": "frob/qwen3.5-instruct",
@@ -221,15 +237,21 @@
         "research_agent",
         "answer_agent",
         "web_scraper",
-        "memory_graph"
+        "memory_graph",
+        "knowledge_graph_builder",
+        "conversational_defaults",
+        "synthesis_agent"
       ],
       "allowed_operations": {
-        "retriever_agent": ["retrieve_documents", "process_retrieval"],
+        "retriever_agent": ["retrieve_documents", "process_retrieval", "generate_response"],
         "query_agent": ["analyze_query_intent", "process_query"],
         "search_agent": ["search"],
-        "answer_agent": ["format_answer"],
+        "answer_agent": ["format_answer", "generate_response"],
         "web_scraper": ["scrape_url"],
-        "memory_graph": ["recall_memories", "get_graph_stats"]
+        "memory_graph": ["recall_memories", "get_graph_stats"],
+        "knowledge_graph_builder": ["query_graph", "build_from_text"],
+        "conversational_defaults": ["generate_response"],
+        "synthesis_agent": ["synthesize", "generate_response"]
       },
       "system_instructions": "You are a helpful Knowledge Companion. Prioritize internal memory and ingested documents. Keep the tone conversational and natural.",
       "model_preference": "frob/qwen3.5-instruct",
@@ -245,7 +267,8 @@
         "mcts_search_engine",
         "chain_of_thought",
         "query_agent",
-        "answer_agent"
+        "answer_agent",
+        "conversational_defaults"
       ],
       "allowed_operations": {
         "strategic_planner": ["create_strategic_plan", "validate_plan"],
@@ -253,7 +276,8 @@
         "mcts_search_engine": ["search", "rollout"],
         "chain_of_thought": ["generate_cot"],
         "query_agent": ["analyze_query_intent"],
-        "answer_agent": ["format_answer"]
+        "answer_agent": ["format_answer", "generate_response"],
+        "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "You are the Principal Strategist. Think deeply before proposing action. Use ToT, MCTS, and CoT to ensure plan robustness.",
       "model_preference": "frob/qwen3.5-instruct",
