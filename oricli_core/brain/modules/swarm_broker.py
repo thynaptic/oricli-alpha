@@ -27,6 +27,8 @@ class SwarmBrokerModule(BaseBrainModule):
         self.broker_id = f"broker_{uuid.uuid4().hex[:8]}"
         self._active_tasks: Dict[str, Dict[str, Any]] = {}
         self._task_locks: Dict[str, threading.Lock] = {}
+        # Global limit on concurrent tasks to prevent CPU exhaustion
+        self._concurrency_limit = threading.Semaphore(2)
 
     @property
     def metadata(self) -> ModuleMetadata:
@@ -55,106 +57,107 @@ class SwarmBrokerModule(BaseBrainModule):
 
     def _delegate_task(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Broadcast CFP, collect bids, and award contract"""
-        operation = params.get("operation")
-        profile_name = params.get("profile_name")
-        task_params = params.get("params", {})
-        timeout = params.get("timeout", 5.0)  # Total wait time for result
-        bid_timeout = params.get("bid_timeout", 1.0)  # Time to wait for bids
+        with self._concurrency_limit:
+            operation = params.get("operation")
+            profile_name = params.get("profile_name")
+            task_params = params.get("params", {})
+            timeout = params.get("timeout", 60.0)  # Total wait time for result
+            bid_timeout = params.get("bid_timeout", 5.0)  # Time to wait for bids
 
-        if not operation:
-            return {"success": False, "error": "Missing required parameter: operation"}
+            if not operation:
+                return {"success": False, "error": "Missing required parameter: operation"}
 
-        task_id = str(uuid.uuid4())
-        self._task_locks[task_id] = threading.Lock()
-        
-        task_state = {
-            "id": task_id,
-            "operation": operation,
-            "profile_name": profile_name,
-            "params": task_params,
-            "bids": [],
-            "status": "bidding",
-            "result": None,
-            "error": None,
-            "event": threading.Event()
-        }
-        self._active_tasks[task_id] = task_state
-
-        # 1. Broadcast CFP
-        cfp_message = SwarmMessage(
-            protocol=MessageProtocol.CFP,
-            topic="tasks.cfp",
-            sender_id=self.broker_id,
-            payload={
-                "task_id": task_id,
-                "operation": operation,
-                "profile_name": profile_name
-            }
-        )
-        self.bus.publish(cfp_message)
-        logger.debug(f"Broker published CFP for {operation} (Profile: {profile_name}, Task: {task_id})")
-
-        # 2. Wait for bids
-        time.sleep(bid_timeout)
-
-        with self._task_locks[task_id]:
-            bids = task_state["bids"]
-            if not bids:
-                task_state["status"] = "failed"
-                task_state["error"] = "No bids received"
-                task_state["event"].set()
-                # Return a valid structure even on failure to prevent generator crashes
-                return {
-                    "success": False, 
-                    "error": f"No micro-agents identified a cognitive task for: {operation}",
-                    "result": {
-                        "success": True,
-                        "text": "The Hive is silent. This usually happens with short greetings or simple prompts. Try providing more context or a specific task!",
-                        "method": "broker_fallback"
-                    }
-                }
-
-            # 3. Evaluate bids (Arbitration)
-            # Pick highest confidence, break ties by lowest compute cost
-            best_bid = sorted(bids, key=lambda b: (b["confidence"], -b["compute_cost"]), reverse=True)[0]
-            winning_node = best_bid["sender_id"]
-            winning_overlays = best_bid.get("skill_overlays", [])
+            task_id = str(uuid.uuid4())
+            self._task_locks[task_id] = threading.Lock()
             
-            task_state["status"] = "executing"
-            task_state["winner"] = winning_node
-
-        # 4. Award contract
-        # Inject skill overlays from bid into task params
-        task_params_with_skills = {**task_params, "_skill_overlays": winning_overlays}
-        
-        accept_message = SwarmMessage(
-            protocol=MessageProtocol.ACCEPT,
-            topic=f"tasks.accept.{winning_node}",
-            sender_id=self.broker_id,
-            recipient_id=winning_node,
-            payload={
-                "task_id": task_id,
+            task_state = {
+                "id": task_id,
                 "operation": operation,
-                "params": task_params_with_skills
+                "profile_name": profile_name,
+                "params": task_params,
+                "bids": [],
+                "status": "bidding",
+                "result": None,
+                "error": None,
+                "event": threading.Event()
             }
-        )
-        self.bus.publish(accept_message)
-        logger.debug(f"Broker awarded task {task_id} to {winning_node}")
+            self._active_tasks[task_id] = task_state
 
-        # 5. Wait for result
-        if task_state["event"].wait(timeout=timeout):
+            # 1. Broadcast CFP
+            cfp_message = SwarmMessage(
+                protocol=MessageProtocol.CFP,
+                topic="tasks.cfp",
+                sender_id=self.broker_id,
+                payload={
+                    "task_id": task_id,
+                    "operation": operation,
+                    "profile_name": profile_name
+                }
+            )
+            self.bus.publish(cfp_message)
+            logger.debug(f"Broker published CFP for {operation} (Profile: {profile_name}, Task: {task_id})")
+
+            # 2. Wait for bids
+            time.sleep(bid_timeout)
+
             with self._task_locks[task_id]:
-                if task_state["status"] == "completed":
-                    result = task_state["result"]
-                    self._cleanup_task(task_id)
-                    return {"success": True, "result": result, "executed_by": winning_node}
-                else:
-                    error = task_state["error"]
-                    self._cleanup_task(task_id)
-                    return {"success": False, "error": error, "executed_by": winning_node}
-        else:
-            self._cleanup_task(task_id)
-            return {"success": False, "error": "Task execution timed out", "executed_by": task_state.get("winner")}
+                bids = task_state["bids"]
+                if not bids:
+                    task_state["status"] = "failed"
+                    task_state["error"] = "No bids received"
+                    task_state["event"].set()
+                    # Return a valid structure even on failure to prevent generator crashes
+                    return {
+                        "success": False, 
+                        "error": f"No micro-agents identified a cognitive task for: {operation}",
+                        "result": {
+                            "success": True,
+                            "text": "The Hive is silent. This usually happens with short greetings or simple prompts. Try providing more context or a specific task!",
+                            "method": "broker_fallback"
+                        }
+                    }
+
+                # 3. Evaluate bids (Arbitration)
+                # Pick highest confidence, break ties by lowest compute cost
+                best_bid = sorted(bids, key=lambda b: (b["confidence"], -b["compute_cost"]), reverse=True)[0]
+                winning_node = best_bid["sender_id"]
+                winning_overlays = best_bid.get("skill_overlays", [])
+                
+                task_state["status"] = "executing"
+                task_state["winner"] = winning_node
+
+            # 4. Award contract
+            # Inject skill overlays from bid into task params
+            task_params_with_skills = {**task_params, "_skill_overlays": winning_overlays}
+            
+            accept_message = SwarmMessage(
+                protocol=MessageProtocol.ACCEPT,
+                topic=f"tasks.accept.{winning_node}",
+                sender_id=self.broker_id,
+                recipient_id=winning_node,
+                payload={
+                    "task_id": task_id,
+                    "operation": operation,
+                    "params": task_params_with_skills
+                }
+            )
+            self.bus.publish(accept_message)
+            logger.debug(f"Broker awarded task {task_id} to {winning_node}")
+
+            # 5. Wait for result
+            if task_state["event"].wait(timeout=timeout):
+                with self._task_locks[task_id]:
+                    if task_state["status"] == "completed":
+                        result = task_state["result"]
+                        self._cleanup_task(task_id)
+                        return {"success": True, "result": result, "executed_by": winning_node}
+                    else:
+                        error = task_state["error"]
+                        self._cleanup_task(task_id)
+                        return {"success": False, "error": error, "executed_by": winning_node}
+            else:
+                self._cleanup_task(task_id)
+                return {"success": False, "error": "Task execution timed out", "executed_by": task_state.get("winner")}
 
     def _cleanup_task(self, task_id: str):
         if task_id in self._active_tasks:

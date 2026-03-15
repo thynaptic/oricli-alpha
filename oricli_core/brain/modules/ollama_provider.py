@@ -66,6 +66,9 @@ class OllamaProviderModule(BaseBrainModule):
             options["num_predict"] = params["max_tokens"]
         if "top_p" in params:
             options["top_p"] = params["top_p"]
+            
+        # Limit CPU usage per request
+        options["num_thread"] = 2
 
         generate_payload = {
             "model": model,
@@ -164,6 +167,8 @@ class OllamaProviderModule(BaseBrainModule):
 
         if "temperature" in params:
             options["temperature"] = params["temperature"]
+            
+        options["num_thread"] = 2
 
         payload = {"model": model, "messages": messages, "stream": False, "options": options}
 

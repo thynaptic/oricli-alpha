@@ -9,7 +9,7 @@ Group=mike
 WorkingDirectory=/home/mike/Mavaia
 Environment=PYTHONPATH=/home/mike/Mavaia
 Environment=MAVAIA_ENABLE_HEAVY_MODULES=true
-Environment=MAVAIA_ENABLE_HIVE_AUTOSTART=true
+Environment=MAVAIA_ENABLE_HIVE_AUTOSTART=false
 Environment=OLLAMA_URL=http://localhost:11434
 Environment=OLLAMA_MODEL=frob/qwen3.5-instruct
 ExecStart=/home/mike/Mavaia/.venv/bin/python3 /home/mike/Mavaia/scripts/oricli_api_daemon.py
