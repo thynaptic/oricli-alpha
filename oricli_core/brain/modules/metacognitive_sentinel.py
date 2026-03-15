@@ -23,8 +23,8 @@ class MetacognitiveSentinelModule(BaseBrainModule):
 
     def __init__(self) -> None:
         super().__init__()
-        self.volatility_threshold = 0.7
-        self.repetition_threshold = 0.4
+        self.volatility_threshold = 0.85
+        self.repetition_threshold = 0.6
         self.subconscious_field = None
         self.bus = get_swarm_bus()
         self._monitored_sessions: Dict[str, List[str]] = {} # session_id -> message contents
@@ -134,7 +134,7 @@ class MetacognitiveSentinelModule(BaseBrainModule):
                 "repetition": repetition_score,
                 "entropy": entropy_score
             },
-            "requires_intervention": (volatility > 0.6) or (repetition_score > 0.8) or (entropy_score > 0.8)
+            "requires_intervention": (volatility > 0.85) or (repetition_score > 0.9) or (entropy_score > 0.9)
         }
 
     def _apply_radical_acceptance(self, params: Dict[str, Any]) -> Dict[str, Any]:
