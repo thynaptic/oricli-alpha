@@ -8,7 +8,8 @@
     "security": "security_agent_profile",
     "memory": "memory_agent_profile",
     "orchestration": "orchestrator_agent_profile",
-    "knowledge": "knowledge_assistant"
+    "knowledge": "knowledge_assistant",
+    "planning": "strategic_orchestrator"
   },
   "agent_type_profiles": {
     "search": "research_agent_profile",
@@ -234,6 +235,30 @@
       "model_preference": "frob/qwen3.5-instruct",
       "skill_overlays": ["knowledge_companion"],
       "task_tags": ["knowledge", "rag", "chat"]
+    },
+    {
+      "name": "strategic_orchestrator",
+      "description": "High-fidelity pre-execution planner using ToT, MCTS, and CoT.",
+      "allowed_modules": [
+        "strategic_planner",
+        "tree_of_thought",
+        "mcts_search_engine",
+        "chain_of_thought",
+        "query_agent",
+        "answer_agent"
+      ],
+      "allowed_operations": {
+        "strategic_planner": ["create_strategic_plan", "validate_plan"],
+        "tree_of_thought": ["generate_thoughts", "evaluate_states"],
+        "mcts_search_engine": ["search", "rollout"],
+        "chain_of_thought": ["generate_cot"],
+        "query_agent": ["analyze_query_intent"],
+        "answer_agent": ["format_answer"]
+      },
+      "system_instructions": "You are the Principal Strategist. Think deeply before proposing action. Use ToT, MCTS, and CoT to ensure plan robustness.",
+      "model_preference": "frob/qwen3.5-instruct",
+      "skill_overlays": ["strategic_pre_execution_planner"],
+      "task_tags": ["planning", "strategy", "orchestration"]
     }
   ]
 }

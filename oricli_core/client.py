@@ -2895,7 +2895,7 @@ class OricliAlphaClient:
         if expanded_tools:
             params["tools"] = expanded_tools
 
-        use_swarm = request.model in ["oricli-swarm", "oricli-hive"]
+        use_swarm = request.model in ["oricli-swarm", "oricli-hive", "strategic_orchestrator"]
         
         # If model name doesn't match standard prefixes, it might be a custom agent name
         profile_name = None
