@@ -3203,41 +3203,57 @@ class OricliAlphaClient:
     
     def list_models(self) -> ModelsListResponse:
         """
-        List available models/capabilities
-        
-        Returns:
-            ModelsListResponse containing all available models and modules
+        List available models/capabilities including dynamic agent profiles.
         """
         models = []
+        now = int(time.time())
         
-        # Add cognitive model
-        models.append(ModelInfo(
-            id="oricli-cognitive",
-            created=int(time.time()),
-            owned_by="oricli",
-            permission=[],
-            root="oricli-cognitive",
-            parent=None
-        ))
+        # 1. Base Cognitive Models
+        base_models = ["oricli-cognitive", "oricli-swarm", "oricli-hive"]
+        for mid in base_models:
+            models.append(ModelInfo(
+                id=mid,
+                created=now,
+                owned_by="oricli",
+                permission=[],
+                root=mid,
+                parent=None
+            ))
         
-        # Add embeddings model
+        # 2. Dynamic Agent Profiles (Agent Factory)
+        try:
+            from oricli_core.services.agent_profile_service import get_agent_profile_service
+            profile_service = get_agent_profile_service()
+            for profile in profile_service.list_profiles():
+                models.append(ModelInfo(
+                    id=profile["name"],
+                    created=now,
+                    owned_by="oricli-factory",
+                    permission=[],
+                    root=profile["name"],
+                    parent=None
+                ))
+        except Exception:
+            pass
+
+        # 3. Embeddings Model
         models.append(ModelInfo(
             id="oricli-embeddings",
-            created=int(time.time()),
+            created=now,
             owned_by="oricli",
             permission=[],
             root="oricli-embeddings",
             parent=None
         ))
         
-        # Add models for each available brain module
+        # 4. Direct Module Access Models
         for module_name in ModuleRegistry.list_modules():
             metadata = ModuleRegistry.get_metadata(module_name)
             if metadata and metadata.enabled:
                 models.append(ModelInfo(
                     id=f"oricli-{module_name}",
-                    created=int(time.time()),
-                    owned_by="oricli",
+                    created=now,
+                    owned_by="oricli-modules",
                     permission=[],
                     root=f"oricli-{module_name}",
                     parent=None

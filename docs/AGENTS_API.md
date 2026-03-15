@@ -39,7 +39,25 @@ Remove a custom agent profile from the factory.
 
 ---
 
-## 2. Using the Python Client
+## 2. Agent Discovery
+
+Oricli-Alpha makes it easy to find and list all available agents (both built-in and custom).
+
+### List via OpenAI-Compatible API
+`GET /v1/models`
+Returns all agents and modules. Custom factory agents are identified by `"owned_by": "oricli-factory"`.
+
+### List via Native Agents API
+`GET /v1/agents`
+Returns the full detailed profile for every agent in the factory.
+
+### List via Ollama Alias
+`GET /api/tags`
+Returns a list of models in the format expected by tools like **Continue** or **LlamaIndex**.
+
+---
+
+## 3. Using the Python Client
 
 The `OricliAlphaClient` includes an `agents` namespace for the factory.
 
