@@ -355,20 +355,27 @@ class ModuleRegistry:
                 failed_count += 1
                 failed_modules.append(f"{module_file.name}: {e}")
 
-        # Proactively instantiate all modules to spawn HiveNodes if Hive autostart is enabled
-        import os
-        if os.getenv("MAVAIA_ENABLE_HIVE_AUTOSTART", "false").lower() in ("true", "1", "yes"):
-            print(f"[ModuleRegistry] Initializing HiveNodes for all {len(cls._modules)} modules...", file=sys.stderr, flush=True)
-            for name in list(cls._modules.keys()):
-                try:
-                    # get_module handles instance creation and HiveNode startup
-                    cls.get_module(name, auto_discover=False)
-                except Exception as e:
-                    # Only show real failures, some modules might fail due to missing heavy deps
-                    pass
-
         # Mark as discovered
         cls._discovered = True
+        
+        # Proactively instantiate all modules using a STAGGERED BACKGROUND WARMUP
+        # This prevents the 500% CPU spike while eventually getting all agents on the bus.
+        import os
+        if os.getenv("MAVAIA_ENABLE_HIVE_AUTOSTART", "false").lower() in ("true", "1", "yes"):
+            def staggered_warmup():
+                import time
+                print(f"[ModuleRegistry] Starting staggered background warmup for {len(cls._modules)} modules...", file=sys.stderr, flush=True)
+                for name in list(cls._modules.keys()):
+                    try:
+                        # Initialize 1 module every 5 seconds
+                        cls.get_module(name, auto_discover=False)
+                        time.sleep(5.0) 
+                    except Exception:
+                        pass
+                print("[ModuleRegistry] Staggered background warmup complete.", file=sys.stderr, flush=True)
+
+            import threading
+            threading.Thread(target=staggered_warmup, daemon=True).start()
         
         # Print single status line with counts
         print(

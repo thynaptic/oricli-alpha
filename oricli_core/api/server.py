@@ -549,6 +549,31 @@ def create_app(
                 "body": exc.body
             }
         )
+
+    # Add universal exception handler for all other errors
+    @app.exception_handler(Exception)
+    async def universal_exception_handler(request: Request, exc: Exception):
+        """Handle all other exceptions with CORS headers"""
+        sys.stderr.write(f"[ERROR] Universal exception handler caught: {exc}\n")
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "message": f"Internal Server Error: {str(exc)}",
+                    "type": "server_error",
+                    "code": 500,
+                }
+            },
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "*",
+                "Access-Control-Allow-Headers": "*",
+            }
+        )
     
     # Root endpoint - redirect to docs
     @app.get("/")
