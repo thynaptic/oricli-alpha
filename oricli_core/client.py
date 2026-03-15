@@ -2928,8 +2928,23 @@ class OricliAlphaClient:
                     # Special case: Broker fallback for simple prompts (no bids)
                     result = result["result"]
                 else:
-                    # Fallback to normal execution if swarm fails
-                    result = cognitive_module.execute(operation_to_use, params)
+                    # Swarm failed to produce a valid result - DIRECT FALLBACK TO OLLAMA
+                    try:
+                        ollama = ModuleRegistry.get_module("ollama_provider")
+                        if ollama:
+                            input_text = params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else params.get("input", "")
+                            res = ollama.execute("generate", {
+                                "prompt": f"Instructions: You are acting as a fallback for the Hive Swarm. Provide a detailed answer to this request.\n\nInput: {input_text}",
+                                "model": profile_name or "frob/qwen3.5-instruct"
+                            })
+                            if res.get("success"):
+                                result = {"success": True, "text": res.get("text", ""), "method": "direct_ollama_fallback"}
+                            else:
+                                result = cognitive_module.execute(operation_to_use, params)
+                        else:
+                            result = cognitive_module.execute(operation_to_use, params)
+                    except Exception:
+                        result = cognitive_module.execute(operation_to_use, params)
             else:
                 result = cognitive_module.execute(operation_to_use, params)
         else:
