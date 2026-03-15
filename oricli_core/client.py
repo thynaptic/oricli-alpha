@@ -2797,6 +2797,9 @@ class OricliAlphaClient:
         )
         cognitive_module, actual_module_name, is_fallback, mapped_operation = module_result
         
+        # Ensure operation_to_use is always defined
+        operation_to_use = mapped_operation if mapped_operation else "generate_response"
+        
         if cognitive_module is None:
             raise ModuleNotFoundError("cognitive_generator")
         
@@ -2926,15 +2929,10 @@ class OricliAlphaClient:
                     result = result["result"]
                 else:
                     # Fallback to normal execution if swarm fails
-                    operation_to_use = mapped_operation if mapped_operation else "generate_response"
                     result = cognitive_module.execute(operation_to_use, params)
             else:
-                operation_to_use = mapped_operation if mapped_operation else "generate_response"
                 result = cognitive_module.execute(operation_to_use, params)
         else:
-            # Use mapped operation if available, otherwise use original
-            operation_to_use = mapped_operation if mapped_operation else "generate_response"
-            
             # Adjust params for fallback modules if needed
             if is_fallback and actual_module_name == "text_generation_engine":
                 # text_generation_engine might need different params
