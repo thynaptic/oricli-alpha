@@ -122,15 +122,30 @@ class SwarmBrokerModule(BaseBrainModule):
                 best_bid = sorted(bids, key=lambda b: (b["confidence"], -b["compute_cost"]), reverse=True)[0]
                 winning_node = best_bid["sender_id"]
                 winning_overlays = best_bid.get("skill_overlays", [])
-                
+
+                # Extract model preference from profile if available
+                preferred_model = None
+                if profile_name:
+                    try:
+                        from oricli_core.services.agent_profile_service import get_agent_profile_service
+                        profile = get_agent_profile_service().get_profile(profile_name)
+                        if profile:
+                            preferred_model = profile.model_preference
+                    except Exception:
+                        pass
+
                 task_state["status"] = "executing"
                 task_state["winner"] = winning_node
 
-            # 4. Award contract
-            # Inject skill overlays from bid into task params
-            task_params_with_skills = {**task_params, "_skill_overlays": winning_overlays}
-            
-            accept_message = SwarmMessage(
+                # 4. Award contract
+                # Inject skill overlays and preferred model into task params
+                task_params_with_metadata = {
+                **task_params, 
+                "_skill_overlays": winning_overlays,
+                "model": preferred_model or task_params.get("model")
+                }
+
+                accept_message = SwarmMessage(
                 protocol=MessageProtocol.ACCEPT,
                 topic=f"tasks.accept.{winning_node}",
                 sender_id=self.broker_id,
@@ -138,9 +153,10 @@ class SwarmBrokerModule(BaseBrainModule):
                 payload={
                     "task_id": task_id,
                     "operation": operation,
-                    "params": task_params_with_skills
+                    "params": task_params_with_metadata
                 }
-            )
+                )
+
             self.bus.publish(accept_message)
             logger.debug(f"Broker awarded task {task_id} to {winning_node}")
 

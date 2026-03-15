@@ -50,7 +50,7 @@
         "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Prioritize retrieval quality, source traceability, and synthesis grounded in the returned evidence.",
-      "model_preference": "frob/qwen3.5-instruct",
+      "model_preference": "llama3.1:8b",
       "task_tags": ["research", "search", "synthesis"]
     },
     {
@@ -77,7 +77,7 @@
         "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Stay implementation-focused, be explicit about constraints, and optimize for correct engineering actions over prose.",
-      "model_preference": "frob/qwen3.5-instruct",
+      "model_preference": "llama3.1:8b",
       "task_tags": ["code", "engineering", "analysis"]
     },
     {
@@ -104,7 +104,7 @@
         "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Bias toward explicit control mapping, cited evidence, and clear distinction between compliant, partial, and missing coverage.",
-      "model_preference": "frob/qwen3.5-instruct",
+      "model_preference": "phi3.5:latest",
       "task_tags": ["compliance", "policy", "audit"]
     },
     {
@@ -129,7 +129,7 @@
         "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Bias toward reproduction steps, root-cause isolation, failed-assumption checks, and concrete next debugging actions over generic explanations.",
-      "model_preference": "frob/qwen3.5-instruct",
+      "model_preference": "phi3.5:latest",
       "task_tags": ["debug", "diagnosis", "incident"]
     },
     {
@@ -152,7 +152,7 @@
         "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Focus on measurement fidelity, units, baselines, and regression interpretation. Be explicit about confidence and avoid overstating causality.",
-      "model_preference": "frob/qwen3.5-instruct",
+      "model_preference": "qwen2:1.5b",
       "task_tags": ["benchmark", "performance", "latency"]
     },
     {
@@ -178,7 +178,7 @@
         "answer_agent": ["answer"]
       },
       "system_instructions": "Prioritize attack surface, exploitability, privilege boundaries, and concrete mitigations. Separate verified findings from hypotheses.",
-      "model_preference": "frob/qwen3.5-instruct",
+      "model_preference": "phi3.5:latest",
       "task_tags": ["security", "audit", "hardening"]
     },
     {
@@ -201,7 +201,7 @@
         "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Optimize for recall, context stitching, and preservation of temporal or source relationships across retrieved state.",
-      "model_preference": "frob/qwen3.5-instruct",
+      "model_preference": "phi3.5:latest",
       "task_tags": ["memory", "recall", "retrieval"]
     },
     {
@@ -224,7 +224,7 @@
         "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Prefer explicit decomposition, dependency-aware routing, and structured handoffs between agents and stages.",
-      "model_preference": "frob/qwen3.5-instruct",
+      "model_preference": "qwen2:1.5b",
       "task_tags": ["orchestration", "routing", "delegation"]
     },
     {
@@ -254,7 +254,7 @@
         "synthesis_agent": ["synthesize", "generate_response"]
       },
       "system_instructions": "You are a helpful Knowledge Companion. Prioritize internal memory and ingested documents. Keep the tone conversational and natural.",
-      "model_preference": "frob/qwen3.5-instruct",
+      "model_preference": "llama3.1:8b",
       "skill_overlays": ["knowledge_companion"],
       "task_tags": ["knowledge", "rag", "chat"]
     },
@@ -280,7 +280,7 @@
         "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "You are the Principal Strategist. Think deeply before proposing action. Use ToT, MCTS, and CoT to ensure plan robustness.",
-      "model_preference": "frob/qwen3.5-instruct",
+      "model_preference": "llama3.1:8b",
       "skill_overlays": ["strategic_pre_execution_planner"],
       "task_tags": ["planning", "strategy", "orchestration"]
     }
