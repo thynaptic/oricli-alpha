@@ -2970,12 +2970,16 @@ class OricliAlphaClient:
         response_text = (
             result.get("response", "") or
             result.get("text", "") or
-            result.get("generated_text", "")
+            result.get("generated_text", "") or
+            result.get("synthesis", "") or
+            result.get("answer", "")
         )
         if (not response_text or not str(response_text).strip()) and isinstance(result.get("result"), dict):
             response_text = (
                 result["result"].get("text", "") or
-                result["result"].get("response", "")
+                result["result"].get("response", "") or
+                result["result"].get("synthesis", "") or
+                result["result"].get("answer", "")
             )
         
         if not response_text or not str(response_text).strip():
