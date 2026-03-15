@@ -2917,7 +2917,7 @@ class OricliAlphaClient:
                     "profile_name": profile_name,
                     "params": params,
                     "timeout": 60.0,
-                    "bid_timeout": 2.0
+                    "bid_timeout": 5.0
                 })
                 if result.get("success") and result.get("result", {}).get("success"):
                     result = result["result"]

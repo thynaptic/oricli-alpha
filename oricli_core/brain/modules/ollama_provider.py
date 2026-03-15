@@ -76,7 +76,7 @@ class OllamaProviderModule(BaseBrainModule):
             "options": options,
         }
 
-        native_generate = self._post_json("/api/generate", generate_payload, timeout=90)
+        native_generate = self._post_json("/api/generate", generate_payload, timeout=120)
         if native_generate.get("success"):
             result = native_generate["data"]
             response_text = result.get("response", "")
@@ -108,7 +108,7 @@ class OllamaProviderModule(BaseBrainModule):
             "options": options,
         }
 
-        native_chat = self._post_json("/api/chat", chat_payload, timeout=90)
+        native_chat = self._post_json("/api/chat", chat_payload, timeout=120)
         if native_chat.get("success"):
             chat_result = native_chat["data"]
             chat_content = chat_result.get("message", {}).get("content", "")
@@ -130,7 +130,7 @@ class OllamaProviderModule(BaseBrainModule):
                 "max_tokens": params.get("max_tokens", 1024),
                 "stream": False,
             },
-            timeout=90,
+            timeout=120,
         )
         if openai_chat.get("success"):
             completion = openai_chat["data"]
@@ -167,7 +167,7 @@ class OllamaProviderModule(BaseBrainModule):
 
         payload = {"model": model, "messages": messages, "stream": False, "options": options}
 
-        native_chat = self._post_json("/api/chat", payload, timeout=90)
+        native_chat = self._post_json("/api/chat", payload, timeout=120)
         if native_chat.get("success"):
             result = native_chat["data"]
             chat_content = result.get("message", {}).get("content", "")
@@ -189,7 +189,7 @@ class OllamaProviderModule(BaseBrainModule):
                 "max_tokens": params.get("max_tokens", 1024),
                 "stream": False,
             },
-            timeout=90,
+            timeout=120,
         )
         if openai_chat.get("success"):
             completion = openai_chat["data"]

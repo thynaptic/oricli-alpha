@@ -355,6 +355,18 @@ class ModuleRegistry:
                 failed_count += 1
                 failed_modules.append(f"{module_file.name}: {e}")
 
+        # Proactively instantiate all modules to spawn HiveNodes if Hive autostart is enabled
+        import os
+        if os.getenv("MAVAIA_ENABLE_HIVE_AUTOSTART", "false").lower() in ("true", "1", "yes"):
+            print(f"[ModuleRegistry] Initializing HiveNodes for all {len(cls._modules)} modules...", file=sys.stderr, flush=True)
+            for name in list(cls._modules.keys()):
+                try:
+                    # get_module handles instance creation and HiveNode startup
+                    cls.get_module(name, auto_discover=False)
+                except Exception as e:
+                    # Only show real failures, some modules might fail due to missing heavy deps
+                    pass
+
         # Mark as discovered
         cls._discovered = True
         
