@@ -79,7 +79,7 @@ func (s *WorldKnowledgeService) loadKnowledgeBase() {
 func (s *WorldKnowledgeService) QueryKnowledge(query string, limit int) ([]Fact, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var results []Fact
+	results := []Fact{}
 	ql := strings.ToLower(query)
 	for _, fact := range s.KnowledgeBase {
 		if strings.Contains(strings.ToLower(fact.Content), ql) { results = append(results, fact) }

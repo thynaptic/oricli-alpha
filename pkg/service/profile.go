@@ -134,6 +134,68 @@ func (s *AgentProfileService) ListProfiles() []AgentProfile {
 	return list
 }
 
+// AddProfile adds a new profile and persists it to custom profiles
+func (s *AgentProfileService) AddProfile(p AgentProfile) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.profiles[p.Name]; exists {
+		return fmt.Errorf("profile '%s' already exists", p.Name)
+	}
+
+	s.profiles[p.Name] = p
+	return s.saveCustomProfiles()
+}
+
+// UpdateProfile updates an existing profile and persists it
+func (s *AgentProfileService) UpdateProfile(name string, p AgentProfile) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.profiles[name]; !exists {
+		return fmt.Errorf("profile '%s' not found", name)
+	}
+
+	// If name changed, delete old one
+	if name != p.Name {
+		delete(s.profiles, name)
+	}
+	s.profiles[p.Name] = p
+	return s.saveCustomProfiles()
+}
+
+// DeleteProfile removes a profile and persists it
+func (s *AgentProfileService) DeleteProfile(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.profiles[name]; !exists {
+		return fmt.Errorf("profile '%s' not found", name)
+	}
+
+	delete(s.profiles, name)
+	return s.saveCustomProfiles()
+}
+
+func (s *AgentProfileService) saveCustomProfiles() error {
+	// Let's manually collect profiles to avoid deadlock with s.ListProfiles()
+	pd := profileData{
+		Profiles:          make([]AgentProfile, 0, len(s.profiles)),
+		TaskTypeProfiles:  s.taskTypeProfiles,
+		AgentTypeProfiles: s.agentTypeProfiles,
+	}
+	for _, p := range s.profiles {
+		pd.Profiles = append(pd.Profiles, p)
+	}
+
+	data, err := json.MarshalIndent(pd, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(s.customPath, data, 0644)
+}
+
 // IsAllowed enforces the profile policy for a given module and operation
 func (s *AgentProfileService) IsAllowed(profile *AgentProfile, moduleName, operation string) (bool, string) {
 	if profile == nil {

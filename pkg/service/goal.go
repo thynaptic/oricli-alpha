@@ -106,6 +106,24 @@ func (s *GoalService) ListObjectives(status string) ([]Objective, error) {
 	return objectives, nil
 }
 
+func (s *GoalService) GetObjective(id string) (*Objective, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	all, err := s.readAll()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, obj := range all {
+		if obj.ID == id {
+			return &obj, nil
+		}
+	}
+
+	return nil, nil
+}
+
 func (s *GoalService) UpdateObjective(id string, updates map[string]interface{}) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -138,6 +156,32 @@ func (s *GoalService) UpdateObjective(id string, updates map[string]interface{})
 
 	if found {
 		return true, s.writeAll(all)
+	}
+
+	return false, nil
+}
+
+func (s *GoalService) DeleteObjective(id string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	all, err := s.readAll()
+	if err != nil {
+		return false, err
+	}
+
+	var updated []Objective
+	found := false
+	for _, obj := range all {
+		if obj.ID == id {
+			found = true
+			continue
+		}
+		updated = append(updated, obj)
+	}
+
+	if found {
+		return true, s.writeAll(updated)
 	}
 
 	return false, nil

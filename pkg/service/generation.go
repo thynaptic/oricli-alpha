@@ -25,7 +25,7 @@ func NewGenerationService() *GenerationService {
 	if model == "" { model = "qwen2:1.5b" }
 	return &GenerationService{
 		BaseURL: url, DefaultModel: model,
-		HTTPClient: &http.Client{Timeout: 120 * time.Second},
+		HTTPClient: &http.Client{Timeout: 300 * time.Second},
 	}
 }
 
@@ -56,7 +56,7 @@ func (s *GenerationService) HybridPhrasing(ctx context.Context, text string, sty
 func (s *GenerationService) Generate(prompt string, options map[string]interface{}) (map[string]interface{}, error) {
 	model := s.DefaultModel
 	if m, ok := options["model"].(string); ok && m != "" { model = m }
-	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": 2}}
+	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": 8}}
 	if temp, ok := options["temperature"].(float64); ok { payload["options"].(map[string]interface{})["temperature"] = temp }
 	data, err := s.postJSON("/api/generate", payload)
 	if err == nil {
