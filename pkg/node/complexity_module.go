@@ -21,7 +21,7 @@ func NewComplexityModule(swarmBus *bus.SwarmBus, svc *service.ComplexityService)
 	return &ComplexityModule{
 		ID:         "go_native_complexity",
 		ModuleName: "complexity_detector",
-		Operations: []string{"analyze_cot_complexity", "should_activate_cot", "analyze_tot_complexity"},
+		Operations: []string{"analyze_cot_complexity", "should_activate_cot", "analyze_tot_complexity", "analyze_complexity", "should_use_tot"},
 		Bus:        swarmBus,
 		Service:    svc,
 	}

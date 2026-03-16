@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -86,7 +87,7 @@ func (m *ToolModule) onAccept(msg bus.Message) {
 	case "execute_tool":
 		name, _ := params["name"].(string)
 		args, _ := params["arguments"].(map[string]interface{})
-		result, err = m.ToolService.ExecuteTool(name, args)
+		result, err = m.ToolService.ExecuteTool(context.Background(), name, args)
 	case "list_tools":
 		result = m.ToolService.ListTools()
 	case "register_tool":

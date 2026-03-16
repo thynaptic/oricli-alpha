@@ -1,7 +1,6 @@
 package service
 
 import (
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -37,81 +36,59 @@ func NewAdapterRouterService(orch *GoOrchestrator) *AdapterRouterService {
 	}
 }
 
-func (s *AdapterRouterService) RouteInput(text string) (string, string, float64) {
-	// 1. Get Embeddings (Use native memory bridge or python bridge)
-	// For now, let's assume a simple keyword heuristic for intent if embeddings down
-	intent := "general"
-	if containsAny(text, []string{"calculate", "equation", "sum", "integral"}) {
-		intent = "math"
-	} else if containsAny(text, []string{"code", "python", "script", "function", "golang"}) {
-		intent = "coding"
-	} else if containsAny(text, []string{"story", "poem", "write", "creative"}) {
-		intent = "creative"
-	} else if containsAny(text, []string{"solve", "logic", "puzzle", "deduce"}) {
-		intent = "logic"
-	}
+// --- ADAPTER INFERENCE ---
 
-	adapterID := s.RoutingTable[intent]
-	return intent, adapterID, 1.0
+func (s *AdapterRouterService) ExecuteAdapterInference(params map[string]interface{}) (map[string]interface{}, error) {
+	adapterID, _ := params["adapter_id"].(string)
+	
+	// Native Go logic to ensure adapter is loaded, then generate
+	if _, ok := s.ActiveAdapters[adapterID]; !ok {
+		s.ApplyRouting(adapterID)
+	}
+	
+	// For now, proxy actual inference to Python which has the weights
+	res, err := s.Orchestrator.Execute("lora_inference.generate", params, 60*time.Second)
+	if err != nil { return nil, err }
+	return res.(map[string]interface{}), nil
+}
+
+// --- EXISTING METHODS ---
+
+func (s *AdapterRouterService) RouteInput(text string) (string, string, float64) {
+	intent := "general"
+	if containsAny(text, []string{"calculate", "equation", "sum", "integral"}) { intent = "math" }
+	if containsAny(text, []string{"code", "python", "script", "function", "golang"}) { intent = "coding" }
+	if containsAny(text, []string{"story", "poem", "write", "creative"}) { intent = "creative" }
+	if containsAny(text, []string{"solve", "logic", "puzzle", "deduce"}) { intent = "logic" }
+	return intent, s.RoutingTable[intent], 1.0
 }
 
 func (s *AdapterRouterService) ApplyRouting(adapterID string) (bool, error) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-
-	// 1. Check if already active
 	if _, ok := s.ActiveAdapters[adapterID]; ok {
-		s.ActiveAdapters[adapterID].LoadedAt = time.Now() // Refresh LRU
+		s.ActiveAdapters[adapterID].LoadedAt = time.Now()
 		return true, nil
 	}
-
-	// 2. VRAM Safety: Unload oldest if full
 	if len(s.ActiveAdapters) >= s.MaxAdapters {
 		var oldestID string
-		var oldestTime time.Time = time.Now().Add(1 * time.Hour)
-		for id, info := range s.ActiveAdapters {
-			if info.LoadedAt.Before(oldestTime) {
-				oldestTime = info.LoadedAt
-				oldestID = id
-			}
-		}
+		oldestTime := time.Now().Add(1 * time.Hour)
+		for id, info := range s.ActiveAdapters { if info.LoadedAt.Before(oldestTime) { oldestTime = info.LoadedAt; oldestID = id } }
 		if oldestID != "" {
-			log.Printf("[Router] Unloading oldest adapter %s to free VRAM", oldestID)
 			delete(s.ActiveAdapters, oldestID)
-			// Tell Python to unload
 			s.Orchestrator.Execute("unload_adapter", map[string]interface{}{"adapter_id": oldestID}, 10*time.Second)
 		}
 	}
-
-	// 3. Load via Python Bridge
-	log.Printf("[Router] Requesting Python load for adapter %s", adapterID)
 	resp, err := s.Orchestrator.Execute("load_adapter", map[string]interface{}{"adapter_id": adapterID}, 60*time.Second)
-	if err != nil {
-		return false, err
-	}
-
+	if err != nil { return false, err }
 	success := false
-	if m, ok := resp.(map[string]interface{}); ok {
-		success, _ = m["success"].(bool)
-	}
-
-	if success {
-		s.ActiveAdapters[adapterID] = &AdapterInfo{
-			ID:       adapterID,
-			Source:   "hf",
-			LoadedAt: time.Now(),
-		}
-	}
-
+	if m, ok := resp.(map[string]interface{}); ok { success, _ = m["success"].(bool) }
+	if success { s.ActiveAdapters[adapterID] = &AdapterInfo{ID: adapterID, Source: "hf", LoadedAt: time.Now()} }
 	return success, nil
 }
 
 func containsAny(text string, keywords []string) bool {
 	lower := strings.ToLower(text)
-	for _, kw := range keywords {
-		if strings.Contains(lower, kw) {
-			return true
-		}
-	}
+	for _, kw := range keywords { if strings.Contains(lower, kw) { return true } }
 	return false
 }

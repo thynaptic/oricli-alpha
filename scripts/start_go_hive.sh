@@ -9,6 +9,8 @@ set -e
 echo "[Shell] Starting Python gRPC Worker..."
 source /home/mike/Mavaia/.venv/bin/activate
 export ORICLI_WORKER_PORT=50051
+export MAVAIA_ENABLE_HEAVY_MODULES=true
+export MAVAIA_MODULE_IMPORT_TIMEOUT=300.0
 python3 /home/mike/Mavaia/oricli_core/brain/grpc_worker.py &
 PYTHON_PID=$!
 

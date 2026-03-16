@@ -10,6 +10,27 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/bus"
 )
 
+// Orchestrator State
+type OrchestratorStatus string
+
+const (
+	StatusIdle     OrchestratorStatus = "idle"
+	StatusStarting OrchestratorStatus = "starting"
+	StatusActive   OrchestratorStatus = "active"
+	StatusError    OrchestratorStatus = "error"
+)
+
+// GoOrchestrator manages the Hive's coordination and lifecycle
+type GoOrchestrator struct {
+	Bus        *bus.SwarmBus
+	Tasks      map[string]*TaskContext
+	BrokerID   string
+	Status     OrchestratorStatus
+	mu         sync.RWMutex
+	LoadOrder  []string
+	Modules    map[string]bool // Known module names
+}
+
 // Bid represents a proposal from a node
 type Bid struct {
 	NodeID      string
@@ -29,19 +50,13 @@ type TaskContext struct {
 	mu        sync.Mutex
 }
 
-// GoOrchestrator manages the Contract Net Protocol (CFP -> BID -> ACCEPT)
-type GoOrchestrator struct {
-	Bus       *bus.SwarmBus
-	Tasks     map[string]*TaskContext
-	mu        sync.RWMutex
-	BrokerID  string
-}
-
 func NewGoOrchestrator(swarmBus *bus.SwarmBus) *GoOrchestrator {
 	orch := &GoOrchestrator{
 		Bus:      swarmBus,
 		Tasks:    make(map[string]*TaskContext),
 		BrokerID: "go_broker_main",
+		Status:   StatusIdle,
+		Modules:  make(map[string]bool),
 	}
 	// Global listener for bids and results
 	swarmBus.Subscribe("*", orch.onMessage)

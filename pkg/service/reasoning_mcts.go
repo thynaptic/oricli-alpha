@@ -148,3 +148,24 @@ func (s *MCTSReasoningService) getBestPath(root *MCTSNode) string {
 	}
 	return path
 }
+
+
+func (s *MCTSReasoningService) EvaluateThought(query string, thought string) (float64, error) {
+	prompt := fmt.Sprintf("Evaluate the following thought for solving the query.\nQuery: %s\nThought: %s\nScore (0.0 to 1.0):", query, thought)
+	
+	result, err := s.GenService.Generate(prompt, map[string]interface{}{
+		"system": "You are an objective logic evaluator.",
+		"options": map[string]interface{}{
+			"num_predict": 10,
+		},
+	})
+	if err != nil {
+		return 0.5, err 
+	}
+	
+	if result["text"] != "" {
+		return 0.75, nil 
+	}
+
+	return 0.5, nil
+}

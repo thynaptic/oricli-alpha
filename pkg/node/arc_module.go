@@ -1,104 +1,119 @@
 package node
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"log"
+	"time"
 
 	"github.com/thynaptic/oricli-go/pkg/bus"
 	"github.com/thynaptic/oricli-go/pkg/service"
 )
 
-type ARCModule struct {
-	ID         string
-	ModuleName string
-	Operations []string
-	Bus        *bus.SwarmBus
-	ARCSolver  *service.ARCSolver
+// ARCSwarmModule provides ARC solving capabilities via the Swarm Bus
+type ARCSwarmModule struct {
+	Bus    *bus.SwarmBus
+	Solver *service.ARCSolverService
+	ID     string
 }
 
-func NewARCModule(swarmBus *bus.SwarmBus, solver *service.ARCSolver) *ARCModule {
-	return &ARCModule{
-		ID:         "go_native_arc",
-		ModuleName: "arc_solver",
-		Operations: []string{"solve_arc_problem", "solve_arc_task", "arc_solver"},
-		Bus:        swarmBus,
-		ARCSolver:  solver,
+// NewARCSwarmModule creates a new ARC swarm module
+func NewARCSwarmModule(swarmBus *bus.SwarmBus, solver *service.ARCSolverService) *ARCSwarmModule {
+	return &ARCSwarmModule{
+		Bus:    swarmBus,
+		Solver: solver,
+		ID:     "arc_solver",
 	}
 }
 
-func (m *ARCModule) Start() {
-	m.Bus.Subscribe("tasks.cfp", m.onCFP)
-	m.Bus.Subscribe(fmt.Sprintf("tasks.accept.%s", m.ID), m.onAccept)
-	log.Printf("[ARCModule] %s started and listening for grid tasks.", m.ModuleName)
+// Start initiates the subscription to the bus
+func (n *ARCSwarmModule) Start() {
+	n.Bus.Subscribe("tasks.cfp", n.onCFP)
+	n.Bus.Subscribe(fmt.Sprintf("tasks.accept.%s", n.ID), n.onAccept)
 }
 
-func (m *ARCModule) onCFP(msg bus.Message) {
+func (n *ARCSwarmModule) onCFP(msg bus.Message) {
 	operation, ok := msg.Payload["operation"].(string)
 	if !ok {
 		return
 	}
 
-	supported := false
-	for _, op := range m.Operations {
-		if op == operation {
-			supported = true
-			break
-		}
-	}
-
-	if !supported {
+	if operation != "solve_arc" && operation != "predict_arc" {
 		return
 	}
 
-	taskID, _ := msg.Payload["task_id"].(string)
-
-	bidPayload := map[string]interface{}{
-		"task_id":      taskID,
-		"operation":     operation,
-		"confidence":    1.0,
-		"compute_cost":  0,
-		"node_id":       m.ID,
-		"module_name":   m.ModuleName,
-	}
-
-	m.Bus.Publish(bus.Message{
-		Protocol:    bus.BID,
-		Topic:       fmt.Sprintf("tasks.bid.%s", taskID),
-		SenderID:    m.ID,
-		RecipientID: msg.SenderID,
-		Payload:     bidPayload,
+	// Bid for the task
+	n.Bus.Publish(bus.Message{
+		Topic: "tasks.bid",
+		Payload: map[string]interface{}{
+			"task_id":    msg.Payload["task_id"],
+			"agent_id":   n.ID,
+			"bid_amount": 0.5, 
+			"confidence": 0.9,
+		},
 	})
 }
 
-func (m *ARCModule) onAccept(msg bus.Message) {
-	taskID, _ := msg.Payload["task_id"].(string)
-	operation, _ := msg.Payload["operation"].(string)
+func (n *ARCSwarmModule) onAccept(msg bus.Message) {
+	taskID := msg.Payload["task_id"].(string)
 	params, _ := msg.Payload["params"].(map[string]interface{})
 
-	log.Printf("[ARCModule] Executing native %s for task %s", operation, taskID)
+	// Execute
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
 
-	var result interface{}
+	// Parse task
+	taskMap, _ := params["task"].(map[string]interface{})
+	task := n.parseARCTask(taskMap)
 
-	// Convert raw JSON to ARCProblem
-	var problem service.ARCProblem
-	data, _ := json.Marshal(params["problem"])
-	if err := json.Unmarshal(data, &problem); err == nil {
-		solution, err := m.ARCSolver.Solve(problem)
-		if err != nil {
-			result = map[string]interface{}{"success": false, "error": err.Error()}
-		} else {
-			result = map[string]interface{}{"success": true, "grid": solution}
-		}
-	} else {
-		result = map[string]interface{}{"success": false, "error": "Invalid ARC problem payload"}
+	result, err := n.Solver.SolveTask(ctx, task)
+
+	// Publish result
+	resPayload := map[string]interface{}{
+		"task_id": taskID,
+		"success": err == nil,
 	}
 
-	m.Bus.Publish(bus.Message{
-		Protocol:    bus.RESULT,
-		Topic:       fmt.Sprintf("tasks.result.%s", taskID),
-		SenderID:    m.ID,
-		RecipientID: msg.SenderID,
-		Payload:     map[string]interface{}{"result": result, "task_id": taskID},
+	if err != nil {
+		resPayload["error"] = err.Error()
+	} else {
+		resPayload["result"] = result
+	}
+
+	n.Bus.Publish(bus.Message{
+		Topic:   "tasks.result",
+		Payload: resPayload,
 	})
+}
+
+func (n *ARCSwarmModule) parseARCTask(m map[string]interface{}) service.ARCTask {
+	task := service.ARCTask{}
+	
+	trainInputs, _ := m["train_inputs"].([]interface{})
+	task.TrainInputs = make([][][]int, len(trainInputs))
+	for i, grid := range trainInputs {
+		task.TrainInputs[i] = n.castGrid(grid.([]interface{}))
+	}
+
+	trainOutputs, _ := m["train_outputs"].([]interface{})
+	task.TrainOutputs = make([][][]int, len(trainOutputs))
+	for i, grid := range trainOutputs {
+		task.TrainOutputs[i] = n.castGrid(grid.([]interface{}))
+	}
+
+	testInput, _ := m["test_input"].([]interface{})
+	task.TestInput = n.castGrid(testInput)
+	
+	return task
+}
+
+func (n *ARCSwarmModule) castGrid(raw []interface{}) [][]int {
+	grid := make([][]int, len(raw))
+	for i, r := range raw {
+		rowRaw, _ := r.([]interface{})
+		grid[i] = make([]int, len(rowRaw))
+		for j, v := range rowRaw {
+			grid[i][j] = int(service.ToFloat64(v))
+		}
+	}
+	return grid
 }

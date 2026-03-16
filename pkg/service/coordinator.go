@@ -119,7 +119,39 @@ func (c *AgentCoordinator) ExecuteParallel(tasks []AgentTask, timeout time.Durat
 			}
 		}(i, t)
 	}
-
 	wg.Wait()
 	return results
+}
+
+// GenerateCodeReasoning parallelizes code-specific cognitive tasks
+func (c *AgentCoordinator) GenerateCodeReasoning(requirements string, timeout time.Duration) (map[string]interface{}, error) {
+	log.Printf("[Coordinator] Starting reasoning-driven code generation for requirements")
+
+	tasks := []AgentTask{
+		{AgentType: "analysis", Query: fmt.Sprintf("Analyze semantic structure: %s", requirements)},
+		{AgentType: "research", Query: fmt.Sprintf("Find relevant code patterns for: %s", requirements)},
+	}
+
+	results := c.ExecuteParallel(tasks, timeout)
+	
+	// Synthesis phase
+	synthesisTask := AgentTask{
+		AgentType: "synthesis",
+		Query:     fmt.Sprintf("Synthesize code for: %s", requirements),
+		Context: map[string]interface{}{
+			"analysis": results[0].Output,
+			"research": results[1].Output,
+		},
+	}
+
+	finalRes, err := c.ExecuteTask(synthesisTask, timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"success": finalRes.Success,
+		"code":    finalRes.Output,
+		"steps":   results,
+	}, nil
 }

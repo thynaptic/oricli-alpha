@@ -1,47 +1,43 @@
 # Oricli-Alpha Autonomous Daemons
 
-Oricli-Alpha uses a set of background **Daemons** to maintain cognitive health, absorb knowledge, and improve tool efficacy asynchronously. These daemons run independently of the main interaction loop.
+Oricli-Alpha uses a set of background **Daemons** to maintain cognitive health, absorb knowledge, and improve tool efficacy asynchronously. With Phase 1 of the Go migration complete, these daemons are now orchestrated by the **Go-Native Backbone** (`pkg/service/daemon.go`).
 
-## 1. JIT Knowledge Daemon (`oricli_jit_daemon.py`)
+## 1. JIT Knowledge Daemon (Go-Orchestrated)
 **"The Librarian"**
 
-*   **Role**: Monitors verified facts and triggers "Just-In-Time" (JIT) absorption into the model weights via LoRA.
-*   **Trigger**: Watches `oricli_core/data/jit_absorption.jsonl`.
+*   **Role**: Monitors verified facts and triggers "Just-In-Time" (JIT) absorption.
+*   **Implementation**: Native Go service (`pkg/service/absorption.go`) monitoring `oricli_core/data/jit_absorption.jsonl`.
 *   **Threshold**: Activates after **5** new verified facts.
-*   **Action**: Triggers a remote RunPod cluster (2-node Blackwell or similar) to fine-tune a JIT adapter.
-*   **Cooldown**: 2 hours.
+*   **Action**: Orchestrates remote RunPod clusters to fine-tune JIT adapters.
 
-## 2. Dream Daemon (`oricli_dream_daemon.py`)
+## 2. Dream Daemon (Go-Orchestrated)
 **"The Subconscious Consolidator"**
 
 *   **Role**: Runs during idle periods to consolidate memories and generate novel insights.
-*   **Trigger**: System idle for >30 minutes.
-*   **Action**:
-    1.  Samples disparte facts from `jit_absorption.jsonl` and the Memory Graph.
-    2.  Uses `cognitive_generator` and `insight_service` to find analogical connections.
-    3.  Persists valid insights back to the Memory Graph.
-*   **Cycle**: Runs every 5 minutes while idle.
+*   **Implementation**: Integrated into the Go sidecar mesh.
+*   **Trigger**: System idle for >30 minutes (monitored by Go Swarm Bus activity).
+*   **Action**: 
+    1.  Samples facts from the Memory Bridge (LMDB).
+    2.  Coordinates with Python sidecars for analogical reasoning.
+    3.  Persists insights back to the Neo4j Knowledge Graph via Go native drivers.
 
-## 3. Metacognition Daemon (`oricli_metacognition_daemon.py`)
+## 3. Metacognition Daemon (Go-Orchestrated)
 **"The Self-Improver"**
 
-*   **Role**: Autonomic self-modification. Monitors execution traces for inefficiencies and proposes architectural changes.
-*   **Trigger**: Hourly scan (3600s).
-*   **Action**:
-    1.  Analyzes `cognitive_trace_diagnostics` for errors, latency, or loops.
-    2.  Uses `python_codebase_search` and `python_refactoring_reasoning` to propose patches.
-    3.  Can trigger **Neural Architecture Search (NAS)** to optimize module structures.
+*   **Role**: Autonomic self-modification. Monitors execution traces for inefficiencies.
+*   **Implementation**: Go Monitor Service (`pkg/service/monitor.go`).
+*   **Trigger**: Real-time heartbeat and trace analysis.
+*   **Action**: Identifies latency bottlenecks or loops across the Swarm and proposes re-routing or scaling.
 
-## 4. Tool-Efficacy Daemon (`oricli_tool_daemon.py`)
+## 4. Tool-Efficacy Daemon (Go-Orchestrated)
 **"The Toolmaster"**
 
-*   **Role**: Monitors tool usage failures and corrections to improve tool-calling reliability.
-*   **Trigger**: Watches `oricli_core/data/tool_corrections.jsonl`.
+*   **Role**: Monitors tool usage failures and corrections.
+*   **Implementation**: Native Go Tool service (`pkg/service/tool.go`).
 *   **Threshold**: Activates after **10** corrections.
-*   **Action**: Triggers a remote RunPod cluster to train a specific `tool_efficacy` adapter.
-*   **Cooldown**: 4 hours.
+*   **Action**: Triggers fine-tuning cycles for tool-calling reliability.
 
 ---
 
 ## Infrastructure
-All daemons are typically managed via systemd (e.g., `oricli-jit.service`) or the master script `scripts/start_servers.sh`. They log to `*.log` files in the repo root.
+Daemons are now internal Goroutines within the `oricli-go` backbone. They are managed as part of the primary system process, ensuring high availability and zero-overhead communication with the Swarm Bus.

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-type CodeIssue struct {
+type SafetyCodeIssue struct {
 	Type        string `json:"type"`
 	Severity    string `json:"severity"`
 	Description string `json:"description"`
@@ -27,8 +27,8 @@ func NewCodeSafetyService() *CodeSafetyService {
 	}
 }
 
-func (s *CodeSafetyService) Analyze(code string) []CodeIssue {
-	var issues []CodeIssue
+func (s *CodeSafetyService) Analyze(code string) []SafetyCodeIssue {
+	var issues []SafetyCodeIssue
 
 	for name, re := range s.DangerousPatterns {
 		if match := re.FindString(code); match != "" {
@@ -36,7 +36,7 @@ func (s *CodeSafetyService) Analyze(code string) []CodeIssue {
 			if name == "unsafe_execution" || name == "os_traversal" {
 				severity = "high"
 			}
-			issues = append(issues, CodeIssue{
+			issues = append(issues, SafetyCodeIssue{
 				Type:        name,
 				Severity:    severity,
 				Description: fmt.Sprintf("Potential %s detected: %s", name, match),
@@ -46,7 +46,7 @@ func (s *CodeSafetyService) Analyze(code string) []CodeIssue {
 
 	// Check for 'with' statement if 'open' is found
 	if strings.Contains(code, "open(") && !strings.Contains(code, "with open") {
-		issues = append(issues, CodeIssue{
+		issues = append(issues, SafetyCodeIssue{
 			Type:        "resource_leak",
 			Severity:    "medium",
 			Description: "File opened without 'with' context manager.",
