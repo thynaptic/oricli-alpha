@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package oricli.rpc;
+
+// Configure Go package output
+option go_package = "github.com/thynaptic/oricli-go/rpc;oriclirpc";
+
+// The ModuleService represents a Python worker exposing one or more Brain Modules.
+service ModuleService {
+  // Discovery: The Go backbone asks the worker what modules and operations it supports.
+  rpc GetManifest (ManifestRequest) returns (ManifestResponse);
+
+  // Execution: The Go backbone tells the Python worker to run a specific module/operation.
+  rpc ExecuteOperation (ExecuteRequest) returns (ExecuteResponse);
+
+  // Health: Standard lightweight ping to ensure the Python worker hasn't hung.
+  rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// --- Messages ---
+
+message ManifestRequest {
+  // Empty, could include auth/version tokens later
+}
+
+message ModuleMetadata {
+  string name = 1;
+  string description = 2;
+  string version = 3;
+  repeated string operations = 5;
+}
+
+message ManifestResponse {
+  repeated ModuleMetadata modules = 1;
+}
+
+message ExecuteRequest {
+  string module_name = 1;
+  string operation = 2;
+  
+  // JSON serialized parameters to keep the schema flexible across 250+ modules
+  string params_json = 3;
+  
+  // Tracing/Context info passed from Go
+  string task_id = 4;
+}
+
+message ExecuteResponse {
+  bool success = 1;
+  
+  // JSON serialized result payload
+  string result_json = 2;
+  
+  // Error message if success == false
+  string error_message = 3;
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  bool ready = 1;
+  string status_message = 2;
+}

@@ -602,6 +602,36 @@ def create_app(
         authorization: Optional[str] = None,
     ):
         """OpenAI-compatible chat completions endpoint"""
+        # --- Go Backbone Proxy Logic ---
+        go_enabled = os.environ.get("ORICLI_GO_BACKBONE", "").lower() == "true"
+        if go_enabled:
+            sys.stderr.write(f"[DEBUG] Go Backbone proxy active for {request.model}\n")
+            sys.stderr.flush()
+            import httpx
+            go_addr = os.environ.get("ORICLI_GO_ADDR", "http://localhost:8089")
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    proxy_resp = await client.post(
+                        f"{go_addr}/v1/chat/completions",
+                        json=request.model_dump(),
+                        headers={"Authorization": authorization} if authorization else {}
+                    )
+                    if proxy_resp.status_code == 200:
+                        sys.stderr.write(f"[DEBUG] Proxy success from Go\n")
+                        sys.stderr.flush()
+                        return ChatCompletionResponse(**proxy_resp.json())
+                    else:
+                        sys.stderr.write(f"[WARNING] Go Backbone returned status {proxy_resp.status_code}, falling back to Python\n")
+                        sys.stderr.flush()
+            except Exception as e:
+                sys.stderr.write(f"[WARNING] Go Backbone proxy failed: {e}, falling back to Python\n")
+                sys.stderr.flush()
+        else:
+            # sys.stderr.write("[DEBUG] Go Backbone proxy NOT enabled\n")
+            # sys.stderr.flush()
+            pass
+        
+        # --- Original Python Implementation ---
         result = await app.state.get_api().chat_completions(request, authorization)
         try:
             trace_id = None

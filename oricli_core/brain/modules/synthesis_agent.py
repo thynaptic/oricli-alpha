@@ -61,8 +61,20 @@ class SynthesisAgentModule(BaseBrainModule):
             return self._get_status()
 
         if operation == "generate_response":
-            # Map chat completions to synthesis
-            return self.execute("synthesize", params)
+            # Extract query from messages if present
+            query = params.get("query") or params.get("input") or ""
+            if not query and params.get("messages"):
+                query = params["messages"][-1].get("content", "")
+            
+            # Extract documents if present
+            documents = params.get("documents", [])
+            
+            # Map to synthesis
+            return self.execute("synthesize", {
+                "query": query,
+                "documents": documents,
+                **params
+            })
 
         if operation not in {"synthesize", "process_synthesis"}:
             return {"success": False, "error": f"Unknown operation: {operation}"}

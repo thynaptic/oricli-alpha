@@ -16,7 +16,7 @@ from oricli_core.exceptions import InvalidParameterError
 
 logger = logging.getLogger(__name__)
 
-PRIMARY_OLLAMA_MODEL = "frob/qwen3.5-instruct"
+PRIMARY_OLLAMA_MODEL = "qwen2:1.5b"
 
 
 class OllamaProviderModule(BaseBrainModule):

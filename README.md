@@ -2,19 +2,18 @@
 
 **Oricli-Alpha** is a proactive, local-first intelligence framework designed for autonomous, multi-day goal execution and decentralized problem-solving. Moving beyond reactive prompting, Oricli-Alpha operates as **The Hive**: a distributed swarm of 269+ specialized micro-agents.
 
-## Core Architecture: The Hive
-Oricli-Alpha has transitioned from a static module registry to a dynamic, decentralized multi-agent system.
-- **Micro-Agents**: 269+ brain modules wrapped as independent nodes.
-- **Contract Net Protocol**: A broker-bidding system where agents compete for tasks based on confidence and compute cost.
-- **Swarm Bus**: A real-time asynchronous pub/sub system for peer-to-peer agent collaboration.
-- **Shared Blackboard**: Persistent session state for multi-round deliberation and consensus.
+## Core Architecture: The Hybrid Hive
+Oricli-Alpha uses a **Go-Native Backbone** for high-concurrency orchestration and a **Python Sidecar Mesh** for complex cognitive modules.
+- **Go Swarm Bus**: High-throughput message routing and microsecond-level bidding.
+- **Go Reasoning Engines**: Native implementation of CoT, ToT, and MCTS for deep thinking.
+- **Go Nervous System**: Native Memory (LMDB), Graph (Neo4j), and Web Ingestion.
+- **Python Sidecars**: 240+ cognitive modules managing specialized logic via gRPC.
 
 ## Key Features
-- **Sovereign Goals**: Persistent, multi-step objectives that survive system restarts and execute autonomously.
-- **Native Sovereign API**: A dedicated interface exposing Goal management, Swarm orchestration, and Knowledge Graph queries (Port 8081).
-- **Hybrid Data Strategy**: High-speed vectorized processing via **Pandas** and persistent relationship management via **Neo4j**.
-- **Ollama Strategic Pivot**: Offloads prose generation to local Ollama models (pinned: `frob/qwen3.5-instruct 4B`) to prioritize internal compute for orchestration.
-- **Dual-Mode Client**: The `OricliAlphaClient` supports both local module proxying and remote REST orchestration.
+- **Sovereign Goals**: Persistent, multi-step objectives that survive system restarts and execute autonomously via Go Executive.
+- **High-Speed API**: Native REST interface exposing Goal management and Swarm orchestration (Go port 8089, Proxied 8081).
+- **Sub-5s Response**: Optimized for CPU-bound VPS with `qwen2:1.5b` reflex cognition.
+- **Immune System**: Persistent Go-native monitoring and self-healing.
 
 ---
 

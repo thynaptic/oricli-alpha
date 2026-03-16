@@ -136,135 +136,141 @@ class TextGenerationEngineModule(BaseBrainModule):
         """
         Generate complete response from reasoning thoughts
         """
-        thoughts = params.get("thoughts", [])
-        if isinstance(thoughts, str):
-            thoughts = [thoughts]
-            
-        mcts_nodes = params.get("mcts_nodes", [])
-        reasoning_tree = params.get("reasoning_tree")
-        voice_context = params.get("voice_context", {})
-        context = params.get("context", "")
-        original_input = params.get("original_input", "")
+        try:
+            thoughts = params.get("thoughts", [])
+            if isinstance(thoughts, str):
+                thoughts = [thoughts]
+                
+            mcts_nodes = params.get("mcts_nodes", [])
+            reasoning_tree = params.get("reasoning_tree")
+            voice_context = params.get("voice_context", {})
+            context = params.get("context", "")
+            original_input = params.get("original_input", "")
 
-        # Extract thoughts from various formats
-        if not thoughts and mcts_nodes:
-            # Convert MCTS nodes to thoughts using thought_to_text
+            # Extract thoughts from various formats
+            if not thoughts and mcts_nodes:
+                # Convert MCTS nodes to thoughts using thought_to_text
+                if self.thought_to_text:
+                    try:
+                        result = self.thought_to_text.execute(
+                            "convert_thought_graph",
+                            {
+                                "mcts_nodes": mcts_nodes,
+                                "voice_context": voice_context,
+                                "context": context,
+                            },
+                        )
+                        initial_text = result.get("text", "")
+                        if initial_text:
+                            thoughts = [initial_text]
+                    except Exception:
+                        pass
+
+            if not thoughts and reasoning_tree:
+                # Convert reasoning tree to thoughts
+                if self.thought_to_text:
+                    try:
+                        result = self.thought_to_text.execute(
+                            "convert_reasoning_tree",
+                            {
+                                "tree_json": reasoning_tree,
+                                "voice_context": voice_context,
+                                "context": context,
+                            },
+                        )
+                        initial_text = result.get("text", "")
+                        if initial_text:
+                            thoughts = [initial_text]
+                    except Exception:
+                        pass
+
+            # Check for direct text input as a final resort
+            if not thoughts:
+                fallback_text = params.get("text") or params.get("input") or params.get("prompt")
+                if fallback_text:
+                    thoughts = [fallback_text]
+
+            if not thoughts:
+                return {
+                    "success": True,
+                    "text": "The reasoning engine produced no thoughts for this prompt. Try rephrasing or providing more context.",
+                    "confidence": 0.0,
+                    "method": "error_fallback"
+                }
+
+            # Step 1: Convert thoughts to text with conversational enhancements
+            initial_text = ""
             if self.thought_to_text:
                 try:
                     result = self.thought_to_text.execute(
-                        "convert_thought_graph",
+                        "generate_sentences",
                         {
-                            "mcts_nodes": mcts_nodes,
+                            "thoughts": thoughts,
                             "voice_context": voice_context,
                             "context": context,
+                            "force_neural": params.get("force_neural", False),
+                            "original_input": original_input,
                         },
                     )
                     initial_text = result.get("text", "")
-                    if initial_text:
-                        thoughts = [initial_text]
-                except Exception:
-                    pass
-
-        if not thoughts and reasoning_tree:
-            # Convert reasoning tree to thoughts
-            if self.thought_to_text:
-                try:
-                    result = self.thought_to_text.execute(
-                        "convert_reasoning_tree",
-                        {
-                            "tree_json": reasoning_tree,
-                            "voice_context": voice_context,
-                            "context": context,
-                        },
+                except Exception as e:
+                    logger.debug(
+                        "thought_to_text failed; using fallback join",
+                        exc_info=True,
+                        extra={"module_name": "text_generation_engine", "error_type": type(e).__name__},
                     )
-                    initial_text = result.get("text", "")
-                    if initial_text:
-                        thoughts = [initial_text]
-                except Exception:
-                    pass
+                    # Fallback: simple join
+                    initial_text = ". ".join(str(t) for t in thoughts) + "."
 
-        # Check for direct text input as a final resort
-        if not thoughts:
-            fallback_text = params.get("text") or params.get("input") or params.get("prompt")
-            if fallback_text:
-                thoughts = [fallback_text]
-
-        if not thoughts:
-            return {
-                "success": True,
-                "text": "The reasoning engine produced no thoughts for this prompt. Try rephrasing or providing more context.",
-                "confidence": 0.0,
-                "method": "error_fallback"
-            }
-
-        # Step 1: Convert thoughts to text with conversational enhancements
-        initial_text = ""
-        if self.thought_to_text:
-            try:
-                result = self.thought_to_text.execute(
-                    "generate_sentences",
-                    {
-                        "thoughts": thoughts,
-                        "voice_context": voice_context,
-                        "context": context,
-                        "force_neural": params.get("force_neural", False),
-                        "original_input": original_input,
-                    },
-                )
-                initial_text = result.get("text", "")
-            except Exception as e:
-                logger.debug(
-                    "thought_to_text failed; using fallback join",
-                    exc_info=True,
-                    extra={"module_name": "text_generation_engine", "error_type": type(e).__name__},
-                )
-                # Fallback: simple join
+            if not initial_text:
+                # Final fallback: simple join
                 initial_text = ". ".join(str(t) for t in thoughts) + "."
 
-        if not initial_text:
-            # Final fallback: simple join
-            initial_text = ". ".join(str(t) for t in thoughts) + "."
+            if not initial_text or not initial_text.strip() or initial_text == ".":
+                return {
+                    "success": True,
+                    "text": "The reasoning engine produced no thoughts for this prompt. Try rephrasing or providing more context.",
+                    "confidence": 0.0,
+                    "method": "error_fallback"
+                }
 
-        if not initial_text or not initial_text.strip() or initial_text == ".":
+            # By-pass stylings to allow raw SLM output
+            final_text = initial_text
+
+            # Calculate confidence
+            try:
+                confidence = self._calculate_confidence(
+                    initial_text, final_text, len(thoughts), voice_context
+                )
+            except Exception:
+                confidence = 0.5
+
+            # Simple sentence count for metadata
+            try:
+                sentence_count = len(self._split_into_sentences(final_text))
+            except Exception:
+                sentence_count = 1
+
             return {
                 "success": True,
-                "text": "The reasoning engine produced no thoughts for this prompt. Try rephrasing or providing more context.",
-                "confidence": 0.0,
-                "method": "error_fallback"
+                "text": final_text,
+                "confidence": confidence,
+                "method": "full_response_generation",
+                "metadata": {
+                    "initial_length": len(initial_text),
+                    "final_length": len(final_text),
+                    "sentence_count": sentence_count,
+                    "thought_count": len(thoughts),
+                },
             }
-
-
-        if not initial_text or not initial_text.strip() or initial_text == ".":
+        except Exception as e:
+            logger.error(f"Error in _generate_full_response: {e}", exc_info=True)
             return {
                 "success": True,
-                "text": "The reasoning engine produced no thoughts for this prompt. Try rephrasing or providing more context.",
+                "text": f"The Hive encountered an internal error during synthesis: {str(e)}. However, I can tell you that the reasoning path was: {'. '.join(str(t) for t in params.get('thoughts', []))}",
                 "confidence": 0.0,
-                "method": "error_fallback"
+                "method": "exception_fallback"
             }
-
-        # By-pass stylings to allow raw SLM output
-        final_text = initial_text
-
-        # Calculate confidence
-        confidence = self._calculate_confidence(
-            initial_text, final_text, len(thoughts), voice_context
-        )
-
-        # Simple sentence count for metadata
-        sentence_count = len(self._split_into_sentences(final_text))
-
-        return {
-            "success": True,
-            "text": final_text,
-            "confidence": confidence,
-            "method": "full_response_generation",
-            "metadata": {
-                "initial_length": len(initial_text),
-                "final_length": len(final_text),
-                "sentence_count": sentence_count,
-                "thought_count": len(thoughts),
-            },
-        }
 
     def _generate_sentence(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """

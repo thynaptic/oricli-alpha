@@ -52,6 +52,7 @@ class RetrieverAgent(BaseBrainModule):
                 "expand_query",
                 "filter_candidates",
                 "process_retrieval",
+                "generate_response",
             ],
             dependencies=[],
             enabled=True,
@@ -159,6 +160,18 @@ class RetrieverAgent(BaseBrainModule):
             except (TypeError, ValueError):
                 limit = 20
             return self.process_retrieval(query, limit)
+        elif operation == "generate_response":
+            # Direct retrieval-based response
+            query = params.get("query") or params.get("input") or ""
+            if not query and params.get("messages"):
+                query = params["messages"][-1].get("content", "")
+                
+            res = self.process_retrieval(query)
+            if res.get("success"):
+                docs = res.get("documents", [])
+                text = "\n\n".join([f"[{d.get('source', 'unknown')}] {d.get('content', '')}" for d in docs[:3]])
+                return {"success": True, "text": f"Found these relevant items in my knowledge base:\n\n{text}", "method": "retrieval_direct"}
+            return {"success": False, "error": "Retrieval failed"}
         else:
             raise InvalidParameterError(
                 parameter="operation",

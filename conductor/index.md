@@ -12,3 +12,4 @@
 ## Management
 - [Tracks Registry](./tracks.md)
 - [Tracks Directory](./tracks/)
+- [GoLang Migration Plan](./golang_migration_plan.md)

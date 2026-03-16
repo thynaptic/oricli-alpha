@@ -10,8 +10,12 @@ WorkingDirectory=/home/mike/Mavaia
 Environment=PYTHONPATH=/home/mike/Mavaia
 Environment=MAVAIA_ENABLE_HEAVY_MODULES=true
 Environment=MAVAIA_ENABLE_HIVE_AUTOSTART=true
+Environment=MAVAIA_MODULE_IMPORT_TIMEOUT=300.0
+Environment=MAVAIA_DISABLE_IMPORT_TIMEOUT=true
 Environment=OLLAMA_URL=http://localhost:11434
 Environment=OLLAMA_MODEL=frob/qwen3.5-instruct
+Environment=ORICLI_GO_BACKBONE=true
+Environment=ORICLI_GO_ADDR=http://localhost:8089
 ExecStart=/home/mike/Mavaia/.venv/bin/python3 /home/mike/Mavaia/scripts/oricli_api_daemon.py
 Restart=always
 RestartSec=10

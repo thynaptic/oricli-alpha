@@ -30,7 +30,7 @@ def _lazy_import_tool_registry():
     global ToolRegistry, _TOOL_REGISTRY_IMPORT_FAILURE_LOGGED
     if ToolRegistry is None:
         try:
-            from oricli_core.services.tool_registry import ToolRegistry as TR
+            from oricli_core.brain.go_bridge import ToolRegistry as TR
             ToolRegistry = TR
         except ImportError:
             if not _TOOL_REGISTRY_IMPORT_FAILURE_LOGGED:
