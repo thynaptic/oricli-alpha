@@ -1,494 +1,175 @@
-# API Documentation
+# Oricli-Alpha API Documentation (v0.5.0-alpha)
 
-Complete API documentation for Oricli-Alpha Core.
+Complete API documentation for the Oricli-Alpha Sovereign Agent OS. The API is powered by a high-performance Go-native backbone optimized for 32-core EPYC environments.
 
 ## Base URL
 
 - Production: `https://oricli.thynaptic.com`
-- Local: `http://localhost:8081`
+- Local: `http://localhost:8089`
 
 ## Authentication
 
 API key authentication is configurable. Configure via:
 
 - Environment variable: `MAVAIA_API_KEY` - Set the API key
-- Environment variable: `MAVAIA_REQUIRE_AUTH` - Set to `true` to require authentication (default: `false`)
-- Server argument: `--api-key` - Set API key via command line
-- Server argument: `--require-auth` - Require authentication for all requests
 - Header: `Authorization: Bearer <api-key>` - Provide API key in request header
 
-**Default Behavior:**
-- If no API key is configured: All requests are allowed (no authentication)
-- If API key is configured but `require_auth=false`: API key is validated if provided, but not required
-- If `require_auth=true`: All requests must include valid API key
+## 🚀 Sovereign Hive Endpoints
 
-**Example:**
-```bash
-# Set API key via environment variable
-export MAVAIA_API_KEY="your-secret-key"
+### Swarm Run (Direct Execution)
 
-# Require authentication
-export MAVAIA_REQUIRE_AUTH="true"
+Execute a task across the swarm with automated micro-agent selection and bidding.
 
-# Start server
-oricli-server --port 8000
-
-# Or set via command line
-oricli-server --port 8000 --api-key "your-secret-key" --require-auth
-```
-
-## OpenAI-Compatible Endpoints
-
-### Chat Completions
-
-Create a chat completion.
-
-**Endpoint:** `POST /v1/chat/completions`
+**Endpoint:** `POST /v1/swarm/run`
 
 **Request:**
 ```json
 {
-  "model": "oricli-cognitive",
-  "messages": [
-    {"role": "user", "content": "Hello, how are you?"}
-  ],
-  "temperature": 0.7,
-  "max_tokens": 1000,
-  "stream": false
+  "operation": "reason",
+  "params": {
+    "query": "How does the AMD EPYC 7543P optimize for Go-native concurrency?",
+    "complexity": 0.8
+  }
 }
 ```
 
 **Response:**
 ```json
 {
-  "id": "chatcmpl-123",
-  "object": "chat.completion",
-  "created": 1694268190,
-  "model": "oricli-cognitive",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "Hello! I'm doing well, thank you for asking."
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 10,
-    "completion_tokens": 12,
-    "total_tokens": 22
+  "success": true,
+  "task_id": "swarm_task_1773685691",
+  "result": {
+    "answer": "The EPYC 7543P provides 32 high-performance cores that the Go backbone utilizes through native Goroutines...",
+    "confidence": 0.98,
+    "agent_id": "mcts_reasoning_go"
   }
 }
 ```
 
-**Parameters:**
-- `model` (string, required): Model identifier (default: "oricli-cognitive")
-- `messages` (array, required): Conversation messages
-- `temperature` (float, optional): Sampling temperature (0.0-2.0, default: 0.7)
-- `max_tokens` (integer, optional): Maximum tokens to generate
-- `stream` (boolean, optional): Stream responses (default: false)
-- `personality_id` (string, optional): Personality identifier
-- `use_memory` (boolean, optional): Use conversation memory (default: true)
-- `use_reasoning` (boolean, optional): Use reasoning layer (default: true)
+### Swarm Inject (Manual Message)
 
-### Embeddings
+Inject a custom message directly into the Swarm Bus.
 
-Create embeddings for text.
-
-**Endpoint:** `POST /v1/embeddings`
+**Endpoint:** `POST /v1/swarm/inject`
 
 **Request:**
 ```json
 {
-  "input": "text to embed",
-  "model": "oricli-embeddings"
-}
-```
-
-**Response:**
-```json
-{
-  "object": "list",
-  "data": [
-    {
-      "object": "embedding",
-      "embedding": [0.1, 0.2, 0.3, ...],
-      "index": 0
-    }
-  ],
-  "model": "oricli-embeddings",
-  "usage": {
-    "prompt_tokens": 4,
-    "total_tokens": 4
+  "topic": "tasks.cfp",
+  "protocol": "broadcast",
+  "payload": {
+    "task_id": "manual_123",
+    "operation": "analyze_code"
   }
 }
 ```
 
-**Parameters:**
-- `input` (string or array, required): Text(s) to embed
-- `model` (string, optional): Embedding model (default: "oricli-embeddings")
+## 🎯 Sovereign Goals
 
-### Models
+### List Goals
 
-List available models.
+Retrieve all persistent sovereign goals.
 
-**Endpoint:** `GET /v1/models`
+**Endpoint:** `GET /v1/goals`
 
-**Response:**
+### Create Goal
+
+Initialize a new autonomous goal for the system.
+
+**Endpoint:** `POST /v1/goals`
+
+**Request:**
 ```json
 {
-  "object": "list",
-  "data": [
-    {
-      "id": "oricli-cognitive",
-      "object": "model",
-      "created": 1694268190,
-      "owned_by": "oricli",
-      "permission": [],
-      "root": "oricli-cognitive",
-      "parent": null
-    }
-  ]
+  "title": "Migrate core logic to Go",
+  "description": "Port 250+ Python modules to the Go backbone for 32-core optimization.",
+  "priority": 10
 }
 ```
 
-## Oricli-Alpha-Specific Endpoints
+## 🤖 Agent Factory
 
-### List Modules
+### List Agents
 
-List available brain modules.
+List all active agent profiles and their specialized skills.
 
-**Endpoint:** `GET /v1/modules`
+**Endpoint:** `GET /v1/agents`
 
-**Response:**
+### Create Agent
+
+Register a new specialized micro-agent profile.
+
+**Endpoint:** `POST /v1/agents`
+
+## 🧠 Intelligence Services
+
+### Code Review
+
+Analyze code for quality, performance, and security.
+
+**Endpoint:** `POST /v1/code/review`
+
+### Document Analysis
+
+Perform deep analysis and summarization of text documents.
+
+**Endpoint:** `POST /v1/documents/analyze`
+
+**Request:**
 ```json
 {
-  "modules": [
-    {
-      "name": "reasoning",
-      "version": "1.0.0",
-      "description": "Reasoning module",
-      "operations": ["reason"],
-      "enabled": true,
-      "model_required": false
-    }
-  ]
+  "text": "Full document text here...",
+  "file_name": "architecture_v2.md"
 }
 ```
 
-### Health Check
+## 🔍 System Introspection
 
-Check server health.
+### Detailed Health
 
-**Endpoint:** `GET /health`
+Get detailed status, uptime, and performance metrics for all Go-native and Python sidecar modules.
 
-**Response:**
-```json
-{
-  "status": "healthy",
-  "service": "oricli-core",
-  "version": "1.0.0"
-}
-```
+**Endpoint:** `GET /v1/health/detailed`
+
+### System Metrics
+
+Retrieve real-time execution counts, latencies, and success rates for the entire swarm.
+
+**Endpoint:** `GET /v1/metrics`
+
+### Execution Traces
+
+Access the high-speed Go ring-buffer of recent task execution traces.
+
+**Endpoint:** `GET /v1/traces`
+
+## 🧪 Stress Testing
+
+### Scream Test
+
+Fire 100 parallel orchestrated tasks across the swarm to verify 32-core EPYC saturation.
+
+**Endpoint:** `POST /v1/stress/scream`
+
+##  OpenAI-Compatible Endpoints
+
+Oricli-Alpha maintains compatibility with existing AI tooling via OpenAI-style aliases.
+
+- `POST /v1/chat/completions` -> Routes to `GoAgentService`
+- `POST /v1/embeddings` -> Routes to `EmbeddingEngine` (Go-proxied to Ollama)
+- `GET /v1/models` -> Returns active Hive model list
 
 ## Error Responses
 
-All errors follow this format:
+Errors return standard HTTP status codes and a JSON error body:
 
 ```json
 {
-  "error": {
-    "message": "Error message",
-    "type": "error_type",
-    "code": 500
-  }
+  "success": false,
+  "error": "Internal server error: GIL contention detected in Python sidecar",
+  "code": 500
 }
 ```
 
-**Error Types:**
-- `invalid_request_error`: Invalid request parameters (400)
-- `authentication_error`: Authentication failed (401)
-- `server_error`: Server error (500)
-
-### Authentication Errors
-
-When API key authentication is required but fails:
-
-**Response (401):**
-```json
-{
-  "error": {
-    "message": "Authentication failed: Invalid API key",
-    "type": "authentication_error",
-    "code": 401
-  }
-}
-```
-
-**Common Scenarios:**
-- Missing `Authorization` header when `MAVAIA_REQUIRE_AUTH=true`
-- Invalid API key format (must be `Bearer <token>`)
-- Incorrect API key value
-
-**Example:**
-```bash
-# Missing header
-curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "oricli-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
-# Returns 401 if authentication required
-
-# Invalid format
-curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
-  -H "Authorization: invalid-format" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "oricli-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
-# Returns 401: "Invalid authorization format. Expected 'Bearer <token>'"
-
-# Wrong API key
-curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
-  -H "Authorization: Bearer wrong-key" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "oricli-cognitive", "messages": [{"role": "user", "content": "Hello"}]}'
-# Returns 401: "Invalid API key"
-```
-
-### Validation Errors
-
-When request parameters are invalid:
-
-**Response (400):**
-```json
-{
-  "error": {
-    "message": "Validation failed for field 'messages': messages is required",
-    "type": "invalid_request_error",
-    "code": 400
-  }
-}
-```
-
-**Common Scenarios:**
-- Missing required fields (`messages`, `input`)
-- Invalid parameter types
-- Parameter values out of range (e.g., `temperature > 2.0`)
-
-**Example:**
-```bash
-# Missing messages
-curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "oricli-cognitive"}'
-# Returns 400: "messages is required"
-
-# Invalid temperature
-curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "oricli-cognitive",
-    "messages": [{"role": "user", "content": "Hello"}],
-    "temperature": 3.0
-  }'
-# Returns 400: "temperature must be between 0.0 and 2.0"
-```
-
-### Server Errors
-
-When an internal error occurs:
-
-**Response (500):**
-```json
-{
-  "error": {
-    "message": "Error generating chat completion: cognitive_generator module not available",
-    "type": "server_error",
-    "code": 500
-  }
-}
-```
-
-**Common Scenarios:**
-- Module not found or failed to initialize
-- Module operation failed
-- Internal processing error
-
-**Example:**
-```bash
-# Module unavailable
-curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "oricli-cognitive",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'
-# Returns 500 if cognitive_generator module is not available
-```
-
-### Error Handling in Code
-
-**Python:**
-```python
-import httpx
-from oricli_core.exceptions import (
-    AuthenticationError,
-    ModuleNotFoundError,
-    ModuleOperationError
-)
-
-try:
-    response = httpx.post(
-        "https://oricli.thynaptic.com/v1/chat/completions",
-        json={"model": "oricli-cognitive", "messages": [...]},
-        headers={"Authorization": "Bearer your-key"}
-    )
-    response.raise_for_status()
-    print(response.json())
-except httpx.HTTPStatusError as e:
-    if e.response.status_code == 401:
-        print("Authentication failed")
-    elif e.response.status_code == 400:
-        print("Invalid request:", e.response.json())
-    else:
-        print("Server error:", e.response.json())
-```
-
-**JavaScript:**
-```javascript
-try {
-  const response = await fetch('https://oricli.thynaptic.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer your-key'
-    },
-    body: JSON.stringify({
-      model: 'oricli-cognitive',
-      messages: [{ role: 'user', content: 'Hello' }]
-    })
-  });
-  
-  if (!response.ok) {
-    const error = await response.json();
-    if (response.status === 401) {
-      console.error('Authentication failed:', error.error.message);
-    } else if (response.status === 400) {
-      console.error('Validation error:', error.error.message);
-    } else {
-      console.error('Server error:', error.error.message);
-    }
-    return;
-  }
-  
-  const data = await response.json();
-  console.log(data);
-} catch (error) {
-  console.error('Network error:', error);
-}
-```
-
-## Streaming
-
-### Chat Completions (Streaming)
-
-Set `stream: true` in the request to receive streaming responses:
-
-**Request:**
-```json
-{
-  "model": "oricli-cognitive",
-  "messages": [{"role": "user", "content": "Hello"}],
-  "stream": true
-}
-```
-
-**Response (Server-Sent Events):**
-```
-data: {"id": "chatcmpl-123", "object": "chat.completion.chunk", ...}
-data: {"id": "chatcmpl-123", "object": "chat.completion.chunk", ...}
-data: [DONE]
-```
-
-## Examples
-
-### Python
-
-```python
-import httpx
-
-# Chat completion
-response = httpx.post(
-    "https://oricli.thynaptic.com/v1/chat/completions",
-    json={
-        "model": "oricli-cognitive",
-        "messages": [{"role": "user", "content": "Hello"}]
-    }
-)
-print(response.json())
-
-# Embeddings
-response = httpx.post(
-    "https://oricli.thynaptic.com/v1/embeddings",
-    json={
-        "input": "text to embed",
-        "model": "oricli-embeddings"
-    }
-)
-print(response.json())
-```
-
-### cURL
-
-```bash
-# Chat completion
-curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "oricli-cognitive",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'
-
-# Embeddings
-curl -X POST https://oricli.thynaptic.com/v1/embeddings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "input": "text to embed",
-    "model": "oricli-embeddings"
-  }'
-```
-
-### JavaScript
-
-```javascript
-// Chat completion
-const response = await fetch('https://oricli.thynaptic.com/v1/chat/completions', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    model: 'oricli-cognitive',
-    messages: [{ role: 'user', content: 'Hello' }]
-  })
-});
-
-const data = await response.json();
-console.log(data);
-```
-
-## Rate Limiting
-
-Rate limiting is not currently implemented but will be added in future versions.
-
-## Versioning
-
-API versioning is handled via the URL path (`/v1/`). Future versions will use `/v2/`, etc.
-
-## OpenAPI Specification
-
-The API includes an OpenAPI specification available at:
-- Swagger UI: `https://oricli.thynaptic.com/docs`
-- ReDoc: `https://oricli.thynaptic.com/redoc`
-- OpenAPI JSON: `https://oricli.thynaptic.com/openapi.json`
-
+---
+*Oricli-Alpha: Intelligence, Orchestrated.*
