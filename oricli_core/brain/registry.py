@@ -442,6 +442,31 @@ class ModuleRegistry:
         cls, name: str, auto_discover: bool = True, wait_timeout: float = 30.0
     ) -> Optional[BaseBrainModule]:
         """Get an instance of a module by name"""
+        # --- Go Bridge Interceptor ---
+        go_native_modules = {
+            "cognitive_generator": "get_cognitive_generator",
+            "neural_text_generator": "get_neural_text_generator",
+            "custom_reasoning_networks": "get_custom_reasoning_networks",
+            "memory_bridge_service": "get_memory_bridge_service",
+            "neo4j_service": "get_neo4j_service",
+            "agent_profile_service": "get_agent_profile_service",
+            "tool_registry": "get_tool_registry",
+            "tool_execution_service": "tool_execution_service"
+        }
+        
+        if name in go_native_modules:
+            try:
+                import oricli_core.brain.go_bridge as bridge
+                # For tool execution service, return the instance directly
+                if name == "tool_execution_service":
+                    return bridge.tool_execution_service
+                # For others, call the getter
+                getter = getattr(bridge, go_native_modules[name])
+                return getter()
+            except ImportError:
+                pass # Fallback to normal behavior if bridge is missing
+        # -----------------------------
+
         if auto_discover and not cls._modules and not cls._discovered:
             # Start discovery in background (non-blocking)
             cls.discover_modules(background=True, verbose=False)

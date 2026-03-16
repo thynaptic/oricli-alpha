@@ -131,6 +131,11 @@ func main() {
 	node.NewCodeModule(swarmBus, codeAnalyzer, sandboxService).Start()
 
 	node.NewZebraModule(swarmBus, genService).Start()
+	node.NewSpatialModule(swarmBus, genService).Start()
+
+	// Initialize ARC Solver
+	arcSolver := service.NewARCSolver()
+	node.NewARCModule(swarmBus, arcSolver).Start()
 
 	complexityService := service.NewComplexityService()
 	node.NewComplexityModule(swarmBus, complexityService).Start()

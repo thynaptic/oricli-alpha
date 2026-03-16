@@ -95,6 +95,8 @@ Available Tools:
    - Params: {"operation": "fetch_url", "url": "..."}
 3. zebra_puzzle_solver (operations: "solve_zebra_puzzle")
    - Params: {"operation": "solve_zebra_puzzle", "input": "full puzzle text here"}
+4. spatial_reasoning_solver (operations: "solve_spatial_problem")
+   - Params: {"operation": "solve_spatial_problem", "input": "puzzle text here"}
 
 Example Tool Call:
 {
