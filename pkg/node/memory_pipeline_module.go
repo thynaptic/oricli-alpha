@@ -52,13 +52,16 @@ func (n *MemoryPipelineModule) onCFP(msg bus.Message) {
 
 	if !supportedOps[operation] { return }
 
+	taskID, _ := msg.Payload["task_id"].(string)
+
 	n.Bus.Publish(bus.Message{
-		Topic: "tasks.bid",
+		Protocol: bus.BID,
+		Topic:    fmt.Sprintf("tasks.bid.%s", taskID),
 		Payload: map[string]interface{}{
-			"task_id":    msg.Payload["task_id"],
-			"agent_id":   n.ID,
-			"bid_amount": 0.15,
-			"confidence": 1.0,
+			"task_id":      taskID,
+			"agent_id":     n.ID,
+			"compute_cost": 0.15,
+			"confidence":   1.0,
 		},
 	})
 }

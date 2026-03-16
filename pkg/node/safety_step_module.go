@@ -41,14 +41,17 @@ func (n *StepSafetyModule) onCFP(msg bus.Message) {
 		return
 	}
 
+	taskID, _ := msg.Payload["task_id"].(string)
+
 	// Bid for the task
 	n.Bus.Publish(bus.Message{
-		Topic: "tasks.bid",
+		Protocol: bus.BID,
+		Topic:    fmt.Sprintf("tasks.bid.%s", taskID),
 		Payload: map[string]interface{}{
-			"task_id":    msg.Payload["task_id"],
-			"agent_id":   n.ID,
-			"bid_amount": 0.2, // Moderate cost for safety analysis
-			"confidence": 1.0,
+			"task_id":      taskID,
+			"agent_id":     n.ID,
+			"compute_cost": 0.2, // Moderate cost for safety analysis
+			"confidence":   1.0,
 		},
 	})
 }
@@ -79,14 +82,18 @@ func (n *StepSafetyModule) onAccept(msg bus.Message) {
 		"success": err == nil,
 	}
 
+	var protocol bus.Protocol
 	if err != nil {
+		protocol = bus.ERROR
 		resPayload["error"] = err.Error()
 	} else {
+		protocol = bus.RESULT
 		resPayload["result"] = result
 	}
 
 	n.Bus.Publish(bus.Message{
-		Topic:   "tasks.result",
-		Payload: resPayload,
+		Protocol: protocol,
+		Topic:    "tasks.result",
+		Payload:  resPayload,
 	})
 }

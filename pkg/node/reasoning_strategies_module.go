@@ -55,16 +55,21 @@ func (n *ReasoningStrategiesModule) onCFP(msg bus.Message) {
 		return
 	}
 
+	taskID, _ := msg.Payload["task_id"].(string)
+
 	// Bid for the task
 	n.Bus.Publish(bus.Message{
-		Topic: "tasks.bid",
+		Protocol: bus.BID,
+		Topic:    fmt.Sprintf("tasks.bid.%s", taskID),
+		SenderID: n.ID,
 		Payload: map[string]interface{}{
-			"task_id":    msg.Payload["task_id"],
-			"agent_id":   n.ID,
-			"bid_amount": 0.3,
-			"confidence": 0.8,
+			"task_id":      taskID,
+			"agent_id":     n.ID,
+			"compute_cost": 0.1,
+			"confidence":   1.0,
 		},
 	})
+
 }
 
 func (n *ReasoningStrategiesModule) onAccept(msg bus.Message) {
@@ -133,14 +138,18 @@ func (n *ReasoningStrategiesModule) onAccept(msg bus.Message) {
 		"success": err == nil,
 	}
 
+	var protocol bus.Protocol
 	if err != nil {
+		protocol = bus.ERROR
 		resPayload["error"] = err.Error()
 	} else {
+		protocol = bus.RESULT
 		resPayload["result"] = result
 	}
 
 	n.Bus.Publish(bus.Message{
-		Topic:   "tasks.result",
-		Payload: resPayload,
+		Protocol: protocol,
+		Topic:    "tasks.result",
+		Payload:  resPayload,
 	})
 }

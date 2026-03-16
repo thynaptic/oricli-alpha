@@ -39,14 +39,17 @@ func (n *IntentModule) onCFP(msg bus.Message) {
 		return
 	}
 
+	taskID, _ := msg.Payload["task_id"].(string)
+
 	// Bid for the task
 	n.Bus.Publish(bus.Message{
-		Topic: "tasks.bid",
+		Protocol: bus.BID,
+		Topic:    fmt.Sprintf("tasks.bid.%s", taskID),
 		Payload: map[string]interface{}{
-			"task_id":    msg.Payload["task_id"],
-			"agent_id":   n.ID,
-			"bid_amount": 0.05, // Extremely fast, keyword-based
-			"confidence": 0.9,
+			"task_id":      taskID,
+			"agent_id":     n.ID,
+			"compute_cost": 0.05, // Extremely fast, keyword-based
+			"confidence":   0.9,
 		},
 	})
 }
@@ -63,7 +66,8 @@ func (n *IntentModule) onAccept(msg bus.Message) {
 
 	// Publish result
 	n.Bus.Publish(bus.Message{
-		Topic:   "tasks.result",
+		Protocol: bus.RESULT,
+		Topic:    "tasks.result",
 		Payload: map[string]interface{}{
 			"task_id": taskID,
 			"success": true,

@@ -33,22 +33,23 @@ func (n *ARCSwarmModule) Start() {
 
 func (n *ARCSwarmModule) onCFP(msg bus.Message) {
 	operation, ok := msg.Payload["operation"].(string)
-	if !ok {
-		return
-	}
+	if !ok { return }
 
 	if operation != "solve_arc" && operation != "predict_arc" {
 		return
 	}
 
+	taskID, _ := msg.Payload["task_id"].(string)
+
 	// Bid for the task
 	n.Bus.Publish(bus.Message{
-		Topic: "tasks.bid",
+		Protocol: bus.BID,
+		Topic:    fmt.Sprintf("tasks.bid.%s", taskID),
 		Payload: map[string]interface{}{
-			"task_id":    msg.Payload["task_id"],
-			"agent_id":   n.ID,
-			"bid_amount": 0.5, 
-			"confidence": 0.9,
+			"task_id":      taskID,
+			"agent_id":     n.ID,
+			"compute_cost": 0.5,
+			"confidence":   0.9,
 		},
 	})
 }
@@ -67,21 +68,27 @@ func (n *ARCSwarmModule) onAccept(msg bus.Message) {
 
 	result, err := n.Solver.SolveTask(ctx, task)
 
-	// Publish result
-	resPayload := map[string]interface{}{
-		"task_id": taskID,
-		"success": err == nil,
-	}
-
 	if err != nil {
-		resPayload["error"] = err.Error()
-	} else {
-		resPayload["result"] = result
+		n.Bus.Publish(bus.Message{
+			Protocol: bus.ERROR,
+			Topic:    "tasks.error",
+			Payload: map[string]interface{}{
+				"task_id": taskID,
+				"error":   err.Error(),
+			},
+		})
+		return
 	}
 
+	// Publish result
 	n.Bus.Publish(bus.Message{
-		Topic:   "tasks.result",
-		Payload: resPayload,
+		Protocol: bus.RESULT,
+		Topic:    "tasks.result",
+		Payload: map[string]interface{}{
+			"task_id": taskID,
+			"success": true,
+			"result":  result,
+		},
 	})
 }
 

@@ -73,7 +73,7 @@ func (m *TreeReasoningModule) onCFP(msg bus.Message) {
 			"task_id":      taskID,
 			"operation":    operation,
 			"confidence":   1.0,
-			"compute_cost": 5, // High compute cost due to parallel rollouts
+			"compute_cost": 5.0, // High compute cost due to parallel rollouts
 			"node_id":      m.ID,
 			"module_name":  m.ModuleName,
 		},

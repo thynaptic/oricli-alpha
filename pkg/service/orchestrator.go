@@ -35,7 +35,7 @@ type GoOrchestrator struct {
 type Bid struct {
 	NodeID      string
 	Confidence  float64
-	ComputeCost int
+	ComputeCost float64
 	Timestamp   int64
 }
 
@@ -123,7 +123,7 @@ func (o *GoOrchestrator) Execute(operation string, params map[string]interface{}
 	}
 	ctx.mu.Unlock()
 
-	log.Printf("[Orchestrator] Task %s: WINNER IS %s (Conf: %.2f, Cost: %d)", taskID, bestBid.NodeID, bestBid.Confidence, bestBid.ComputeCost)
+	log.Printf("[Orchestrator] Task %s: WINNER IS %s (Conf: %.2f, Cost: %.2f)", taskID, bestBid.NodeID, bestBid.Confidence, bestBid.ComputeCost)
 
 	// 4. Accept Bid
 	o.Bus.Publish(bus.Message{
@@ -157,15 +157,15 @@ func (o *GoOrchestrator) handleBid(msg bus.Message) {
 		return
 	}
 
-	confidence, _ := msg.Payload["confidence"].(float64)
-	cost, _ := msg.Payload["compute_cost"].(float64)
+	confidence := ToFloat64(msg.Payload["confidence"])
+	cost := ToFloat64(msg.Payload["compute_cost"])
 	
 	log.Printf("[Orchestrator] Task %s: Received bid from %s (Confidence: %.2f, Cost: %.2f)", taskID, msg.SenderID, confidence, cost)
 
 	bid := Bid{
 		NodeID:      msg.SenderID,
 		Confidence:  confidence,
-		ComputeCost: int(cost),
+		ComputeCost: cost,
 		Timestamp:   msg.Timestamp,
 	}
 

@@ -33,28 +33,29 @@ func (n *SymbolicModule) Start() {
 
 func (n *SymbolicModule) onCFP(msg bus.Message) {
 	operation, ok := msg.Payload["operation"].(string)
-	if !ok {
-		return
-	}
+	if !ok { return }
 
 	if operation != "solve" && operation != "check_satisfiability" && operation != "solve_web_of_lies" {
 		return
 	}
 
+	taskID, _ := msg.Payload["task_id"].(string)
+
 	// Bid for the task
 	n.Bus.Publish(bus.Message{
-		Topic: "tasks.bid",
+		Protocol: bus.BID,
+		Topic:    fmt.Sprintf("tasks.bid.%s", taskID),
 		Payload: map[string]interface{}{
-			"task_id":    msg.Payload["task_id"],
-			"agent_id":   n.ID,
-			"bid_amount": 0.4, 
-			"confidence": 1.0,
+			"task_id":      taskID,
+			"agent_id":     n.ID,
+			"compute_cost": 0.4,
+			"confidence":   1.0,
 		},
 	})
 }
 
 func (n *SymbolicModule) onAccept(msg bus.Message) {
-	taskID := msg.Payload["task_id"].(string)
+	taskID, _ := msg.Payload["task_id"].(string)
 	params, _ := msg.Payload["params"].(map[string]interface{})
 	operation, _ := msg.Payload["operation"].(string)
 
@@ -73,20 +74,26 @@ func (n *SymbolicModule) onAccept(msg bus.Message) {
 		result, err = n.Manager.Solve(ctx, params)
 	}
 
-	// Publish result
-	resPayload := map[string]interface{}{
-		"task_id": taskID,
-		"success": err == nil,
-	}
-
 	if err != nil {
-		resPayload["error"] = err.Error()
-	} else {
-		resPayload["result"] = result
+		n.Bus.Publish(bus.Message{
+			Protocol: bus.ERROR,
+			Topic:    "tasks.error",
+			Payload: map[string]interface{}{
+				"task_id": taskID,
+				"error":   err.Error(),
+			},
+		})
+		return
 	}
 
+	// Publish result
 	n.Bus.Publish(bus.Message{
-		Topic:   "tasks.result",
-		Payload: resPayload,
+		Protocol: bus.RESULT,
+		Topic:    "tasks.result",
+		Payload: map[string]interface{}{
+			"task_id": taskID,
+			"success": true,
+			"result":  result,
+		},
 	})
 }
