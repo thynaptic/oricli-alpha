@@ -2,8 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
+
+	rpc "github.com/thynaptic/oricli-go/pkg/rpc"
 )
 
 // ModuleMetadata represents the metadata for a brain module
@@ -44,19 +48,17 @@ func NewModuleRegistry(modulesDir string) *ModuleRegistry {
 	}
 }
 
-// RegisterNativeModule manually registers a Go-native module
+// RegisterNativeModule manually registers a module
 func (r *ModuleRegistry) RegisterNativeModule(name string, instance ModuleInstance) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	metadata := instance.Metadata()
-	metadata.IsGoNative = true
 	r.modules[name] = metadata
 	r.instances[name] = instance
 }
 
 // DiscoverModules finds modules in the specified directory
-// For now, this mostly serves to store metadata that might be provided by the Python sidecar
 func (r *ModuleRegistry) DiscoverModules(ctx context.Context) (int, int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -64,11 +66,6 @@ func (r *ModuleRegistry) DiscoverModules(ctx context.Context) (int, int, error) 
 	if r.discovered {
 		return len(r.modules), 0, nil
 	}
-
-	// In a real scenario, we might scan the Python modules directory to extract metadata
-	// or wait for the Python sidecar to register its modules over gRPC.
-	// For this migration, we'll assume Go owns the registry and Python modules 
-	// are "proxied" via a Go instance that talks to the Python gRPC worker.
 
 	r.discovered = true
 	return len(r.modules), 0, nil
@@ -111,16 +108,44 @@ func (r *ModuleRegistry) GetMetadata(name string) (ModuleMetadata, bool) {
 // PythonModuleProxy is a Go wrapper for a Python module managed via gRPC
 type PythonModuleProxy struct {
 	ModuleMetadata ModuleMetadata
-	Client         interface{} // placeholder for gRPC client
+	Client         rpc.ModuleServiceClient
 }
 
 func (p *PythonModuleProxy) Initialize(ctx context.Context) error {
-	return nil
+	// Ping health check to ensure worker is alive for this module
+	_, err := p.Client.HealthCheck(ctx, &rpc.HealthCheckRequest{})
+	return err
 }
 
 func (p *PythonModuleProxy) Execute(ctx context.Context, operation string, params map[string]interface{}) (interface{}, error) {
-	// Implement gRPC call to Python sidecar here
-	return nil, fmt.Errorf("not implemented: python proxy execution")
+	paramsJSON, err := json.Marshal(params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal params: %w", err)
+	}
+
+	req := &rpc.ExecuteRequest{
+		TaskId:     fmt.Sprintf("go_proxy_%d", time.Now().UnixNano()),
+		ModuleName: p.ModuleMetadata.Name,
+		Operation:  operation,
+		ParamsJson: string(paramsJSON),
+	}
+
+	resp, err := p.Client.ExecuteOperation(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC execution failed: %w", err)
+	}
+
+	if !resp.Success {
+		return nil, fmt.Errorf("python module error: %s", resp.ErrorMessage)
+	}
+
+	var result interface{}
+	err = json.Unmarshal([]byte(resp.ResultJson), &result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal result: %w", err)
+	}
+
+	return result, nil
 }
 
 func (p *PythonModuleProxy) Metadata() ModuleMetadata {

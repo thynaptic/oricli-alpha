@@ -102,6 +102,7 @@ func main() {
 				Name:       m.Name,
 				Operations: m.Operations,
 			},
+			Client: client,
 		})
 	}
 

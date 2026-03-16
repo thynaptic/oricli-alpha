@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -255,6 +256,7 @@ func (s *Server) setupRoutes() {
 			c.JSON(http.StatusOK, s.Monitor.ListStatuses())
 		})
 		v1.GET("/health/detailed", s.handleDetailedHealth)
+		v1.POST("/stress/scream", s.handleScreamTest)
 	}
 
 	// Ollama-style API Aliases
@@ -1334,6 +1336,34 @@ func (s *Server) handleDetailedHealth(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, results)
+}
+
+func (s *Server) handleScreamTest(c *gin.Context) {
+	count := 100
+	log.Printf("[Scream] Firing %d parallel orchestrated tasks across the swarm...", count)
+	
+	var wg sync.WaitGroup
+	for i := 0; i < count; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			params := map[string]interface{}{
+				"query": fmt.Sprintf("Stress test reasoning query #%d", idx),
+			}
+			// Use orchestrator's native execution which handles CFP/Bid/Result
+			_, err := s.Orchestrator.Execute("reason", params, 10*time.Second)
+			if err != nil {
+				log.Printf("[Scream] Task %d failed: %v", idx, err)
+			}
+		}(i)
+	}
+	// We don't wg.Wait() here to avoid blocking the API response
+	// The tasks will run in the background
+	
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("Fired %d parallel orchestrated tasks. 32-core EPYC saturation initiated.", count),
+	})
 }
 
 
