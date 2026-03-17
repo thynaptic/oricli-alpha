@@ -3185,6 +3185,9 @@ def main():
         "--benchmark", action="store_true", help="Run benchmark mode instead of training"
     )
     parser.add_argument(
+        "--ingest", action="store_true", help="Maintain a vision-capable pod for active ingestion tasks"
+    )
+    parser.add_argument(
         "--bench-script",
         default="LiveBench/livebench/run_livebench.py",
         help="Path to evaluation script on the pod",
@@ -4295,6 +4298,36 @@ def main():
                     args.ssh_proxy,
                     src=f"{args.volume_mount_path}/oricli",
                 )
+        elif args.ingest:
+            _rich_log("Activating Vision-Ingest Bridge Mode...", "bold magenta", "👁")
+            
+            # 1. Ensure Qwen2-VL is pulled
+            vision_model = "qwen2-vl:2b"
+            setup_ollama(
+                pod_ip,
+                pod_port,
+                args.ssh_key,
+                vision_model,
+                args.ollama_model_dir,
+                pod["id"],
+                args.ssh_proxy,
+            )
+            
+            _rich_log(f"Vision Bridge Active! Model: {vision_model}", "bold green", "✓")
+            _rich_log(f"Connect Go Backbone to: http://{pod_ip}:{pod_port} (via tunnel)", "cyan", "🔗")
+            
+            # 2. Stay alive and monitor
+            while True:
+                # Simple heartbeat
+                time.sleep(60)
+                _rich_log("Bridge Heartbeat: Guarding balance and pod status...", "dim", "💓")
+                
+                # Check balance
+                bal = bridge.get_balance()
+                if bal is not None and bal < args.min_balance:
+                    _rich_log(f"Emergency Exit: Balance ${bal:.2f} below minimum!", "red", "🚨")
+                    break
+                    
         elif args.internal_bench:
             _rich_log("Starting OricliAlpha Internal Knowledge Benchmark...", "bold green", "🚀")
             
