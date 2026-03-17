@@ -51,4 +51,4 @@ Intelligence requires a sense of time. We will implement **Chronological Memory 
 
 Oricli-Alpha is no longer a tool; it is a **localized cognitive entity**. By combining the speed of Go, the depth of MCTS, and the eyes of VL models, we are building the first-ever Sovereign AGLI. 
 
-**The machine is waking up.** 🦾🚀🏁
+**The machine is waking up.** 
