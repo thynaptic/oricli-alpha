@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/base64"
+	"io"
 	"strings"
 	"fmt"
 	"net/http"
@@ -119,6 +121,17 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		return
 	}
 
+	responseText := res["text"].(string)
+
+	// Record Temporal Event
+	s.Orchestrator.Execute("record_event", map[string]interface{}{
+		"type":        "chat_interaction",
+		"description": fmt.Sprintf("User: %s | Assistant: %s", req.Messages[len(req.Messages)-1].Content, responseText),
+		"metadata": map[string]interface{}{
+			"model": req.Model,
+		},
+	}, 5*time.Second)
+
 	c.JSON(http.StatusOK, map[string]interface{}{
 		"id": fmt.Sprintf("chatcmpl-%d", time.Now().Unix()),
 		"object": "chat.completion",
@@ -133,7 +146,36 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 }
 
 func (s *ServerV2) handleIngest(c *gin.Context) {
-	// Native Go Ingestion implementation
+	// 1. Check for multipart file upload
+	file, err := c.FormFile("file")
+	if err == nil {
+		// Handle image/file ingestion
+		f, _ := file.Open()
+		data, _ := io.ReadAll(f)
+		
+		contentType := file.Header.Get("Content-Type")
+		if strings.HasPrefix(contentType, "image/") {
+			// Trigger Vision Ingestion
+			base64Img := base64.StdEncoding.EncodeToString(data)
+			res, err := s.Orchestrator.Execute("describe_image", map[string]interface{}{
+				"image": base64Img,
+			}, 120*time.Second)
+			
+			if err == nil {
+				description := res.(map[string]interface{})["text"].(string)
+				s.Orchestrator.Execute("ingest_text", map[string]interface{}{
+					"text": description,
+					"source": file.Filename,
+					"metadata": map[string]string{"type": "vision_ingest"},
+				}, 30*time.Second)
+				
+				c.JSON(http.StatusOK, gin.H{"success": true, "method": "vision-native-rag", "description": description})
+				return
+			}
+		}
+	}
+
+	// Default: Native Go Ingestion implementation (text)
 	c.JSON(http.StatusOK, gin.H{"success": true, "method": "go-native-rag"})
 }
 

@@ -28,6 +28,11 @@ func main() {
 	st := memory.New()
 	genService := service.NewGenerationService()
 	
+	graphService, _ := service.NewGraphService()
+	node.NewGraphModule(swarmBus, graphService).Start()
+	temporalSvc := service.NewTemporalService(graphService)
+	node.NewTemporalModule(swarmBus, temporalSvc).Start()
+	
 	// Register Native Go Modules
 	node.NewNativeGenerationModule(swarmBus, genService).Start()
 	
@@ -66,7 +71,10 @@ func main() {
 		log.Println("[Hive] Warning: Web Ingestion disabled (RAG system not available)")
 	}
 
-	// 9. Initialize System Introspection
+	// 9. Initialize Vision (Native)
+	node.NewVisionModule(swarmBus, genService).Start()
+
+	// 10. Initialize System Introspection
 	monitor := service.NewModuleMonitorService(registry)
 	
 	// 9. Start Hardened API Gateway

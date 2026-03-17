@@ -2,6 +2,7 @@
 import argparse
 import sys
 import json
+import requests
 from oricli_client import OricliClient
 
 def main():
@@ -31,6 +32,10 @@ def main():
     # oricli memory
     mem_parser = subparsers.add_parser("memory", help="Search knowledge base")
     mem_parser.add_argument("query", help="Search query")
+
+    # oricli history
+    hist_parser = subparsers.add_parser("history", help="Get chronological history")
+    hist_parser.add_argument("--limit", type=int, default=10)
 
     args = parser.parse_args()
     client = OricliClient(base_url=args.url)
@@ -64,6 +69,13 @@ def main():
 
     elif args.command == "memory":
         print(json.dumps(client.memory_search(args.query), indent=2))
+
+    elif args.command == "history":
+        payload = {
+            "operation": "get_history",
+            "params": {"limit": args.limit}
+        }
+        print(json.dumps(requests.post(f"{args.url}/v1/swarm/run", headers=client.headers, json=payload).json(), indent=2))
 
     else:
         parser.print_help()

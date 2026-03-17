@@ -8,31 +8,31 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/service"
 )
 
-type GraphModule struct {
+type TemporalModule struct {
 	ID         string
 	ModuleName string
 	Operations []string
 	Bus        *bus.SwarmBus
-	Service    *service.GraphService
+	Service    *service.TemporalService
 }
 
-func NewGraphModule(swarmBus *bus.SwarmBus, svc *service.GraphService) *GraphModule {
-	return &GraphModule{
-		ID:         "go_native_graph",
-		ModuleName: "neo4j_service",
-		Operations: []string{"execute_query", "add_node", "add_relationship"},
+func NewTemporalModule(swarmBus *bus.SwarmBus, svc *service.TemporalService) *TemporalModule {
+	return &TemporalModule{
+		ID:         "go_native_temporal",
+		ModuleName: "chronos_agent",
+		Operations: []string{"record_event", "get_history"},
 		Bus:        swarmBus,
 		Service:    svc,
 	}
 }
 
-func (m *GraphModule) Start() {
+func (m *TemporalModule) Start() {
 	m.Bus.Subscribe("tasks.cfp", m.onCFP)
 	m.Bus.Subscribe(fmt.Sprintf("tasks.accept.%s", m.ID), m.onAccept)
-	log.Printf("[GraphModule] %s active. Native graph operations online.", m.ModuleName)
+	log.Printf("[TemporalModule] %s active. Chronological grounding online.", m.ModuleName)
 }
 
-func (m *GraphModule) onCFP(msg bus.Message) {
+func (m *TemporalModule) onCFP(msg bus.Message) {
 	operation, ok := msg.Payload["operation"].(string)
 	if !ok { return }
 
@@ -56,14 +56,14 @@ func (m *GraphModule) onCFP(msg bus.Message) {
 			"task_id":      taskID,
 			"operation":     operation,
 			"confidence":    1.0,
-			"compute_cost":  0.3,
+			"compute_cost":  0.1,
 			"node_id":       m.ID,
 			"module_name":   m.ModuleName,
 		},
 	})
 }
 
-func (m *GraphModule) onAccept(msg bus.Message) {
+func (m *TemporalModule) onAccept(msg bus.Message) {
 	taskID, _ := msg.Payload["task_id"].(string)
 	operation, _ := msg.Payload["operation"].(string)
 	params, _ := msg.Payload["params"].(map[string]interface{})
@@ -72,22 +72,18 @@ func (m *GraphModule) onAccept(msg bus.Message) {
 	var err error
 
 	switch operation {
-	case "execute_query":
-		query, _ := params["query"].(string)
-		qParams, _ := params["params"].(map[string]interface{})
-		result, err = m.Service.ExecuteQuery(query, qParams)
+	case "record_event":
+		eType, _ := params["type"].(string)
+		desc, _ := params["description"].(string)
+		meta, _ := params["metadata"].(map[string]interface{})
+		result, err = m.Service.RecordEvent(eType, desc, meta)
 		
-	case "add_node":
-		label, _ := params["label"].(string)
-		props, _ := params["properties"].(map[string]interface{})
-		result, err = m.Service.AddNode(label, props)
-
-	case "add_relationship":
-		src, _ := params["source_id"].(string)
-		tgt, _ := params["target_id"].(string)
-		rel, _ := params["type"].(string)
-		props, _ := params["properties"].(map[string]interface{})
-		result, err = m.Service.AddRelationship(src, tgt, rel, props)
+	case "get_history":
+		limit := 10
+		if val, ok := params["limit"].(float64); ok {
+			limit = int(val)
+		}
+		result, err = m.Service.GetRecentHistory(limit)
 	}
 
 	if err != nil {
