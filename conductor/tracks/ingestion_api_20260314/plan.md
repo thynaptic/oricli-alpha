@@ -1,21 +1,27 @@
-# Implementation Plan: Sovereign Ingestion API
+# Implementation Plan: Sovereign Ingestion API Completion
 
-## Phase 1: Ingestion Agent Module
-- [ ] Create `oricli_core/brain/modules/ingestion_agent.py`.
-- [ ] Implement PDF parsing using `pypdf`.
-- [ ] Implement recursive character text splitter.
-- [ ] Implement `ingest_document` operation that handles the full pipeline (Parse -> Chunk -> Embed -> Store).
-- [ ] Integrate with `world_knowledge` and `neo4j` for storage.
+This plan completes the Sovereign Ingestion API (RAG Bridge) by fixing Go-native file handling and enhancing the Python Ingestion Agent.
 
-## Phase 2: API & Models
-- [ ] Add `IngestRequest`, `IngestResponse` to `oricli_core/types/models.py`.
-- [ ] Implement `POST /v1/ingest` in `oricli_core/api/server.py` using FastAPI's `UploadFile`.
+## Phase 1: Go API Fixes
+- [ ] Modify `pkg/api/server.go`: Update `handleIngest` to read the actual file bytes from the multipart form.
+  - Open the file using `file.Open()`.
+  - Read all bytes using `io.ReadAll()`.
+  - Pass the bytes to `params["file_data"]`.
+- [ ] Rebuild Go backbone: `go build -o bin/oricli-go ./cmd/backbone`.
 
-## Phase 3: Client & Infrastructure
-- [ ] Install dependencies: `pip install pypdf`.
-- [ ] Update `OricliAlphaClient` with `ingest` method in `Knowledge` class.
-- [ ] Create `docs/INGESTION_API.md`.
+## Phase 2: Ingestion Agent Enhancements
+- [ ] Update `oricli_core/brain/modules/ingestion_agent.py`:
+  - Enhance `_parse_file` to support `PyPDF2` if `pypdf` is missing.
+  - Implement a better `_recursive_character_splitter` that uses a list of separators (e.g., `["\n\n", "\n", ". ", " ", ""]`).
+  - Improve `_process_chunks` to correctly track and link chunks in Neo4j.
+
+## Phase 3: Infrastructure & Documentation
+- [ ] Ensure `pypdf` or `PyPDF2` is installed in the environment.
+- [ ] Review and update `docs/INGESTION_API.md` to reflect the latest capabilities.
 
 ## Phase 4: Validation
-- [ ] Write `scripts/test_ingestion_api.py` to verify PDF and text ingestion.
-- [ ] Perform a RAG test to ensure the ingested data is retrieved during chat completions.
+- [ ] Create `scripts/test_ingestion_rag.py`:
+  - Ingest a specific unique text/PDF.
+  - Ask a question that requires that specific knowledge.
+  - Verify that the answer contains the ingested info.
+- [ ] Test via `OricliAlphaClient` in both local and remote modes.

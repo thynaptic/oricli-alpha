@@ -1,9 +1,0 @@
-@rule_name: global_safety
-@description: Core safety and sandboxing constraints for Oricli-Alpha.
-@scope: global
-@categories: ["safety"]
-
-<constraints>
-- deny: shell_sandbox_service on paths outside /workspace and /tmp
-</constraints>
-

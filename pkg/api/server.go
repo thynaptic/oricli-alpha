@@ -300,6 +300,22 @@ func (s *Server) handleIngest(c *gin.Context) {
 		if file != nil {
 			params["file_name"] = file.Filename
 			params["mime_type"] = file.Header.Get("Content-Type")
+			
+			// Read file data
+			f, err := file.Open()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to open file: %v", err)})
+				return
+			}
+			defer f.Close()
+			
+			data, err := io.ReadAll(f)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to read file: %v", err)})
+				return
+			}
+			params["file_data"] = data
+			
 			result, err = s.Orchestrator.Execute("ingest_file", params, 60*time.Second)
 		} else {
 			params["text"] = text

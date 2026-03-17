@@ -41,3 +41,18 @@ v0.5.1-alpha is the stable follow-up to our major architectural pivot. This rele
 ### Changed
 - Default model shifted from `qwen2:1.5b` -> `ministral-3:3b`.
 - Increased default Go Backbone timeout to 300s for deep MCTS reasoning.
+
+## [2.0.0] - 2026-03-17
+### BREAKING CHANGES
+- **Python Deprecation**: The entire Python core (`oricli_core/`) and gRPC sidecar mesh have been removed.
+- **Pure-Go Architecture**: The system now runs as a single, high-performance Go binary (`bin/oricli-go-v2`).
+- **Hardened API Gateway**: Migrated to `ServerV2` structure based on G-LM, providing better security and multi-tenant foundations.
+
+### Added
+- **Native RAG Bridge**: Integrated P-LMv1 Go-native RAG and memory packages.
+- **Deep Cognition Engine**: Transplanted deep causal and MCTS reasoning from secret internal Go modules.
+- **Consolidated Sovereignty**: Combined the best of P-LMv1 and G-LM into the Oricli-Alpha core.
+
+### Fixed
+- **Latency**: Eliminated gRPC and Python startup overhead.
+- **Port Stability**: Consolidating on port 8089 for all native operations.
