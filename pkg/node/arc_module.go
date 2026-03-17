@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/thynaptic/oricli-go/pkg/arc"
 	"github.com/thynaptic/oricli-go/pkg/bus"
 	"github.com/thynaptic/oricli-go/pkg/service"
 )
@@ -21,7 +22,7 @@ func NewARCSwarmModule(swarmBus *bus.SwarmBus, solver *service.ARCSolverService)
 	return &ARCSwarmModule{
 		Bus:    swarmBus,
 		Solver: solver,
-		ID:     "arc_solver",
+		ID:     "arc_solver_native",
 	}
 }
 
@@ -33,9 +34,11 @@ func (n *ARCSwarmModule) Start() {
 
 func (n *ARCSwarmModule) onCFP(msg bus.Message) {
 	operation, ok := msg.Payload["operation"].(string)
-	if !ok { return }
+	if !ok {
+		return
+	}
 
-	if operation != "solve_arc" && operation != "predict_arc" {
+	if operation != "solve_arc" {
 		return
 	}
 
@@ -45,11 +48,12 @@ func (n *ARCSwarmModule) onCFP(msg bus.Message) {
 	n.Bus.Publish(bus.Message{
 		Protocol: bus.BID,
 		Topic:    fmt.Sprintf("tasks.bid.%s", taskID),
+		SenderID: n.ID,
 		Payload: map[string]interface{}{
 			"task_id":      taskID,
 			"agent_id":     n.ID,
-			"compute_cost": 0.5,
-			"confidence":   0.9,
+			"compute_cost": 0.8,
+			"confidence":   1.0, // High confidence for native solver
 		},
 	})
 }
@@ -59,7 +63,7 @@ func (n *ARCSwarmModule) onAccept(msg bus.Message) {
 	params, _ := msg.Payload["params"].(map[string]interface{})
 
 	// Execute
-	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 
 	// Parse task
@@ -72,6 +76,7 @@ func (n *ARCSwarmModule) onAccept(msg bus.Message) {
 		n.Bus.Publish(bus.Message{
 			Protocol: bus.ERROR,
 			Topic:    "tasks.error",
+			SenderID: n.ID,
 			Payload: map[string]interface{}{
 				"task_id": taskID,
 				"error":   err.Error(),
@@ -80,41 +85,55 @@ func (n *ARCSwarmModule) onAccept(msg bus.Message) {
 		return
 	}
 
+	// Map to result structure
+	resMap := map[string]interface{}{
+		"prediction": result.Prediction,
+		"confidence": result.Confidence,
+		"method":     result.Method,
+		"program":    result.Program,
+	}
+
 	// Publish result
 	n.Bus.Publish(bus.Message{
 		Protocol: bus.RESULT,
 		Topic:    "tasks.result",
+		SenderID: n.ID,
 		Payload: map[string]interface{}{
 			"task_id": taskID,
 			"success": true,
-			"result":  result,
+			"result":  resMap,
 		},
 	})
 }
 
-func (n *ARCSwarmModule) parseARCTask(m map[string]interface{}) service.ARCTask {
-	task := service.ARCTask{}
-	
-	trainInputs, _ := m["train_inputs"].([]interface{})
-	task.TrainInputs = make([][][]int, len(trainInputs))
-	for i, grid := range trainInputs {
-		task.TrainInputs[i] = n.castGrid(grid.([]interface{}))
+func (n *ARCSwarmModule) parseARCTask(m map[string]interface{}) arc.Task {
+	task := arc.Task{}
+
+	trainRaw, _ := m["train"].([]interface{})
+	for _, entry := range trainRaw {
+		item := entry.(map[string]interface{})
+		in := n.castGrid(item["input"].([]interface{}))
+		out := n.castGrid(item["output"].([]interface{}))
+		task.Train = append(task.Train, struct {
+			Input  arc.Grid
+			Output arc.Grid
+		}{Input: in, Output: out})
 	}
 
-	trainOutputs, _ := m["train_outputs"].([]interface{})
-	task.TrainOutputs = make([][][]int, len(trainOutputs))
-	for i, grid := range trainOutputs {
-		task.TrainOutputs[i] = n.castGrid(grid.([]interface{}))
+	testRaw, _ := m["test"].([]interface{})
+	for _, entry := range testRaw {
+		item := entry.(map[string]interface{})
+		in := n.castGrid(item["input"].([]interface{}))
+		task.Test = append(task.Test, struct {
+			Input arc.Grid
+		}{Input: in})
 	}
 
-	testInput, _ := m["test_input"].([]interface{})
-	task.TestInput = n.castGrid(testInput)
-	
 	return task
 }
 
-func (n *ARCSwarmModule) castGrid(raw []interface{}) [][]int {
-	grid := make([][]int, len(raw))
+func (n *ARCSwarmModule) castGrid(raw []interface{}) arc.Grid {
+	grid := make(arc.Grid, len(raw))
 	for i, r := range raw {
 		rowRaw, _ := r.([]interface{})
 		grid[i] = make([]int, len(rowRaw))

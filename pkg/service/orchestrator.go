@@ -190,11 +190,14 @@ func (o *GoOrchestrator) handleBid(msg bus.Message) {
 
 func (o *GoOrchestrator) handleResult(msg bus.Message) {
 	taskID, _ := msg.Payload["task_id"].(string)
+	log.Printf("[Orchestrator] Received result for task %s from %s", taskID, msg.SenderID)
+	
 	o.mu.RLock()
 	ctx, ok := o.Tasks[taskID]
 	o.mu.RUnlock()
 
 	if !ok {
+		log.Printf("[Orchestrator] Warning: Received result for unknown task %s", taskID)
 		return
 	}
 

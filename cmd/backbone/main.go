@@ -48,6 +48,10 @@ func main() {
 	reasoningStratSvc := service.NewReasoningStrategyService(genService)
 	node.NewReasoningStrategiesModule(swarmBus, reasoningStratSvc).Start()
 
+	// ARC-AGI Native Solver
+	arcSolverSvc := service.NewARCSolverService(genService, orch)
+	node.NewARCSwarmModule(swarmBus, arcSolverSvc).Start()
+
 	// 7. Initialize Tools & Utilities
 	toolService := service.NewToolService(orch)
 	node.NewToolModule(swarmBus, toolService).Start()

@@ -50,6 +50,9 @@ func (s *ServerV2) setupRoutes() {
 		v1.POST("/chat/completions", s.handleChatCompletions)
 		v1.GET("/health", s.handleHealth)
 		
+		// Swarm Execution
+		v1.POST("/swarm/run", s.handleSwarmRun)
+		
 		// Pure-Go Ingestion (The RAG Bridge)
 		v1.POST("/ingest", s.handleIngest)
 	}
@@ -61,6 +64,35 @@ func (s *ServerV2) handleHealth(c *gin.Context) {
 		"system": "oricli-alpha-v2",
 		"pure_go": true,
 	})
+}
+
+func (s *ServerV2) handleSwarmRun(c *gin.Context) {
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	operation, _ := body["operation"].(string)
+	params, _ := body["params"].(map[string]interface{})
+
+	if operation == "" && body["query"] != nil {
+		// Handle legacy Python client format
+		operation = "reason"
+		params = body
+	}
+
+	if operation == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "operation is required"})
+		return
+	}
+
+	result, err := s.Orchestrator.Execute(operation, params, 300*time.Second)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "result":  result})
 }
 
 func (s *ServerV2) handleChatCompletions(c *gin.Context) {

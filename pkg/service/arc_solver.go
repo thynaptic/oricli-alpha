@@ -2,31 +2,20 @@ package service
 
 import (
 	"context"
-	"time"
+	"fmt"
+	"log"
+	"strings"
+
+	"github.com/thynaptic/oricli-go/pkg/arc"
+	"github.com/thynaptic/oricli-go/pkg/cognition"
 )
 
-// ARCTask represents an ARC task with training examples and test input
-type ARCTask struct {
-	TrainInputs  [][][]int `json:"train_inputs"`
-	TrainOutputs [][][]int `json:"train_outputs"`
-	TestInput    [][]int   `json:"test_input"`
-}
-
-// ARCResult represents the result of an ARC solve attempt
-type ARCResult struct {
-	Prediction [][]int `json:"prediction"`
-	Confidence float64 `json:"confidence"`
-	Method     string  `json:"method"`
-	Program    string  `json:"program,omitempty"`
-}
-
-// ARCSolverService provides Go-native logic for solving ARC tasks
+// ARCSolverService provides Go-native logic for solving ARC tasks using MCTS
 type ARCSolverService struct {
 	genService *GenerationService
 	orch       *GoOrchestrator
 }
 
-// NewARCSolverService creates a new ARC solver service
 func NewARCSolverService(genService *GenerationService, orch *GoOrchestrator) *ARCSolverService {
 	return &ARCSolverService{
 		genService: genService,
@@ -34,78 +23,106 @@ func NewARCSolverService(genService *GenerationService, orch *GoOrchestrator) *A
 	}
 }
 
-// SolveTask coordinates induction and transduction to solve an ARC task
-func (s *ARCSolverService) SolveTask(ctx context.Context, task ARCTask) (*ARCResult, error) {
-	// 1. Try Transduction (Geometric/Color logic) - High Speed
-	res, err := s.Transduce(ctx, task)
-	if err == nil && res.Confidence > 0.9 {
-		return res, nil
+func (s *ARCSolverService) SolveTask(ctx context.Context, task arc.Task) (*arc.ARCResult, error) {
+	log.Printf("[ARCSolver] Starting deep search for task with %d examples", len(task.Train))
+
+	// Define MCTS callbacks
+	callbacks := cognition.MCTSCallbacks{
+		ProposeBranches: func(ctx context.Context, currentPath string, count int) ([]string, error) {
+			// Ask Ministral to propose transformation steps based on current path and examples
+			prompt := fmt.Sprintf("ARC Task Examples: %v\nCurrent Transformation Path: %s\nPropose %d next transformation steps (e.g., 'Rotate90', 'FlipH', 'ReplaceColor(1,2)').", task.Train, currentPath, count)
+			res, err := s.genService.Generate(prompt, nil)
+			if err != nil {
+				return nil, err
+			}
+			// Parse proposed steps (simplified)
+			steps := strings.Split(res["text"].(string), "\n")
+			return steps, nil
+		},
+		EvaluatePath: func(ctx context.Context, path string) (cognition.MCTSEvaluation, error) {
+			// Execute the path on training inputs and compare with outputs
+			score := s.evaluateTransformationPath(task, path)
+			return cognition.MCTSEvaluation{
+				Confidence: score,
+				Terminal:   score == 1.0,
+				Reason:     fmt.Sprintf("Path matched %f percent of pixels", score*100),
+			}, nil
+		},
+		AdversarialEval: func(ctx context.Context, path string) (cognition.MCTSEvaluation, error) {
+			// Red-team check: does this path make sense? 
+			// For ARC, we just use the same evaluation for now
+			score := s.evaluateTransformationPath(task, path)
+			return cognition.MCTSEvaluation{
+				Confidence: score,
+				Terminal:   score == 1.0,
+			}, nil
+		},
 	}
 
-	// 2. Try Induction (Program Synthesis via LLM) - Slower but powerful
-	indRes, err := s.Induce(ctx, task)
-	if err == nil {
-		return indRes, nil
+	engine := &cognition.MCTSEngine{
+		Config: cognition.MCTSConfig{
+			Iterations:   10,
+			BranchFactor: 3,
+			RolloutDepth: 4,
+		},
+		Callbacks: callbacks,
 	}
 
-	return res, err
-}
-
-// Transduce performs pattern matching and geometric transformations
-func (s *ARCSolverService) Transduce(ctx context.Context, task ARCTask) (*ARCResult, error) {
-	// For now, proxy to Python which has numpy/scipy logic
-	// In a real EPYC VPS optimized scenario, we'd use gonum/mat here
-	result, err := s.orch.Execute("arc_transduction.predict", map[string]interface{}{"task": task}, 30*time.Second)
+	result, err := engine.SearchV2(ctx, "Root")
 	if err != nil {
 		return nil, err
 	}
 
-	resMap := result.(map[string]interface{})
-	
-	// Complex cast back to [][]int
-	predRaw, _ := resMap["prediction"].([]interface{})
-	prediction := s.castGrid(predRaw)
-	
-	conf, _ := resMap["confidence"].(float64)
+	// Apply best path to test input
+	prediction := s.applyPath(task.Test[0].Input, result.BestAnswer)
 
-	return &ARCResult{
+	return &arc.ARCResult{
 		Prediction: prediction,
-		Confidence: conf,
-		Method:     "transduction",
+		Confidence: result.Confidence,
+		Method:     "go_native_mcts_induction",
+		Program:    result.BestAnswer,
 	}, nil
 }
 
-// Induce performs program synthesis via LLM
-func (s *ARCSolverService) Induce(ctx context.Context, task ARCTask) (*ARCResult, error) {
-	// Proxy to Python which handles the synthesis loop and code verification
-	result, err := s.orch.Execute("arc_induction.solve_task", map[string]interface{}{"task": task}, 120*time.Second)
-	if err != nil {
-		return nil, err
-	}
+func (s *ARCSolverService) evaluateTransformationPath(task arc.Task, path string) float64 {
+	totalPixels := 0
+	matchedPixels := 0
 
-	resMap := result.(map[string]interface{})
-	predRaw, _ := resMap["prediction"].([]interface{})
-	prediction := s.castGrid(predRaw)
-	
-	conf, _ := resMap["confidence"].(float64)
-	prog, _ := resMap["program"].(string)
-
-	return &ARCResult{
-		Prediction: prediction,
-		Confidence: conf,
-		Method:     "induction",
-		Program:    prog,
-	}, nil
-}
-
-func (s *ARCSolverService) castGrid(raw []interface{}) [][]int {
-	grid := make([][]int, len(raw))
-	for i, r := range raw {
-		rowRaw, _ := r.([]interface{})
-		grid[i] = make([]int, len(rowRaw))
-		for j, v := range rowRaw {
-			grid[i][j] = int(ToFloat64(v))
+	for _, ex := range task.Train {
+		result := s.applyPath(ex.Input, path)
+		if result.Height() != ex.Output.Height() || result.Width() != ex.Output.Width() {
+			continue
+		}
+		for y := 0; y < result.Height(); y++ {
+			for x := 0; x < result.Width(); x++ {
+				totalPixels++
+				if result[y][x] == ex.Output[y][x] {
+					matchedPixels++
+				}
+			}
 		}
 	}
-	return grid
+
+	if totalPixels == 0 {
+		return 0
+	}
+	return float64(matchedPixels) / float64(totalPixels)
+}
+
+func (s *ARCSolverService) applyPath(input arc.Grid, path string) arc.Grid {
+	steps := strings.Split(path, "->")
+	current := input.Clone()
+	for _, step := range steps {
+		step = strings.TrimSpace(step)
+		switch step {
+		case "Rotate90":
+			current = current.Rotate90()
+		case "FlipH":
+			current = current.FlipHorizontal()
+		case "FlipV":
+			current = current.FlipVertical()
+		// Add more primitives as needed
+		}
+	}
+	return current
 }
