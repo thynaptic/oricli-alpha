@@ -15,20 +15,28 @@ import (
 // GenerationService handles direct requests to Ollama for high-speed prose
 type GenerationService struct {
 	BaseURL      string
+	GenerateURL  string
 	DefaultModel string
 	HTTPClient   *http.Client
 }
 
 func NewGenerationService() *GenerationService {
 	url := "http://127.0.0.1:11434"
-	model := os.Getenv("OLLAMA_MODEL")
-	if model == "" { model = "ministral-3:3b" }
-	return &GenerationService{
-		BaseURL: url, DefaultModel: model,
-		HTTPClient: &http.Client{Timeout: 300 * time.Second},
+	genUrl := os.Getenv("OLLAMA_GEN_URL")
+	if genUrl == "" {
+		genUrl = url
 	}
-}
-// --- PROMPT ENGINEERING & PHRASING ---
+	model := os.Getenv("OLLAMA_MODEL")
+	if model == "" {
+		model = "ministral-3:3b"
+	}
+	return &GenerationService{
+		BaseURL:      url,
+		GenerateURL:  genUrl,
+		DefaultModel: model,
+		HTTPClient:   &http.Client{Timeout: 300 * time.Second},
+	}
+}// --- PROMPT ENGINEERING & PHRASING ---
 
 func (s *GenerationService) EnhancePrompt(ctx context.Context, prompt string) (string, error) {
 	enhanced := "Enhanced: " + prompt // Native heuristic or LLM-based enhancement
@@ -96,10 +104,15 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
         return nil, fmt.Errorf("invalid response format")
 }
 func (s *GenerationService) postJSON(path string, payload interface{}) (map[string]interface{}, error) {
-        body, _ := json.Marshal(payload)
-        log.Printf("[DEBUG] Sending to Ollama %s: %s", path, string(body))
+	body, _ := json.Marshal(payload)
+	targetURL := s.BaseURL
+	if strings.Contains(path, "generate") || strings.Contains(path, "chat") {
+		targetURL = s.GenerateURL
+	}
 
-        url := fmt.Sprintf("%s%s", s.BaseURL, path)
+	url := fmt.Sprintf("%s%s", targetURL, path)
+	log.Printf("[DEBUG] Sending to Ollama %s: %s", url, string(body))
+
         resp, err := s.HTTPClient.Post(url, "application/json", bytes.NewReader(body))
         if err != nil { return nil, err }
         defer resp.Body.Close()

@@ -55,6 +55,7 @@ func (s *ServerV2) setupRoutes() {
 		
 		// Pure-Go Ingestion (The RAG Bridge)
 		v1.POST("/ingest", s.handleIngest)
+		v1.POST("/ingest/web", s.handleIngestWeb)
 	}
 }
 
@@ -134,6 +135,33 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 func (s *ServerV2) handleIngest(c *gin.Context) {
 	// Native Go Ingestion implementation
 	c.JSON(http.StatusOK, gin.H{"success": true, "method": "go-native-rag"})
+}
+
+func (s *ServerV2) handleIngestWeb(c *gin.Context) {
+	var req struct {
+		URL      string                 `json:"url"`
+		MaxPages int                    `json:"max_pages"`
+		MaxDepth int                    `json:"max_depth"`
+		Metadata map[string]interface{} `json:"metadata"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := s.Orchestrator.Execute("crawl_and_ingest", map[string]interface{}{
+		"url":       req.URL,
+		"max_pages": float64(req.MaxPages),
+		"max_depth": float64(req.MaxDepth),
+		"metadata":  req.Metadata,
+	}, 300*time.Second)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "result": result})
 }
 
 func (s *ServerV2) Start() error {

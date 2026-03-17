@@ -58,7 +58,15 @@ func main() {
 	webService := service.NewWebFetchService()
 	node.NewWebModule(swarmBus, webService).Start()
 
-	// 8. Initialize System Introspection
+	// 8. Initialize Web Ingestion (Native)
+	if ragSvc != nil {
+		webIngestSvc := service.NewWebIngestionService(webService, ragSvc)
+		node.NewWebIngestionModule(swarmBus, webIngestSvc).Start()
+	} else {
+		log.Println("[Hive] Warning: Web Ingestion disabled (RAG system not available)")
+	}
+
+	// 9. Initialize System Introspection
 	monitor := service.NewModuleMonitorService(registry)
 	
 	// 9. Start Hardened API Gateway
