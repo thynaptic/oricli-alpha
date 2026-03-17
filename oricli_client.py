@@ -69,3 +69,35 @@ class OricliClient:
         }
         return requests.post(f"{self.base_url}/v1/swarm/run", headers=self.headers, json=payload).json()
 
+    def add_goal(self, goal: str, priority: int = 1, metadata: Optional[Dict] = None) -> Dict[str, Any]:
+        payload = {
+            "operation": "add_objective",
+            "params": {
+                "goal": goal,
+                "priority": priority,
+                "metadata": metadata or {}
+            }
+        }
+        return requests.post(f"{self.base_url}/v1/swarm/run", headers=self.headers, json=payload).json()
+
+    def list_goals(self, status: Optional[str] = None) -> Dict[str, Any]:
+        payload = {
+            "operation": "list_objectives",
+            "params": {"status": status}
+        }
+        return requests.post(f"{self.base_url}/v1/swarm/run", headers=self.headers, json=payload).json()
+
+    def research(self, query: str, context: Optional[Dict] = None) -> Dict[str, Any]:
+        payload = {
+            "operation": "execute_task",
+            "params": {
+                "task": {
+                    "id": f"res-{int(time.time())}",
+                    "agent_type": "research",
+                    "query": query,
+                    "context": context or {}
+                }
+            }
+        }
+        return requests.post(f"{self.base_url}/v1/swarm/run", headers=self.headers, json=payload).json()
+

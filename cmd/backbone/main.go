@@ -77,6 +77,15 @@ func main() {
 	// 10. Initialize System Introspection
 	monitor := service.NewModuleMonitorService(registry)
 	
+	// 11. Initialize Goal & Fleet Coordination
+	goalSvc := service.NewGoalService("/home/mike/Mavaia/.oricli/goals.json")
+	node.NewGoalModule(swarmBus, goalSvc).Start()
+	
+	agentCoord := service.NewAgentCoordinator(swarmBus)
+	node.NewAgentModule(swarmBus, agentCoord).Start()
+	
+	node.NewResearchAgentModule(swarmBus, genService, webService, ragSvc).Start()
+
 	// 9. Start Hardened API Gateway
 	apiPort := 8089
 	apiServer := api.NewServerV2(cfg, st, orch, agentService, monitor, apiPort)

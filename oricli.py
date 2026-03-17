@@ -37,6 +37,16 @@ def main():
     hist_parser = subparsers.add_parser("history", help="Get chronological history")
     hist_parser.add_argument("--limit", type=int, default=10)
 
+    # oricli goals
+    goals_parser = subparsers.add_parser("goals", help="Manage sovereign goals")
+    goals_parser.add_argument("action", choices=["list", "add"], help="Action to perform")
+    goals_parser.add_argument("goal", nargs="?", help="Goal description (for 'add')")
+    goals_parser.add_argument("--priority", type=int, default=1)
+
+    # oricli research
+    res_parser = subparsers.add_parser("research", help="Perform autonomous research")
+    res_parser.add_argument("query", help="Research topic or question")
+
     args = parser.parse_args()
     client = OricliClient(base_url=args.url)
 
@@ -76,6 +86,18 @@ def main():
             "params": {"limit": args.limit}
         }
         print(json.dumps(requests.post(f"{args.url}/v1/swarm/run", headers=client.headers, json=payload).json(), indent=2))
+
+    elif args.command == "goals":
+        if args.action == "add":
+            if not args.goal:
+                print("Error: goal description required for 'add'")
+                return
+            print(json.dumps(client.add_goal(args.goal, args.priority), indent=2))
+        else:
+            print(json.dumps(client.list_goals(), indent=2))
+
+    elif args.command == "research":
+        print(json.dumps(client.research(args.query), indent=2))
 
     else:
         parser.print_help()
