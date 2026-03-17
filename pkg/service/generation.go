@@ -28,7 +28,7 @@ func NewGenerationService() *GenerationService {
 	}
 	model := os.Getenv("OLLAMA_MODEL")
 	if model == "" {
-		model = "ministral-3:3b"
+		model = "llama3.2:latest"
 	}
 	return &GenerationService{
 		BaseURL:      url,
@@ -61,47 +61,81 @@ func (s *GenerationService) HybridPhrasing(ctx context.Context, text string, sty
 // --- EXISTING METHODS ---
 
 func (s *GenerationService) Generate(prompt string, options map[string]interface{}) (map[string]interface{}, error) {
-        model := s.DefaultModel
-        if m, ok := options["model"].(string); ok && m != "" { model = m }
-        payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": 8}}
+	model := s.DefaultModel
+	if m, ok := options["model"].(string); ok && m != "" {
+		model = m
+	}
+	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": 8}}
 
-        if temp, ok := options["temperature"].(float64); ok { payload["options"].(map[string]interface{})["temperature"] = temp }
-        if sys, ok := options["system"].(string); ok { payload["system"] = sys }
-        if rawOpts, ok := options["options"].(map[string]interface{}); ok {
-                for k, v := range rawOpts {
-                        payload["options"].(map[string]interface{})[k] = v
-                }
-        }
+	if temp, ok := options["temperature"].(float64); ok {
+		payload["options"].(map[string]interface{})["temperature"] = temp
+	}
+	if sys, ok := options["system"].(string); ok {
+		payload["system"] = sys
+	}
+	// Add support for images (base64 strings)
+	if imgs, ok := options["images"].([]string); ok && len(imgs) > 0 {
+		payload["images"] = imgs
+	}
+	
+	if rawOpts, ok := options["options"].(map[string]interface{}); ok {
+		for k, v := range rawOpts {
+			payload["options"].(map[string]interface{})[k] = v
+		}
+	}
 
-        data, err := s.postJSON("/api/generate", payload)
-        if err == nil {
-                if resp, ok := data["response"].(string); ok {
-                        return map[string]interface{}{"success": true, "text": resp, "model": model, "method": "go_ollama_native", "confidence": 0.95}, nil
-                }
-        }
-        return s.Chat([]map[string]string{{"role": "user", "content": prompt}}, options)
+	data, err := s.postJSON("/api/generate", payload)
+	if err == nil {
+		if resp, ok := data["response"].(string); ok {
+			return map[string]interface{}{"success": true, "text": resp, "model": model, "method": "go_ollama_native", "confidence": 0.95}, nil
+		}
+	}
+	return s.Chat([]map[string]string{{"role": "user", "content": prompt}}, options)
 }
 
 func (s *GenerationService) Chat(messages []map[string]string, options map[string]interface{}) (map[string]interface{}, error) {
-        model := s.DefaultModel
-        if m, ok := options["model"].(string); ok && m != "" { model = m }
-        payload := map[string]interface{}{"model": model, "messages": messages, "stream": false, "options": map[string]interface{}{"num_thread": 8}}
+	model := s.DefaultModel
+	if m, ok := options["model"].(string); ok && m != "" {
+		model = m
+	}
+	
+	// Prepare messages for Ollama (including potential images in the last message)
+	ollamaMessages := make([]map[string]interface{}, len(messages))
+	for i, msg := range messages {
+		m := map[string]interface{}{
+			"role":    msg["role"],
+			"content": msg["content"],
+		}
+		// If it's the last message and we have images, attach them
+		if i == len(messages)-1 {
+			if imgs, ok := options["images"].([]string); ok && len(imgs) > 0 {
+				m["images"] = imgs
+			}
+		}
+		ollamaMessages[i] = m
+	}
 
-        if temp, ok := options["temperature"].(float64); ok { payload["options"].(map[string]interface{})["temperature"] = temp }
-        if rawOpts, ok := options["options"].(map[string]interface{}); ok {
-                for k, v := range rawOpts {
-                        payload["options"].(map[string]interface{})[k] = v
-                }
-        }
+	payload := map[string]interface{}{"model": model, "messages": ollamaMessages, "stream": false, "options": map[string]interface{}{"num_thread": 8}}
 
-        data, err := s.postJSON("/api/chat", payload)
-        if err != nil { return nil, err }
-        if msg, ok := data["message"].(map[string]interface{}); ok {
-                if content, ok := msg["content"].(string); ok {
-                        return map[string]interface{}{"success": true, "text": content, "model": model, "method": "go_ollama_chat", "confidence": 0.95}, nil
-                }
-        }
-        return nil, fmt.Errorf("invalid response format")
+	if temp, ok := options["temperature"].(float64); ok {
+		payload["options"].(map[string]interface{})["temperature"] = temp
+	}
+	if rawOpts, ok := options["options"].(map[string]interface{}); ok {
+		for k, v := range rawOpts {
+			payload["options"].(map[string]interface{})[k] = v
+		}
+	}
+
+	data, err := s.postJSON("/api/chat", payload)
+	if err != nil {
+		return nil, err
+	}
+	if msg, ok := data["message"].(map[string]interface{}); ok {
+		if content, ok := msg["content"].(string); ok {
+			return map[string]interface{}{"success": true, "text": content, "model": model, "method": "go_ollama_chat", "confidence": 0.95}, nil
+		}
+	}
+	return nil, fmt.Errorf("invalid response format")
 }
 func (s *GenerationService) postJSON(path string, payload interface{}) (map[string]interface{}, error) {
 	body, _ := json.Marshal(payload)

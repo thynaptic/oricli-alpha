@@ -56,3 +56,15 @@ v0.5.1-alpha is the stable follow-up to our major architectural pivot. This rele
 ### Fixed
 - **Latency**: Eliminated gRPC and Python startup overhead.
 - **Port Stability**: Consolidating on port 8089 for all native operations.
+
+## [2.1.0] - 2026-03-17
+### Added
+- **Sovereign CLI**: A powerful, native Python-based cockpit (`oricli.py`) installed as a system command.
+- **Chronological Memory Graph**: Full temporal grounding using Neo4j with automated event logging for every interaction.
+- **Native Research Agent**: Autonomous multi-round research module integrated into the Go Hive.
+- **Multi-Modal Bridge**: Support for `qwen2-vl:2b` via the RunPod bridge, enabling visual ingestion and reasoning.
+- **Global API Documentation**: Fully updated docs for external integration, hardened auth, and v2.1.0 architecture.
+
+### Fixed
+- **Bidding Stability**: Corrected SenderID reporting in native Go modules to ensure the Orchestrator always identifies the correct winner.
+- **Port Consolidation**: All native operations now unified on port 8089.

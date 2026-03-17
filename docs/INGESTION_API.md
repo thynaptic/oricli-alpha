@@ -5,7 +5,7 @@ The **Sovereign Ingestion API** allows external systems to "feed" Oricli-Alpha n
 
 ## 1. Using the REST API
 
-Port: `8081` (default)
+Port: `8089` (Native Go Backbone)
 
 ### Ingest a Document (Multipart Upload)
 `POST /v1/ingest`

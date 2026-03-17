@@ -1,175 +1,167 @@
-# Oricli-Alpha API Documentation (v0.5.0-alpha)
+# Oricli-Alpha API Documentation (v2.1.0)
 
-Complete API documentation for the Oricli-Alpha Sovereign Agent OS. The API is powered by a high-performance Go-native backbone optimized for 32-core EPYC environments.
+Complete API documentation for the Oricli-Alpha Sovereign Agent OS. The API is powered by a high-performance, 100% Go-native backbone optimized for 32-core EPYC environments and multi-modal GPU-accelerated inference.
 
-## Base URL
+## 🌐 External Access & Connectivity
 
-- Production: `https://oricli.thynaptic.com`
-- Local: `http://localhost:8089`
+To use Oricli-Alpha from outside the VPS, you must ensure the backbone port (`8089` by default) is accessible or proxied via Caddy/Nginx.
 
-## Authentication
+- **Base URL:** `http://<vps-ip>:8089` or `https://oricli.thynaptic.com`
+- **Port:** `8089` (Native Go Gateway)
 
-API key authentication is configurable. Configure via:
+### Client Libraries
+- **Python**: Use the `OricliClient` provided in `oricli_client.py`.
+- **HTTP**: Any standard client (curl, requests, etc.) can interact with the JSON API.
 
-- Environment variable: `MAVAIA_API_KEY` - Set the API key
-- Header: `Authorization: Bearer <api-key>` - Provide API key in request header
+## 🛡️ Authentication & Multi-Tenancy
 
-## 🚀 Sovereign Hive Endpoints
+Oricli v2.1.0 uses a hardened authentication layer based on the G-LM architecture.
 
-### Swarm Run (Direct Execution)
+- **Header**: `Authorization: Bearer <your-api-key>`
+- **Header**: `X-Tenant-ID: <tenant-id>` (Defaults to `local`)
 
-Execute a task across the swarm with automated micro-agent selection and bidding.
+Example Header:
+```http
+Authorization: Bearer test_key
+X-Tenant-ID: local
+```
+
+---
+
+## 🚀 Swarm Execution (The Hive)
+
+Execute specialized tasks across the distributed micro-agent swarm.
 
 **Endpoint:** `POST /v1/swarm/run`
 
-**Request:**
+### Common Operations:
+
+#### 1. `reason` (General Logic)
 ```json
 {
   "operation": "reason",
   "params": {
-    "query": "How does the AMD EPYC 7543P optimize for Go-native concurrency?",
-    "complexity": 0.8
+    "query": "Analyze the impact of Go-native concurrency on agent latency.",
+    "complexity": 0.9
   }
 }
 ```
 
-**Response:**
+#### 2. `research_task` (Autonomous Research)
+Triggers the `research_agent` to perform deep analysis and synthesis.
 ```json
 {
-  "success": true,
-  "task_id": "swarm_task_1773685691",
-  "result": {
-    "answer": "The EPYC 7543P provides 32 high-performance cores that the Go backbone utilizes through native Goroutines...",
-    "confidence": 0.98,
-    "agent_id": "mcts_reasoning_go"
+  "operation": "research_task",
+  "params": {
+    "query": "Latest breakthroughs in multi-modal LLM quantization."
   }
 }
 ```
 
-### Swarm Inject (Manual Message)
-
-Inject a custom message directly into the Swarm Bus.
-
-**Endpoint:** `POST /v1/swarm/inject`
-
-**Request:**
+#### 3. `solve_arc` (AGI Benchmarking)
+Triggers the Go-native MCTS solver for ARC-AGI tasks.
 ```json
 {
-  "topic": "tasks.cfp",
-  "protocol": "broadcast",
-  "payload": {
-    "task_id": "manual_123",
-    "operation": "analyze_code"
+  "operation": "solve_arc",
+  "params": {
+    "task": { ...ARC JSON... }
   }
-}
-```
-
-## 🎯 Sovereign Goals
-
-### List Goals
-
-Retrieve all persistent sovereign goals.
-
-**Endpoint:** `GET /v1/goals`
-
-### Create Goal
-
-Initialize a new autonomous goal for the system.
-
-**Endpoint:** `POST /v1/goals`
-
-**Request:**
-```json
-{
-  "title": "Migrate core logic to Go",
-  "description": "Port 250+ Python modules to the Go backbone for 32-core optimization.",
-  "priority": 10
-}
-```
-
-## 🤖 Agent Factory
-
-### List Agents
-
-List all active agent profiles and their specialized skills.
-
-**Endpoint:** `GET /v1/agents`
-
-### Create Agent
-
-Register a new specialized micro-agent profile.
-
-**Endpoint:** `POST /v1/agents`
-
-## 🧠 Intelligence Services
-
-### Code Review
-
-Analyze code for quality, performance, and security.
-
-**Endpoint:** `POST /v1/code/review`
-
-### Document Analysis
-
-Perform deep analysis and summarization of text documents.
-
-**Endpoint:** `POST /v1/documents/analyze`
-
-**Request:**
-```json
-{
-  "text": "Full document text here...",
-  "file_name": "architecture_v2.md"
-}
-```
-
-## 🔍 System Introspection
-
-### Detailed Health
-
-Get detailed status, uptime, and performance metrics for all Go-native and Python sidecar modules.
-
-**Endpoint:** `GET /v1/health/detailed`
-
-### System Metrics
-
-Retrieve real-time execution counts, latencies, and success rates for the entire swarm.
-
-**Endpoint:** `GET /v1/metrics`
-
-### Execution Traces
-
-Access the high-speed Go ring-buffer of recent task execution traces.
-
-**Endpoint:** `GET /v1/traces`
-
-## 🧪 Stress Testing
-
-### Scream Test
-
-Fire 100 parallel orchestrated tasks across the swarm to verify 32-core EPYC saturation.
-
-**Endpoint:** `POST /v1/stress/scream`
-
-##  OpenAI-Compatible Endpoints
-
-Oricli-Alpha maintains compatibility with existing AI tooling via OpenAI-style aliases.
-
-- `POST /v1/chat/completions` -> Routes to `GoAgentService`
-- `POST /v1/embeddings` -> Routes to `EmbeddingEngine` (Go-proxied to Ollama)
-- `GET /v1/models` -> Returns active Hive model list
-
-## Error Responses
-
-Errors return standard HTTP status codes and a JSON error body:
-
-```json
-{
-  "success": false,
-  "error": "Internal server error: GIL contention detected in Python sidecar",
-  "code": 500
 }
 ```
 
 ---
-*Oricli-Alpha: Intelligence, Orchestrated.*
+
+## 👁️ Multi-Modal Ingestion
+
+Oricli-Alpha can "see" and "read" natively into its long-term memory.
+
+### Web Ingestion (Crawl)
+**Endpoint:** `POST /v1/ingest/web`
+```json
+{
+  "url": "https://thynaptic.com",
+  "max_pages": 5,
+  "max_depth": 2
+}
+```
+
+### File & Image Ingestion
+**Endpoint:** `POST /v1/ingest`
+- **Method**: `POST` (multipart/form-data)
+- **Field**: `file` (Binary blob or Image)
+
+*Note: If an image is uploaded, the `vision_agent` (Qwen2-VL) automatically transcribes it before indexing.*
+
+---
+
+## 🕰️ Chronological Memory & History
+
+Every interaction is grounded in a Neo4j-backed temporal graph.
+
+### Get History
+**Endpoint:** `POST /v1/swarm/run`
+```json
+{
+  "operation": "get_history",
+  "params": {
+    "limit": 10
+  }
+}
+```
+
+---
+
+## 🎯 Sovereign Goals
+
+### List Goals
+**Endpoint:** `POST /v1/swarm/run`
+```json
+{
+  "operation": "list_objectives",
+  "params": { "status": "pending" }
+}
+```
+
+### Add Goal
+```json
+{
+  "operation": "add_objective",
+  "params": {
+    "goal": "Optimize Neo4j relationship traversal for temporal lookups.",
+    "priority": 8
+  }
+}
+```
+
+---
+
+## 🤖 OpenAI-Compatible Interface
+
+Oricli-Alpha maintains drop-in compatibility for existing AI tooling.
+
+### Chat Completions
+**Endpoint:** `POST /v1/chat/completions`
+```json
+{
+  "model": "oricli-cognitive",
+  "messages": [{"role": "user", "content": "Explain the AGLI trajectory."}]
+}
+```
+
+---
+
+## 🔍 System Health
+
+### Readiness Check
+**Endpoint:** `GET /v1/health`
+**Response:**
+```json
+{
+  "status": "ready",
+  "system": "oricli-alpha-v2",
+  "pure_go": true
+}
+```
+
+---
+*Oricli-Alpha: Sovereign Intelligence, Orchestrated at Scale.*
