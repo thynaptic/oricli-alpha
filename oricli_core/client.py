@@ -2935,7 +2935,7 @@ class OricliAlphaClient:
                             input_text = params.get("messages", [{}])[-1].get("content", "") if params.get("messages") else params.get("input", "")
                             res = ollama.execute("generate", {
                                 "prompt": f"Instructions: You are acting as a fallback for the Hive Swarm. Provide a detailed answer to this request.\n\nInput: {input_text}",
-                                "model": profile_name or "frob/qwen3.5-instruct"
+                                "model": profile_name or "ministral-3:3b"
                             })
                             if res.get("success"):
                                 result = {"success": True, "text": res.get("text", ""), "method": "direct_ollama_fallback"}

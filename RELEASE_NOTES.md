@@ -23,3 +23,21 @@ v0.5.1-alpha is the stable follow-up to our major architectural pivot. This rele
 
 ---
 *Oricli-Alpha: Intelligence, Orchestrated. Stability, Guaranteed.*
+
+## [1.2.0] - 2026-03-17
+### Added
+- **Instruction Following Detector (Go)**: Native Go logic to detect strict formatting tasks and override conversational personas.
+- **Ministral-3:3b Integration**: Successfully pivoted entire stack to Ministral-3:3b for 3x speed and higher logical precision.
+- **Log Watchdog Daemon**: Background cron job to prevent runaway log exhaustion.
+- **GPU Accelerated Bridge**: Stabilized SSH tunnel logic for high-speed remote inference via RTX GPU pods.
+- **Swarm Bus Proxies**: Added missing `swarm_bus.py` and `services/` shims to bridge Python sidecars to the Go backbone.
+
+### Fixed
+- **Hive Selection Bug**: Fixed empty CFP operations and bidding panics by integrating `DegradedModeClassifier` into the Go Orchestrator.
+- **Module Health Deadlock**: Implemented universal `health_check` support in `BaseBrainModule` and `grpc_worker.py`.
+- **404 Routing**: Moved Ollama parity routes to `v1` group for maximum proxy compatibility.
+- **Qwen Purge**: Eliminated all hardcoded legacy `qwen` references across Python and Go.
+
+### Changed
+- Default model shifted from `qwen2:1.5b` -> `ministral-3:3b`.
+- Increased default Go Backbone timeout to 300s for deep MCTS reasoning.

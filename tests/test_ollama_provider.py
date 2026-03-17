@@ -53,7 +53,7 @@ def test_generate_reports_missing_requested_model():
     provider = OllamaProviderModule()
 
     with patch("requests.post") as mock_post, patch("requests.get") as mock_get:
-        mock_post.return_value = _mock_response(404, {"error": "model 'qwen2.5:7b' not found"})
+        mock_post.return_value = _mock_response(404, {"error": "model 'deepseek-r1:1.5b' not found"})
         mock_get.return_value = _mock_response(
             200,
             {
@@ -67,7 +67,7 @@ def test_generate_reports_missing_requested_model():
         result = provider.execute("generate", {"prompt": "hello"})
 
     assert result["success"] is False
-    assert "qwen2.5:7b" in result["error"]
+    assert "deepseek-r1:1.5b" in result["error"]
     assert "llama3.2:latest" in result["error"]
     assert result["available_models"] == ["llama3.2:latest", "mxbai-embed-large:latest"]
 
@@ -78,10 +78,10 @@ def test_list_models_falls_back_to_openai_models_endpoint():
     with patch("requests.get") as mock_get:
         mock_get.side_effect = [
             _mock_response(404, {"error": "not found"}),
-            _mock_response(200, {"data": [{"id": "qwen2.5:7b"}, {"id": "llama3.2:latest"}]}),
+            _mock_response(200, {"data": [{"id": "deepseek-r1:1.5b"}, {"id": "llama3.2:latest"}]}),
         ]
 
         result = provider.execute("list_models", {})
 
     assert result["success"] is True
-    assert result["models"][0]["name"] == "qwen2.5:7b"
+    assert result["models"][0]["name"] == "deepseek-r1:1.5b"

@@ -189,3 +189,15 @@ class BaseBrainModule(ABC):
         should be logged but not propagated to avoid disrupting shutdown.
         """
         pass
+
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Default health check for brain modules.
+        Returns a dictionary with status and basic metadata.
+        """
+        return {
+            "success": True,
+            "status": "online",
+            "module_name": self.metadata.name,
+            "timestamp": time.time()
+        }

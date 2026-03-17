@@ -18,7 +18,7 @@ from enum import Enum
 
 from oricli_core.brain.registry import ModuleRegistry
 from oricli_core.brain.base_module import BaseBrainModule
-from oricli_core.brain.monitor import ModuleMonitorService, ModuleState, get_monitor_service
+from oricli_core.brain.modules.monitor import ModuleMonitorService, ModuleState, get_monitor_service
 from oricli_core.exceptions import ModuleInitializationError, ModuleNotFoundError
 
 logger = logging.getLogger(__name__)

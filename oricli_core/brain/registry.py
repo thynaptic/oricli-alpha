@@ -7,6 +7,7 @@ Refactored to be importable as a package while maintaining backward compatibilit
 
 import importlib.util
 import inspect
+import logging
 import os
 import sys
 import threading
@@ -20,6 +21,8 @@ from oricli_core.exceptions import (
     ModuleDiscoveryError,
     ModuleInitializationError,
 )
+
+logger = logging.getLogger(__name__)
 
 class ModuleRegistry:
     """Registry for all brain modules - enables plug-and-play architecture"""

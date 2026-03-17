@@ -9,7 +9,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from oricli_core.brain.registry import ModuleRegistry
-from oricli_core.brain.orchestrator import ModuleOrchestrator
+# ModuleOrchestrator is deprecated and moved to Go backbone
 from oricli_core.brain.state_storage.base_storage import BaseStorage
 from oricli_core.brain.metrics import get_metrics_collector
 from oricli_core.brain.health import get_health_checker
@@ -138,28 +138,11 @@ class SystemTestRunner:
             raise ValueError(f"Unknown registry operation: {operation}")
     
     def _test_orchestrator(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Test module orchestrator"""
-        if self.orchestrator is None:
-            self.orchestrator = ModuleOrchestrator()
-        
-        if operation == "get_dependencies":
-            module_name = params.get("module_name")
-            if not module_name:
-                raise ValueError("module_name required")
-            deps = self.orchestrator.get_dependencies(module_name)
-            return {"dependencies": deps}
-        
-        elif operation == "check_health":
-            module_name = params.get("module_name")
-            if module_name:
-                health = self.orchestrator.check_module_health(module_name)
-                return {"health": health}
-            else:
-                health_summary = self.orchestrator.get_health_summary()
-                return {"health_summary": health_summary}
-        
-        else:
-            raise ValueError(f"Unknown orchestrator operation: {operation}")
+        """Test module orchestrator (Deprecated in Python sidecar)"""
+        return {
+            "status": "deprecated",
+            "message": "ModuleOrchestrator has been moved to the Go-native backbone."
+        }
     
     def _test_state_storage(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Test state storage"""
@@ -234,4 +217,3 @@ class SystemTestRunner:
             results.append(result)
         
         return results
-

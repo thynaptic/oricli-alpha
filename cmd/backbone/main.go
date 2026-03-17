@@ -107,7 +107,7 @@ func main() {
 	}
 
 	// 5. Start Orchestrator (Needed by other services)
-	orch := service.NewGoOrchestrator(swarmBus)
+	orch := service.NewGoOrchestrator(swarmBus, registry)
 	log.Println("Go Orchestrator started. Hive is now active.")
 
 	// 6. Spawn Go Sidecars for each module

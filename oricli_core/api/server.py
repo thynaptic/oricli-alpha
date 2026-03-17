@@ -1332,7 +1332,7 @@ def create_app(
         """Get detailed health status for a specific module"""
         try:
             from oricli_core.brain.availability import get_availability_manager
-            from oricli_core.brain.monitor import get_monitor_service
+            from oricli_core.brain.modules.monitor import get_monitor_service
             from oricli_core.brain.degraded_classifier import get_degraded_classifier
             
             availability_manager = get_availability_manager()

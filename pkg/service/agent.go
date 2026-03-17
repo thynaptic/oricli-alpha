@@ -78,11 +78,26 @@ type toolCall struct {
 }
 
 func (s *GoAgentService) decideNextStep(query, context string, history []map[string]string) (string, *toolCall, error) {
-	// Build personality-aware system prompt
-	personalityID := "gen_z_cousin" // Default
-	systemInstructions, temp := s.PersonaService.BuildSystemInstructions(personalityID)
+        // Build personality-aware system prompt
+        personalityID := "gen_z_cousin" // Default
+        systemInstructions, temp := s.PersonaService.BuildSystemInstructions(personalityID)
 
-	systemPrompt := fmt.Sprintf(`%s
+        exampleFinalAnswer := `{
+  "thought": "Here is your joke: Why did the chicken cross the road? To get to the other side!",
+  "tool_call": null
+}`
+
+        detector := NewInstructionFollowingDetector()
+        if detector.IsTaskExecution(query) {
+                systemInstructions = detector.GetTaskSystemPrompt()
+                temp = 0.1 // Precision mode
+                exampleFinalAnswer = `{
+  "thought": "id,name\n1,Alice\n2,Bob",
+  "tool_call": null
+}`
+        }
+
+        systemPrompt := fmt.Sprintf(`%s
 
 TASK INSTRUCTIONS:
 Your goal is to answer the user query accurately. You can use tools or answer directly.
@@ -105,21 +120,17 @@ Example Tool Call:
 }
 
 Example Final Answer:
-{
-  "thought": "Here is your joke: Why did the chicken cross the road? To get to the other side!",
-  "tool_call": null
-}
+%s
 
-Output Format (JSON ONLY):`, systemInstructions)
+Output Format (JSON ONLY):`, systemInstructions, exampleFinalAnswer)
 
-	userPrompt := fmt.Sprintf("User Query: %s\n\nCurrent Context: %s", query, context)
-	
-	// Direct call to GenService
-	resp, err := s.GenService.Chat([]map[string]string{
-		{"role": "system", "content": systemPrompt},
-		{"role": "user", "content": userPrompt},
-	}, map[string]interface{}{"temperature": temp})
+        userPrompt := fmt.Sprintf("User Query: %s\n\nCurrent Context: %s", query, context)
 
+        // Direct call to GenService
+        resp, err := s.GenService.Chat([]map[string]string{
+                {"role": "system", "content": systemPrompt},
+                {"role": "user", "content": userPrompt},
+        }, map[string]interface{}{"temperature": temp})
 	if err != nil {
 		return "", nil, err
 	}

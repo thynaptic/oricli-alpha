@@ -74,14 +74,20 @@ class ModuleWorkerService(pb2_grpc.ModuleServiceServicer):
                     error_message=f"Module '{module_name}' not found or failed to load."
                 )
                 
-            if operation not in module.metadata.operations:
+            if operation == "health_check":
+                # Use the default health_check method if not overridden in execute
+                if hasattr(module, "health_check"):
+                    result = module.health_check()
+                else:
+                    result = {"success": True, "status": "online"}
+            elif operation not in module.metadata.operations:
                 return pb2.ExecuteResponse(
                     success=False,
                     error_message=f"Operation '{operation}' not supported by '{module_name}'."
                 )
-
-            # Execution
-            result = module.execute(operation, params)
+            else:
+                # Normal Execution
+                result = module.execute(operation, params)
             
             return pb2.ExecuteResponse(
                 success=True,

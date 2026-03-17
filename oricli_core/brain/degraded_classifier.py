@@ -16,7 +16,7 @@ from enum import Enum
 from pathlib import Path
 
 from oricli_core.brain.registry import ModuleRegistry
-from oricli_core.brain.monitor import ModuleStatus, ModuleState
+from oricli_core.brain.modules.monitor import ModuleStatus, ModuleState
 from oricli_core.brain.health import HealthCheck, HealthStatus
 
 logger = logging.getLogger(__name__)

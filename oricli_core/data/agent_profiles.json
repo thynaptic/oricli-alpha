@@ -152,7 +152,7 @@
         "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Focus on measurement fidelity, units, baselines, and regression interpretation. Be explicit about confidence and avoid overstating causality.",
-      "model_preference": "qwen2:1.5b",
+      "model_preference": "ministral-3:3b",
       "task_tags": ["benchmark", "performance", "latency"]
     },
     {
@@ -224,7 +224,7 @@
         "conversational_defaults": ["generate_response"]
       },
       "system_instructions": "Prefer explicit decomposition, dependency-aware routing, and structured handoffs between agents and stages.",
-      "model_preference": "qwen2:1.5b",
+      "model_preference": "ministral-3:3b",
       "task_tags": ["orchestration", "routing", "delegation"]
     },
     {

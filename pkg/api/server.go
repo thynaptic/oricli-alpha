@@ -192,14 +192,20 @@ func (s *Server) setupRoutes() {
 		})
 		v1.GET("/health/detailed", s.handleDetailedHealth)
 		v1.POST("/stress/scream", s.handleScreamTest)
-	}
-	s.Router.POST("/api/generate", s.handleOllamaGenerate)
-	s.Router.POST("/api/chat", s.handleOllamaChat)
-	s.Router.GET("/api/tags", s.handleOllamaTags)
+
+		// Ollama Parity (v1)
+		v1.POST("/api/generate", s.handleOllamaGenerate)
+		v1.POST("/api/chat", s.handleOllamaChat)
+		v1.GET("/api/tags", s.handleOllamaTags)
+		}
+
+		// Ollama Parity (Root - for legacy and direct clients)
+		s.Router.POST("/api/generate", s.handleOllamaGenerate)
+		s.Router.POST("/api/chat", s.handleOllamaChat)
+		s.Router.GET("/api/tags", s.handleOllamaTags)
 }
 
-func (s *Server) handleChatCompletions(c *gin.Context) {
-	var req map[string]interface{}
+func (s *Server) handleChatCompletions(c *gin.Context) {	var req map[string]interface{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -211,27 +217,51 @@ func (s *Server) handleChatCompletions(c *gin.Context) {
 			query, _ = lastMsg["content"].(string)
 		}
 	}
-	answer, err := s.Agent.Run(query, nil)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	finalContent := answer
-	if strings.Contains(answer, "}") {
-		var decision struct { Thought string `json:"thought"` }
-		jsonStr := answer
-		if strings.Contains(answer, "```json") {
-			parts := strings.Split(answer, "```json")
-			if len(parts) > 1 { jsonStr = strings.Split(parts[1], "```")[0] }
-		}
-		if err := json.Unmarshal([]byte(jsonStr), &decision); err == nil && decision.Thought != "" {
-			finalContent = decision.Thought
-		}
-	}
 	model, _ := req["model"].(string)
 	if model == "" { model = "oricli-swarm" }
-	c.JSON(http.StatusOK, map[string]interface{}{
-		"id": fmt.Sprintf("chatcmpl-%d", time.Now().Unix()),
+
+	var finalContent string
+	if model == "oricli-cognitive" || model == "oricli-direct" {
+	        // Direct generation via GenService (Bypass Swarm/Agentic wrapper completely)
+
+	        // Inject the Task Execution Detector explicitly
+	        systemPrompt := "You are Oricli-Alpha. Be direct, clear, and highly capable."
+	        detector := service.NewInstructionFollowingDetector()
+	        if detector.IsTaskExecution(query) {
+	                systemPrompt = detector.GetTaskSystemPrompt()
+	        }
+
+	        resRaw, err := s.Agent.GenService.Generate(query, map[string]interface{}{
+	                "system": systemPrompt,
+	        })
+	        if err != nil {
+	                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	                return
+	        }
+	        if res, ok := resRaw["text"].(string); ok {
+	                finalContent = res
+	        }
+	} else {	        // Swarm/Agentic run
+	        answer, err := s.Agent.Run(query, nil)
+	        if err != nil {
+	                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	                return
+	        }
+	        finalContent = answer
+	        if strings.Contains(answer, "}") {
+	                var decision struct { Thought string `json:"thought"` }
+	                jsonStr := answer
+	                if strings.Contains(answer, "```json") {
+	                        parts := strings.Split(answer, "```json")
+	                        if len(parts) > 1 { jsonStr = strings.Split(parts[1], "```")[0] }
+	                }
+	                if err := json.Unmarshal([]byte(jsonStr), &decision); err == nil && decision.Thought != "" {
+	                        finalContent = decision.Thought
+	                }
+	        }
+	}
+
+	c.JSON(http.StatusOK, map[string]interface{}{		"id": fmt.Sprintf("chatcmpl-%d", time.Now().Unix()),
 		"object": "chat.completion",
 		"created": time.Now().Unix(),
 		"model": model,
@@ -1009,22 +1039,33 @@ func (s *Server) handleListModels(c *gin.Context) {
 }
 
 func (s *Server) handleSwarmRun(c *gin.Context) {
-	var req struct {
-		Operation string                 `json:"operation"`
-		Params    map[string]interface{} `json:"params"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	result, err := s.Orchestrator.Execute(req.Operation, req.Params, 300*time.Second)
+
+	operation, _ := body["operation"].(string)
+	params, _ := body["params"].(map[string]interface{})
+
+	if operation == "" && body["query"] != nil {
+		// Handle legacy Python client format
+		operation = "reason"
+		params = body
+	}
+
+	if operation == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "operation is required"})
+		return
+	}
+
+	result, err := s.Orchestrator.Execute(operation, params, 300*time.Second)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "result":  result})
 }
-
 func (s *Server) handleSwarmInject(c *gin.Context) {
 	var req struct {
 		Topic    string                 `json:"topic"`

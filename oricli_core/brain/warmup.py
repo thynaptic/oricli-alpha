@@ -17,7 +17,6 @@ from datetime import datetime
 from enum import Enum
 
 from oricli_core.brain.registry import ModuleRegistry
-from oricli_core.brain.orchestrator import ModuleOrchestrator
 from oricli_core.brain.base_module import BaseBrainModule
 from oricli_core.exceptions import ModuleInitializationError
 
@@ -58,7 +57,6 @@ class ModuleWarmupService:
         """Initialize warmup service"""
         self._warmup_status: Dict[str, WarmupResult] = {}
         self._warmup_lock = threading.RLock()
-        self._orchestrator: Optional[ModuleOrchestrator] = None
         
         # Configuration from environment variables
         self._enabled = os.getenv("MAVAIA_WARMUP_ENABLED", "true").lower() in ("true", "1", "yes")
@@ -103,16 +101,8 @@ class ModuleWarmupService:
         
         logger.info(f"Starting warmup for {len(module_names)} modules...")
         
-        # Get load order from orchestrator
-        if self._orchestrator is None:
-            self._orchestrator = ModuleOrchestrator()
-            self._orchestrator.initialize()
-        
-        try:
-            load_order = self._orchestrator.get_load_order(module_names)
-        except Exception as e:
-            logger.warning(f"Failed to get load order, using discovery order: {e}")
-            load_order = module_names
+        # Warm up modules in discovery order
+        load_order = module_names
         
         # Warm up modules in dependency order
         # Use semaphore to limit concurrency
@@ -522,4 +512,3 @@ def get_warmup_service() -> ModuleWarmupService:
     if _global_warmup_service is None:
         _global_warmup_service = ModuleWarmupService()
     return _global_warmup_service
-

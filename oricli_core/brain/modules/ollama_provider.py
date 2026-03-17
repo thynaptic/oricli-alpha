@@ -16,7 +16,7 @@ from oricli_core.exceptions import InvalidParameterError
 
 logger = logging.getLogger(__name__)
 
-PRIMARY_OLLAMA_MODEL = "qwen2:1.5b"
+PRIMARY_OLLAMA_MODEL = "ministral-3:3b"
 
 
 class OllamaProviderModule(BaseBrainModule):

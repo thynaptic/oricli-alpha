@@ -18,8 +18,8 @@ from datetime import datetime
 from oricli_core.brain.registry import ModuleRegistry
 from oricli_core.brain.base_module import BaseBrainModule
 from oricli_core.brain.warmup import ModuleWarmupService, get_warmup_service, WarmupStatus
-from oricli_core.brain.monitor import ModuleMonitorService, get_monitor_service, ModuleState
-from oricli_core.brain.recovery import ModuleRecoveryService, get_recovery_service
+from oricli_core.brain.modules.monitor import ModuleMonitorService, get_monitor_service, ModuleState
+from oricli_core.brain.modules.recovery import ModuleRecoveryService, get_recovery_service
 from oricli_core.brain.degraded_classifier import (
     DegradedModeClassifier,
     get_degraded_classifier,

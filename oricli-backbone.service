@@ -3,6 +3,7 @@ Description=Oricli-Alpha Go Backbone (Hive Orchestrator)
 After=network.target
 
 [Service]
+Environment=OLLAMA_URL=http://localhost:11434
 Type=simple
 User=mike
 Group=mike

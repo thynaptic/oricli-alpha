@@ -45,7 +45,7 @@ def _write_profile_config(path: Path) -> None:
                         "allowed_modules": ["search_agent"],
                         "allowed_operations": {"search_agent": ["search"]},
                         "system_instructions": "Use only approved research tools.",
-                        "model_preference": "qwen2.5:7b",
+                        "model_preference": "deepseek-r1:1.5b",
                     },
                     {
                         "name": "answer_only",
@@ -72,7 +72,7 @@ def _write_profile_config(path: Path) -> None:
                             "adversarial_auditor": ["fuzz_reasoning", "detect_manipulation"],
                         },
                         "system_instructions": "Debug by reproducing failures and isolating root causes.",
-                        "model_preference": "qwen2.5:7b",
+                        "model_preference": "deepseek-r1:1.5b",
                     },
                     {
                         "name": "benchmark_agent_profile",
@@ -91,7 +91,7 @@ def _write_profile_config(path: Path) -> None:
                             "research_agent": ["research"],
                         },
                         "system_instructions": "Interpret performance measurements carefully.",
-                        "model_preference": "qwen2.5:7b",
+                        "model_preference": "deepseek-r1:1.5b",
                     },
                     {
                         "name": "security_agent_profile",
@@ -111,7 +111,7 @@ def _write_profile_config(path: Path) -> None:
                         },
                         "blocked_operations": {"answer_agent": ["answer"]},
                         "system_instructions": "Audit attack surface and propose mitigations.",
-                        "model_preference": "qwen2.5:7b",
+                        "model_preference": "deepseek-r1:1.5b",
                     },
                     {
                         "name": "memory_agent_profile",
@@ -130,7 +130,7 @@ def _write_profile_config(path: Path) -> None:
                             "answer_agent": ["format_answer"],
                         },
                         "system_instructions": "Preserve long-horizon retrieval context.",
-                        "model_preference": "qwen2.5:7b",
+                        "model_preference": "deepseek-r1:1.5b",
                     },
                     {
                         "name": "orchestrator_agent_profile",
@@ -149,7 +149,7 @@ def _write_profile_config(path: Path) -> None:
                             "answer_agent": ["format_answer"],
                         },
                         "system_instructions": "Decompose work and route it explicitly.",
-                        "model_preference": "qwen2.5:7b",
+                        "model_preference": "deepseek-r1:1.5b",
                     },
                 ],
             },
@@ -327,7 +327,7 @@ def test_agent_coordinator_spawn_agent_resolves_orchestrator_profile(tmp_path, m
 
     assert result["success"] is True
     assert result["agent_profile"] == "orchestrator_agent_profile"
-    assert result["model"] == "qwen2.5:7b"
+    assert result["model"] == "deepseek-r1:1.5b"
     assert result["instructions"].startswith("Decompose work and route it explicitly.")
     assert "Break the work into stages." in result["instructions"]
 
@@ -379,7 +379,7 @@ def test_multi_agent_orchestrator_applies_stage_profile(tmp_path, monkeypatch):
     assert result["success"] is True
     assert search_agent.calls[0][0] == "search"
     assert search_agent.calls[0][1]["agent_profile"] == "research_only"
-    assert search_agent.calls[0][1]["model"] == "qwen2.5:7b"
+    assert search_agent.calls[0][1]["model"] == "deepseek-r1:1.5b"
     assert result["agent_results"][0]["agent_profile"] == "research_only"
 
 

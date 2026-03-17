@@ -9,7 +9,7 @@ def test_generate():
         response = requests.post(
             "http://localhost:11434/api/generate",
             json={
-                "model": "qwen2.5:7b",
+                "model": "deepseek-r1:1.5b",
                 "prompt": "Write a python function to add two numbers. Output only the code.",
                 "stream": False
             },

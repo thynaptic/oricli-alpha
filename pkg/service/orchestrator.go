@@ -29,6 +29,7 @@ type GoOrchestrator struct {
 	mu         sync.RWMutex
 	LoadOrder  []string
 	Modules    map[string]bool // Known module names
+	Classifier *DegradedModeClassifier
 }
 
 // Bid represents a proposal from a node
@@ -50,13 +51,14 @@ type TaskContext struct {
 	mu        sync.Mutex
 }
 
-func NewGoOrchestrator(swarmBus *bus.SwarmBus) *GoOrchestrator {
+func NewGoOrchestrator(swarmBus *bus.SwarmBus, registry *ModuleRegistry) *GoOrchestrator {
 	orch := &GoOrchestrator{
-		Bus:      swarmBus,
-		Tasks:    make(map[string]*TaskContext),
-		BrokerID: "go_broker_main",
-		Status:   StatusIdle,
-		Modules:  make(map[string]bool),
+		Bus:        swarmBus,
+		Tasks:      make(map[string]*TaskContext),
+		BrokerID:   "go_broker_main",
+		Status:     StatusIdle,
+		Modules:    make(map[string]bool),
+		Classifier: NewDegradedModeClassifier(registry),
 	}
 	// Global listener for bids and results
 	swarmBus.Subscribe("*", orch.onMessage)
@@ -76,6 +78,14 @@ func (o *GoOrchestrator) onMessage(msg bus.Message) {
 
 // Execute triggers a Call for Proposals and waits for the best bid to finish
 func (o *GoOrchestrator) Execute(operation string, params map[string]interface{}, timeout time.Duration) (interface{}, error) {
+	// Map operation if needed
+	if o.Classifier != nil {
+		if mapped, ok := o.Classifier.operationMappings[operation]; ok {
+			log.Printf("[Orchestrator] Mapping legacy operation '%s' -> '%s'", operation, mapped)
+			operation = mapped
+		}
+	}
+
 	taskID := uuid.New().String()
 	ctx := &TaskContext{
 		TaskID:    taskID,
@@ -98,26 +108,23 @@ func (o *GoOrchestrator) Execute(operation string, params map[string]interface{}
 		Payload: map[string]interface{}{
 			"task_id":   taskID,
 			"operation": operation,
+			"params":    params,
 		},
 	})
 
-	// 2. Wait for bidding window to close
+	// 2. Wait for Bidding Window
 	time.Sleep(5 * time.Second)
 
-	// 3. Select best bid
+	// 3. Selection
 	ctx.mu.Lock()
-	log.Printf("[Orchestrator] Task %s: Selection started. Total bids: %d", taskID, len(ctx.Bids))
 	if len(ctx.Bids) == 0 {
 		ctx.mu.Unlock()
 		return nil, fmt.Errorf("no bids received for operation: %s", operation)
 	}
 
-	bestBid := ctx.Bids[0]
+	var bestBid Bid
 	for _, b := range ctx.Bids {
-		// Priority logic: Highest confidence, then lowest cost
 		if b.Confidence > bestBid.Confidence {
-			bestBid = b
-		} else if b.Confidence == bestBid.Confidence && b.ComputeCost < bestBid.ComputeCost {
 			bestBid = b
 		}
 	}
@@ -138,10 +145,10 @@ func (o *GoOrchestrator) Execute(operation string, params map[string]interface{}
 		},
 	})
 
-	// 5. Wait for result
+	// 5. Wait for Result
 	select {
-	case res := <-ctx.ResultCh:
-		return res, nil
+	case result := <-ctx.ResultCh:
+		return result, nil
 	case <-time.After(timeout):
 		return nil, fmt.Errorf("task %s timed out after %v", taskID, timeout)
 	}
@@ -157,16 +164,23 @@ func (o *GoOrchestrator) handleBid(msg bus.Message) {
 		return
 	}
 
-	confidence := ToFloat64(msg.Payload["confidence"])
-	cost := ToFloat64(msg.Payload["compute_cost"])
-	
-	log.Printf("[Orchestrator] Task %s: Received bid from %s (Confidence: %.2f, Cost: %.2f)", taskID, msg.SenderID, confidence, cost)
-
 	bid := Bid{
-		NodeID:      msg.SenderID,
-		Confidence:  confidence,
-		ComputeCost: cost,
-		Timestamp:   msg.Timestamp,
+		NodeID:    msg.SenderID,
+		Timestamp: time.Now().UnixNano(),
+	}
+
+	// Safe conversion for confidence
+	if conf, ok := msg.Payload["confidence"].(float64); ok {
+		bid.Confidence = conf
+	} else if conf, ok := msg.Payload["confidence"].(int); ok {
+		bid.Confidence = float64(conf)
+	}
+
+	// Safe conversion for compute_cost
+	if cost, ok := msg.Payload["compute_cost"].(float64); ok {
+		bid.ComputeCost = cost
+	} else if cost, ok := msg.Payload["compute_cost"].(int); ok {
+		bid.ComputeCost = float64(cost)
 	}
 
 	ctx.mu.Lock()
@@ -184,17 +198,11 @@ func (o *GoOrchestrator) handleResult(msg bus.Message) {
 		return
 	}
 
-	select {
-	case ctx.ResultCh <- msg.Payload["result"]:
-		// Result sent
-	default:
-	}
+	ctx.ResultCh <- msg.Payload["result"]
 }
 
 func (o *GoOrchestrator) handleError(msg bus.Message) {
 	taskID, _ := msg.Payload["task_id"].(string)
-	errStr, _ := msg.Payload["error"].(string)
-	
 	o.mu.RLock()
 	ctx, ok := o.Tasks[taskID]
 	o.mu.RUnlock()
@@ -203,8 +211,7 @@ func (o *GoOrchestrator) handleError(msg bus.Message) {
 		return
 	}
 
-	select {
-	case ctx.ResultCh <- fmt.Errorf("node error: %s", errStr):
-	default:
-	}
+	log.Printf("[Orchestrator] Task %s received error: %v", taskID, msg.Payload["error"])
+	// Pass error to result channel to avoid hanging
+	ctx.ResultCh <- fmt.Errorf("node error: %v", msg.Payload["error"])
 }
