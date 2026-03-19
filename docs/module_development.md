@@ -1,6 +1,8 @@
 # Module Development Guide
 
-This guide explains how to create new brain modules for Oricli-Alpha Core.
+> **Architecture note:** As of v2.0.0, Oricli-Alpha's primary orchestration, reasoning, and API layers run on the **Go-native backbone** (`bin/oricli-go-v2`). Python brain modules now operate as **gRPC sidecars** invoked by the Go orchestrator. This guide covers Python sidecar module development. For Go-native service development, see `pkg/service/` and `pkg/node/` in the source.
+
+This guide explains how to create new Python brain module sidecars for Oricli-Alpha.
 
 ## Overview
 

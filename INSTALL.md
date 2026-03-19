@@ -1,105 +1,139 @@
-# Oricli-Alpha Core Installation Guide
+# Oricli-Alpha Installation Guide
 
-## Quick Install
+**Version:** 2.1.0 — Go-native backbone
 
-### macOS / Linux
+---
+
+## System Requirements
+
+| Component | Minimum | Recommended |
+|---|---|---|
+| OS | Linux (Ubuntu 22.04+) | Ubuntu 22.04 LTS |
+| CPU | 4 cores | 32-core AMD EPYC |
+| RAM | 8 GB | 32 GB |
+| Go | 1.21+ | 1.25+ |
+| Python | 3.11+ | 3.11 or 3.12 |
+| Ollama | Any | Latest |
+
+---
+
+## 1. Install Go
 
 ```bash
-# Run the setup script (installs CMake and all dependencies)
-./scripts/setup.sh
+# Download and install Go 1.25+
+wget https://go.dev/dl/go1.25.0.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf go1.25.0.linux-amd64.tar.gz
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+source ~/.bashrc
+go version
 ```
 
-### Windows
+---
 
-```powershell
-# Run the setup script (installs CMake and all dependencies)
-.\scripts\setup.ps1
-```
+## 2. Install Ollama & Pull Model
 
-## Manual Installation
-
-### 1. Install System Dependencies
-
-**macOS:**
 ```bash
-brew install cmake
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen2.5-coder:3b
 ```
 
-**Linux (Ubuntu/Debian):**
+---
+
+## 3. Clone & Build
+
 ```bash
-sudo apt-get update
-sudo apt-get install -y cmake build-essential
+git clone https://github.com/thynaptic/oricli-alpha.git
+cd oricli-alpha
+
+# Build the Go backbone
+go build -o bin/oricli-go-v2 ./cmd/backbone
 ```
 
-**Linux (Fedora/RHEL):**
-```bash
-sudo dnf install -y cmake gcc gcc-c++ make
-```
+---
 
-**Windows:**
-- Download CMake from: https://cmake.org/download/
-- Or use winget: `winget install Kitware.CMake`
-- Or use Chocolatey: `choco install cmake`
+## 4. Python Environment (UI + Sidecars)
 
-### 2. Create Virtual Environment (Recommended)
+The Python stack is only required for the UI proxy and optional training pipelines.
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
+pip install -U pip setuptools wheel
+pip install -e .
 ```
 
-### 3. Install Python Dependencies
+For training pipelines and ML sidecars:
+```bash
+pip install -e ".[ml,data,train_neural]"
+```
+
+---
+
+## 5. Infrastructure Services (Optional but Recommended)
+
+### Neo4j (Knowledge Vault)
+```bash
+docker run -d \
+  --name neo4j \
+  -p 7474:7474 -p 7687:7687 \
+  -e NEO4J_AUTH=none \
+  neo4j:latest
+```
+
+### Caddy (TLS Reverse Proxy)
+```bash
+sudo apt install -y caddy
+# Copy the Caddyfile from the repo:
+sudo cp oricli-backbone.service /etc/systemd/system/
+sudo cp oricli-ui.service /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
+---
+
+## 6. Install systemd Services
 
 ```bash
-pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
+sudo cp oricli-backbone.service /etc/systemd/system/
+sudo cp oricli-ui.service /etc/systemd/system/
+sudo systemctl daemon-reload
+
+sudo systemctl enable oricli-backbone oricli-ui
+sudo systemctl start oricli-backbone oricli-ui
 ```
 
-## Verify Installation
+---
+
+## 7. Verify
 
 ```bash
-python3 -c "import jax; import flax; print('JAX/Flax installed successfully')"
+# Check services
+sudo systemctl status oricli-backbone oricli-ui
+
+# Health check (should return {"status":"ready",...})
+curl http://localhost:8089/v1/health
+
+# Get the auto-generated API key
+cat /home/mike/Mavaia/.oricli/api_key
 ```
 
-## Troubleshooting
+---
 
-### CMake Not Found
-- Ensure CMake is installed and in your PATH
-- Verify with: `cmake --version`
+## Environment Variables
 
-### JAX Installation
+The backbone reads from `.env` in the project root. Key variables:
 
-JAX v0.7.1+ supports Python 3.14.0 with pre-built wheels. If you encounter installation issues:
+| Variable | Default | Description |
+|---|---|---|
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama inference endpoint |
+| `OLLAMA_MODEL` | `qwen2.5-coder:3b` | Default generation model |
+| `ORICLI_ENCRYPTION_KEY` | (auto) | Base64 AES key for LMDB encryption |
+| `OricliAlpha_Key` | (auto) | Override API key (optional) |
 
-**Option 1: Use pre-built wheels (recommended):**
-```bash
-pip install --only-binary :all: jax jaxlib
-pip install flax optax transformers huggingface-hub
-```
+---
 
-**Option 2: Use the installation script:**
-```bash
-./scripts/install_jax.sh
-```
+## Quick Start After Install
 
-**Option 3: Install from requirements:**
-```bash
-pip install -r requirements.txt
-```
-
-### Python Version
-- Requires Python 3.8 or higher
-- Check with: `python3 --version`
-- JAX v0.7.1+ supports Python 3.14.0 with pre-built wheels
-
-### CMake Version Compatibility
-- CMake is required for some Python packages that need to build C extensions
-- The setup script will automatically install CMake if needed
-- CMake 3.15+ is recommended
-
-## Requirements
-
-- Python 3.8+
-- CMake 3.15+
-- pip, setuptools, wheel
-- System build tools (gcc, make, etc.)
+See [`QUICKSTART.md`](QUICKSTART.md) for first API calls and client setup.  
+See [`docs/API.md`](docs/API.md) for the full API reference.

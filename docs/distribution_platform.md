@@ -1,5 +1,7 @@
 # Thynaptic Registry: Distribution Platform for Cognitive Modules and Frameworks
 
+> **Status: Roadmap** — This feature is not yet implemented. This document describes the intended design for a future module distribution system. Current module management is handled via filesystem discovery in `oricli_core/brain/modules/` and `skills/`.
+
 ## Abstract
 
 We introduce Thynaptic Registry, a distribution platform for cognitive modules and pre-configured cognitive frameworks within the Oricli-Alpha ecosystem. This system enables discovery, installation, and management of cognitive capabilities through a centralized registry service. The registry supports both individual brain modules and complete cognitive framework configurations, providing developers with a streamlined experience for cognitive systems components. This document describes the architecture, capabilities, security mechanisms, and technical roadmap for the Thynaptic Registry platform.

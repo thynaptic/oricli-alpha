@@ -1,38 +1,66 @@
 # Technology Stack: Oricli-Alpha Core
 
-## Language & Runtime
-- **Python (3.11+)**: The primary programming language, leveraging modern features and type hinting.
+> Last updated: 2026-03-19 — reflects v2.1.0 Go-native architecture.
+> **Before introducing a new stack-level dependency, update this file first.**
 
-## Machine Learning & Reasoning
-- **PyTorch**: The foundational framework for transformer model training and execution.
-- **JAX & Flax**: Used for optimized numerical computing and specific reasoning architectures.
-- **Transformers (Hugging Face)**: Core library for working with state-of-the-art LLM architectures and tokenizers.
-- **PEFT (Hugging Face)**: Utilized for Parameter-Efficient Fine-Tuning (LoRA) of specialized elective adapters.
-- **DPO (Direct Preference Optimization)**: Primary alignment algorithm used for RFAL-based self-correction and personality tuning.
-- **Semantic Intent Classification**: Independent embedding models (e.g., `all-MiniLM-L6-v2`) used for sub-100ms routing decisions.
-- **Proactive VRAM Management**: LRU-based adapter eviction strategy implemented to maintain performance within hardware constraints.
-- **TensorFlow**: Supported for specific module implementations and legacy compatibility.
+## Primary Language & Runtime
 
-## API & Backend
-- **FastAPI**: Used to provide a high-performance, asynchronous, OpenAI-compatible HTTP API.
-- **Uvicorn**: Asynchronous server gateway interface (ASGI) for running the FastAPI application.
+- **Go (1.25+)**: The primary language for all production services — API gateway, Swarm Bus, reasoning engines, memory, ingestion, and orchestration. Module: `github.com/thynaptic/oricli-go`.
+- **Python (3.11+)**: Used for the UI proxy (`ui_app.py`), training pipelines, and optional cognitive sidecars exposed over gRPC.
 
-## User Interface
-- **Flask**: Used for the lightweight, interactive testing UI.
-- **Vanilla CSS & JS**: Primary technologies for UI components to ensure flexibility and low overhead.
+## Go Core Libraries (`go.mod`)
 
-## Data & Integration
-- **Hugging Face Datasets**: Used for loading and processing curriculum training data.
-- **Wikipedia API**: Integrated for external knowledge retrieval.
-- **Internet Archive API**: Integrated for discovering and retrieving public domain texts.
-- **HTTPX & Requests**: Used for robust synchronous and asynchronous network communication.
+| Package | Role |
+|---|---|
+| `github.com/gin-gonic/gin` | HTTP router for the Sovereign API Gateway (ServerV2) |
+| `github.com/PowerDNS/lmdb-go` | High-speed persistent key-value store (Memory Bridge / Chronos) |
+| `github.com/neo4j/neo4j-go-driver/v5` | Neo4j Knowledge Graph queries |
+| `github.com/philippgille/chromem-go` | In-process vector store for semantic search / RAG |
+| `github.com/ollama/ollama` | Ollama client for local LLM inference (prose generation) |
+| `github.com/traefik/yaegi` | Go interpreter for dynamic gosh sandbox execution |
+| `mvdan.cc/sh/v3` | Shell interpreter for script execution inside the Kernel |
+| `github.com/google/uuid` | ID generation |
+| `github.com/joho/godotenv` | `.env` loading |
+| `google.golang.org/grpc` | gRPC transport for Python sidecar communication |
+| `google.golang.org/protobuf` | Protobuf serialization |
+| `github.com/PuerkitoBio/goquery` | HTML parsing for web ingestion |
+| `github.com/quic-go/quic-go` | QUIC transport (future high-speed cluster comms) |
+
+## Inference & Generation
+
+- **Ollama**: Local LLM inference. Primary model: `qwen2.5-coder:3b` (via `oricli-backbone.service`). The Go backbone offloads all prose generation and light reasoning to Ollama, reserving native compute for orchestration and tool-use.
+- **gRPC Sidecars**: Specialized Python cognitive modules (e.g., vision, symbolic solvers) are invoked via gRPC from the Go orchestrator when a capability requires a Python ML library.
+
+## Storage
+
+- **LMDB** (`lmdb-go`): Primary fast key-value store for the Memory Bridge and Chronos temporal index. Path: `/home/mike/Mavaia/.memory/lmdb`.
+- **Neo4j**: Persistent graph database for the Knowledge Vault (entity/relationship storage). Accessed via Go driver.
+- **chromem-go**: In-process vector store for RAG embeddings — no external vector DB required.
+- **AWS S3 / RunPod S3**: Persistent storage for model checkpoints, training data archives, and cross-pod coordination state.
+
+## API Gateway & Networking
+
+- **Gin** (`gin-gonic/gin`): Go HTTP framework powering `ServerV2` on port `8089`.
+- **Caddy**: TLS termination and reverse proxy. Routes `oricli.thynaptic.com` → `127.0.0.1:8089`. Config: `/etc/caddy/Caddyfile`.
+- **Auth**: Argon2id key hashing via `pkg/core/auth`. Key format: `glm.<prefix>.<secret>`.
+
+## Python Sidecar Stack
+
+Used only for the UI proxy and optional cognitive sidecars. Not in the critical path.
+
+- **Flask**: Lightweight UI proxy (`ui_app.py`) forwarding browser traffic to the Go API. Port 5000.
+- **PyTorch / Transformers / PEFT**: Used in training pipelines and LoRA adapter management (`scripts/train_*.py`).
+- **JAX & Flax**: Specific reasoning architecture experiments.
+- **HTTPX / Requests**: Network communication in Python sidecars.
+- **Black / Ruff / MyPy**: Python code formatting, linting, and type checking.
 
 ## Infrastructure & DevOps
-- **Docker**: Used for containerization and consistent execution environments.
-- **RunPod**: The primary platform for GPU-accelerated remote training, supporting custom dynamic hardware matching and multi-pod VPC clusters.
-- **AWS S3 / RunPod S3**: Used for persistent storage of models, checkpoints, and code archives.
 
-## Development Tools
-- **Black**: Enforced for consistent code formatting.
-- **Ruff**: Used for high-speed linting and code quality checks.
-- **MyPy**: Utilized for static type checking to ensure code robustness.
+- **systemd**: Service management. Key units: `oricli-backbone.service`, `oricli-ui.service`, `oricli-trainer.service`.
+- **RunPod**: GPU-accelerated remote training (NVIDIA RTX 5090 / Blackwell). Async virtual clustering via S3 coordination.
+- **Docker**: Containerization for sandboxed execution environments.
+
+## Compute Targets
+
+- **Primary VPS**: AMD EPYC 7543P (32 cores, 32GB RAM). Go backbone fully utilizes all cores via goroutines.
+- **Remote GPU (RunPod)**: Training workloads and heavy ML inference offloaded via SSH tunnel / S3 bridge.

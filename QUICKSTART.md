@@ -1,149 +1,100 @@
-# Quick Start Guide
+# Oricli-Alpha Quick Start
 
-## 🚀 One-Click Start (Recommended)
+**Version:** 2.1.0 — Go-native backbone  
+**Production URL:** `https://oricli.thynaptic.com`
 
-The easiest way to start everything:
+---
+
+## Prerequisites
+
+- **Go 1.21+** — [install](https://go.dev/dl/)
+- **Ollama** — [install](https://ollama.com) with `qwen2.5-coder:3b` pulled
+- **Python 3.11+** + pip — only needed for the UI proxy and training pipelines
+
+---
+
+## 1. Run (Production — systemd)
+
+The Go backbone and UI are managed as systemd services.
 
 ```bash
-./scripts/start_servers.sh
+# Start the Go backbone (Hive Orchestrator, port 8089)
+sudo systemctl start oricli-backbone
+
+# Start the UI proxy (Flask, port 5000)
+sudo systemctl start oricli-ui
+
+# Check status
+sudo systemctl status oricli-backbone oricli-ui
 ```
 
-This will:
-- ✅ Start both API and UI servers
-- ✅ Use port 8001 for API (default)
-- ✅ Use port 5000 for UI (default)
-- ✅ Automatically open your browser
-- ✅ Show beautiful status messages
+**Access:**
+- API: `https://oricli.thynaptic.com` (via Caddy) or `http://localhost:8089` (local)
+- UI: `http://localhost:5000`
 
-## Starting the Servers (Manual)
+---
 
-### Prerequisites
+## 2. Run (Development — manual)
 
-1. **Activate the virtual environment:**
-   ```bash
-   source venv/bin/activate
-   ```
-
-2. **Verify dependencies are installed:**
-   ```bash
-   python3 scripts/check_dependencies.py
-   ```
-
-### Starting the API Server
-
-**Option 1: Using the entry point (if package is installed)**
 ```bash
-source venv/bin/activate
-oricli-server --port 8000
+# Build the Go backbone
+go build -o bin/oricli-go-v2 ./cmd/backbone
+
+# Start it
+./bin/oricli-go-v2
 ```
 
-**Option 2: Using Python module**
+In a second terminal, start the UI proxy:
 ```bash
-source venv/bin/activate
-python3 -m oricli_core.api.server --port 8000
+source .venv/bin/activate
+MAVAIA_API_BASE=http://localhost:8089 python3 ui_app.py
 ```
 
-**Option 3: Using the startup script**
+---
+
+## 3. Get Your API Key
+
 ```bash
-source venv/bin/activate
-python3 scripts/start_server.py --port 8000
+cat /home/mike/Mavaia/.oricli/api_key
 ```
 
-**Option 4: Using the convenience shell script**
+The key is auto-generated on first boot. Format: `glm.<prefix>.<secret>`.
+
+---
+
+## 4. First API Call
+
 ```bash
-./scripts/start_servers.sh api --port 8000
+# Health check (no auth required)
+curl https://oricli.thynaptic.com/v1/health
+
+# Chat (auth required)
+curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
+  -H "Authorization: Bearer $(cat /home/mike/Mavaia/.oricli/api_key)" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"oricli-cognitive","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-### Starting the UI Server
+---
 
-**Option 1: Direct execution**
-```bash
-source venv/bin/activate
-python3 ui_app.py
+## 5. Python (OpenAI SDK)
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://oricli.thynaptic.com/v1",
+    api_key=open("/home/mike/Mavaia/.oricli/api_key").read().strip()
+)
+response = client.chat.completions.create(
+    model="oricli-cognitive",
+    messages=[{"role": "user", "content": "What can you do?"}]
+)
+print(response.choices[0].message.content)
 ```
 
-**Option 2: Using the startup script**
-```bash
-source venv/bin/activate
-python3 scripts/start_ui.py
-```
+---
 
-**Option 3: Using the convenience shell script**
-```bash
-./scripts/start_servers.sh ui
-```
+## Full API Reference
 
-### Common Issues
-
-#### "Module not found" errors
-
-Make sure you've activated the virtual environment:
-```bash
-source venv/bin/activate
-```
-
-#### "Port already in use" errors
-
-Use a different port:
-```bash
-# API server
-python3 -m oricli_core.api.server --port 8001
-
-# UI server
-MAVAIA_UI_PORT=5001 python3 ui_app.py
-```
-
-#### Server starts but immediately exits
-
-Check for errors in the output. Common causes:
-- Missing dependencies (run `pip install -e .`)
-- Port conflicts
-- Import errors in modules
-
-#### UI can't connect to API
-
-Make sure:
-1. API server is running first
-2. `MAVAIA_API_BASE` environment variable points to the correct API URL
-3. Both servers are accessible
-
-### Environment Variables
-
-**API Server:**
-- `MAVAIA_API_KEY` - API key for authentication
-- `MAVAIA_REQUIRE_AUTH` - Set to "true" to require authentication
-
-**UI Server:**
-- `MAVAIA_API_BASE` - Base URL for API (default: http://localhost:8000)
-- `MAVAIA_API_KEY` - API key for authentication
-- `MAVAIA_UI_PORT` - UI server port (default: 5000)
-- `MAVAIA_UI_HOST` - UI server host (default: 0.0.0.0)
-- `MAVAIA_UI_ATTACHMENT_MB` - Max attachment size in MB (default: 5)
-
-### Testing the Servers
-
-**Test API server:**
-```bash
-curl http://localhost:8000/health
-```
-
-**Test UI server:**
-```bash
-curl http://localhost:5000/health
-```
-
-**Test API endpoints:**
-```bash
-# List models
-curl http://localhost:8000/v1/models
-
-# List modules
-curl http://localhost:8000/v1/modules
-
-# Get metrics
-curl http://localhost:8000/v1/metrics
-
-# Get health status
-curl http://localhost:8000/v1/health/modules
-```
-
+See [`docs/API.md`](docs/API.md) for all endpoints, auth details, swarm operations, and ingestion.
