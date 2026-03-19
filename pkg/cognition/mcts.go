@@ -37,6 +37,7 @@ type ThoughtNode struct {
 	Prior            float64
 	ChildrenExpanded int
 	Pruned           bool
+	Terminal         bool // set when evaluation marks this branch as a dead-end; blocks further expansion
 	PruneReason      string
 	LastEvalErr      string
 }
@@ -106,6 +107,7 @@ type nodeEvalResult struct {
 	confidence float64
 	prior      float64
 	pruned     bool
+	terminal   bool
 	err        error
 }
 
@@ -197,10 +199,20 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 			}
 			if r.err != nil {
 				r.node.LastEvalErr = strings.TrimSpace(r.err.Error())
+				// Backpropagate parent's average as a neutral signal so the
+				// iteration is not wasted and the tree doesn't starve.
+				neutral := 0.5
+				if r.node.Parent != nil && r.node.Parent.Visits > 0 {
+					neutral = r.node.Parent.AverageValue()
+				}
+				e.backpropagate(r.node, neutral)
 				continue
 			}
 			r.node.Score = r.score
 			r.node.Confidence = r.confidence
+			if r.terminal {
+				r.node.Terminal = true
+			}
 			if r.prior > 0 {
 				r.node.Prior = clamp01Local(r.prior)
 			}
@@ -359,7 +371,7 @@ func (e *MCTSEngine) selectAndMaybeExpand(ctx context.Context, root *ThoughtNode
 }
 
 func shouldExpand(node *ThoughtNode, cfg MCTSConfig) bool {
-	if node == nil || node.Pruned || node.Depth >= cfg.RolloutDepth {
+	if node == nil || node.Pruned || node.Terminal || node.Depth >= cfg.RolloutDepth {
 		return false
 	}
 	visits := maxIntLocal(node.Visits+node.VirtualVisits, 1)
@@ -466,6 +478,7 @@ func (e *MCTSEngine) evaluateNode(ctx context.Context, node *ThoughtNode, cfg MC
 		confidence: weighted,
 		prior:      prior,
 		pruned:     weighted < cfg.PruneThreshold,
+		terminal:   base.Terminal || adv.Terminal,
 	}
 }
 
@@ -476,7 +489,9 @@ func (e *MCTSEngine) backpropagate(node *ThoughtNode, score float64) {
 		}
 		n.Visits++
 		n.ValueSum += score
-		n.Confidence = clamp01Local(maxFloatLocal(n.Confidence, score))
+		// Track average confidence, not max — a single lucky child should
+		// not inflate the parent's confidence across many samples.
+		n.Confidence = clamp01Local(n.ValueSum / float64(n.Visits))
 	}
 }
 
