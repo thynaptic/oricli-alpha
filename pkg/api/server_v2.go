@@ -44,13 +44,32 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		c.Next()
 	})
 
-	// Serve Flutter UI
-	r.StaticFile("/", "/home/mike/Mavaia/oricli_ui/build/web/index.html")
-	r.StaticFS("/ui", gin.Dir("/home/mike/Mavaia/oricli_ui/build/web", true))
-	r.Static("/assets", "/home/mike/Mavaia/oricli_ui/build/web/assets")
-	r.StaticFile("/main.dart.js", "/home/mike/Mavaia/oricli_ui/build/web/main.dart.js")
-	r.StaticFile("/flutter_service_worker.js", "/home/mike/Mavaia/oricli_ui/build/web/flutter_service_worker.js")
-	r.StaticFile("/manifest.json", "/home/mike/Mavaia/oricli_ui/build/web/manifest.json")
+	// Serve Flutter UI Static Files
+	webDir := "/home/mike/Mavaia/oricli_ui/build/web"
+	
+	// Handle /v1 separately, everything else is static or SPA
+	r.Static("/assets", webDir+"/assets")
+	r.Static("/canvaskit", webDir+"/canvaskit")
+	r.Static("/icons", webDir+"/icons")
+	
+	// Files at root
+	staticFiles := []string{
+		"index.html", "main.dart.js", "flutter.js", "flutter_bootstrap.js",
+		"flutter_service_worker.js", "manifest.json", "favicon.png", "version.json",
+	}
+	for _, f := range staticFiles {
+		r.StaticFile("/"+f, webDir+"/"+f)
+	}
+	r.StaticFile("/", webDir+"/index.html")
+
+	// Fallback for SPA routing
+	r.NoRoute(func(c *gin.Context) {
+		if !strings.HasPrefix(c.Request.URL.Path, "/v1") {
+			c.File(webDir + "/index.html")
+			return
+		}
+		c.JSON(404, gin.H{"error": "not found"})
+	})
 
 	s := &ServerV2{
 cfg:          cfg,
