@@ -3,6 +3,7 @@ package cognition
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"math"
 	"math/rand"
 	"strings"
@@ -13,7 +14,78 @@ import (
 const (
 	defaultPruneThreshold = 0.30
 	defaultUCB1C          = 1.25
+	defaultMaxTableSize   = 256
 )
+
+// transpositionEntry holds the cached evaluation result for a given answer text.
+// Storing the result (not the node) keeps the tree structure intact while
+// avoiding duplicate LLM calls for identical answer strings across branches.
+type transpositionEntry struct {
+	Score      float64
+	Confidence float64
+	Terminal   bool
+	Pruned     bool
+	Candidate  string
+	Prior      float64
+}
+
+// transpositionTable is a within-search evaluation cache keyed on normalized
+// answer text. It is reset at the start of every SearchV2 call.
+type transpositionTable struct {
+	mu       sync.RWMutex
+	entries  map[uint64]transpositionEntry
+	hits     int
+	maxSize  int
+}
+
+func newTranspositionTable(maxSize int) *transpositionTable {
+	if maxSize <= 0 {
+		maxSize = defaultMaxTableSize
+	}
+	return &transpositionTable{
+		entries: make(map[uint64]transpositionEntry, maxSize),
+		maxSize: maxSize,
+	}
+}
+
+func (t *transpositionTable) key(answer string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(strings.ToLower(strings.TrimSpace(answer))))
+	return h.Sum64()
+}
+
+func (t *transpositionTable) get(answer string) (transpositionEntry, bool) {
+	k := t.key(answer)
+	t.mu.RLock()
+	e, ok := t.entries[k]
+	t.mu.RUnlock()
+	if ok {
+		t.mu.Lock()
+		t.hits++
+		t.mu.Unlock()
+	}
+	return e, ok
+}
+
+func (t *transpositionTable) put(answer string, e transpositionEntry) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if len(t.entries) >= t.maxSize {
+		return // table full — skip caching rather than evict
+	}
+	k := t.key(answer)
+	if _, exists := t.entries[k]; !exists {
+		t.entries[k] = e
+	}
+}
+
+func (t *transpositionTable) Hits() int {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.hits
+}
+
+
 
 type MCTSStrategy string
 
@@ -63,6 +135,9 @@ type MCTSConfig struct {
 	MaxConcurrency     int
 	EvalTimeout        time.Duration
 	Deterministic      bool
+	// MaxTableSize caps the transposition table. 0 uses defaultMaxTableSize (256).
+	// Set to -1 to disable transposition caching entirely.
+	MaxTableSize int
 }
 
 // MCTSEvaluation captures weighted score components for a branch.
@@ -87,17 +162,19 @@ type MCTSCallbacks struct {
 type MCTSEngine struct {
 	Config    MCTSConfig
 	Callbacks MCTSCallbacks
+	table     *transpositionTable // reset each SearchV2 call
 }
 
 type MCTSResult struct {
-	BestAnswer    string
-	Confidence    float64
-	Root          *ThoughtNode
-	IterationsRun int
-	ExpandedNodes int
-	PrunedNodes   int
-	Strategy      string
-	ElapsedMS     int64
+	BestAnswer         string
+	Confidence         float64
+	Root               *ThoughtNode
+	IterationsRun      int
+	ExpandedNodes      int
+	PrunedNodes        int
+	Strategy           string
+	ElapsedMS          int64
+	TranspositionHits  int // number of evaluation LLM calls avoided via cache
 }
 
 type nodeEvalResult struct {
@@ -135,6 +212,14 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 	if cfg.Deterministic {
 		cfg.MaxConcurrency = 1
 	}
+
+	// Reset transposition table for this search. -1 disables caching.
+	if cfg.MaxTableSize >= 0 {
+		e.table = newTranspositionTable(cfg.MaxTableSize)
+	} else {
+		e.table = nil
+	}
+
 	rng := rand.New(rand.NewSource(cfg.Seed))
 	root := &ThoughtNode{ID: "root", Answer: strings.TrimSpace(draftAnswer), Depth: 0, Prior: 1.0}
 
@@ -239,15 +324,20 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 	if strings.TrimSpace(bestAnswer) == "" {
 		bestAnswer = strings.TrimSpace(root.Answer)
 	}
+	tableHits := 0
+	if e.table != nil {
+		tableHits = e.table.Hits()
+	}
 	return MCTSResult{
-		BestAnswer:    strings.TrimSpace(bestAnswer),
-		Confidence:    clamp01Local(bestScore),
-		Root:          root,
-		IterationsRun: iterationsRun,
-		ExpandedNodes: expandedNodes,
-		PrunedNodes:   prunedNodes,
-		Strategy:      string(cfg.Strategy),
-		ElapsedMS:     time.Since(started).Milliseconds(),
+		BestAnswer:        strings.TrimSpace(bestAnswer),
+		Confidence:        clamp01Local(bestScore),
+		Root:              root,
+		IterationsRun:     iterationsRun,
+		ExpandedNodes:     expandedNodes,
+		PrunedNodes:       prunedNodes,
+		Strategy:          string(cfg.Strategy),
+		ElapsedMS:         time.Since(started).Milliseconds(),
+		TranspositionHits: tableHits,
 	}, nil
 }
 
@@ -353,8 +443,9 @@ func (e *MCTSEngine) selectAndMaybeExpand(ctx context.Context, root *ThoughtNode
 			}
 		}
 		if len(unvisited) > 0 {
-			node = unvisited[rng.Intn(len(unvisited))]
-			continue
+			// Return immediately — do not call shouldExpand on an unevaluated node.
+			// Terminal/prune status can only be known after the first evaluation.
+			return unvisited[rng.Intn(len(unvisited))], expanded
 		}
 		best := children[0]
 		bestScore := e.selectionScore(best, node, cfg)
@@ -374,6 +465,9 @@ func shouldExpand(node *ThoughtNode, cfg MCTSConfig) bool {
 	if node == nil || node.Pruned || node.Terminal || node.Depth >= cfg.RolloutDepth {
 		return false
 	}
+	if cfg.MaxChildrenPerNode > 0 && len(node.Children) >= cfg.MaxChildrenPerNode {
+		return false // hard cap regardless of pruning state
+	}
 	visits := maxIntLocal(node.Visits+node.VirtualVisits, 1)
 	allowed := int(math.Floor(cfg.WideningK * math.Pow(float64(visits), cfg.WideningAlpha)))
 	if allowed < 1 {
@@ -382,7 +476,9 @@ func shouldExpand(node *ThoughtNode, cfg MCTSConfig) bool {
 	if allowed > cfg.MaxChildrenPerNode {
 		allowed = cfg.MaxChildrenPerNode
 	}
-	return len(node.Children) < allowed
+	// Expand when we don't yet have enough unpruned children to explore.
+	// Total children is bounded by MaxChildrenPerNode above.
+	return len(unprunedChildren(node.Children)) < allowed
 }
 
 func (e *MCTSEngine) expandOneChild(ctx context.Context, node *ThoughtNode, cfg MCTSConfig) bool {
@@ -446,6 +542,23 @@ func (e *MCTSEngine) evaluateNode(ctx context.Context, node *ThoughtNode, cfg MC
 	if node == nil || node.Pruned {
 		return nodeEvalResult{node: node, err: fmt.Errorf("node unavailable")}
 	}
+
+	// Transposition check — if this answer text was already evaluated in this
+	// search, return the cached result and skip both LLM calls.
+	if e.table != nil {
+		if cached, ok := e.table.get(node.Answer); ok {
+			return nodeEvalResult{
+				node:       node,
+				score:      cached.Score,
+				candidate:  cached.Candidate,
+				confidence: cached.Confidence,
+				prior:      cached.Prior,
+				pruned:     cached.Pruned,
+				terminal:   cached.Terminal,
+			}
+		}
+	}
+
 	base, err := e.Callbacks.EvaluatePath(ctx, node.Answer)
 	if err != nil {
 		return nodeEvalResult{node: node, err: err}
@@ -471,7 +584,7 @@ func (e *MCTSEngine) evaluateNode(ctx context.Context, node *ThoughtNode, cfg MC
 	if prior <= 0 {
 		prior = node.Prior
 	}
-	return nodeEvalResult{
+	result := nodeEvalResult{
 		node:       node,
 		score:      weighted,
 		candidate:  candidate,
@@ -480,6 +593,20 @@ func (e *MCTSEngine) evaluateNode(ctx context.Context, node *ThoughtNode, cfg MC
 		pruned:     weighted < cfg.PruneThreshold,
 		terminal:   base.Terminal || adv.Terminal,
 	}
+
+	// Store in transposition table for future hits within this search.
+	if e.table != nil {
+		e.table.put(node.Answer, transpositionEntry{
+			Score:      result.score,
+			Confidence: result.confidence,
+			Terminal:   result.terminal,
+			Pruned:     result.pruned,
+			Candidate:  result.candidate,
+			Prior:      result.prior,
+		})
+	}
+
+	return result
 }
 
 func (e *MCTSEngine) backpropagate(node *ThoughtNode, score float64) {
