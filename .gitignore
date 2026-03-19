@@ -150,6 +150,7 @@ bin/
 *_result.json
 *_results*.json
 *_results*.txt
+*_results.md
 *_last_sync.json
 baseline_diagnostic_results.txt
 lb_results.txt
