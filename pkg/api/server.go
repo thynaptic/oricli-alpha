@@ -65,6 +65,24 @@ func NewServer(orch *service.GoOrchestrator, agent *service.GoAgentService, mon 
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.Default()
+	
+	// CORS Middleware: Sovereign UI Access
+	r.Use(func(c *gin.Context) {
+		origin := c.Request.Header.Get("Origin")
+		if origin == "http://localhost:5173" || origin == "http://localhost:3000" {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Tenant-ID")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	})
+
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 

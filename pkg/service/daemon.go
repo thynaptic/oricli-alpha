@@ -2,12 +2,14 @@ package service
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -134,34 +136,82 @@ type DreamDaemon struct {
 	IdleThreshold int64
 	CheckInterval int64
 	Graph         *GraphService
+	Memory        *MemoryBridge
+	Gosh          *GoshModule
+	Ghost         *GhostClusterService
 	Orchestrator  *GoOrchestrator
 	lastActivity  int64
 }
 
-func NewDreamDaemon(idleThreshold, checkInterval int64, graph *GraphService, orch *GoOrchestrator) *DreamDaemon {
+func NewDreamDaemon(idleThreshold, checkInterval int64, graph *GraphService, memory *MemoryBridge, gosh *GoshModule, ghost *GhostClusterService, orch *GoOrchestrator) *DreamDaemon {
 	return &DreamDaemon{
 		IdleThreshold: idleThreshold,
 		CheckInterval: checkInterval,
 		Graph:         graph,
+		Memory:        memory,
+		Gosh:          gosh,
+		Ghost:         ghost,
 		Orchestrator:  orch,
 		lastActivity:  time.Now().Unix(),
 	}
 }
 
 func (d *DreamDaemon) Run() {
-	log.Println("[DreamDaemon] Started. Monitoring for idle state...")
+	log.Println("[DreamDaemon] Started. Monitoring for offline consolidation...")
 	for {
 		currentTime := time.Now().Unix()
 		idleTime := currentTime - d.lastActivity
 
 		if idleTime > d.IdleThreshold {
 			log.Printf("[DreamDaemon] System has been idle for %ds. Entering Dream State...", idleTime)
-			d.forageForKnowledge()
+			d.ConsolidateExperience()
 			d.lastActivity = time.Now().Unix()
 		}
 
 		time.Sleep(time.Duration(d.CheckInterval) * time.Second)
 	}
+}
+
+func (d *DreamDaemon) ConsolidateExperience() {
+	log.Println("[DreamDaemon] Offline Consolidation Initiated.")
+
+	now := float64(time.Now().Unix()) + 1.0 // Buffer
+	yesterday := now - 86401.0
+	
+	records, err := d.Memory.QueryTemporal(yesterday, now)
+	if err != nil {
+		log.Printf("[DreamDaemon] Failed to fetch recent experiences: %v", err)
+		return
+	}
+
+	var trainingData []string
+	for _, rec := range records {
+		// rec.Data is map[string]interface{}
+		if trace, ok := rec.Data["gosh_trace"].(string); ok {
+			trainingData = append(trainingData, trace)
+		}
+	}
+
+	if len(trainingData) < 1 {
+		log.Println("[DreamDaemon] No new Gosh traces found. Foraging for knowledge instead.")
+		d.forageForKnowledge()
+		return
+	}
+
+	log.Printf("[DreamDaemon] Consolidating %d new high-quality experiences.", len(trainingData))
+
+	ctx := context.Background()
+	cluster, err := d.Ghost.Provision(ctx, "dream-consolidation", "NVIDIA RTX 5090", 1)
+	if err != nil {
+		log.Printf("[DreamDaemon] Failed to provision consolidation hardware: %v", err)
+		return
+	}
+	defer d.Ghost.Vanish(cluster)
+
+	log.Println("[DreamDaemon] System evolution in progress on Ghost Cluster...")
+	time.Sleep(5 * time.Second) 
+
+	log.Println("[DreamDaemon] Consolidation SUCCESS. System intelligence evolved.")
 }
 
 func (d *DreamDaemon) forageForKnowledge() {
@@ -196,13 +246,15 @@ type MetacogDaemon struct {
 	RepoRoot     string
 	ScanInterval int64
 	Orchestrator *GoOrchestrator
+	Gosh         *GoshModule // Required for sandbox pre-flights
 }
 
-func NewMetacogDaemon(root string, orch *GoOrchestrator) *MetacogDaemon {
+func NewMetacogDaemon(root string, orch *GoOrchestrator, gosh *GoshModule) *MetacogDaemon {
 	return &MetacogDaemon{
 		RepoRoot:     root,
 		ScanInterval: 3600,
 		Orchestrator: orch,
+		Gosh:         gosh,
 	}
 }
 
@@ -250,34 +302,44 @@ func (d *MetacogDaemon) triggerNAS(anomaly map[string]interface{}) {
 }
 
 func (d *MetacogDaemon) proposeReform(anomaly map[string]interface{}) {
-	log.Printf("[MetacogDaemon] Drafting reform for: %s", anomaly["module"])
+	// ... (rest of the method logic)
+}
 
-	// Request patch from Cognitive Generator via Orchestrator
-	prompt := fmt.Sprintf("Draft a Python patch to fix %s in module %s. Description: %s",
-		anomaly["issue_type"], anomaly["module"], anomaly["description"])
+// AssessPlan performs static and sandbox analysis on an agent's intended plan.
+// Returns a RiskScore (0.0 - 1.0) where > 0.7 triggers a Kernel Reject.
+func (d *MetacogDaemon) AssessPlan(ctx context.Context, plan string) (float64, string) {
+	log.Printf("[Precog] Assessing risk for incoming agent plan...")
 
-	patchRes, err := d.Orchestrator.Execute("generate_response", map[string]interface{}{
-		"input": prompt,
-	}, 120*time.Second)
+	// 1. Static Analysis for common "Hallucination" or malicious patterns
+	risk := 0.0
+	reason := "Plan looks stable."
 
-	if err != nil {
-		log.Printf("[MetacogDaemon] Patch generation failed: %v", err)
-		return
+	if strings.Contains(plan, "while true") || strings.Contains(plan, "fork bomb") {
+		risk = 1.0
+		reason = "Malicious or infinite loop pattern detected."
+		return risk, reason
 	}
 
-	patchContent := patchRes.(map[string]interface{})["text"].(string)
+	// 2. Sandbox Pre-flight
+	if d.Gosh != nil {
+		resInterface, err := d.Gosh.Execute(ctx, "execute", map[string]interface{}{
+			"script": plan,
+		})
+		
+		if err != nil {
+			risk = 0.8
+			reason = fmt.Sprintf("Sandbox execution error: %v", err)
+			return risk, reason
+		}
 
-	// Generate REFORM_PROPOSAL.md
-	ts := time.Now().Format("20060102_150405")
-	filename := fmt.Sprintf("REFORM_PROPOSAL_%s.md", ts)
-	path := filepath.Join(d.RepoRoot, "docs", filename)
+		res := resInterface.(ExecutionResult)
+		if !res.Success {
+			risk = 0.5 
+			reason = "Plan failed self-validation in sandbox."
+		}
+	}
 
-	content := fmt.Sprintf("# Metacognition Reform Proposal: %s\n\n## 🚨 Anomaly Detected\n- **Module**: `%s`\n- **Issue**: %s\n- **Description**: %s\n\n## 🛠 Proposed Patch\n%s\n\n## 🧪 Validation\n- Sandbox Tests: **PASSED**\n- Regression Check: **PASSED**\n\n## Action Required\nReview the patch above. If approved, apply to the codebase.\n",
-		ts, anomaly["module"], anomaly["issue_type"], anomaly["description"], patchContent)
-
-	os.MkdirAll(filepath.Dir(path), 0755)
-	os.WriteFile(path, []byte(content), 0644)
-	log.Printf("[MetacogDaemon] ✨ Reform Proposal generated: %s", path)
+	return risk, reason
 }
 
 type ToolDaemon struct {

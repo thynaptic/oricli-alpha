@@ -7,12 +7,16 @@ require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
+	github.com/joho/godotenv v1.5.1
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/ollama/ollama v0.18.1
 	github.com/philippgille/chromem-go v0.7.0
+	github.com/spf13/afero v1.15.0
+	github.com/traefik/yaegi v0.16.1
 	golang.org/x/crypto v0.49.0
 	google.golang.org/grpc v1.79.2
 	google.golang.org/protobuf v1.36.11
+	mvdan.cc/sh/v3 v3.13.0
 )
 
 require (
@@ -47,6 +51,7 @@ require (
 	golang.org/x/arch v0.22.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

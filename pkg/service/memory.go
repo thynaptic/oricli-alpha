@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +30,7 @@ const (
 	LongTermState MemoryCategory = "long_term_state"
 	ReflectionLog MemoryCategory = "reflection_log"
 	VectorIndex   MemoryCategory = "vector_index"
+	TemporalIndex MemoryCategory = "temporal_index"
 )
 
 type MemoryRecord struct {
@@ -99,7 +102,7 @@ func NewMemoryBridge(path string, encryptionKeyBase64 string) (*MemoryBridge, er
 	}
 
 	// 3. Open Databases
-	categories := []MemoryCategory{Semantic, Episodic, Identity, Skill, LongTermState, ReflectionLog, VectorIndex}
+	categories := []MemoryCategory{Semantic, Episodic, Identity, Skill, LongTermState, ReflectionLog, VectorIndex, TemporalIndex}
 	err = env.Update(func(txn *lmdb.Txn) error {
 		for _, cat := range categories {
 			dbi, err := txn.OpenDBI(string(cat), lmdb.Create)
@@ -163,20 +166,35 @@ func (mb *MemoryBridge) Put(category MemoryCategory, id string, data map[string]
 	finalValue = append(finalValue, ciphertext...)
 
 	return mb.Env.Update(func(txn *lmdb.Txn) error {
+		// 1. Store main record
 		dbi := mb.DBs[category]
-		return txn.Put(dbi, []byte(id), finalValue, 0)
+		if err := txn.Put(dbi, []byte(id), finalValue, 0); err != nil {
+			return err
+		}
+
+		// 2. Index by time
+		timeDbi := mb.DBs[TemporalIndex]
+		timeKey := make([]byte, 8)
+		binary.BigEndian.PutUint64(timeKey, math.Float64bits(record.UpdatedAt))
+		timeVal := []byte(fmt.Sprintf("%s:%s", category, id))
+
+		return txn.Put(timeDbi, timeKey, timeVal, 0)
 	})
 }
 
 func (mb *MemoryBridge) Get(category MemoryCategory, id string) (*MemoryRecord, error) {
-	var val []byte
+	var record *MemoryRecord
 	err := mb.Env.View(func(txn *lmdb.Txn) error {
-		dbi := mb.DBs[category]
 		var err error
-		val, err = txn.Get(dbi, []byte(id))
+		record, err = mb.getWithTxn(txn, category, id)
 		return err
 	})
+	return record, err
+}
 
+func (mb *MemoryBridge) getWithTxn(txn *lmdb.Txn, category MemoryCategory, id string) (*MemoryRecord, error) {
+	dbi := mb.DBs[category]
+	val, err := txn.Get(dbi, []byte(id))
 	if lmdb.IsNotFound(err) {
 		return nil, nil
 	}
@@ -204,6 +222,59 @@ func (mb *MemoryBridge) Get(category MemoryCategory, id string) (*MemoryRecord, 
 	}
 
 	return &record, nil
+}
+
+// QueryTemporal retrieves records within a specific time range [startTime, endTime].
+func (mb *MemoryBridge) QueryTemporal(startTime, endTime float64) ([]MemoryRecord, error) {
+	var records []MemoryRecord
+
+	err := mb.Env.View(func(txn *lmdb.Txn) error {
+		dbi := mb.DBs[TemporalIndex]
+		cur, err := txn.OpenCursor(dbi)
+		if err != nil {
+			return err
+		}
+		defer cur.Close()
+
+		startKey := make([]byte, 8)
+		binary.BigEndian.PutUint64(startKey, math.Float64bits(startTime))
+
+		k, v, err := cur.Get(startKey, nil, lmdb.SetRange)
+		if lmdb.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		for {
+			ts := math.Float64frombits(binary.BigEndian.Uint64(k))
+			if ts > endTime {
+				break
+			}
+
+			parts := strings.Split(string(v), ":")
+			if len(parts) == 2 {
+				cat := MemoryCategory(parts[0])
+				id := parts[1]
+				rec, err := mb.getWithTxn(txn, cat, id)
+				if err == nil && rec != nil {
+					records = append(records, *rec)
+				}
+			}
+
+			k, v, err = cur.Get(nil, nil, lmdb.Next)
+			if lmdb.IsNotFound(err) {
+				break
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	return records, err
 }
 
 type VectorResult struct {

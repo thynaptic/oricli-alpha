@@ -20,6 +20,7 @@ type AgentProfile struct {
 	ModelPreference    string              `json:"model_preference"`
 	TaskTags           []string            `json:"task_tags"`
 	SkillOverlays      []string            `json:"skill_overlays"`
+	MetacogTokens      float64             `json:"metacog_tokens"` // The Hive's merit-based currency
 }
 
 type profileData struct {

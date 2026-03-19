@@ -36,14 +36,17 @@ type Subscriber func(msg Message)
 
 // SwarmBus handles high-throughput message routing via Go Channels
 type SwarmBus struct {
-	subscribers map[string][]Subscriber
-	mu          sync.RWMutex
-	messageCh   chan Message
-	priorityCh  chan Message
-	stopCh      chan struct{}
-	msgPool     *sync.Pool
-	Blackboard  map[string]interface{}
-	BbMu        sync.RWMutex
+	subscribers  map[string][]Subscriber
+	mu           sync.RWMutex
+	messageCh    chan Message
+	priorityCh   chan Message
+	stopCh       chan struct{}
+	msgPool      *sync.Pool
+	Blackboard   map[string]interface{}
+	BbMu         sync.RWMutex
+	AvgLatencyMS float64 // Real-time transit latency
+	msgCount     int64
+	latencyMu    sync.RWMutex
 }
 
 // NewSwarmBus initializes the bus with pooled messages and priority routing
@@ -97,6 +100,12 @@ func (b *SwarmBus) GetState(key string) interface{} {
 	return b.Blackboard[key]
 }
 
+func (b *SwarmBus) GetLatency() float64 {
+	b.latencyMu.RLock()
+	defer b.latencyMu.RUnlock()
+	return b.AvgLatencyMS
+}
+
 // Publish drops a message onto the bus channel
 func (b *SwarmBus) Publish(msg Message) {
 	if msg.ID == "" {
@@ -143,6 +152,18 @@ func (b *SwarmBus) startDispatcher() {
 }
 
 func (b *SwarmBus) dispatch(msg Message) {
+	// Calculate transit latency
+	transitTime := float64(time.Now().UnixNano()-msg.Timestamp) / 1e6 // ms
+	b.latencyMu.Lock()
+	b.msgCount++
+	// Simple moving average for latency
+	if b.AvgLatencyMS == 0 {
+		b.AvgLatencyMS = transitTime
+	} else {
+		b.AvgLatencyMS = (b.AvgLatencyMS * 0.9) + (transitTime * 0.1)
+	}
+	b.latencyMu.Unlock()
+
 	b.mu.RLock()
 	subs, ok := b.subscribers[msg.Topic]
 	wildcardSubs := b.subscribers["*"]
