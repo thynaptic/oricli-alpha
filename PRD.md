@@ -27,7 +27,9 @@ Founders, developers, and researchers building high-stakes, privacy-first cognit
 - **Knowledge Graph Builder**: Extracts entities and relationships from unstructured text into queryable RDF-style graphs, integrated with `world_knowledge`.
 - **Game Theory Solver**: Symbolic normal-form game engine (`game_theory_solver` module) for multi-agent strategic reasoning (Nash equilibria, best responses, and canonical dilemmas such as Prisoner’s Dilemma, Stag Hunt, Chicken, and coordination games).
 
-### 3.2 Proactive Agency
+### 3.2 Proactive Agency & Interaction
+- **Sovereign OpenClaw Trajectory**: Evolution toward a "Personal OS" that moves beyond chat into autonomous computer-use (Browser control, local file manipulation, and system orchestration).
+- **Live Artifact System**: Interactive, agent-driven visual workspace ("The Canvas") for rendering code, graphs, documents, and environment previews in real-time.
 - **Sovereign Goals**: Supports multi-step, multi-day objectives with persistent state storage and automatic resumption across restarts.
 - **Strategic Planner**: Long-horizon planning and decomposition of high-level goals into executable tracks.
 - **Predictive Speculation**: Anticipates follow-up queries and pre-computes reasoning paths to achieve near-zero latency.
