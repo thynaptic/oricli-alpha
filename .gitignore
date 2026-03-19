@@ -146,6 +146,11 @@ bin/
 # Go test cache
 /tmp/
 
+# Python test scripts (root-level and tests/ directory)
+# Go _test.go files remain tracked — they are source code in Go's model
+test_*.py
+tests/
+
 # Result & diagnostic dumps (runtime artifacts)
 *_result.json
 *_results*.json
