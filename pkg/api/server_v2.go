@@ -1,14 +1,14 @@
 package api
 
 import (
-"encoding/base64"
-"errors"
-"fmt"
-"io"
-"net/http"
-"strings"
-"time"
-
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"strings"
+	"time"
 "github.com/gin-gonic/gin"
 "github.com/thynaptic/oricli-go/pkg/core/auth"
 "github.com/thynaptic/oricli-go/pkg/core/config"
@@ -66,13 +66,21 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		"flutter_service_worker.js", "manifest.json", "favicon.png", "version.json",
 	}
 	for _, f := range staticFiles {
-		r.StaticFile("/"+f, webDir+"/"+f)
+		file := f // capture
+		r.GET("/"+file, func(c *gin.Context) {
+			log.Printf("[UI] Request: %s", c.Request.URL.Path)
+			c.File(webDir + "/" + file)
+		})
 	}
-	r.StaticFile("/", webDir+"/index.html")
+	r.GET("/", func(c *gin.Context) {
+		log.Printf("[UI] Request: / (index.html)")
+		c.File(webDir + "/index.html")
+	})
 
 	// Fallback for SPA routing
 	r.NoRoute(func(c *gin.Context) {
 		if !strings.HasPrefix(c.Request.URL.Path, "/v1") {
+			log.Printf("[UI] SPA Fallback: %s -> index.html", c.Request.URL.Path)
 			c.File(webDir + "/index.html")
 			return
 		}

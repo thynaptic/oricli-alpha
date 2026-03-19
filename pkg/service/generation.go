@@ -50,11 +50,13 @@ func (s *GenerationService) BuildSystemPrompt(ctx context.Context, persona strin
 	sb.WriteString("MANDATE: Your primary objective is to maintain perimeter sovereignty. All cognition happens locally. You prioritize technical precision, architectural integrity, and proactive goal execution.\n")
 	sb.WriteString(fmt.Sprintf("CURRENT PERSONA: %s\n", persona))
 	
-	// Artifact Instructions
-	sb.WriteString("\nARTIFACT SYSTEM: When generating code, data tables, or structured documents, wrap them in the following XML-style tags for the Live Canvas:\n")
-	sb.WriteString("<artifact type=\"code|data|document\" title=\"Filename or Title\" language=\"language_id\">\n")
-	sb.WriteString("... content ...\n")
-	sb.WriteString("</artifact>\n\n")
+	// Artifact Instructions (MANDATORY)
+	sb.WriteString("\nCRITICAL INSTRUCTION: You MUST use the ARTIFACT SYSTEM for all code, scripts, HTML, CSS, data tables, or structured documents.\n")
+	sb.WriteString("Format your output as follows:\n")
+	sb.WriteString("<artifact type=\"code\" title=\"example.html\" language=\"html\">\n")
+	sb.WriteString("... your code here ...\n")
+	sb.WriteString("</artifact>\n")
+	sb.WriteString("DO NOT simply use markdown code blocks. Always wrap them in <artifact> tags so the Sovereign Portal can render them on the Live Canvas.\n\n")
 
 	if len(goals) > 0 {
 		sb.WriteString("ACTIVE SOVEREIGN GOALS:\n")

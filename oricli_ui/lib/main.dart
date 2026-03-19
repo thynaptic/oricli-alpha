@@ -157,34 +157,48 @@ class OricliState extends ChangeNotifier {
   }
 
   void _parseArtifacts(String text) {
-    final regex = RegExp(r'<artifact type="([^"]*)" title="([^"]*)" language="([^"]*)">([\s\S]*?)<\/artifact>');
-    final matches = regex.allMatches(text);
+    // 1. Precise Tag Parsing (Resilient Regex)
+    final tagRegex = RegExp(r'<artifact\s+type="([^"]*)"\s+title="([^"]*)"\s+language="([^"]*)">([\s\S]*?)<\/artifact>', caseSensitive: false);
+    final tagMatches = tagRegex.allMatches(text);
     
-    for (final match in matches) {
+    for (final match in tagMatches) {
       final type = match.group(1) ?? 'code';
       final title = match.group(2) ?? 'untitled';
       final language = match.group(3) ?? 'plain';
       final content = match.group(4)?.trim() ?? '';
-      
-      final existingIndex = currentSession.artifacts.indexWhere((a) => a.title == title);
-      
-      if (existingIndex != -1) {
-        // If it exists but content is different, add a new version
-        if (currentSession.artifacts[existingIndex].content != content) {
-          currentSession.artifacts[existingIndex].versions.add(content);
-          currentSession.artifacts[existingIndex].currentVersion = currentSession.artifacts[existingIndex].versions.length - 1;
-        }
-      } else {
-        // New artifact
-        currentSession.artifacts.add(Artifact(
-          type: type,
-          title: title,
-          language: language,
-          initialContent: content,
-        ));
-      }
-      _canvasVisible = true;
+      _addOrUpdateArtifact(type, title, language, content);
     }
+
+    // 2. Markdown Auto-Promotion (Fallback for standard code blocks)
+    // Only promote if no artifacts were found via tags
+    if (tagMatches.isEmpty) {
+      final mdRegex = RegExp(r'```(\w+)?\n([\s\S]*?)```');
+      final mdMatches = mdRegex.allMatches(text);
+      for (final match in mdMatches) {
+        final lang = match.group(1) ?? 'plain';
+        final content = match.group(2)?.trim() ?? '';
+        final title = "generated_snippet.${lang == 'python' ? 'py' : lang}";
+        _addOrUpdateArtifact('code', title, lang, content);
+      }
+    }
+  }
+
+  void _addOrUpdateArtifact(String type, String title, String language, String content) {
+    final existingIndex = currentSession.artifacts.indexWhere((a) => a.title == title);
+    if (existingIndex != -1) {
+      if (currentSession.artifacts[existingIndex].content != content) {
+        currentSession.artifacts[existingIndex].versions.add(content);
+        currentSession.artifacts[existingIndex].currentVersion = currentSession.artifacts[existingIndex].versions.length - 1;
+      }
+    } else {
+      currentSession.artifacts.add(Artifact(
+        type: type,
+        title: title,
+        language: language,
+        initialContent: content,
+      ));
+    }
+    _canvasVisible = true;
   }
 
   void setArtifactVersion(int artIndex, int versionIndex) {
@@ -369,7 +383,7 @@ class _MainPortalState extends State<MainPortal> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<OricliState>();
-    final isLargeScreen = MediaQuery.of(context).size.width > 1100;
+    final isLargeScreen = MediaQuery.of(context).size.width > 900;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -685,9 +699,10 @@ class ChatSidebar extends StatelessWidget {
           final isSelected = state.currentSessionIndex == index;
           return Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2), child: ListTile(
             title: Text(session.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isSelected ? Colors.white : Colors.white38, fontSize: 13, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-            selected: isSelected, selectedTileColor: Colors.white.withOpacity(0.05),
-            onTap: () { state.switchSession(index); if (MediaQuery.of(context).size.width <= 1100) Navigator.pop(context); },
+            selectedTileColor: Colors.white.withOpacity(0.05),
+            onTap: () { state.switchSession(index); if (MediaQuery.of(context).size.width <= 900) Navigator.pop(context); },
             trailing: isSelected ? Row(mainAxisSize: MainAxisSize.min, children: [
+
               IconButton(icon: const Icon(Icons.edit_outlined, size: 14, color: Colors.white24), onPressed: () => _showRenameDialog(context, state, index)),
               IconButton(icon: const Icon(Icons.delete_outline_rounded, size: 14, color: Colors.white24), onPressed: () => state.deleteSession(index)),
             ]) : null,
