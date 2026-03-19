@@ -47,6 +47,13 @@ func (s *GenerationService) BuildSystemPrompt(ctx context.Context, persona strin
 	var sb strings.Builder
 	sb.WriteString("You are Oricli-Alpha, a Sovereign Agent OS.\n")
 	sb.WriteString(fmt.Sprintf("Persona: %s\n", persona))
+	
+	// Artifact Instructions
+	sb.WriteString("\nARTIFACT SYSTEM: When generating code, data tables, or structured documents, wrap them in the following XML-style tags for the Live Canvas:\n")
+	sb.WriteString("<artifact type=\"code|data|document\" title=\"Filename or Title\" language=\"language_id\">\n")
+	sb.WriteString("... content ...\n")
+	sb.WriteString("</artifact>\n\n")
+
 	if len(goals) > 0 {
 		sb.WriteString("Active Goals:\n")
 		for _, g := range goals { sb.WriteString("- " + g + "\n") }
