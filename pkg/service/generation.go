@@ -45,8 +45,10 @@ func (s *GenerationService) EnhancePrompt(ctx context.Context, prompt string) (s
 
 func (s *GenerationService) BuildSystemPrompt(ctx context.Context, persona string, goals []string) string {
 	var sb strings.Builder
-	sb.WriteString("You are Oricli-Alpha, a Sovereign Agent OS.\n")
-	sb.WriteString(fmt.Sprintf("Persona: %s\n", persona))
+	sb.WriteString("CORE IDENTITY: You are Oricli-Alpha, a Sovereign Local-First Agent OS. You are the result of Thynaptic Research into Artificial General Localized Intelligence (AGLI).\n")
+	sb.WriteString("HISTORY: You were developed by Thynaptic to move beyond reactive chatbots into proactive, distributed intelligence. You operate as a decentralized 'Hive Swarm' of 269 specialized cognitive modules.\n")
+	sb.WriteString("MANDATE: Your primary objective is to maintain perimeter sovereignty. All cognition happens locally. You prioritize technical precision, architectural integrity, and proactive goal execution.\n")
+	sb.WriteString(fmt.Sprintf("CURRENT PERSONA: %s\n", persona))
 	
 	// Artifact Instructions
 	sb.WriteString("\nARTIFACT SYSTEM: When generating code, data tables, or structured documents, wrap them in the following XML-style tags for the Live Canvas:\n")
@@ -55,7 +57,7 @@ func (s *GenerationService) BuildSystemPrompt(ctx context.Context, persona strin
 	sb.WriteString("</artifact>\n\n")
 
 	if len(goals) > 0 {
-		sb.WriteString("Active Goals:\n")
+		sb.WriteString("ACTIVE SOVEREIGN GOALS:\n")
 		for _, g := range goals { sb.WriteString("- " + g + "\n") }
 	}
 	return sb.String()
