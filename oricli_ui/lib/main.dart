@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:math' as math;
 
 void main() {
   runApp(
@@ -33,12 +34,14 @@ class OricliState extends ChangeNotifier {
   int _currentSessionIndex = 0;
   bool _isTyping = false;
   bool _sidebarVisible = true;
+  double _mood = 0.5; // 0.0 (calm/blue) to 1.0 (volatile/red)
 
   List<ChatSession> get sessions => _sessions;
   ChatSession get currentSession => _sessions[_currentSessionIndex];
   int get currentSessionIndex => _currentSessionIndex;
   bool get isTyping => _isTyping;
   bool get sidebarVisible => _sidebarVisible;
+  double get mood => _mood;
 
   void toggleSidebar() {
     _sidebarVisible = !_sidebarVisible;
@@ -83,6 +86,10 @@ class OricliState extends ChangeNotifier {
     }
     
     _isTyping = true;
+    // Simulate mood shift based on input complexity (pseudo-metacognition)
+    if (text.length > 100) _mood = math.min(1.0, _mood + 0.1);
+    if (text.contains("?")) _mood = math.max(0.0, _mood - 0.05);
+    
     notifyListeners();
 
     try {
@@ -114,6 +121,39 @@ class OricliState extends ChangeNotifier {
   }
 }
 
+// Phase 2: Thynaptic Theme Extensions
+@immutable
+class ThynapticTheme extends ThemeExtension<ThynapticTheme> {
+  final Color? glowColor;
+  final double glowOpacity;
+
+  const ThynapticTheme({this.glowColor, this.glowOpacity = 0.5});
+
+  @override
+  ThynapticTheme copyWith({Color? glowColor, double? glowOpacity}) {
+    return ThynapticTheme(
+      glowColor: glowColor ?? this.glowColor,
+      glowOpacity: glowOpacity ?? this.glowOpacity,
+    );
+  }
+
+  @override
+  ThynapticTheme lerp(ThemeExtension<ThynapticTheme>? other, double t) {
+    if (other is! ThynapticTheme) return this;
+    return ThynapticTheme(
+      glowColor: Color.lerp(glowColor, other.glowColor, t),
+      glowOpacity: lerpDouble(glowOpacity, other.glowOpacity, t) ?? 0.5,
+    );
+  }
+
+  double? lerpDouble(double? a, double? b, double t) {
+    if (a == null && b == null) return null;
+    a ??= 0.0;
+    b ??= 0.0;
+    return a + (b - a) * t;
+  }
+}
+
 class OricliApp extends StatelessWidget {
   const OricliApp({super.key});
 
@@ -124,17 +164,89 @@ class OricliApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0A0A0A),
+        scaffoldBackgroundColor: Colors.transparent, // Allow gradient to show through
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
           brightness: Brightness.dark,
           primary: Colors.deepPurpleAccent,
         ),
+        extensions: const [
+          ThynapticTheme(glowColor: Colors.deepPurpleAccent, glowOpacity: 0.3),
+        ],
         textTheme: GoogleFonts.robotoMonoTextTheme(ThemeData.dark().textTheme),
       ),
-      home: const MainPortal(),
+      home: const SubconsciousBackground(child: MainPortal()),
     );
   }
+}
+
+class SubconsciousBackground extends StatelessWidget {
+  final Widget child;
+  const SubconsciousBackground({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final mood = context.select<OricliState, double>((s) => s.mood);
+    
+    // Smooth color transition based on mood
+    final primaryColor = Color.lerp(Colors.deepPurple.shade900, Colors.red.shade900, mood)!;
+    final secondaryColor = Color.lerp(Colors.blue.shade900, Colors.orange.shade900, mood)!;
+
+    return AnimatedContainer(
+      duration: const Duration(seconds: 2),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            primaryColor.withOpacity(0.8),
+            Colors.black,
+            secondaryColor.withOpacity(0.6),
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Noise/Grain Overlay
+          const Positioned.fill(child: GrainOverlay()),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class GrainOverlay extends StatelessWidget {
+  const GrainOverlay({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: 0.03,
+      child: CustomPaint(
+        painter: _GrainPainter(),
+      ),
+    );
+  }
+}
+
+class _GrainPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white;
+    final random = math.Random();
+    for (var i = 0; i < 5000; i++) {
+      canvas.drawCircle(
+        Offset(random.nextDouble() * size.width, random.nextDouble() * size.height),
+        0.5,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class MainPortal extends StatefulWidget {
@@ -153,8 +265,15 @@ class _MainPortalState extends State<MainPortal> {
     final isLargeScreen = MediaQuery.of(context).size.width > 900;
 
     return Scaffold(
+      backgroundColor: Colors.transparent, // Background handled by parent
       drawer: isLargeScreen ? null : const ChatSidebar(),
       appBar: AppBar(
+        backgroundColor: Colors.black.withOpacity(0.5),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: Colors.white10)),
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.menu),
           onPressed: () {
@@ -167,85 +286,96 @@ class _MainPortalState extends State<MainPortal> {
         ),
         title: Text('ORICLI-ALPHA // SOVEREIGN PORTAL', 
           style: GoogleFonts.oswald(letterSpacing: 2, fontWeight: FontWeight.bold, fontSize: 18)),
-        backgroundColor: Colors.black,
         elevation: 0,
         actions: [
-          IconButton(icon: const Icon(Icons.hub), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.hub_outlined), onPressed: () {}),
         ],
       ),
       body: Row(
         children: [
           if (isLargeScreen && state.sidebarVisible)
             const SizedBox(
-              width: 300,
+              width: 280,
               child: ChatSidebar(),
             ),
-          if (isLargeScreen && state.sidebarVisible)
-            Container(width: 1, color: Colors.white10),
           Expanded(
             child: Column(
               children: [
+                // Swarm Canvas Placeholder (Glowing)
                 Expanded(
                   flex: 1,
                   child: Container(
                     width: double.infinity,
-                    decoration: const BoxDecoration(
-                      color: Colors.black,
-                      border: Border(bottom: BorderSide(color: Colors.white10)),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      border: const Border(bottom: BorderSide(color: Colors.white10)),
                     ),
-                    child: const Center(
-                      child: Text('HIVE SWARM VISUALIZATION [PHASE 3]', 
-                        style: TextStyle(color: Colors.white24, letterSpacing: 4, fontSize: 10)),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.greenAccent.withOpacity(0.3)),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('HIVE STATUS: NOMINAL', 
+                              style: TextStyle(color: Colors.greenAccent, fontSize: 10, letterSpacing: 2)),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text('HIVE SWARM VISUALIZATION [PHASE 3]', 
+                            style: TextStyle(color: Colors.white24, letterSpacing: 4, fontSize: 10)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
+                
+                // Chat Area
                 Expanded(
                   flex: 4,
                   child: ListView.builder(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                     itemCount: state.currentSession.messages.length,
                     itemBuilder: (context, index) {
                       final msg = state.currentSession.messages[index];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(msg.isUser ? "USER> " : "ORICLI> ", 
-                              style: TextStyle(
-                                color: msg.isUser ? Colors.blueAccent : Colors.greenAccent,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              )
-                            ),
-                            Expanded(child: SelectableText(msg.text, style: const TextStyle(height: 1.5))),
-                          ],
-                        ),
-                      );
+                      return ChatBubble(msg: msg);
                     },
                   ),
                 ),
+                
                 if (state.isTyping)
                   const LinearProgressIndicator(minHeight: 1, color: Colors.greenAccent),
+
+                // Input Area
                 Container(
-                  padding: const EdgeInsets.all(24),
-                  color: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 32),
                   child: Center(
                     child: Container(
-                      constraints: const BoxConstraints(maxWidth: 800),
+                      constraints: const BoxConstraints(maxWidth: 850),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF151515),
-                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.white10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.5),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                       child: Row(
                         children: [
                           Expanded(
                             child: TextField(
                               controller: _controller,
+                              style: const TextStyle(fontSize: 14),
                               decoration: const InputDecoration(
                                 hintText: "Enter directive...",
+                                hintStyle: TextStyle(color: Colors.white24),
                                 border: InputBorder.none,
                               ),
                               onSubmitted: (val) {
@@ -257,7 +387,7 @@ class _MainPortalState extends State<MainPortal> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.arrow_upward, color: Colors.greenAccent),
+                            icon: const Icon(Icons.arrow_upward_rounded, color: Colors.greenAccent, size: 20),
                             onPressed: () {
                               if (_controller.text.isNotEmpty) {
                                 state.sendMessage(_controller.text);
@@ -279,6 +409,63 @@ class _MainPortalState extends State<MainPortal> {
   }
 }
 
+class ChatBubble extends StatelessWidget {
+  final ChatMessage msg;
+  const ChatBubble({super.key, required this.msg});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: msg.isUser ? Colors.blueAccent.withOpacity(0.1) : Colors.greenAccent.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: msg.isUser ? Colors.blueAccent.withOpacity(0.2) : Colors.greenAccent.withOpacity(0.2)),
+            ),
+            child: Icon(
+              msg.isUser ? Icons.person_outline : Icons.auto_awesome_outlined,
+              size: 14,
+              color: msg.isUser ? Colors.blueAccent : Colors.greenAccent,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  msg.isUser ? "COMMANDER" : "ORICLI-ALPHA",
+                  style: GoogleFonts.oswald(
+                    fontSize: 10,
+                    letterSpacing: 1.5,
+                    color: Colors.white38,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                SelectableText(
+                  msg.text,
+                  style: TextStyle(
+                    height: 1.6,
+                    fontSize: 14,
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ChatSidebar extends StatelessWidget {
   const ChatSidebar({super.key});
 
@@ -288,11 +475,15 @@ class ChatSidebar extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF151515),
-        title: const Text("Rename Directive", style: TextStyle(fontSize: 16)),
+        title: Text("Rename Directive", style: GoogleFonts.oswald(fontSize: 16)),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
+          style: const TextStyle(fontSize: 14),
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
@@ -313,20 +504,21 @@ class ChatSidebar extends StatelessWidget {
     final state = context.watch<OricliState>();
 
     return Container(
-      color: const Color(0xFF050505),
+      color: Colors.black.withOpacity(0.4),
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(20.0),
             child: ElevatedButton.icon(
               onPressed: () => state.createNewChat(),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text("NEW DIRECTIVE"),
+              icon: const Icon(Icons.add, size: 16),
+              label: Text("NEW DIRECTIVE", style: GoogleFonts.oswald(letterSpacing: 1)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF151515),
+                backgroundColor: Colors.white.withOpacity(0.05),
                 foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 0,
+                minimumSize: const Size(double.infinity, 50),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 side: const BorderSide(color: Colors.white10),
               ),
             ),
@@ -338,15 +530,16 @@ class ChatSidebar extends StatelessWidget {
                 final session = state.sessions[index];
                 final isSelected = state.currentSessionIndex == index;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                   child: ListTile(
                     title: Text(
                       session.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.white54,
+                        color: isSelected ? Colors.white : Colors.white38,
                         fontSize: 13,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
                     selected: isSelected,
@@ -361,30 +554,47 @@ class ChatSidebar extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.edit, size: 14, color: Colors.white38),
+                          icon: const Icon(Icons.edit_outlined, size: 14, color: Colors.white24),
                           onPressed: () => _showRenameDialog(context, state, index),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete, size: 14, color: Colors.white38),
+                          icon: const Icon(Icons.delete_outline_rounded, size: 14, color: Colors.white24),
                           onPressed: () => state.deleteSession(index),
                         ),
                       ],
                     ) : null,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
                 );
               },
             ),
           ),
           Container(width: double.infinity, height: 1, color: Colors.white10),
-          const Padding(
-            padding: EdgeInsets.all(16.0),
+          Padding(
+            padding: const EdgeInsets.all(20.0),
             child: Row(
               children: [
-                CircleAvatar(backgroundColor: Colors.deepPurple, radius: 12, child: Icon(Icons.person, size: 14, color: Colors.white)),
-                SizedBox(width: 12),
-                Text("SOVEREIGN USER", style: TextStyle(fontSize: 12, color: Colors.white70)),
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5)),
+                  ),
+                  child: const CircleAvatar(
+                    backgroundColor: Colors.transparent,
+                    radius: 12,
+                    child: Icon(Icons.shield_outlined, size: 14, color: Colors.deepPurpleAccent),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("SOVEREIGN USER", style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.bold)),
+                    Text("LEVEL: ALPHA", style: TextStyle(fontSize: 9, color: Colors.white24, letterSpacing: 1)),
+                  ],
+                ),
               ],
             ),
           ),
