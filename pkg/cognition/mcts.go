@@ -138,6 +138,12 @@ type MCTSConfig struct {
 	// MaxTableSize caps the transposition table. 0 uses defaultMaxTableSize (256).
 	// Set to -1 to disable transposition caching entirely.
 	MaxTableSize int
+	// Query is the original question/topic for query-relevance scoring
+	// inside the ValueNetwork. Optional — only used when ValueNet is set.
+	Query string
+	// ValueNet optionally provides a fast value estimator that pre-screens
+	// candidates before the expensive EvaluatePath+AdversarialEval callbacks.
+	ValueNet *ValueNetConfig
 }
 
 // MCTSEvaluation captures weighted score components for a branch.
@@ -160,21 +166,23 @@ type MCTSCallbacks struct {
 
 // MCTSEngine runs branch search and backpropagation to choose a winning path.
 type MCTSEngine struct {
-	Config    MCTSConfig
-	Callbacks MCTSCallbacks
-	table     *transpositionTable // reset each SearchV2 call
+	Config       MCTSConfig
+	Callbacks    MCTSCallbacks
+	table        *transpositionTable // reset each SearchV2 call
+	valueNetHits int                 // atomic-ish; written under treeMu
 }
 
 type MCTSResult struct {
-	BestAnswer         string
-	Confidence         float64
-	Root               *ThoughtNode
-	IterationsRun      int
-	ExpandedNodes      int
-	PrunedNodes        int
-	Strategy           string
-	ElapsedMS          int64
-	TranspositionHits  int // number of evaluation LLM calls avoided via cache
+	BestAnswer        string
+	Confidence        float64
+	Root              *ThoughtNode
+	IterationsRun     int
+	ExpandedNodes     int
+	PrunedNodes       int
+	Strategy          string
+	ElapsedMS         int64
+	TranspositionHits int // evaluation LLM calls avoided via transposition cache
+	ValueNetHits      int // evaluation LLM calls avoided via value network pre-screening
 }
 
 type nodeEvalResult struct {
@@ -185,6 +193,7 @@ type nodeEvalResult struct {
 	prior      float64
 	pruned     bool
 	terminal   bool
+	vnHit      bool // true when full LLM eval was skipped via value network
 	err        error
 }
 
@@ -219,6 +228,7 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 	} else {
 		e.table = nil
 	}
+	e.valueNetHits = 0
 
 	rng := rand.New(rand.NewSource(cfg.Seed))
 	root := &ThoughtNode{ID: "root", Answer: strings.TrimSpace(draftAnswer), Depth: 0, Prior: 1.0}
@@ -298,6 +308,9 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 			if r.terminal {
 				r.node.Terminal = true
 			}
+			if r.vnHit {
+				e.valueNetHits++
+			}
 			if r.prior > 0 {
 				r.node.Prior = clamp01Local(r.prior)
 			}
@@ -338,6 +351,7 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 		Strategy:          string(cfg.Strategy),
 		ElapsedMS:         time.Since(started).Milliseconds(),
 		TranspositionHits: tableHits,
+		ValueNetHits:      e.valueNetHits,
 	}, nil
 }
 
@@ -543,8 +557,9 @@ func (e *MCTSEngine) evaluateNode(ctx context.Context, node *ThoughtNode, cfg MC
 		return nodeEvalResult{node: node, err: fmt.Errorf("node unavailable")}
 	}
 
-	// Transposition check — if this answer text was already evaluated in this
-	// search, return the cached result and skip both LLM calls.
+	// ── Transposition check ───────────────────────────────────────────────────
+	// If this answer text was already evaluated in this search, return the
+	// cached result and skip both LLM calls.
 	if e.table != nil {
 		if cached, ok := e.table.get(node.Answer); ok {
 			return nodeEvalResult{
@@ -559,6 +574,46 @@ func (e *MCTSEngine) evaluateNode(ctx context.Context, node *ThoughtNode, cfg MC
 		}
 	}
 
+	// ── Value network pre-screening ───────────────────────────────────────────
+	// Three zones:
+	//   score < AcceptBelow   → definitely weak, skip LLM entirely
+	//   AcceptBelow ≤ score < EscalateAbove → moderate, use VN score directly
+	//   score ≥ EscalateAbove → promising, escalate to full LLM eval
+	if cfg.ValueNet != nil && cfg.ValueNet.Network != nil {
+		vnScore, vnErr := cfg.ValueNet.Network.Estimate(ctx, cfg.Query, node.Answer)
+		if vnErr == nil {
+			lo := cfg.ValueNet.acceptBelow()
+			hi := cfg.ValueNet.escalateAbove()
+			if vnScore < hi {
+				// Below escalation threshold — skip LLM, use VN score directly.
+				pruned := vnScore < cfg.PruneThreshold
+				result := nodeEvalResult{
+					node:       node,
+					score:      vnScore,
+					candidate:  strings.TrimSpace(node.Answer),
+					confidence: vnScore,
+					prior:      node.Prior,
+					pruned:     pruned,
+					vnHit:      true,
+				}
+				// Still cache in transposition table so identical nodes benefit.
+				if e.table != nil && vnScore >= lo {
+					e.table.put(node.Answer, transpositionEntry{
+						Score:      result.score,
+						Confidence: result.confidence,
+						Terminal:   result.terminal,
+						Pruned:     result.pruned,
+						Candidate:  result.candidate,
+						Prior:      result.prior,
+					})
+				}
+				return result
+			}
+			// vnScore >= hi — fall through to full LLM eval below.
+		}
+	}
+
+	// ── Full dual-LLM evaluation ──────────────────────────────────────────────
 	base, err := e.Callbacks.EvaluatePath(ctx, node.Answer)
 	if err != nil {
 		return nodeEvalResult{node: node, err: err}
