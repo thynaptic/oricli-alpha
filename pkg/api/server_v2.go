@@ -175,21 +175,25 @@ if strings.HasPrefix(modelName, "oricli-") {
 modelName = ""
 }
 
-msgs := make([]map[string]string, len(req.Messages))
+msgs := make([]map[string]string, len(req.Messages)+1)
+
+// 1. Inject Sovereign System Prompt
+sysPrompt := s.Agent.GenService.BuildSystemPrompt(c.Request.Context(), "digital_guardian", nil)
+msgs[0] = map[string]string{"role": "system", "content": sysPrompt}
+
 for i, m := range req.Messages {
-role := m.Role
-if role == "analyst" {
-role = "princess"
-}
-if role == "commander" {
-role = "daddy"
-}
-msgs[i] = map[string]string{"role": role, "content": m.Content}
+	role := m.Role
+	if role == "analyst" {
+		role = "princess"
+	}
+	if role == "commander" {
+		role = "daddy"
+	}
+	msgs[i+1] = map[string]string{"role": role, "content": m.Content}
 }
 res, err := s.Agent.GenService.Chat(msgs, map[string]interface{}{
-"model": modelName,
+	"model": modelName,
 })
-
 if err != nil {
 c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 return
