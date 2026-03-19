@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:async';
+import 'package:flutter_highlight/flutter_highlight.dart';
+import 'package:flutter_highlight/themes/atom-one-dark.dart';
 
 void main() {
   runApp(
@@ -25,8 +28,17 @@ class Artifact {
   final String type;
   final String title;
   final String language;
-  final String content;
-  Artifact({required this.type, required this.title, required this.language, required this.content});
+  final List<String> versions;
+  int currentVersion;
+
+  Artifact({
+    required this.type,
+    required this.title,
+    required this.language,
+    required String initialContent,
+  }) : versions = [initialContent], currentVersion = 0;
+
+  String get content => versions[currentVersion];
 }
 
 class ChatSession {
@@ -154,17 +166,30 @@ class OricliState extends ChangeNotifier {
       final language = match.group(3) ?? 'plain';
       final content = match.group(4)?.trim() ?? '';
       
-      // Check if this artifact already exists in this session to avoid duplicates
-      if (!currentSession.artifacts.any((a) => a.title == title && a.content == content)) {
+      final existingIndex = currentSession.artifacts.indexWhere((a) => a.title == title);
+      
+      if (existingIndex != -1) {
+        // If it exists but content is different, add a new version
+        if (currentSession.artifacts[existingIndex].content != content) {
+          currentSession.artifacts[existingIndex].versions.add(content);
+          currentSession.artifacts[existingIndex].currentVersion = currentSession.artifacts[existingIndex].versions.length - 1;
+        }
+      } else {
+        // New artifact
         currentSession.artifacts.add(Artifact(
           type: type,
           title: title,
           language: language,
-          content: content,
+          initialContent: content,
         ));
-        _canvasVisible = true; // Auto-show canvas when an artifact is detected
       }
+      _canvasVisible = true;
     }
+  }
+
+  void setArtifactVersion(int artIndex, int versionIndex) {
+    currentSession.artifacts[artIndex].currentVersion = versionIndex;
+    notifyListeners();
   }
 
   Future<void> sendMessage(String text) async {
@@ -196,10 +221,7 @@ class OricliState extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final content = data['choices'][0]['message']['content'];
-        
-        // Clean the chat display of the raw tags while keeping the original for parsing
         _parseArtifacts(content);
-        
         currentSession.messages.add(ChatMessage(text: content, isUser: false));
         _triggerSwarm();
       } else {
@@ -371,16 +393,13 @@ class _MainPortalState extends State<MainPortal> {
       ),
       body: Row(
         children: [
-          // Left Sidebar
           if (isLargeScreen && state.sidebarVisible)
             const SizedBox(width: 280, child: ChatSidebar()),
           
-          // Main Chat Area
           Expanded(
             flex: 3,
             child: Column(
               children: [
-                // Swarm Canvas
                 Expanded(
                   flex: 2,
                   child: Container(
@@ -406,7 +425,6 @@ class _MainPortalState extends State<MainPortal> {
                   ),
                 ),
                 
-                // Messages
                 Expanded(
                   flex: 5,
                   child: ListView.builder(
@@ -418,7 +436,6 @@ class _MainPortalState extends State<MainPortal> {
                 
                 if (state.isTyping) const LinearProgressIndicator(minHeight: 1, color: Colors.greenAccent),
 
-                // Input
                 Container(
                   padding: const EdgeInsets.all(24),
                   child: Center(
@@ -444,9 +461,8 @@ class _MainPortalState extends State<MainPortal> {
             ),
           ),
 
-          // Right Live Canvas Area
           if (isLargeScreen && state.canvasVisible)
-            const SizedBox(width: 500, child: LiveCanvasPanel()),
+            const SizedBox(width: 600, child: LiveCanvasPanel()),
         ],
       ),
     );
@@ -499,23 +515,7 @@ class LiveCanvasPanel extends StatelessWidget {
                 itemCount: artifacts.length,
                 itemBuilder: (context, index) {
                   final art = artifacts[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.03), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
-                    child: ExpansionTile(
-                      leading: Icon(art.type == 'code' ? Icons.code : Icons.description_outlined, color: Colors.blueAccent, size: 18),
-                      title: Text(art.title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                      subtitle: Text(art.type.toUpperCase(), style: const TextStyle(fontSize: 9, color: Colors.white24)),
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          color: Colors.black.withOpacity(0.3),
-                          child: SelectableText(art.content, style: GoogleFonts.robotoMono(fontSize: 12, height: 1.4, color: Colors.greenAccent.withOpacity(0.8))),
-                        ),
-                      ],
-                    ),
-                  );
+                  return ArtifactRenderer(art: art, index: index);
                 },
               ),
             ),
@@ -525,13 +525,102 @@ class LiveCanvasPanel extends StatelessWidget {
   }
 }
 
+class ArtifactRenderer extends StatelessWidget {
+  final Artifact art;
+  final int index;
+  const ArtifactRenderer({super.key, required this.art, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.read<OricliState>();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: Icon(art.type == 'code' ? Icons.code : Icons.description_outlined, color: Colors.blueAccent, size: 18),
+            title: Text(art.title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+            subtitle: Text(art.type.toUpperCase(), style: const TextStyle(fontSize: 9, color: Colors.white24)),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (art.versions.length > 1)
+                  DropdownButton<int>(
+                    value: art.currentVersion,
+                    underline: Container(),
+                    dropdownColor: const Color(0xFF151515),
+                    items: List.generate(art.versions.length, (i) => DropdownMenuItem(
+                      value: i,
+                      child: Text("V${i+1}", style: const TextStyle(fontSize: 10)),
+                    )),
+                    onChanged: (v) => state.setArtifactVersion(index, v!),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded, size: 14, color: Colors.white24),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: art.content));
+                    ScaffoldMessenger.of(context).showSnackBar(ApiResponseSnackBar(message: "Copied to clipboard"));
+                  },
+                ),
+              ],
+            ),
+          ),
+          if (art.type == 'code')
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.white10)),
+              ),
+              child: HighlightView(
+                art.content,
+                language: art.language,
+                theme: atomOneDarkTheme,
+                padding: const EdgeInsets.all(8),
+                textStyle: GoogleFonts.robotoMono(fontSize: 12),
+              ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.white10)),
+              ),
+              child: SelectableText(
+                art.content,
+                style: const TextStyle(fontSize: 13, height: 1.5, color: Colors.white70),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class ApiResponseSnackBar extends SnackBar {
+  final String message;
+  ApiResponseSnackBar({super.key, required this.message}) : super(
+    content: Text(message, style: const TextStyle(fontSize: 12)),
+    backgroundColor: Colors.deepPurple,
+    behavior: SnackBarBehavior.floating,
+    duration: const Duration(seconds: 2),
+  );
+}
+
 class ChatBubble extends StatelessWidget {
   final ChatMessage msg;
   const ChatBubble({super.key, required this.msg});
 
   @override
   Widget build(BuildContext context) {
-    // Remove artifact tags from the display string
     final displayContent = msg.text.replaceAll(RegExp(r'<artifact[\s\S]*?<\/artifact>'), "[ARTIFACT GENERATED - SEE CANVAS]");
 
     return Padding(
