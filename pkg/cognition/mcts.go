@@ -144,6 +144,11 @@ type MCTSConfig struct {
 	// ValueNet optionally provides a fast value estimator that pre-screens
 	// candidates before the expensive EvaluatePath+AdversarialEval callbacks.
 	ValueNet *ValueNetConfig
+	// RAVEEquivalence (k) controls the RAVE blend schedule.
+	// Set > 0 to enable RAVE. Recommended starting value: 300.
+	//   β = sqrt(k / (3·N + k))  →  β=1 at N=0, β≈0.5 at N=k/3, β→0 as N→∞
+	// Set 0 (default) to disable RAVE entirely.
+	RAVEEquivalence float64
 }
 
 // MCTSEvaluation captures weighted score components for a branch.
@@ -169,6 +174,7 @@ type MCTSEngine struct {
 	Config       MCTSConfig
 	Callbacks    MCTSCallbacks
 	table        *transpositionTable // reset each SearchV2 call
+	rave         *raveTable          // reset each SearchV2 call; nil when RAVEEquivalence==0
 	valueNetHits int                 // atomic-ish; written under treeMu
 }
 
@@ -183,6 +189,7 @@ type MCTSResult struct {
 	ElapsedMS         int64
 	TranspositionHits int // evaluation LLM calls avoided via transposition cache
 	ValueNetHits      int // evaluation LLM calls avoided via value network pre-screening
+	RAVETableSize     int // unique answer texts recorded in the RAVE table
 }
 
 type nodeEvalResult struct {
@@ -227,6 +234,12 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 		e.table = newTranspositionTable(cfg.MaxTableSize)
 	} else {
 		e.table = nil
+	}
+	// Reset RAVE table. Enabled when RAVEEquivalence > 0.
+	if cfg.RAVEEquivalence > 0 {
+		e.rave = newRaveTable()
+	} else {
+		e.rave = nil
 	}
 	e.valueNetHits = 0
 
@@ -341,6 +354,10 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 	if e.table != nil {
 		tableHits = e.table.Hits()
 	}
+	raveSize := 0
+	if e.rave != nil {
+		raveSize = e.rave.size()
+	}
 	return MCTSResult{
 		BestAnswer:        strings.TrimSpace(bestAnswer),
 		Confidence:        clamp01Local(bestScore),
@@ -352,6 +369,7 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 		ElapsedMS:         time.Since(started).Milliseconds(),
 		TranspositionHits: tableHits,
 		ValueNetHits:      e.valueNetHits,
+		RAVETableSize:     raveSize,
 	}, nil
 }
 
@@ -538,11 +556,23 @@ func (e *MCTSEngine) selectionScore(child *ThoughtNode, parent *ThoughtNode, cfg
 	if child.Visits == 0 {
 		return math.Inf(1)
 	}
+
+	// Base Q value, optionally blended with RAVE estimate.
+	// RAVE gives a warm start when the node has few real visits.
+	q := child.AverageValue()
+	if e.rave != nil && cfg.RAVEEquivalence > 0 {
+		if raveEst, ok := e.rave.estimate(child.Answer); ok {
+			beta := raveBlend(child.Visits, cfg.RAVEEquivalence)
+			q = (1-beta)*q + beta*raveEst
+		}
+	}
+
 	switch cfg.Strategy {
 	case MCTSStrategyUCB1:
-		return ucb(child, maxIntLocal(parent.Visits, 1), cfg.UCB1C)
-	default:
-		q := child.AverageValue()
+		parentVisits := maxIntLocal(parent.Visits, 1)
+		explore := cfg.UCB1C * math.Sqrt(math.Log(float64(parentVisits))/float64(child.Visits))
+		return q + explore
+	default: // PUCT
 		p := child.Prior
 		if p <= 0 {
 			p = 1.0 / float64(maxIntLocal(len(parent.Children), 1))
@@ -665,6 +695,11 @@ func (e *MCTSEngine) evaluateNode(ctx context.Context, node *ThoughtNode, cfg MC
 }
 
 func (e *MCTSEngine) backpropagate(node *ThoughtNode, score float64) {
+	// Record this answer text in the RAVE table so sibling/cousin nodes with
+	// the same text can bootstrap their cold-start Q estimate.
+	if e.rave != nil && node != nil {
+		e.rave.update(node.Answer, score)
+	}
 	for n := node; n != nil; n = n.Parent {
 		if n.VirtualVisits > 0 {
 			n.VirtualVisits--
