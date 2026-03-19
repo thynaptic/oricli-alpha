@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:async';
 
 void main() {
   runApp(
@@ -27,6 +28,14 @@ class ChatSession {
   ChatSession({required this.id, required this.title, required this.messages});
 }
 
+class HiveNode {
+  final String name;
+  Offset position;
+  double pulse = 0.0;
+  bool isActive = false;
+  HiveNode({required this.name, required this.position});
+}
+
 class OricliState extends ChangeNotifier {
   final List<ChatSession> _sessions = [
     ChatSession(id: '1', title: 'Initial Directive', messages: [])
@@ -34,7 +43,9 @@ class OricliState extends ChangeNotifier {
   int _currentSessionIndex = 0;
   bool _isTyping = false;
   bool _sidebarVisible = true;
-  double _mood = 0.5; // 0.0 (calm/blue) to 1.0 (volatile/red)
+  double _mood = 0.5;
+  List<HiveNode> _nodes = [];
+  Timer? _animationTimer;
 
   List<ChatSession> get sessions => _sessions;
   ChatSession get currentSession => _sessions[_currentSessionIndex];
@@ -42,6 +53,46 @@ class OricliState extends ChangeNotifier {
   bool get isTyping => _isTyping;
   bool get sidebarVisible => _sidebarVisible;
   double get mood => _mood;
+  List<HiveNode> get nodes => _nodes;
+
+  OricliState() {
+    _initializeHive();
+    _startAnimations();
+  }
+
+  void _initializeHive() {
+    final random = math.Random();
+    // Generate 250+ module nodes in a neural-cloud distribution
+    for (var i = 0; i < 269; i++) {
+      _nodes.add(HiveNode(
+        name: "module_$i",
+        position: Offset(random.nextDouble(), random.nextDouble()),
+      ));
+    }
+  }
+
+  void _startAnimations() {
+    _animationTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+      for (var node in _nodes) {
+        if (node.isActive) {
+          node.pulse += 0.1;
+          if (node.pulse >= 1.0) {
+            node.pulse = 0.0;
+            node.isActive = false;
+          }
+        }
+      }
+      notifyListeners();
+    });
+  }
+
+  void _triggerSwarm() {
+    final random = math.Random();
+    // Activate a random cluster of nodes to simulate bidding
+    for (var i = 0; i < 20; i++) {
+      _nodes[random.nextInt(_nodes.length)].isActive = true;
+    }
+  }
 
   void toggleSidebar() {
     _sidebarVisible = !_sidebarVisible;
@@ -86,7 +137,7 @@ class OricliState extends ChangeNotifier {
     }
     
     _isTyping = true;
-    // Simulate mood shift based on input complexity (pseudo-metacognition)
+    _triggerSwarm(); // Visual feedback for the "Swarm Bidding"
     if (text.length > 100) _mood = math.min(1.0, _mood + 0.1);
     if (text.contains("?")) _mood = math.max(0.0, _mood - 0.05);
     
@@ -109,6 +160,7 @@ class OricliState extends ChangeNotifier {
         final data = jsonDecode(response.body);
         final content = data['choices'][0]['message']['content'];
         currentSession.messages.add(ChatMessage(text: content, isUser: false));
+        _triggerSwarm(); // Final pulse on response synthesis
       } else {
         currentSession.messages.add(ChatMessage(text: "Error: ${response.statusCode}", isUser: false));
       }
@@ -119,38 +171,11 @@ class OricliState extends ChangeNotifier {
     _isTyping = false;
     notifyListeners();
   }
-}
-
-// Phase 2: Thynaptic Theme Extensions
-@immutable
-class ThynapticTheme extends ThemeExtension<ThynapticTheme> {
-  final Color? glowColor;
-  final double glowOpacity;
-
-  const ThynapticTheme({this.glowColor, this.glowOpacity = 0.5});
 
   @override
-  ThynapticTheme copyWith({Color? glowColor, double? glowOpacity}) {
-    return ThynapticTheme(
-      glowColor: glowColor ?? this.glowColor,
-      glowOpacity: glowOpacity ?? this.glowOpacity,
-    );
-  }
-
-  @override
-  ThynapticTheme lerp(ThemeExtension<ThynapticTheme>? other, double t) {
-    if (other is! ThynapticTheme) return this;
-    return ThynapticTheme(
-      glowColor: Color.lerp(glowColor, other.glowColor, t),
-      glowOpacity: lerpDouble(glowOpacity, other.glowOpacity, t) ?? 0.5,
-    );
-  }
-
-  double? lerpDouble(double? a, double? b, double t) {
-    if (a == null && b == null) return null;
-    a ??= 0.0;
-    b ??= 0.0;
-    return a + (b - a) * t;
+  void dispose() {
+    _animationTimer?.cancel();
+    super.dispose();
   }
 }
 
@@ -164,15 +189,12 @@ class OricliApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: Colors.transparent, // Allow gradient to show through
+        scaffoldBackgroundColor: Colors.transparent,
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
           brightness: Brightness.dark,
           primary: Colors.deepPurpleAccent,
         ),
-        extensions: const [
-          ThynapticTheme(glowColor: Colors.deepPurpleAccent, glowOpacity: 0.3),
-        ],
         textTheme: GoogleFonts.robotoMonoTextTheme(ThemeData.dark().textTheme),
       ),
       home: const SubconsciousBackground(child: MainPortal()),
@@ -187,8 +209,6 @@ class SubconsciousBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mood = context.select<OricliState, double>((s) => s.mood);
-    
-    // Smooth color transition based on mood
     final primaryColor = Color.lerp(Colors.deepPurple.shade900, Colors.red.shade900, mood)!;
     final secondaryColor = Color.lerp(Colors.blue.shade900, Colors.orange.shade900, mood)!;
 
@@ -208,7 +228,6 @@ class SubconsciousBackground extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Noise/Grain Overlay
           const Positioned.fill(child: GrainOverlay()),
           child,
         ],
@@ -244,9 +263,55 @@ class _GrainPainter extends CustomPainter {
       );
     }
   }
-
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class HiveSwarmPainter extends CustomPainter {
+  final List<HiveNode> nodes;
+  final double mood;
+  HiveSwarmPainter({required this.nodes, required this.mood});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final activePaint = Paint()
+      ..color = Color.lerp(Colors.greenAccent, Colors.orangeAccent, mood)!
+      ..style = PaintingStyle.fill;
+
+    final inactivePaint = Paint()
+      ..color = Colors.white.withOpacity(0.05)
+      ..style = PaintingStyle.fill;
+
+    final linePaint = Paint()
+      ..color = Colors.white.withOpacity(0.02)
+      ..strokeWidth = 0.5;
+
+    for (var i = 0; i < nodes.length; i++) {
+      final node = nodes[i];
+      final pos = Offset(node.position.dx * size.width, node.position.dy * size.height);
+      
+      // Draw Connections (Sparse)
+      if (i % 10 == 0 && i + 1 < nodes.length) {
+        final nextPos = Offset(nodes[i+1].position.dx * size.width, nodes[i+1].position.dy * size.height);
+        canvas.drawLine(pos, nextPos, linePaint);
+      }
+
+      if (node.isActive) {
+        // Draw Pulse
+        final pulseSize = 2.0 + (node.pulse * 15.0);
+        final pulsePaint = Paint()
+          ..color = activePaint.color.withOpacity(1.0 - node.pulse)
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(pos, pulseSize, pulsePaint);
+        canvas.drawCircle(pos, 2, activePaint);
+      } else {
+        canvas.drawCircle(pos, 1, inactivePaint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant HiveSwarmPainter oldDelegate) => true;
 }
 
 class MainPortal extends StatefulWidget {
@@ -265,7 +330,7 @@ class _MainPortalState extends State<MainPortal> {
     final isLargeScreen = MediaQuery.of(context).size.width > 900;
 
     return Scaffold(
-      backgroundColor: Colors.transparent, // Background handled by parent
+      backgroundColor: Colors.transparent,
       drawer: isLargeScreen ? null : const ChatSidebar(),
       appBar: AppBar(
         backgroundColor: Colors.black.withOpacity(0.5),
@@ -301,33 +366,44 @@ class _MainPortalState extends State<MainPortal> {
           Expanded(
             child: Column(
               children: [
-                // Swarm Canvas Placeholder (Glowing)
+                // Phase 3: The Swarm Canvas
                 Expanded(
-                  flex: 1,
+                  flex: 2,
                   child: Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.3),
                       border: const Border(bottom: BorderSide(color: Colors.white10)),
                     ),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: HiveSwarmPainter(nodes: state.nodes, mood: state.mood),
+                          ),
+                        ),
+                        Positioned(
+                          top: 20,
+                          left: 20,
+                          child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
                               border: Border.all(color: Colors.greenAccent.withOpacity(0.3)),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: const Text('HIVE STATUS: NOMINAL', 
-                              style: TextStyle(color: Colors.greenAccent, fontSize: 10, letterSpacing: 2)),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.lens, color: Colors.greenAccent, size: 8),
+                                const SizedBox(width: 8),
+                                Text('HIVE SWARM: 269 NODES ACTIVE', 
+                                  style: GoogleFonts.robotoMono(color: Colors.greenAccent, fontSize: 10, letterSpacing: 1)),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 12),
-                          const Text('HIVE SWARM VISUALIZATION [PHASE 3]', 
-                            style: TextStyle(color: Colors.white24, letterSpacing: 4, fontSize: 10)),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
