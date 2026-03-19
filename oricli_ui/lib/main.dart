@@ -157,21 +157,25 @@ class OricliState extends ChangeNotifier {
   }
 
   void _parseArtifacts(String text) {
-    // 1. Precise Tag Parsing (Resilient Regex)
-    final tagRegex = RegExp(r'<artifact\s+type="([^"]*)"\s+title="([^"]*)"\s+language="([^"]*)">([\s\S]*?)<\/artifact>', caseSensitive: false);
-    final tagMatches = tagRegex.allMatches(text);
+    // 1. Precise Tag Parsing (High Resilience)
+    // Matches <artifact ...>content</artifact>
+    final artifactBlockRegex = RegExp(r'<artifact([\s\S]*?)>([\s\S]*?)<\/artifact>', caseSensitive: false);
+    final blocks = artifactBlockRegex.allMatches(text);
     
-    for (final match in tagMatches) {
-      final type = match.group(1) ?? 'code';
-      final title = match.group(2) ?? 'untitled';
-      final language = match.group(3) ?? 'plain';
-      final content = match.group(4)?.trim() ?? '';
-      _addOrUpdateArtifact(type, title, language, content);
+    for (final block in blocks) {
+      final attrString = block.group(1) ?? '';
+      final content = block.group(2)?.trim() ?? '';
+      
+      // Extract individual attributes from the attrString
+      final type = RegExp(r'type="([^"]*)"').firstMatch(attrString)?.group(1) ?? 'code';
+      final title = RegExp(r'title="([^"]*)"').firstMatch(attrString)?.group(1) ?? 'untitled';
+      final lang = RegExp(r'language="([^"]*)"').firstMatch(attrString)?.group(1) ?? 'plain';
+      
+      _addOrUpdateArtifact(type, title, lang, content);
     }
 
-    // 2. Markdown Auto-Promotion (Fallback for standard code blocks)
-    // Only promote if no artifacts were found via tags
-    if (tagMatches.isEmpty) {
+    // 2. Markdown Auto-Promotion (Fallback)
+    if (blocks.isEmpty) {
       final mdRegex = RegExp(r'```(\w+)?\n([\s\S]*?)```');
       final mdMatches = mdRegex.allMatches(text);
       for (final match in mdMatches) {
@@ -235,7 +239,10 @@ class OricliState extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final content = data['choices'][0]['message']['content'];
+        
+        // Parse artifacts first so state is ready
         _parseArtifacts(content);
+        
         currentSession.messages.add(ChatMessage(text: content, isUser: false));
         _triggerSwarm();
       } else {
