@@ -32,11 +32,19 @@ Port         int
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.MonitorService, port int) *ServerV2 {
 	r := gin.Default()
 
-	// CORS Middleware
+	// CORS & Cache-Control Middleware
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Tenant-ID")
+		
+		// Aggressive Cache Busting for UI assets
+		if !strings.HasPrefix(c.Request.URL.Path, "/v1") {
+			c.Writer.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0")
+			c.Writer.Header().Set("Pragma", "no-cache")
+			c.Writer.Header().Set("Expires", "0")
+		}
+
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
