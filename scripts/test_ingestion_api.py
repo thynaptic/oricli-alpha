@@ -15,7 +15,7 @@ from oricli_core.client import OricliAlphaClient
 
 def test_ingestion():
     print("\n--- Testing Sovereign Ingestion API ---")
-    client = OricliAlphaClient(base_url="http://localhost:8080", api_key="test_key")
+    client = OricliAlphaClient(base_url="http://localhost:8089", api_key=None)
     
     # 1. Test Text Ingestion
     print("1. Testing raw text ingestion...")

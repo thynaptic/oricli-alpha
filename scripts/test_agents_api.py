@@ -14,7 +14,7 @@ from oricli_core.client import OricliAlphaClient
 
 def test_agents_crud():
     print("\n--- Testing External Agents API (Agent Factory) ---")
-    client = OricliAlphaClient(base_url="http://localhost:8080", api_key="test_key")
+    client = OricliAlphaClient(base_url="http://localhost:8089", api_key=None)
     
     agent_name = "TestAgentFactory"
     

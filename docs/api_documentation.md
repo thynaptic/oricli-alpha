@@ -17,14 +17,16 @@ To use Oricli-Alpha from outside the VPS, you must ensure the backbone port (`80
 
 Oricli v2.1.0 uses a hardened authentication layer based on the G-LM architecture.
 
-- **Header**: `Authorization: Bearer <your-api-key>`
+- **Header**: `Authorization: Bearer glm.<prefix>.<secret>`
 - **Header**: `X-Tenant-ID: <tenant-id>` (Defaults to `local`)
 
 Example Header:
 ```http
-Authorization: Bearer test_key
+Authorization: Bearer glm.8eHruhzb.IPtP2toLOSKATWc5f_KXrRQOO6JcvFBB
 X-Tenant-ID: local
 ```
+
+> **Note**: Your unique API key is generated on first start and stored in `/home/mike/Mavaia/.oricli/api_key`. Use the contents of that file for authentication.
 
 ---
 

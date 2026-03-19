@@ -20,7 +20,7 @@ Port: `8089` (Native Go Backbone)
 **Example (cURL):**
 ```bash
 curl -X POST https://oricli.thynaptic.com/v1/ingest \
-  -H "Authorization: Bearer test_key" \
+  -H "Authorization: Bearer glm.8eHruhzb.IPtP2toLOSKATWc5f_KXrRQOO6JcvFBB" \
   -F "file=@document.pdf" \
   -F "tags=[\"external\", \"research\"]" \
   -F "domain=genetics"
@@ -32,7 +32,7 @@ curl -X POST https://oricli.thynaptic.com/v1/ingest \
 **Example (cURL):**
 ```bash
 curl -X POST https://oricli.thynaptic.com/v1/ingest \
-  -H "Authorization: Bearer test_key" \
+  -H "Authorization: Bearer glm.8eHruhzb.IPtP2toLOSKATWc5f_KXrRQOO6JcvFBB" \
   -F "text=The new fusion reactor was successfully tested in Switzerland." \
   -F "source=lab_report_01"
 ```
@@ -51,7 +51,7 @@ Allows Oricli to autonomously crawl and ingest multiple pages from a site.
 **Example (cURL):**
 ```bash
 curl -X POST https://oricli.thynaptic.com/v1/ingest/web \
-  -H "Authorization: Bearer test_key" \
+  -H "Authorization: Bearer glm.8eHruhzb.IPtP2toLOSKATWc5f_KXrRQOO6JcvFBB" \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://blog.oricli.com",

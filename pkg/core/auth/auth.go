@@ -67,6 +67,29 @@ func (s *Service) GenerateAPIKey(ctx context.Context, tenantID string, scopes []
 	return raw, created, nil
 }
 
+// RegisterAPIKey re-hashes and stores an existing raw token.
+// Useful for persisted keys on restart.
+func (s *Service) RegisterAPIKey(ctx context.Context, raw, tenantID string, scopes []string, expiresAt *time.Time) (model.APIKeyRecord, error) {
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 || parts[0] != "glm" {
+		return model.APIKeyRecord{}, errors.New("invalid key format")
+	}
+	prefix := parts[1]
+	hash, err := hashSecret(raw)
+	if err != nil {
+		return model.APIKeyRecord{}, err
+	}
+	rec := model.APIKeyRecord{
+		TenantID:  tenantID,
+		Prefix:    prefix,
+		Hash:      hash,
+		Scopes:    scopes,
+		Status:    "active",
+		ExpiresAt: model.NewFlexTimeValue(expiresAt),
+	}
+	return s.store.CreateAPIKey(ctx, rec)
+}
+
 func (s *Service) Authenticate(ctx context.Context, rawToken string) (context.Context, error) {
 	token := strings.TrimSpace(strings.TrimPrefix(rawToken, "Bearer "))
 	parts := strings.Split(token, ".")

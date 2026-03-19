@@ -15,7 +15,7 @@ from oricli_core.client import OricliAlphaClient
 
 def test_web_ingestion():
     print("\n--- Testing Sovereign Web Ingestion API ---")
-    client = OricliAlphaClient(base_url="http://localhost:8080", api_key="test_key")
+    client = OricliAlphaClient(base_url="http://localhost:8089", api_key=None)
     
     # Test URL (using a simple, stable technical site or local mock if needed)
     # For testing, we'll use a known public documentation page

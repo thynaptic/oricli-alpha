@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from oricli_core.client import OricliAlphaClient
 
 def test_rag_ingestion():
-    client = OricliAlphaClient(base_url="http://localhost:8081", api_key="test_key")
+    client = OricliAlphaClient(base_url="http://localhost:8089", api_key=None)
     
     unique_id = str(uuid.uuid4())[:8]
     secret_knowledge = f"The secret password for project phoenix is 'FLAMINGO-{unique_id}'."

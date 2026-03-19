@@ -8,8 +8,23 @@ from typing import Dict, Any, List, Optional, Union
 class OricliClient:
     """Lean Python client for Oricli-Alpha Pure-Go Backbone v2.0"""
     
-    def __init__(self, base_url: str = "http://localhost:8089", api_key: str = "test_key", tenant_id: str = "local"):
+    def __init__(self, base_url: str = "http://localhost:8089", api_key: Optional[str] = None, tenant_id: str = "local"):
         self.base_url = base_url
+        
+        # Resolve API Key
+        if api_key is None:
+            # 1. Check environment
+            api_key = os.environ.get("MAVAIA_API_KEY")
+            if not api_key:
+                # 2. Check local file (sovereign default)
+                key_path = "/home/mike/Mavaia/.oricli/api_key"
+                if os.path.exists(key_path):
+                    with open(key_path, "r") as f:
+                        api_key = f.read().strip()
+                else:
+                    # 3. Last resort fallback
+                    api_key = "unauthorized"
+        
         self.api_key = api_key
         self.tenant_id = tenant_id
         self.headers = {

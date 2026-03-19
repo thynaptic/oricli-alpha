@@ -15,7 +15,7 @@ from oricli_core.client import OricliAlphaClient
 
 def test_factory_swarm_flow():
     print("\n--- Testing Agent Factory -> Swarm Execution Flow ---")
-    client = OricliAlphaClient(base_url="http://localhost:8080", api_key="test_key")
+    client = OricliAlphaClient(base_url="http://localhost:8089", api_key=None)
     
     agent_name = "FactoryRobot"
     
