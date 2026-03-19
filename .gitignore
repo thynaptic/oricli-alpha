@@ -128,15 +128,43 @@ checkpoints/
 # Internal Reports
 technical_reports/
 *.txt
+!requirements.txt
 LiveBench/
 oricli_core/evaluation/results/
 oricli_core/evaluation/test_data_manager.py
 oricli_core/evaluation/test_results.py
 oricli_core/evaluation/test_runner.py
 oricli_core/evaluation/test_reporter.py
-oricli_core/evaluation/test_data_manager.py
-oricli_core/evaluation/test_results.py
-oricli_core/evaluation/test_runner.py
-oricli_core/evaluation/test_reporter.py
 .venv_*
 .venv_broken_*
+
+# Go build outputs
+bin/
+*.exe
+*.out
+
+# Go test cache
+/tmp/
+
+# Result & diagnostic dumps (runtime artifacts)
+*_result.json
+*_results*.json
+*_results*.txt
+*_last_sync.json
+baseline_diagnostic_results.txt
+lb_results.txt
+
+# Conversation exports
+gemini-conversation-*.json
+
+# Daemon/server runtime logs (root-level)
+*_daemon.log
+*_os.log
+go_backbone.log
+server_stdout.log
+server_stderr.log
+server_debug.log
+runpod_bridge*.log
+runpod_monitor*.log
+trainer_daemon.log
+ui_daemon.log
