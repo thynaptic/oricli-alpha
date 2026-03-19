@@ -1,27 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
-  <base href="$FLUTTER_BASE_HREF">
+  <script>
+    // CACHE BYPASS: Update base href dynamically based on current timestamp
+    var version = new Date().getTime();
+    var base = document.createElement('base');
+    base.href = "/portal/"; 
+    document.head.appendChild(base);
+  </script>
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Oricli Sovereign Portal">
 
   <!-- iOS meta tags & icons -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="oricli_ui">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
@@ -29,10 +22,35 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>oricli_ui</title>
+  <title>Oricli Sovereign Portal</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    body {
+      background-color: #0A0A0A;
+    }
+  </style>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Force cache busting for the bootstrap script with absolute portal path
+    var ts = new Date().getTime();
+    var script = document.createElement('script');
+    script.src = "/portal/flutter_bootstrap.js?v=" + ts;
+    script.async = true;
+    document.body.appendChild(script);
+  </script>
+  <script>
+    // DISABLE SERVICE WORKER CACHING
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.getRegistrations().then(function (registrations) {
+          for (let registration of registrations) {
+            registration.unregister();
+          }
+        });
+      });
+    }
+  </script>
 </body>
 </html>

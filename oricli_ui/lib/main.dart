@@ -402,7 +402,16 @@ class _MainPortalState extends State<MainPortal> {
           icon: const Icon(Icons.menu),
           onPressed: () => isLargeScreen ? state.toggleSidebar() : Scaffold.of(context).openDrawer(),
         ),
-        title: Text('ORICLI-ALPHA // SOVEREIGN PORTAL', style: GoogleFonts.oswald(letterSpacing: 2, fontWeight: FontWeight.bold, fontSize: 18)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('ORICLI-ALPHA // SOVEREIGN PORTAL', 
+              style: GoogleFonts.oswald(letterSpacing: 2, fontWeight: FontWeight.bold, fontSize: 18)),
+            Text('BUILD: 20260319.0355 // ALPHA-STABLE', 
+              style: GoogleFonts.robotoMono(fontSize: 8, color: Colors.greenAccent.withOpacity(0.5))),
+          ],
+        ),
+
         elevation: 0,
         actions: [
           IconButton(

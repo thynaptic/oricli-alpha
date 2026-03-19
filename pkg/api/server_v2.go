@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -43,6 +42,8 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 			c.Writer.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0")
 			c.Writer.Header().Set("Pragma", "no-cache")
 			c.Writer.Header().Set("Expires", "0")
+			c.Writer.Header().Set("Surrogate-Control", "no-store") // For CDNs
+			c.Writer.Header().Set("CDN-Cache-Control", "no-store") // For Cloudflare/CDNs
 		}
 
 		if c.Request.Method == "OPTIONS" {
@@ -54,34 +55,26 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 
 	// Serve Flutter UI Static Files
 	webDir := "/home/mike/Mavaia/oricli_ui/build/web"
-	
-	// Handle /v1 separately, everything else is static or SPA
+
+	// DYNAMIC CACHE BYPASS: Map everything under /portal
+	r.Static("/portal", webDir)
 	r.Static("/assets", webDir+"/assets")
 	r.Static("/canvaskit", webDir+"/canvaskit")
 	r.Static("/icons", webDir+"/icons")
-	
-	// Files at root
-	staticFiles := []string{
-		"index.html", "main.dart.js", "flutter.js", "flutter_bootstrap.js",
-		"flutter_service_worker.js", "manifest.json", "favicon.png", "version.json",
-	}
-	for _, f := range staticFiles {
-		file := f // capture
-		r.GET("/"+file, func(c *gin.Context) {
-			log.Printf("[UI] Request: %s", c.Request.URL.Path)
-			c.File(webDir + "/" + file)
-		})
-	}
+
+	// Files at root (Redirect / to /portal/)
 	r.GET("/", func(c *gin.Context) {
-		log.Printf("[UI] Request: / (index.html)")
-		c.File(webDir + "/index.html")
+		c.Redirect(http.StatusMovedPermanently, "/portal/")
 	})
 
-	// Fallback for SPA routing
+	// Fallback for SPA routing inside portal
 	r.NoRoute(func(c *gin.Context) {
-		if !strings.HasPrefix(c.Request.URL.Path, "/v1") {
-			log.Printf("[UI] SPA Fallback: %s -> index.html", c.Request.URL.Path)
+		if strings.HasPrefix(c.Request.URL.Path, "/portal") {
 			c.File(webDir + "/index.html")
+			return
+		}
+		if !strings.HasPrefix(c.Request.URL.Path, "/v1") {
+			c.Redirect(http.StatusTemporaryRedirect, "/portal/")
 			return
 		}
 		c.JSON(404, gin.H{"error": "not found"})
