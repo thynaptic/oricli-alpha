@@ -1,0 +1,28 @@
+@rule_name: code_quality
+@description: Language-specific code quality standards for Go and Python contributions.
+@scope: global
+@categories: ["quality", "code"]
+
+<constraints>
+# ── Go ───────────────────────────────────────────────────────────────────────
+- require: all Go code passes `gofmt`, `go vet`, and `golangci-lint` before suggesting a merge
+- deny: `panic()` in any library or service code — use explicit error returns
+- deny: `interface{}` / `any` where a concrete type or generic is possible
+- deny: goroutines with no documented owner and no cancellation path
+- require: all exported functions have a Go doc comment
+- require: context.Context as first argument on all functions that perform I/O or call external services
+- deny: direct global state mutation — use constructor-injected dependencies
+
+# ── Python ───────────────────────────────────────────────────────────────────
+- require: all Python code passes `black` (formatting) and `ruff` (linting) before suggesting a merge
+- require: type hints on all public function signatures
+- deny: bare `except:` clauses — always catch specific exception types
+- deny: `print()` for diagnostic output in library code — use the project logger
+- require: docstrings on all public classes and functions (Google style)
+
+# ── Universal ────────────────────────────────────────────────────────────────
+- deny: commented-out dead code blocks in any language — delete or track as a TODO
+- deny: hardcoded secrets, credentials, or environment-specific paths in source files
+- require: new modules/packages to follow the existing directory layout (`pkg/` for Go, `oricli_core/` for Python)
+- deny: introducing a new external dependency without updating conductor/tech-stack.md
+</constraints>

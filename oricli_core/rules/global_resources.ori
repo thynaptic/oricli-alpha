@@ -1,0 +1,26 @@
+@rule_name: global_resources
+@description: Global resource usage policies, model preferences, and compute limits.
+@scope: global
+@categories: ["resources"]
+
+<resource_policies>
+# ── Compute limits ───────────────────────────────────────────────────────────
+- max_heavy_modules_per_request: 2
+- planner_max_depth_hint: 8
+- max_swarm_rounds: 3          # require human checkpoint above this on open-ended tasks
+- max_parallel_agents: 5       # hard cap on concurrent Hive bidders per request
+
+# ── Ollama model preferences (local-first) ───────────────────────────────────
+- preferred_generation_model: frob/qwen3.5-instruct   # prose, reasoning, general chat
+- preferred_code_model: qwen2.5-coder:3b              # code generation and review
+- fallback_model: ministral-3:3b                      # low-latency lightweight tasks
+
+# ── Context window budget ────────────────────────────────────────────────────
+- max_context_window_utilization: 0.80   # reserve 20% headroom for response generation
+- warn_at_context_utilization: 0.70      # emit a context pressure warning above this threshold
+
+# ── Storage & training ───────────────────────────────────────────────────────
+- require: s3_checkpoint_before_pod_termination   # all adapters must persist to S3 before RunPod teardown
+- max_training_run_epochs_without_review: 3       # flag for human review if val loss has not converged
+</resource_policies>
+

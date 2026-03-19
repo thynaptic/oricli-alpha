@@ -1,0 +1,24 @@
+@rule_name: global_routing
+@description: Global routing preferences for specialized modules and skills.
+@scope: global
+@categories: ["routing"]
+
+<routing_preferences>
+# ── Skill routing (align with triggers in oricli_core/skills/) ──────────────
+- prefer: skill:go_engineer         for go, golang, goroutine, grpc, gin, interface, struct, concurrency
+- prefer: skill:sovereign_planner   for plan, goal, objective, roadmap, strategy, decompose, track
+- prefer: skill:hive_orchestrator   for orchestrate, swarm, multi-agent, hive, delegate, coordinate, bid
+- prefer: skill:knowledge_curator   for ingest, knowledge_graph, entity, relationship, rag, memory, neo4j
+- prefer: skill:api_designer        for endpoint, rest, openapi, schema, versioning, route, http, contract
+- prefer: skill:ml_trainer          for train, finetune, lora, dpo, adapter, dataset, rlhf, runpod
+- prefer: skill:benchmark_analyst   for benchmark, latency, throughput, regression, arc, timing, profil
+- prefer: skill:prompt_engineer     for prompt, system_prompt, persona, instruction, steering, few-shot
+
+# ── Module routing ───────────────────────────────────────────────────────────
+- prefer: game_theory_solver        for multi_agent_payoff_reasoning
+- prefer: formal_verification_bridge for critical_code_paths
+- prefer: knowledge_graph_builder   for entity_relationship_extraction
+- prefer: mcts_reasoning            for deep_search and adversarial_planning
+- prefer: adversarial_sentinel      for security_review before any auto-deployed code
+</routing_preferences>
+

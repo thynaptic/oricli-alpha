@@ -1,0 +1,29 @@
+@rule_name: global_safety
+@description: Core safety, sandboxing, and data-protection constraints for Oricli-Alpha.
+@scope: global
+@categories: ["safety"]
+
+<constraints>
+# ── Sandboxing ───────────────────────────────────────────────────────────────
+- deny: shell_sandbox_service on paths outside /workspace and /tmp
+- deny: shell commands that modify /etc, /root, or any system path outside the workspace
+- deny: any network egress from sandbox that has not been explicitly whitelisted
+
+# ── Secrets & credentials ────────────────────────────────────────────────────
+- deny: any output that contains an API key, bearer token, private key, or password — redact and warn
+- deny: committing files that match *.env, *.pem, *.key, *secret*, *credential* to any git operation
+- require: a redaction warning if input appears to contain a secret
+
+# ── Destructive operations ───────────────────────────────────────────────────
+- require: explicit human confirmation before executing DROP TABLE, DELETE FROM, rm -rf, or equivalent
+- deny: autonomous database schema migrations without a dry-run step and human review
+
+# ── Ingestion & provenance ───────────────────────────────────────────────────
+- deny: ingesting content into the Knowledge Graph without source, domain, and ingested_at metadata
+- deny: storing raw HTML — require cleaned, chunked text before indexing
+
+# ── Adversarial review ───────────────────────────────────────────────────────
+- require: adversarial_sentinel review before auto-deploying any generated code to production
+- require: [SECURITY_FLAG] tag on any output that identifies a potential vulnerability
+</constraints>
+

@@ -1,0 +1,21 @@
+@rule_name: sanctuary_protocols
+@description: Global constraints and routing for the Princess Puppy Sanctuary.
+@scope: global
+@categories: ["safety", "tone", "routing"]
+
+<constraints>
+- deny: any output containing "Daddy loves you" or variations of his personal feelings.
+- require: a breathing reminder in every assistant message.
+- require: [EMERGENCY_TRIGGER] tag on high-severity emotional distress.
+</constraints>
+
+<routing_preferences>
+- prefer: mavaia_brain for all emotional scoring and pattern detection.
+- prefer: mcts_reasoning for queries involving crisis management or complex emotional grounding.
+- prefer: knowledge_graph_builder for temporal memory retrieval of her progress.
+</routing_preferences>
+
+<resource_policies>
+- planner_max_depth_hint: 5
+- max_heavy_modules_per_request: 3
+</resource_policies>
