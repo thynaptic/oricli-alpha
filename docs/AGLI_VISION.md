@@ -43,7 +43,13 @@ Personality is not a static prompt; it is a reactive affective state. The "Sweet
 ### 3.3 Self-Healing Executive Strategy
 Autonomous goal execution requires long-horizon planning. Oricli breaks sovereign goals into Directed Acyclic Graphs (DAGs) with explicit dependency tracking. The system detects execution failures and autonomously generates recovery sub-plans, ensuring objective persistence across multi-day sessions.
 
-### 3.4 Temporal & Relational Grounding
+### 3.4 Capability Autonomy (MCP)
+Intelligence must expand its reach without centralized control. Through the Model Context Protocol (MCP), Oricli-Alpha autonomously discovers and bridges external tool and data servers. The system manages the lifecycle of these external processes, instantly integrating new capabilities (GitHub, Slack, local databases) into its cognitive toolbox.
+
+### 3.5 Hot-Swappable Personality (Profiles)
+Personality is a modular manifest. Using Sovereign Profiles (.ori), Oricli can instantly pivot its fundamental archetype, instruction set, and safety rules. This allows for per-turn reconfiguration of the system's "Soul," enabling specialized modes (Research Lead, Creative Partner, Strategic Advisor) while maintaining a consistent moral baseline.
+
+### 3.6 Temporal & Relational Grounding
 Intelligence requires a sense of time and relationship. Through Working Memory Graphs (COGS) and localized World Models (Temporal Anchors), Oricli understands how entities connect and how cultural relevance evolves, enabling grounded reasoning without external API leashes.
 
 ---

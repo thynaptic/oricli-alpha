@@ -24,7 +24,12 @@ The Micro-Kernel serves as the master arbiter for the system. It manages process
 ### Ring 1: The Sovereign Engine
 The Sovereign Engine manages affective homeostasis and executive strategy. It unifies the Resonance Layer (ERI/ERS calculation), the Sweetheart Core (Personality Calibration), and the Long-Horizon Planner (Strategic DAGs). It provides the "modulated instruction trace" that shapes all downstream inference.
 
-### Ring 2: The Hive Swarm (Swarm Bus)
+### Ring 2: The Substrate & Capability Layer
+Manages the system's relationship with its substrate and external capabilities.
+*   **Substrate Awareness**: Automatically detects hardware constraints (CPU/RAM) and scales reasoning tiers accordingly.
+*   **MCP Integration**: Manages external Model Context Protocol servers, autonomously bridging their tools into the native toolbox.
+
+### Ring 3: The Hive Swarm (Swarm Bus)
 A high-speed pub/sub nervous system routing messages between 269+ micro-agents. It utilizes the Contract Net Protocol for dynamic task bidding and uses Gosh Traces for verifiable execution.
 
 ### The HAL (Hardware Abstraction Layer)
