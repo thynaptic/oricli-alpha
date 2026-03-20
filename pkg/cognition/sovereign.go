@@ -17,6 +17,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/connectors/mcp"
 	"github.com/thynaptic/oricli-go/pkg/connectors/telegram"
 	"github.com/thynaptic/oricli-go/pkg/vdi"
+	"github.com/thynaptic/oricli-go/pkg/voice"
 )
 
 // --- Pillar 1: Subconscious Field ---
@@ -118,6 +119,7 @@ type SovereignEngine struct {
 	Telegram     *telegram.Client
 	VDI          *vdi.Manager
 	Vision       *vdi.VisionGroundingService
+	Voice        *voice.VoicePiperService
 	SubstrateHealth *HealthMonitor
 	WSHub        EventBroadcaster
 	CurrentSensory SensoryState
@@ -165,6 +167,7 @@ func NewSovereignEngine(genService GenerationService) *SovereignEngine {
 		MCP:          mcp.NewMCPManager("oricli_core/mcp_config.json"),
 		Telegram:     telegram.NewClient(tgToken, tgChatID),
 		VDI:          vdi.NewManager(),
+		Voice:        voice.NewVoicePiperService("/home/mike/puppy-princess-os/voice/piper/piper", "/home/mike/puppy-princess-os/voice/en_US-lessac-medium.onnx", nil),
 	}
 	
 	engine.Generator = NewGeneratorOrchestrator(engine)
@@ -176,6 +179,15 @@ func NewSovereignEngine(genService GenerationService) *SovereignEngine {
 	engine.CurrentHealth = engine.Health.GenerateSnapshot(0, 0, time.Now())
 	engine.Stochastic.Train("I hear you. That sounds really hard. We can figure this out together. Take a breath.", 4)
 	return engine
+}
+
+func (e *SovereignEngine) SetWSHub(hub EventBroadcaster) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.WSHub = hub
+	if e.Voice != nil {
+		e.Voice.InjectWSHub(hub)
+	}
 }
 
 // ProcessInference implements the exact 11-step Aurora cognitive sequence.

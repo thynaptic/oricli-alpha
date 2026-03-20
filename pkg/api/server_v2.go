@@ -181,6 +181,11 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	responseText, _ = s.Agent.SovEngine.SelfAlign(c.Request.Context(), lastMsg, responseText)
 	responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
 
+	// Trigger Voice Synthesis (Async)
+	if s.Agent.SovEngine.Voice != nil {
+		go s.Agent.SovEngine.Voice.Synthesize(responseText, s.Agent.SovEngine.Resonance.Current.ERI, 0.5, s.Agent.SovEngine.Resonance.Current.MusicalKey)
+	}
+
 	s.Orchestrator.Execute("record_event", map[string]interface{}{
 		"type":        "chat_interaction",
 		"description": fmt.Sprintf("User: %s | Assistant: %s", lastMsg, responseText),
@@ -243,6 +248,11 @@ func (s *ServerV2) handleTelegramWebhook(c *gin.Context) {
 	responseText := "I am here. " + update.Message.Text
 	responseText, _ = s.Agent.SovEngine.SelfAlign(c.Request.Context(), update.Message.Text, responseText)
 	responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
+
+	// Trigger Voice Synthesis (Async)
+	if s.Agent.SovEngine.Voice != nil {
+		go s.Agent.SovEngine.Voice.Synthesize(responseText, s.Agent.SovEngine.Resonance.Current.ERI, 0.5, s.Agent.SovEngine.Resonance.Current.MusicalKey)
+	}
 
 	s.Agent.SovEngine.Telegram.SendMessage(update.Message.Chat.ID, responseText, "HTML")
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
