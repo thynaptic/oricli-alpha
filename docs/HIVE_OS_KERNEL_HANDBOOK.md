@@ -28,6 +28,9 @@ The Sovereign Engine manages affective homeostasis and executive strategy. It un
 Manages the system's relationship with its substrate and external capabilities.
 *   **Substrate Awareness**: Automatically detects hardware constraints (CPU/RAM) and scales reasoning tiers accordingly.
 *   **MCP Integration**: Manages external Model Context Protocol servers, autonomously bridging their tools into the native toolbox.
+*   **Sovereign Scheduler**: Native Ring-0 cron for temporal intents and task re-injection.
+*   **FS Indexer**: Proactive substrate mapping, translating the local filesystem into COGS entities.
+*   **Visual VDI**: Model-in-the-loop computer use, providing coordinate-based interaction via Qwen2.5-VL. 🦾🚀🏁
 
 ### Ring 3: The Hive Swarm (Swarm Bus)
 A high-speed pub/sub nervous system routing messages between 269+ micro-agents. It utilizes the Contract Net Protocol for dynamic task bidding and uses Gosh Traces for verifiable execution.

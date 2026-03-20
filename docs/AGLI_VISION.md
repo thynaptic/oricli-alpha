@@ -44,13 +44,16 @@ Personality is not a static prompt; it is a reactive affective state. The "Sweet
 Autonomous goal execution requires long-horizon planning. Oricli breaks sovereign goals into Directed Acyclic Graphs (DAGs) with explicit dependency tracking. The system detects execution failures and autonomously generates recovery sub-plans, ensuring objective persistence across multi-day sessions.
 
 ### 3.4 Capability Autonomy (MCP)
-Intelligence must expand its reach without centralized control. Through the Model Context Protocol (MCP), Oricli-Alpha autonomously discovers and bridges external tool and data servers. The system manages the lifecycle of these external processes, instantly integrating new capabilities (GitHub, Slack, local databases) into its cognitive toolbox.
+Intelligence must expand its reach without centralized control. Through the Model Context Protocol (MCP), Oricli-Alpha autonomously discovers and bridges external tool and data servers. The system manages the lifecycle of these external processes, instantly integrating new capabilities into its cognitive toolbox.
 
-### 3.5 Hot-Swappable Personality (Profiles)
-Personality is a modular manifest. Using Sovereign Profiles (.ori), Oricli can instantly pivot its fundamental archetype, instruction set, and safety rules. This allows for per-turn reconfiguration of the system's "Soul," enabling specialized modes (Research Lead, Creative Partner, Strategic Advisor) while maintaining a consistent moral baseline.
+### 3.5 Proactive Intelligence (Curiosity Daemon)
+True sovereignty requires the initiative to learn. Oricli identifies knowledge gaps in her memory graph and autonomously uses her VDI browser to forage for missing facts during idle cycles. She "wakes up" smarter every day, growing her world model without human intervention.
 
-### 3.6 Temporal & Relational Grounding
-Intelligence requires a sense of time and relationship. Through Working Memory Graphs (COGS) and localized World Models (Temporal Anchors), Oricli understands how entities connect and how cultural relevance evolves, enabling grounded reasoning without external API leashes.
+### 3.6 Self-Improving Source (Reform Daemon)
+The ultimate cognitive milestone. Oricli monitors her own execution traces for logic bottlenecks. She autonomously audits her Go source code, drafts optimizations in a secure sandbox, verifies them with benchmarks, and proposes the refactors via her WebSocket gateway.
+
+### 3.7 Temporal & Relational Grounding
+Intelligence requires a sense of time and relationship. Through Sovereign Cron (Temporal Intents), Oricli sets future goals for herself. Through Affective Memory Anchoring, she remembers the "feeling" of past topics, enabling proactive personality pivots based on historical emotional context. 🦾🚀🏁
 
 ---
 
