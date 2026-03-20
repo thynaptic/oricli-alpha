@@ -129,10 +129,11 @@ v1.GET("/health", s.handleHealth)
 // Protected — Bearer glm.* token required
 protected := v1.Group("/", s.authMiddleware())
 {
-protected.POST("/chat/completions", s.handleChatCompletions)
-protected.POST("/swarm/run", s.handleSwarmRun)
-protected.POST("/ingest", s.handleIngest)
-protected.POST("/ingest/web", s.handleIngestWeb)
+	protected.POST("/chat/completions", s.handleChatCompletions)
+	protected.POST("/swarm/run", s.handleSwarmRun)
+	protected.POST("/ingest", s.handleIngest)
+	protected.POST("/ingest/web", s.handleIngestWeb)
+	protected.POST("/telegram/webhook", s.handleTelegramWebhook)
 }
 }
 
@@ -266,6 +267,64 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			"sensory":   s.Agent.SovEngine.CurrentSensory.ToJSONMap(),
 		},
 	})
+}
+
+func (s *ServerV2) handleTelegramWebhook(c *gin.Context) {
+	var update struct {
+		UpdateID int `json:"update_id"`
+		Message  *struct {
+			Chat struct {
+				ID int64 `json:"id"`
+			} `json:"chat"`
+			Text string `json:"text"`
+			From struct {
+				Username string `json:"username"`
+			} `json:"from"`
+		} `json:"message"`
+	}
+
+	if err := c.ShouldBindJSON(&update); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if update.Message == nil || update.Message.Text == "" {
+		c.JSON(http.StatusOK, gin.H{"status": "ignored"})
+		return
+	}
+
+	log.Printf("[Telegram] Received message from %s: %s", update.Message.From.Username, update.Message.Text)
+
+	// Authorization check
+	if update.Message.Chat.ID != s.Agent.SovEngine.Telegram.ChatID {
+		log.Printf("[Telegram] Unauthorized access attempt from %d", update.Message.Chat.ID)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized chat id"})
+		return
+	}
+
+	// 1. Process stimulus through Sovereign Engine (The Conductor)
+	_, err := s.Agent.SovEngine.ProcessInference(c.Request.Context(), update.Message.Text)
+	if err != nil {
+		s.Agent.SovEngine.Telegram.SendMessage(update.Message.Chat.ID, "I encountered a cognitive error. Please retry.", "HTML")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "sovereign engine failure"})
+		return
+	}
+
+	// 2. Perform Constitutional Self-Alignment (Critique-Revision Loop)
+	// (Using a placeholder for the first turn, in full impl this would call the LLM)
+	responseText := "I am here. " + update.Message.Text
+	responseText, _ = s.Agent.SovEngine.SelfAlign(c.Request.Context(), update.Message.Text, responseText)
+
+	// 3. Final Adversarial Output Audit
+	responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
+
+	// 4. Send response back to Telegram
+	err = s.Agent.SovEngine.Telegram.SendMessage(update.Message.Chat.ID, responseText, "HTML")
+	if err != nil {
+		log.Printf("[Telegram] Error sending response: %v", err)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
 func (s *ServerV2) handleIngest(c *gin.Context) {
