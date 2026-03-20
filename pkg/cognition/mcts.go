@@ -149,6 +149,10 @@ type MCTSConfig struct {
 	//   β = sqrt(k / (3·N + k))  →  β=1 at N=0, β≈0.5 at N=k/3, β→0 as N→∞
 	// Set 0 (default) to disable RAVE entirely.
 	RAVEEquivalence float64
+	// PolicyNet optionally provides a fast prior estimator that replaces the
+	// default uniform prior (1/BranchFactor) with heuristic/learned scores.
+	// When nil (default), uniform priors are used.
+	PolicyNet *PolicyNetConfig
 }
 
 // MCTSEvaluation captures weighted score components for a branch.
@@ -176,6 +180,7 @@ type MCTSEngine struct {
 	table        *transpositionTable // reset each SearchV2 call
 	rave         *raveTable          // reset each SearchV2 call; nil when RAVEEquivalence==0
 	valueNetHits int                 // atomic-ish; written under treeMu
+	policyPriorizations int          // branches where policy net set non-uniform priors; written under treeMu
 }
 
 type MCTSResult struct {
@@ -190,6 +195,7 @@ type MCTSResult struct {
 	TranspositionHits int // evaluation LLM calls avoided via transposition cache
 	ValueNetHits      int // evaluation LLM calls avoided via value network pre-screening
 	RAVETableSize     int // unique answer texts recorded in the RAVE table
+	PolicyNetPriorizations int // branches where policy network set non-uniform priors
 }
 
 type nodeEvalResult struct {
@@ -242,8 +248,8 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 		e.rave = nil
 	}
 	e.valueNetHits = 0
+	e.policyPriorizations = 0
 
-	rng := rand.New(rand.NewSource(cfg.Seed))
 	root := &ThoughtNode{ID: "root", Answer: strings.TrimSpace(draftAnswer), Depth: 0, Prior: 1.0}
 
 	bestAnswer := strings.TrimSpace(draftAnswer)
@@ -252,99 +258,117 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 	expandedNodes := 0
 	prunedNodes := 0
 	started := time.Now()
-	var treeMu sync.Mutex
 
-	for iterationsRun < cfg.Iterations {
-		if ctx.Err() != nil {
-			break
-		}
-		batch := minIntLocal(cfg.MaxConcurrency, cfg.Iterations-iterationsRun)
-		selected := make([]*ThoughtNode, 0, batch)
-		treeMu.Lock()
-		for i := 0; i < batch; i++ {
-			node, expanded := e.selectAndMaybeExpand(ctx, root, cfg, rng)
-			if node == nil {
+	// ── Parallel path (MaxConcurrency > 1) ───────────────────────────────────
+	// Each worker independently selects → evaluates → backpropagates, pipelining
+	// the slow LLM eval step with concurrent tree traversals.
+	if cfg.MaxConcurrency > 1 {
+		ba, bs, iters, exp, prun := e.runParallelSearch(ctx, cfg, root)
+		bestAnswer = ba
+		bestScore = bs
+		iterationsRun = iters
+		expandedNodes = exp
+		prunedNodes = prun
+		// Collect counters from parallel run.
+		// valueNetHits and policyPriorizations are not easily shared across
+		// goroutines without extra synchronization; they are reset at the start
+		// of SearchV2 (above) and stay 0 in the parallel path for now.
+		// TODO: thread counters through workerState in a follow-up.
+	} else {
+		// ── Sequential path (Deterministic or MaxConcurrency == 1) ───────────
+		rng := rand.New(rand.NewSource(cfg.Seed))
+		var treeMu sync.Mutex
+
+		for iterationsRun < cfg.Iterations {
+			if ctx.Err() != nil {
 				break
 			}
-			if expanded {
-				expandedNodes++
+			batch := minIntLocal(cfg.MaxConcurrency, cfg.Iterations-iterationsRun)
+			selected := make([]*ThoughtNode, 0, batch)
+			treeMu.Lock()
+			for i := 0; i < batch; i++ {
+				node, expanded := e.selectAndMaybeExpand(ctx, root, cfg, rng)
+				if node == nil {
+					break
+				}
+				if expanded {
+					expandedNodes++
+				}
+				node.VirtualVisits += int(math.Ceil(maxFloatLocal(cfg.VirtualLoss, 1.0)))
+				selected = append(selected, node)
 			}
-			node.VirtualVisits += int(math.Ceil(maxFloatLocal(cfg.VirtualLoss, 1.0)))
-			selected = append(selected, node)
-		}
-		treeMu.Unlock()
-		if len(selected) == 0 {
-			break
-		}
+			treeMu.Unlock()
+			if len(selected) == 0 {
+				break
+			}
 
-		results := make(chan nodeEvalResult, len(selected))
-		var wg sync.WaitGroup
-		for _, node := range selected {
-			n := node
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				evalCtx := ctx
-				cancel := func() {}
-				if cfg.EvalTimeout > 0 {
-					evalCtx, cancel = context.WithTimeout(ctx, cfg.EvalTimeout)
-				}
-				defer cancel()
-				results <- e.evaluateNode(evalCtx, n, cfg)
-			}()
-		}
-		wg.Wait()
-		close(results)
+			results := make(chan nodeEvalResult, len(selected))
+			var wg sync.WaitGroup
+			for _, node := range selected {
+				n := node
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					evalCtx := ctx
+					cancel := func() {}
+					if cfg.EvalTimeout > 0 {
+						evalCtx, cancel = context.WithTimeout(ctx, cfg.EvalTimeout)
+					}
+					defer cancel()
+					results <- e.evaluateNode(evalCtx, n, cfg)
+				}()
+			}
+			wg.Wait()
+			close(results)
 
-		treeMu.Lock()
-		for r := range results {
-			iterationsRun++
-			if r.node == nil {
-				continue
-			}
-			if r.node.VirtualVisits > 0 {
-				r.node.VirtualVisits--
-			}
-			if r.err != nil {
-				r.node.LastEvalErr = strings.TrimSpace(r.err.Error())
-				// Backpropagate parent's average as a neutral signal so the
-				// iteration is not wasted and the tree doesn't starve.
-				neutral := 0.5
-				if r.node.Parent != nil && r.node.Parent.Visits > 0 {
-					neutral = r.node.Parent.AverageValue()
+			treeMu.Lock()
+			for r := range results {
+				iterationsRun++
+				if r.node == nil {
+					continue
 				}
-				e.backpropagate(r.node, neutral)
-				continue
-			}
-			r.node.Score = r.score
-			r.node.Confidence = r.confidence
-			if r.terminal {
-				r.node.Terminal = true
-			}
-			if r.vnHit {
-				e.valueNetHits++
-			}
-			if r.prior > 0 {
-				r.node.Prior = clamp01Local(r.prior)
-			}
-			if r.pruned {
-				if !r.node.Pruned {
-					prunedNodes++
+				if r.node.VirtualVisits > 0 {
+					r.node.VirtualVisits--
 				}
-				r.node.Pruned = true
-				r.node.PruneReason = fmt.Sprintf("kill-switch: branch score %.2f < %.2f", r.score, cfg.PruneThreshold)
+				if r.err != nil {
+					r.node.LastEvalErr = strings.TrimSpace(r.err.Error())
+					neutral := 0.5
+					if r.node.Parent != nil && r.node.Parent.Visits > 0 {
+						neutral = r.node.Parent.AverageValue()
+					}
+					e.backpropagate(r.node, neutral)
+					continue
+				}
+				r.node.Score = r.score
+				r.node.Confidence = r.confidence
+				if r.terminal {
+					r.node.Terminal = true
+				}
+				if r.vnHit {
+					e.valueNetHits++
+				}
+				if r.prior > 0 {
+					r.node.Prior = clamp01Local(r.prior)
+				}
+				if r.pruned {
+					if !r.node.Pruned {
+						prunedNodes++
+					}
+					r.node.Pruned = true
+					r.node.PruneReason = fmt.Sprintf("kill-switch: branch score %.2f < %.2f", r.score, cfg.PruneThreshold)
+				}
+				e.backpropagate(r.node, r.score)
+				candidate := strings.TrimSpace(r.candidate)
+				if candidate == "" {
+					candidate = strings.TrimSpace(r.node.Answer)
+				}
+				if r.score > bestScore && candidate != "" {
+					bestScore = r.score
+					bestAnswer = candidate
+				}
 			}
-			e.backpropagate(r.node, r.score)
-			candidate := strings.TrimSpace(r.candidate)
-			if candidate == "" {
-				candidate = strings.TrimSpace(r.node.Answer)
-			}
-			if r.score > bestScore && candidate != "" {
-				bestScore = r.score
-				bestAnswer = candidate
-			}
+			treeMu.Unlock()
 		}
-		treeMu.Unlock()
 	}
 
 	if strings.TrimSpace(bestAnswer) == "" {
@@ -367,9 +391,10 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 		PrunedNodes:       prunedNodes,
 		Strategy:          string(cfg.Strategy),
 		ElapsedMS:         time.Since(started).Milliseconds(),
-		TranspositionHits: tableHits,
-		ValueNetHits:      e.valueNetHits,
-		RAVETableSize:     raveSize,
+		TranspositionHits:      tableHits,
+		ValueNetHits:           e.valueNetHits,
+		RAVETableSize:          raveSize,
+		PolicyNetPriorizations: e.policyPriorizations,
 	}, nil
 }
 
@@ -470,14 +495,20 @@ func (e *MCTSEngine) selectAndMaybeExpand(ctx context.Context, root *ThoughtNode
 		}
 		var unvisited []*ThoughtNode
 		for _, c := range children {
-			if c.Visits == 0 {
+			// Exclude nodes currently being evaluated by another worker
+			// (VirtualVisits > 0 with Visits == 0 means in-flight).
+			if c.Visits == 0 && c.VirtualVisits == 0 {
 				unvisited = append(unvisited, c)
 			}
 		}
 		if len(unvisited) > 0 {
 			// Return immediately — do not call shouldExpand on an unevaluated node.
 			// Terminal/prune status can only be known after the first evaluation.
-			return unvisited[rng.Intn(len(unvisited))], expanded
+			idx := 0
+			if rng != nil && len(unvisited) > 1 {
+				idx = rng.Intn(len(unvisited))
+			}
+			return unvisited[idx], expanded
 		}
 		best := children[0]
 		bestScore := e.selectionScore(best, node, cfg)
@@ -487,6 +518,12 @@ func (e *MCTSEngine) selectAndMaybeExpand(ctx context.Context, root *ThoughtNode
 				best = c
 				bestScore = s
 			}
+		}
+		// All children are either pruned or in-flight (VirtualVisits > 0).
+		// Return nil to signal "no available node" — the caller will decide
+		// whether to yield and retry (parallel) or re-evaluate the parent (sequential).
+		if math.IsInf(bestScore, -1) {
+			return nil, expanded
 		}
 		node = best
 	}
@@ -525,7 +562,13 @@ func (e *MCTSEngine) expandOneChild(ctx context.Context, node *ThoughtNode, cfg 
 	for _, c := range node.Children {
 		existing[strings.ToLower(strings.TrimSpace(c.Answer))] = true
 	}
-	for _, b := range branches {
+
+	// Score ALL proposed branches with the policy network up front so priors
+	// are normalised across the full sibling set, not just the first new child.
+	// Falls back to uniform when PolicyNet is nil or scoring fails.
+	priors := e.computePriors(ctx, node.Answer, branches, cfg)
+
+	for i, b := range branches {
 		ans := strings.TrimSpace(b)
 		if ans == "" {
 			continue
@@ -535,13 +578,12 @@ func (e *MCTSEngine) expandOneChild(ctx context.Context, node *ThoughtNode, cfg 
 			continue
 		}
 		idx := len(node.Children) + 1
-		prior := 1.0 / float64(maxIntLocal(cfg.BranchFactor, 1))
 		node.Children = append(node.Children, &ThoughtNode{
 			ID:     fmt.Sprintf("%s.%d", node.IDOrDefault(), idx),
 			Answer: ans,
 			Depth:  node.Depth + 1,
 			Parent: node,
-			Prior:  prior,
+			Prior:  priors[i],
 		})
 		node.ChildrenExpanded++
 		return true
@@ -549,8 +591,42 @@ func (e *MCTSEngine) expandOneChild(ctx context.Context, node *ThoughtNode, cfg 
 	return false
 }
 
+// computePriors returns a prior score for each branch in the same order.
+// When PolicyNet is enabled and all scoring succeeds, scores are normalised.
+// Falls back to uniform on any error or when PolicyNet is nil.
+func (e *MCTSEngine) computePriors(ctx context.Context, parentAnswer string, branches []string, cfg MCTSConfig) []float64 {
+	uniform := 1.0 / float64(maxIntLocal(cfg.BranchFactor, 1))
+	priors := make([]float64, len(branches))
+	for i := range priors {
+		priors[i] = uniform
+	}
+
+	if cfg.PolicyNet == nil || cfg.PolicyNet.Network == nil {
+		return priors
+	}
+
+	raw := make([]float64, len(branches))
+	for i, b := range branches {
+		score, err := cfg.PolicyNet.Network.Score(ctx, parentAnswer, b)
+		if err != nil {
+			return priors // fall back to uniform on any error
+		}
+		raw[i] = score
+	}
+	normed := normalisePriors(raw)
+	e.policyPriorizations += len(branches)
+	return normed
+}
+
 func (e *MCTSEngine) selectionScore(child *ThoughtNode, parent *ThoughtNode, cfg MCTSConfig) float64 {
 	if child == nil || child.Pruned {
+		return math.Inf(-1)
+	}
+	// Any node currently being evaluated by another worker (VirtualVisits > 0)
+	// is off-limits. Returning -Inf steers parallel workers to other branches.
+	// Combined with the all-children-are-inflight guard in selectAndMaybeExpand,
+	// this ensures no two workers evaluate the same node simultaneously.
+	if child.VirtualVisits > 0 {
 		return math.Inf(-1)
 	}
 	if child.Visits == 0 {
