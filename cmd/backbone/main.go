@@ -78,9 +78,18 @@ func main() {
 	apiKey := bootstrapAPIKey(st)
 	_ = apiKey
 
+	traceStore := service.NewTraceStore(genService)
+	codeMetrics := service.NewCodeMetricsService(nil) // Orchestrator injected later if needed
+
 	// 5. Intelligence Synthesis (Sovereign Engine)
 	log.Println("[Boot] Initializing Sovereign Engine...")
 	sovEngine := cognition.NewSovereignEngine(genService)
+	
+	// Initialize Reform Daemon (The Self-Modifier)
+	reform := service.NewReformDaemon(traceStore, codeMetrics, genService, nil)
+	sovEngine.Reform = reform
+	go reform.Run(context.Background())
+	log.Println("[Boot] Reform Daemon (Self-Modifier) loop engaged.")
 	
 	// Initialize VDI (Virtual Device Interface)
 	log.Println("[Boot] Initializing Sovereign VDI...")
@@ -134,6 +143,7 @@ func main() {
 	
 	// Inject WS Hub into Sovereign Engine for real-time broadcasts
 	sovEngine.SetWSHub(apiServer.WSHub)
+	reform.WSHub = apiServer.WSHub
 	
 	go apiServer.Start()
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)

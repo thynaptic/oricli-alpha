@@ -120,6 +120,7 @@ type SovereignEngine struct {
 	VDI          *vdi.Manager
 	Vision       *vdi.VisionGroundingService
 	Voice        *voice.VoicePiperService
+	Reform       interface{} // Use interface to avoid circular dependency
 	SubstrateHealth *HealthMonitor
 	WSHub        EventBroadcaster
 	CurrentSensory SensoryState

@@ -114,3 +114,36 @@ func (s *TraceStore) ListRecent(limit int) []TraceRecord {
 	for i := 0; i < limit; i++ { res[i] = s.traces[s.order[start+i]] }
 	return res
 }
+
+// FindBottlenecks scans recent traces for high-latency or low-confidence operations.
+func (s *TraceStore) FindBottlenecks(latencyThreshold time.Duration, confidenceThreshold float64) []TraceRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var bottlenecks []TraceRecord
+	// Scan last 50 traces
+	start := 0
+	if len(s.order) > 50 {
+		start = len(s.order) - 50
+	}
+
+	for i := start; i < len(s.order); i++ {
+		trace := s.traces[s.order[i]]
+		
+		// Check latency (if present in trace graph)
+		if latRaw, ok := trace.TraceGraph["latency_ms"].(float64); ok {
+			if time.Duration(latRaw)*time.Millisecond > latencyThreshold {
+				bottlenecks = append(bottlenecks, trace)
+				continue
+			}
+		}
+
+		// Check confidence
+		if conf, ok := trace.TraceGraph["confidence"].(float64); ok {
+			if conf < confidenceThreshold {
+				bottlenecks = append(bottlenecks, trace)
+			}
+		}
+	}
+	return bottlenecks
+}

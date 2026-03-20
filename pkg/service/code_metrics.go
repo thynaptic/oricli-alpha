@@ -56,7 +56,8 @@ func (s *CodeMetricsService) CalculateMetrics(code string) (*CodeMetricsResult, 
 		defer wg.Done()
 		count := 0
 		for _, line := range lines {
-			if strings.Contains(line, "def ") { count++ }
+			// Support for Python (def) and Go (func)
+			if strings.Contains(line, "def ") || strings.Contains(line, "func ") { count++ }
 		}
 		mu.Lock(); funcCount = count; mu.Unlock()
 	}()
@@ -64,7 +65,8 @@ func (s *CodeMetricsService) CalculateMetrics(code string) (*CodeMetricsResult, 
 		defer wg.Done()
 		count := 0
 		for _, line := range lines {
-			if strings.Contains(line, "class ") { count++ }
+			// Support for Python (class) and Go (struct)
+			if strings.Contains(line, "class ") || strings.Contains(line, "type ") && strings.Contains(line, " struct {") { count++ }
 		}
 		mu.Lock(); classCount = count; mu.Unlock()
 	}()
@@ -72,7 +74,8 @@ func (s *CodeMetricsService) CalculateMetrics(code string) (*CodeMetricsResult, 
 		defer wg.Done()
 		count := 0
 		for _, line := range lines {
-			if strings.Contains(line, "import ") || strings.Contains(line, "from ") { count++ }
+			// Support for Python (import/from) and Go (import/package)
+			if strings.Contains(line, "import ") || strings.Contains(line, "from ") || strings.Contains(line, "package ") { count++ }
 		}
 		mu.Lock(); importCount = count; mu.Unlock()
 	}()
