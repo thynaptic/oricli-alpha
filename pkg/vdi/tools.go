@@ -1,6 +1,7 @@
 package vdi
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -10,7 +11,7 @@ import (
 // --- Pillar 47: VDI Tool Bridge ---
 // Exposes VDI capabilities to the Sovereign Engine's dynamic toolbox.
 
-func (m *Manager) RegisterTools(registry *tools.Registry) {
+func (m *Manager) RegisterTools(registry *tools.Registry, vision *VisionGroundingService) {
 	// 1. Browser Navigation
 	registry.Register(&tools.Tool{
 		Definition: tools.ToolDefinition{
@@ -111,5 +112,36 @@ func (m *Manager) RegisterTools(registry *tools.Registry) {
 		},
 	})
 
-	log.Println("[VDI] Registered native System & Browser tools to Sovereign Toolbox.")
+	// 6. Visual Click (Pillar 50)
+	registry.Register(&tools.Tool{
+		Definition: tools.ToolDefinition{
+			Name:        "vdi_visual_click",
+			Description: "Look at the current screen and click an element based on its natural language description.",
+			Parameters: tools.ToolParameters{
+				Type: "object",
+				Properties: map[string]tools.ToolProperty{
+					"description": {Type: "string", Description: "The element to find (e.g., 'the Login button')."},
+				},
+				Required: []string{"description"},
+			},
+		},
+		Category: tools.TypeWeb,
+		Handler: func(args map[string]interface{}) (string, error) {
+			desc, ok := args["description"].(string)
+			if !ok { return "", fmt.Errorf("missing description parameter") }
+
+			// 1. Capture Eyes
+			img, err := m.Screenshot()
+			if err != nil { return "", err }
+
+			// 2. Ground Reality
+			x, y, err := vision.GetElementCoordinates(context.Background(), img, desc)
+			if err != nil { return "", err }
+
+			// 3. Act
+			return m.ClickAt(x, y)
+		},
+	})
+
+	log.Println("[VDI] Registered native System, Browser, and Visual tools to Sovereign Toolbox.")
 }

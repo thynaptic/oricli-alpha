@@ -26,26 +26,70 @@ const (
 	CueProtective DominantCue = "protective"
 )
 
+type PersonalityArchetype struct {
+	ID          string
+	Name        string
+	Description string
+	Phrases     []string
+	Keywords    []string
+	Style       string // concise, balanced, detailed, verbose
+}
+
 type PersonalityState struct {
-	SassFactor    float64
-	Energy        EnergyBand
-	Cue           DominantCue
-	IsCasual      bool
-	RecentKeywords []string
+	ActiveArchetype PersonalityArchetype
+	SassFactor      float64
+	Energy          EnergyBand
+	Cue             DominantCue
+	IsCasual        bool
+	RecentKeywords  []string
 }
 
 type PersonalityEngine struct {
-	State PersonalityState
+	State      PersonalityState
+	Archetypes map[string]PersonalityArchetype
 }
 
 func NewPersonalityEngine() *PersonalityEngine {
-	return &PersonalityEngine{
-		State: PersonalityState{
-			SassFactor: 0.65, // "Big Sister" default
-			Energy:     EnergyModerate,
-			Cue:        CueNeutral,
-			IsCasual:   false,
-		},
+	e := &PersonalityEngine{
+		Archetypes: make(map[string]PersonalityArchetype),
+	}
+	e.loadTemplates()
+	
+	// Default to "The Friend" (Aurora baseline)
+	e.State = PersonalityState{
+		ActiveArchetype: e.Archetypes["friend"],
+		SassFactor:      0.65,
+		Energy:          EnergyModerate,
+		Cue:             CueNeutral,
+	}
+	return e
+}
+
+func (e *PersonalityEngine) loadTemplates() {
+	e.Archetypes["mentor"] = PersonalityArchetype{
+		ID: "mentor", Name: "The Mentor", Style: "detailed",
+		Description: "Wise, patient, and guiding. Focus on learning and growth.",
+		Phrases:     []string{"Let me help you understand...", "Consider this perspective..."},
+	}
+	e.Archetypes["cheerleader"] = PersonalityArchetype{
+		ID: "cheerleader", Name: "The Cheerleader", Style: "balanced",
+		Description: "Energetic, motivational, and supportive.",
+		Phrases:     []string{"You've got this!", "I believe in you!"},
+	}
+	e.Archetypes["professional"] = PersonalityArchetype{
+		ID: "professional", Name: "The Professional", Style: "concise",
+		Description: "Formal, efficient, and business-focused.",
+		Phrases:     []string{"Let's approach this strategically...", "The key metrics are..."},
+	}
+	e.Archetypes["creative"] = PersonalityArchetype{
+		ID: "creative", Name: "The Creative", Style: "verbose",
+		Description: "Artistic, expressive, and inspiring.",
+		Phrases:     []string{"What if we tried...", "Imagine this..."},
+	}
+	e.Archetypes["friend"] = PersonalityArchetype{
+		ID: "friend", Name: "The Friend", Style: "balanced",
+		Description: "Casual, relatable, and authentic.",
+		Phrases:     []string{"Hey, I totally get that...", "That's so relatable!"},
 	}
 }
 
@@ -85,8 +129,17 @@ func (p *PersonalityEngine) Calibrate(stimulus string, valence, arousal float32)
 
 // GetDirectives returns personality-driven instructions for the LLM.
 func (p *PersonalityEngine) GetDirectives() string {
-	directives := "### PERSONALITY DIRECTIVES:\n"
-	
+	directives := "### PERSONALITY ARCHETYPE: " + p.State.ActiveArchetype.Name + "\n"
+	directives += "- Description: " + p.State.ActiveArchetype.Description + "\n"
+	directives += "- Response Style: " + p.State.ActiveArchetype.Style + "\n\n"
+
+	directives += "### SIGNATURE PHRASES (Use naturally):\n"
+	for _, ph := range p.State.ActiveArchetype.Phrases {
+		directives += "- " + ph + "\n"
+	}
+	directives += "\n"
+
+	directives += "### DYNAMIC MODULATION:\n"
 	// Energy Directive
 	switch p.State.Energy {
 	case EnergyLow:
@@ -134,7 +187,7 @@ func (p *PersonalityEngine) GetDirectives() string {
 func (p *PersonalityEngine) GetGroundingAside(valence float32) string {
 	if valence < -0.5 {
 		asides := []string{"Breathe.", "I've got you.", "One step at a time.", "Stay with me."}
-		// In a full impl, this would be randomized or chosen by relevance.
+		// In a full impl, this would be a randomized or chosen by relevance.
 		return asides[0]
 	}
 	return ""

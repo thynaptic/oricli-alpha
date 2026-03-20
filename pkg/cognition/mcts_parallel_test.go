@@ -56,8 +56,8 @@ func TestParallelSearchCompletesWithoutDeadlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parallel SearchV2 error: %v", err)
 	}
-	if strings.TrimSpace(result.BestAnswer) == "" {
-		t.Error("expected non-empty BestAnswer from parallel search")
+	if strings.TrimSpace(result.Answer) == "" {
+		t.Error("expected non-empty Answer from parallel search")
 	}
 }
 
@@ -136,8 +136,8 @@ func TestDeterministicModeStaysSequential(t *testing.T) {
 	if err1 != nil || err2 != nil {
 		t.Fatalf("errors: %v / %v", err1, err2)
 	}
-	if r1.BestAnswer != r2.BestAnswer {
-		t.Errorf("deterministic runs differ: %q vs %q", r1.BestAnswer, r2.BestAnswer)
+	if r1.Answer != r2.Answer {
+		t.Errorf("deterministic runs differ: %q vs %q", r1.Answer, r2.Answer)
 	}
 }
 

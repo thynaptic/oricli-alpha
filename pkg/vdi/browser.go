@@ -97,3 +97,39 @@ func (m *Manager) Type(selector string, text string) (string, error) {
 
 	return fmt.Sprintf("Typed text into element matching: %s", selector), nil
 }
+
+// Screenshot captures the current browser viewport as a PNG (base64).
+func (m *Manager) Screenshot() (string, error) {
+	ctx, cancel := m.GetBrowserContext(15 * time.Second)
+	if ctx == nil {
+		return "", fmt.Errorf("VDI browser is not initialized")
+	}
+	defer cancel()
+
+	var buf []byte
+	if err := chromedp.Run(ctx, chromedp.CaptureScreenshot(&buf)); err != nil {
+		return "", fmt.Errorf("screenshot failed: %v", err)
+	}
+
+	// We return the raw base64 data for the vision model
+	return fmt.Sprintf("%s", strings.TrimSpace(string(buf))), nil
+}
+
+// ClickAt executes a mouse click at specific pixel coordinates.
+func (m *Manager) ClickAt(x, y float64) (string, error) {
+	ctx, cancel := m.GetBrowserContext(15 * time.Second)
+	if ctx == nil {
+		return "", fmt.Errorf("VDI browser is not initialized")
+	}
+	defer cancel()
+
+	err := chromedp.Run(ctx,
+		chromedp.MouseClickXY(x, y),
+	)
+
+	if err != nil {
+		return "", fmt.Errorf("coordinate click failed at (%.2f, %.2f): %v", x, y, err)
+	}
+
+	return fmt.Sprintf("Clicked at coordinates: (%.2f, %.2f)", x, y), nil
+}

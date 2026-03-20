@@ -34,26 +34,25 @@ func (m *Manager) Start() error {
 
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.DisableGPU,
-		chromedp.Flag("headless", true), // Keep headless for background automation
+		chromedp.Flag("headless", true), 
 		chromedp.Flag("disable-extensions", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.Flag("no-sandbox", true),
+		chromedp.WindowSize(1280, 720), // Standardized viewport for vision grounding
 	)
 
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), opts...)
 	
-	// Create a persistent browser context
 	ctx, cancelCtx := chromedp.NewContext(allocCtx)
 
 	m.browserCtx = ctx
-	// We need to keep both cancel functions to shut down cleanly
 	m.cancelBrowser = func() {
 		cancelCtx()
 		cancelAlloc()
 	}
 
-	// Ping the browser to ensure it started
-	if err := chromedp.Run(ctx); err != nil {
+	// Ping and set viewport explicitly
+	if err := chromedp.Run(ctx, chromedp.EmulateViewport(1280, 720)); err != nil {
 		m.cancelBrowser()
 		return err
 	}

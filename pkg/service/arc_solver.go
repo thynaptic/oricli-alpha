@@ -74,13 +74,13 @@ func (s *ARCSolverService) SolveTask(ctx context.Context, task arc.Task) (*arc.A
 	}
 
 	// Apply best path to test input
-	prediction := s.applyPath(task.Test[0].Input, result.BestAnswer)
+	prediction := s.applyPath(task.Test[0].Input, result.Answer)
 
 	return &arc.ARCResult{
 		Prediction: prediction,
-		Confidence: result.Confidence,
+		Confidence: result.BestScore,
 		Method:     "go_native_mcts_induction",
-		Program:    result.BestAnswer,
+		Program:    result.Answer,
 	}, nil
 }
 

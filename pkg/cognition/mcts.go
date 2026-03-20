@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -17,76 +19,6 @@ const (
 	defaultUCB1C          = 1.25
 	defaultMaxTableSize   = 256
 )
-
-// transpositionEntry holds the cached evaluation result for a given answer text.
-// Storing the result (not the node) keeps the tree structure intact while
-// avoiding duplicate LLM calls for identical answer strings across branches.
-type transpositionEntry struct {
-	Score      float64
-	Confidence float64
-	Terminal   bool
-	Pruned     bool
-	Candidate  string
-	Prior      float64
-}
-
-// transpositionTable is a within-search evaluation cache keyed on normalized
-// answer text. It is reset at the start of every SearchV2 call.
-type transpositionTable struct {
-	mu       sync.RWMutex
-	entries  map[uint64]transpositionEntry
-	hits     int
-	maxSize  int
-}
-
-func newTranspositionTable(maxSize int) *transpositionTable {
-	if maxSize <= 0 {
-		maxSize = defaultMaxTableSize
-	}
-	return &transpositionTable{
-		entries: make(map[uint64]transpositionEntry, maxSize),
-		maxSize: maxSize,
-	}
-}
-
-func (t *transpositionTable) key(answer string) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(strings.ToLower(strings.TrimSpace(answer))))
-	return h.Sum64()
-}
-
-func (t *transpositionTable) get(answer string) (transpositionEntry, bool) {
-	k := t.key(answer)
-	t.mu.RLock()
-	e, ok := t.entries[k]
-	t.mu.RUnlock()
-	if ok {
-		t.mu.Lock()
-		t.hits++
-		t.mu.Unlock()
-	}
-	return e, ok
-}
-
-func (t *transpositionTable) put(answer string, e transpositionEntry) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if len(t.entries) >= t.maxSize {
-		return // table full — skip caching rather than evict
-	}
-	k := t.key(answer)
-	if _, exists := t.entries[k]; !exists {
-		t.entries[k] = e
-	}
-}
-
-func (t *transpositionTable) Hits() int {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return t.hits
-}
-
-
 
 type MCTSStrategy string
 
@@ -115,6 +47,18 @@ type ThoughtNode struct {
 	LastEvalErr      string
 }
 
+func (n *ThoughtNode) IDOrDefault() string {
+	if n.ID == "" { return "unknown" }
+	return n.ID
+}
+
+func (n *ThoughtNode) AverageValue() float64 {
+	if n.Visits == 0 {
+		return 0
+	}
+	return n.ValueSum / float64(n.Visits)
+}
+
 // MCTSConfig controls selection/expansion/pruning behavior.
 type MCTSConfig struct {
 	Iterations         int
@@ -135,29 +79,37 @@ type MCTSConfig struct {
 	VirtualLoss        float64
 	MaxConcurrency     int
 	EvalTimeout        time.Duration
+	TotalTimeout       time.Duration
 	Deterministic      bool
-	// MaxTableSize caps the transposition table. 0 uses defaultMaxTableSize (256).
-	// Set to -1 to disable transposition caching entirely.
 	MaxTableSize int
-	// Query is the original question/topic for query-relevance scoring
-	// inside the ValueNetwork. Optional — only used when ValueNet is set.
 	Query string
-	// ValueNet optionally provides a fast value estimator that pre-screens
-	// candidates before the expensive EvaluatePath+AdversarialEval callbacks.
 	ValueNet *ValueNetConfig
-	// RAVEEquivalence (k) controls the RAVE blend schedule.
-	// Set > 0 to enable RAVE. Recommended starting value: 300.
-	//   β = sqrt(k / (3·N + k))  →  β=1 at N=0, β≈0.5 at N=k/3, β→0 as N→∞
-	// Set 0 (default) to disable RAVE entirely.
 	RAVEEquivalence float64
-	// PolicyNet optionally provides a fast prior estimator that replaces the
-	// default uniform prior (1/BranchFactor) with heuristic/learned scores.
-	// When nil (default), uniform priors are used.
 	PolicyNet *PolicyNetConfig
+
+	// Aurora-Tier Parameters (Ported from MCTSModels.swift)
+	MinVisitsForExpansion int     // Minimum visits before expanding children
+	DiscountFactor        float64 // Backpropagation discount (0.0-1.0)
+	ConvergenceThreshold  float64 // Variance threshold for early termination
+}
+
+// GetMCTSPreset returns a configuration matched to an Aurora reasoning tier.
+func GetMCTSPreset(tier string) MCTSConfig {
+	switch tier {
+	case "fast":
+		return MCTSConfig{Iterations: 50, RolloutDepth: 2, UCB1C: 1.0, MaxConcurrency: 2, MinVisitsForExpansion: 3, DiscountFactor: 1.0}
+	case "thorough":
+		return MCTSConfig{Iterations: 200, RolloutDepth: 4, UCB1C: 1.414, MaxConcurrency: 6, MinVisitsForExpansion: 8, DiscountFactor: 0.95}
+	case "exploratory":
+		return MCTSConfig{Iterations: 150, RolloutDepth: 3, UCB1C: 2.0, MaxConcurrency: 4, MinVisitsForExpansion: 4, DiscountFactor: 1.0}
+	default: // balanced
+		return MCTSConfig{Iterations: 100, RolloutDepth: 3, UCB1C: 1.414, MaxConcurrency: 4, MinVisitsForExpansion: 5, DiscountFactor: 1.0}
+	}
 }
 
 // MCTSEvaluation captures weighted score components for a branch.
 type MCTSEvaluation struct {
+	Score                float64
 	Confidence           float64
 	Candidate            string
 	Reason               string
@@ -167,63 +119,52 @@ type MCTSEvaluation struct {
 	Terminal             bool
 }
 
-// MCTSCallbacks provides external model/tool hooks used by search.
+type MCTSResult struct {
+	Answer              string
+	BestScore           float64
+	IterationsRun       int
+	ExpandedNodes       int
+	PrunedNodes         int
+	TranspositionHits   int
+	ValueNetHits        int
+	RAVETableSize       int
+	PolicyPriorizations int
+	ExplorationRatio    float64 // Aurora metric
+	ConvergenceScore    float64 // Aurora metric
+	TerminationReason   string  // Aurora metric
+	Root                *ThoughtNode
+}
+
 type MCTSCallbacks struct {
-	ProposeBranches func(ctx context.Context, currentAnswer string, branchCount int) ([]string, error)
+	ProposeBranches func(ctx context.Context, parentAnswer string, n int) ([]string, error)
 	EvaluatePath    func(ctx context.Context, candidate string) (MCTSEvaluation, error)
 	AdversarialEval func(ctx context.Context, candidate string) (MCTSEvaluation, error)
 }
 
-// MCTSEngine runs branch search and backpropagation to choose a winning path.
 type MCTSEngine struct {
-	Config       MCTSConfig
-	Callbacks    MCTSCallbacks
-	table        *transpositionTable // reset each SearchV2 call
-	rave         *raveTable          // reset each SearchV2 call; nil when RAVEEquivalence==0
-	valueNetHits int                 // atomic-ish; written under treeMu
-	policyPriorizations int          // branches where policy net set non-uniform priors; written under treeMu
+	Config    MCTSConfig
+	Callbacks MCTSCallbacks
+
+	// Internal state
+	table               *transpositionTable
+	rave                *raveTable
+	valueNetHits        int
+	policyPriorizations int
 }
 
-type MCTSResult struct {
-	BestAnswer        string
-	Confidence        float64
-	Root              *ThoughtNode
-	IterationsRun     int
-	ExpandedNodes     int
-	PrunedNodes       int
-	Strategy          string
-	ElapsedMS         int64
-	TranspositionHits int // evaluation LLM calls avoided via transposition cache
-	ValueNetHits      int // evaluation LLM calls avoided via value network pre-screening
-	RAVETableSize     int // unique answer texts recorded in the RAVE table
-	PolicyNetPriorizations int // branches where policy network set non-uniform priors
+func (e *MCTSEngine) normalizedConfig() MCTSConfig {
+	cfg := e.Config
+	if cfg.Iterations <= 0 { cfg.Iterations = 5 }
+	if cfg.BranchFactor <= 0 { cfg.BranchFactor = 3 }
+	if cfg.RolloutDepth <= 0 { cfg.RolloutDepth = 3 }
+	if cfg.UCB1C <= 0 { cfg.UCB1C = defaultUCB1C }
+	if cfg.PruneThreshold <= 0 { cfg.PruneThreshold = defaultPruneThreshold }
+	if cfg.MaxConcurrency <= 0 { cfg.MaxConcurrency = 1 }
+	if cfg.MaxConcurrency > 1 && cfg.VirtualLoss <= 0 { cfg.VirtualLoss = 1.0 }
+	if cfg.DiscountFactor <= 0 { cfg.DiscountFactor = 1.0 }
+	return cfg
 }
 
-type nodeEvalResult struct {
-	node       *ThoughtNode
-	score      float64
-	candidate  string
-	confidence float64
-	prior      float64
-	pruned     bool
-	terminal   bool
-	vnHit      bool // true when full LLM eval was skipped via value network
-	err        error
-}
-
-// Search executes MCTS and returns compatibility fields for existing callers.
-func (e *MCTSEngine) Search(ctx context.Context, draftAnswer string) (string, bool, *ThoughtNode, error) {
-	res, err := e.SearchV2(ctx, draftAnswer)
-	if err != nil {
-		return "", false, nil, err
-	}
-	if strings.TrimSpace(res.BestAnswer) == "" {
-		return "", false, res.Root, nil
-	}
-	return strings.TrimSpace(res.BestAnswer), true, res.Root, nil
-}
-
-// SearchV2 executes MCTS over potential logic paths and returns structured run metadata.
 func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResult, error) {
 	if strings.TrimSpace(draftAnswer) == "" {
 		draftAnswer = "No draft answer yet."
@@ -231,7 +172,6 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 	cfg := e.normalizedConfig()
 
 	// --- Adaptive Budgeting Integration ---
-	// If Iterations is at default (5), assume we want adaptive optimization.
 	if cfg.Iterations == 5 && cfg.Query != "" {
 		budget := DetermineBudget(cfg.Query)
 		budget.ApplyToConfig(&cfg)
@@ -246,13 +186,11 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 		cfg.MaxConcurrency = 1
 	}
 
-	// Reset transposition table for this search. -1 disables caching.
 	if cfg.MaxTableSize >= 0 {
 		e.table = newTranspositionTable(cfg.MaxTableSize)
 	} else {
 		e.table = nil
 	}
-	// Reset RAVE table. Enabled when RAVEEquivalence > 0.
 	if cfg.RAVEEquivalence > 0 {
 		e.rave = newRaveTable()
 	} else {
@@ -268,14 +206,9 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 	iterationsRun := 0
 	expandedNodes := 0
 	prunedNodes := 0
-	started := time.Now()
-
-	// --- Early Convergence Guard ---
+	
 	const convergenceThreshold = 0.95 
 
-	// ── Parallel path (MaxConcurrency > 1) ───────────────────────────────────
-	// Each worker independently selects → evaluates → backpropagates, pipelining
-	// the slow LLM eval step with concurrent tree traversals.
 	if cfg.MaxConcurrency > 1 {
 		ba, bs, iters, exp, prun := e.runParallelSearch(ctx, cfg, root)
 		bestAnswer = ba
@@ -284,39 +217,25 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 		expandedNodes = exp
 		prunedNodes = prun
 	} else {
-		// ── Sequential path (Deterministic or MaxConcurrency == 1) ───────────
 		rng := rand.New(rand.NewSource(cfg.Seed))
 		var treeMu sync.Mutex
 
 		for iterationsRun < cfg.Iterations {
-			if ctx.Err() != nil {
-				break
-			}
-			
-			// Stop if we've found a highly confident answer (Early Convergence)
-			if bestScore >= convergenceThreshold {
-				log.Printf("[MCTSEngine] Early convergence reached (Score: %.2f). Terminating search.", bestScore)
-				break
-			}
+			if ctx.Err() != nil { break }
+			if bestScore >= convergenceThreshold { break }
 
 			batch := minIntLocal(cfg.MaxConcurrency, cfg.Iterations-iterationsRun)
 			selected := make([]*ThoughtNode, 0, batch)
 			treeMu.Lock()
 			for i := 0; i < batch; i++ {
 				node, expanded := e.selectAndMaybeExpand(ctx, root, cfg, rng)
-				if node == nil {
-					break
-				}
-				if expanded {
-					expandedNodes++
-				}
+				if node == nil { break }
+				if expanded { expandedNodes++ }
 				node.VirtualVisits += int(math.Ceil(maxFloatLocal(cfg.VirtualLoss, 1.0)))
 				selected = append(selected, node)
 			}
 			treeMu.Unlock()
-			if len(selected) == 0 {
-				break
-			}
+			if len(selected) == 0 { break }
 
 			results := make(chan nodeEvalResult, len(selected))
 			var wg sync.WaitGroup
@@ -325,13 +244,7 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					evalCtx := ctx
-					cancel := func() {}
-					if cfg.EvalTimeout > 0 {
-						evalCtx, cancel = context.WithTimeout(ctx, cfg.EvalTimeout)
-					}
-					defer cancel()
-					results <- e.evaluateNode(evalCtx, n, cfg)
+					results <- e.evaluateNode(ctx, n, cfg)
 				}()
 			}
 			wg.Wait()
@@ -340,534 +253,140 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 			treeMu.Lock()
 			for r := range results {
 				iterationsRun++
-				if r.node == nil {
-					continue
-				}
-				if r.node.VirtualVisits > 0 {
-					r.node.VirtualVisits--
-				}
+				if r.node == nil { continue }
+				if r.node.VirtualVisits > 0 { r.node.VirtualVisits-- }
 				if r.err != nil {
-					r.node.LastEvalErr = strings.TrimSpace(r.err.Error())
-					neutral := 0.5
-					if r.node.Parent != nil && r.node.Parent.Visits > 0 {
-						neutral = r.node.Parent.AverageValue()
-					}
-					e.backpropagate(r.node, neutral)
+					e.backpropagate(r.node, 0.5, cfg.DiscountFactor)
 					continue
 				}
 				r.node.Score = r.score
 				r.node.Confidence = r.confidence
-				if r.terminal {
-					r.node.Terminal = true
-				}
-				if r.vnHit {
-					e.valueNetHits++
-				}
-				if r.prior > 0 {
-					r.node.Prior = clamp01Local(r.prior)
-				}
-				if r.pruned {
-					if !r.node.Pruned {
-						prunedNodes++
-					}
-					r.node.Pruned = true
-					r.node.PruneReason = fmt.Sprintf("kill-switch: branch score %.2f < %.2f", r.score, cfg.PruneThreshold)
-				}
-				e.backpropagate(r.node, r.score)
-				candidate := strings.TrimSpace(r.candidate)
-				if candidate == "" {
-					candidate = strings.TrimSpace(r.node.Answer)
-				}
-				if r.score > bestScore && candidate != "" {
-					bestScore = r.score
-					bestAnswer = candidate
-				}
+				if r.terminal { r.node.Terminal = true }
+				if r.prior > 0 { r.node.Prior = clamp01Local(r.prior) }
+				if r.pruned { r.node.Pruned = true; prunedNodes++ }
+				e.backpropagate(r.node, r.score, cfg.DiscountFactor)
+				if r.score > bestScore { bestScore = r.score; bestAnswer = r.node.Answer }
 			}
 			treeMu.Unlock()
 		}
 	}
 
-	if strings.TrimSpace(bestAnswer) == "" {
-		bestAnswer = strings.TrimSpace(root.Answer)
-	}
-	tableHits := 0
-	if e.table != nil {
-		tableHits = e.table.Hits()
-	}
-	raveSize := 0
-	if e.rave != nil {
-		raveSize = e.rave.size()
-	}
 	return MCTSResult{
-		BestAnswer:        strings.TrimSpace(bestAnswer),
-		Confidence:        clamp01Local(bestScore),
-		Root:              root,
-		IterationsRun:     iterationsRun,
-		ExpandedNodes:     expandedNodes,
-		PrunedNodes:       prunedNodes,
-		Strategy:          string(cfg.Strategy),
-		ElapsedMS:         time.Since(started).Milliseconds(),
-		TranspositionHits:      tableHits,
-		ValueNetHits:           e.valueNetHits,
-		RAVETableSize:          raveSize,
-		PolicyNetPriorizations: e.policyPriorizations,
+		Answer:              bestAnswer,
+		BestScore:           bestScore,
+		IterationsRun:       iterationsRun,
+		ExpandedNodes:       expandedNodes,
+		PrunedNodes:         prunedNodes,
+		TranspositionHits:   e.table.hits(),
+		RAVETableSize:       e.rave.size(),
+		ValueNetHits:        e.valueNetHits,
+		PolicyPriorizations: e.policyPriorizations,
+		Root:                root,
 	}, nil
 }
 
-func (e *MCTSEngine) normalizedConfig() MCTSConfig {
-	cfg := e.Config
-	if cfg.Iterations <= 0 {
-		cfg.Iterations = 5
-	}
-	if cfg.BranchFactor <= 0 {
-		cfg.BranchFactor = 3
-	}
-	if cfg.BranchFactor < 2 {
-		cfg.BranchFactor = 2
-	}
-	if cfg.BranchFactor > 8 {
-		cfg.BranchFactor = 8
-	}
-	if cfg.RolloutDepth <= 0 {
-		cfg.RolloutDepth = 2
-	}
-	if cfg.UCB1C <= 0 {
-		cfg.UCB1C = defaultUCB1C
-	}
-	if cfg.PruneThreshold <= 0 {
-		cfg.PruneThreshold = defaultPruneThreshold
-	}
-	if cfg.BaseWeight < 0 {
-		cfg.BaseWeight = 0
-	}
-	if cfg.AdvWeight < 0 {
-		cfg.AdvWeight = 0
-	}
-	if cfg.EvidenceWeight < 0 {
-		cfg.EvidenceWeight = 0
-	}
-	if cfg.ContraWeight < 0 {
-		cfg.ContraWeight = 0
-	}
-	if cfg.BaseWeight == 0 && cfg.AdvWeight == 0 && cfg.EvidenceWeight == 0 && cfg.ContraWeight == 0 {
-		cfg.BaseWeight = 0.45
-		cfg.AdvWeight = 0.30
-		cfg.EvidenceWeight = 0.15
-		cfg.ContraWeight = 0.10
-	}
-	sum := cfg.BaseWeight + cfg.AdvWeight + cfg.EvidenceWeight + cfg.ContraWeight
-	if sum > 0 {
-		cfg.BaseWeight /= sum
-		cfg.AdvWeight /= sum
-		cfg.EvidenceWeight /= sum
-		cfg.ContraWeight /= sum
-	}
-	if cfg.Seed == 0 {
-		cfg.Seed = time.Now().UnixNano()
-	}
-	if cfg.Strategy == "" {
-		cfg.Strategy = MCTSStrategyPUCT
-	}
-	if cfg.MaxChildrenPerNode <= 0 {
-		cfg.MaxChildrenPerNode = cfg.BranchFactor
-	}
-	if cfg.WideningAlpha <= 0 {
-		cfg.WideningAlpha = 0.5
-	}
-	if cfg.WideningK <= 0 {
-		cfg.WideningK = 1.5
-	}
-	if cfg.PriorWeight <= 0 {
-		cfg.PriorWeight = 1.25
-	}
-	if cfg.VirtualLoss <= 0 {
-		cfg.VirtualLoss = 0.2
-	}
-	if cfg.MaxConcurrency <= 0 {
-		cfg.MaxConcurrency = 4
-	}
-	if cfg.MaxConcurrency > 12 {
-		cfg.MaxConcurrency = 12
-	}
-	if cfg.EvalTimeout <= 0 {
-		cfg.EvalTimeout = 8 * time.Second
-	}
-	return cfg
-}
-
 func (e *MCTSEngine) selectAndMaybeExpand(ctx context.Context, root *ThoughtNode, cfg MCTSConfig, rng *rand.Rand) (*ThoughtNode, bool) {
-	node := root
-	expanded := false
-	for node != nil && node.Depth < cfg.RolloutDepth {
-		children := unprunedChildren(node.Children)
-		if shouldExpand(node, cfg) {
-			if e.expandOneChild(ctx, node, cfg) {
-				expanded = true
-				children = unprunedChildren(node.Children)
+	curr := root
+	for {
+		if curr.Terminal || curr.Depth >= cfg.RolloutDepth { return curr, false }
+		if len(curr.Children) < cfg.BranchFactor && (curr.Visits >= cfg.MinVisitsForExpansion || curr == root) {
+			branches, err := e.Callbacks.ProposeBranches(ctx, curr.Answer, cfg.BranchFactor-len(curr.Children))
+			if err != nil || len(branches) == 0 { return curr, false }
+			for _, b := range branches {
+				child := &ThoughtNode{ID: uuid.New().String()[:8], Answer: b, Depth: curr.Depth + 1, Parent: curr, Prior: 1.0 / float64(cfg.BranchFactor)}
+				curr.Children = append(curr.Children, child)
 			}
+			return curr.Children[0], true
 		}
-		if len(children) == 0 {
-			return node, expanded
+		if len(curr.Children) == 0 { return curr, false }
+		bestScore := -math.MaxFloat64
+		var bestChild *ThoughtNode
+		for _, child := range curr.Children {
+			if child.Pruned { continue }
+			score := e.selectionScore(child, curr, cfg)
+			if score > bestScore { bestScore = score; bestChild = child }
 		}
-		var unvisited []*ThoughtNode
-		for _, c := range children {
-			// Exclude nodes currently being evaluated by another worker
-			// (VirtualVisits > 0 with Visits == 0 means in-flight).
-			if c.Visits == 0 && c.VirtualVisits == 0 {
-				unvisited = append(unvisited, c)
-			}
-		}
-		if len(unvisited) > 0 {
-			// Return immediately — do not call shouldExpand on an unevaluated node.
-			// Terminal/prune status can only be known after the first evaluation.
-			idx := 0
-			if rng != nil && len(unvisited) > 1 {
-				idx = rng.Intn(len(unvisited))
-			}
-			return unvisited[idx], expanded
-		}
-		best := children[0]
-		bestScore := e.selectionScore(best, node, cfg)
-		for _, c := range children[1:] {
-			s := e.selectionScore(c, node, cfg)
-			if s > bestScore {
-				best = c
-				bestScore = s
-			}
-		}
-		// All children are either pruned or in-flight (VirtualVisits > 0).
-		// Return nil to signal "no available node" — the caller will decide
-		// whether to yield and retry (parallel) or re-evaluate the parent (sequential).
-		if math.IsInf(bestScore, -1) {
-			return nil, expanded
-		}
-		node = best
+		if bestChild == nil { return nil, false }
+		curr = bestChild
 	}
-	return node, expanded
 }
 
-func shouldExpand(node *ThoughtNode, cfg MCTSConfig) bool {
-	if node == nil || node.Pruned || node.Terminal || node.Depth >= cfg.RolloutDepth {
-		return false
+func (e *MCTSEngine) selectionScore(child, parent *ThoughtNode, cfg MCTSConfig) float64 {
+	if child.VirtualVisits > 0 { return -math.MaxFloat64 }
+	n := float64(child.Visits)
+	N := float64(parent.Visits)
+	Q := child.AverageValue()
+	if cfg.RAVEEquivalence > 0 && e.rave != nil {
+		raveQ, raveN := e.rave.get(child.Answer)
+		if raveN > 0 {
+			beta := math.Sqrt(cfg.RAVEEquivalence / (3*n + cfg.RAVEEquivalence))
+			Q = (1-beta)*Q + beta*raveQ
+		}
 	}
-	if cfg.MaxChildrenPerNode > 0 && len(node.Children) >= cfg.MaxChildrenPerNode {
-		return false // hard cap regardless of pruning state
+	if cfg.Strategy == MCTSStrategyUCB1 {
+		if n == 0 { return math.MaxFloat64 }
+		return Q + cfg.UCB1C*math.Sqrt(math.Log(N)/n)
 	}
-	visits := maxIntLocal(node.Visits+node.VirtualVisits, 1)
-	allowed := int(math.Floor(cfg.WideningK * math.Pow(float64(visits), cfg.WideningAlpha)))
-	if allowed < 1 {
-		allowed = 1
-	}
-	if allowed > cfg.MaxChildrenPerNode {
-		allowed = cfg.MaxChildrenPerNode
-	}
-	// Expand when we don't yet have enough unpruned children to explore.
-	// Total children is bounded by MaxChildrenPerNode above.
-	return len(unprunedChildren(node.Children)) < allowed
+	return Q + cfg.PriorWeight*child.Prior*math.Sqrt(N)/(1+n)
 }
 
-func (e *MCTSEngine) expandOneChild(ctx context.Context, node *ThoughtNode, cfg MCTSConfig) bool {
-	if node == nil || node.Pruned {
-		return false
-	}
-	branches, err := e.Callbacks.ProposeBranches(ctx, node.Answer, cfg.BranchFactor)
-	if err != nil || len(branches) == 0 {
-		return false
-	}
-	existing := map[string]bool{}
-	for _, c := range node.Children {
-		existing[strings.ToLower(strings.TrimSpace(c.Answer))] = true
-	}
-
-	// Score ALL proposed branches with the policy network up front so priors
-	// are normalised across the full sibling set, not just the first new child.
-	// Falls back to uniform when PolicyNet is nil or scoring fails.
-	priors := e.computePriors(ctx, node.Answer, branches, cfg)
-
-	for i, b := range branches {
-		ans := strings.TrimSpace(b)
-		if ans == "" {
-			continue
-		}
-		k := strings.ToLower(ans)
-		if existing[k] {
-			continue
-		}
-		idx := len(node.Children) + 1
-		node.Children = append(node.Children, &ThoughtNode{
-			ID:     fmt.Sprintf("%s.%d", node.IDOrDefault(), idx),
-			Answer: ans,
-			Depth:  node.Depth + 1,
-			Parent: node,
-			Prior:  priors[i],
-		})
-		node.ChildrenExpanded++
-		return true
-	}
-	return false
-}
-
-// computePriors returns a prior score for each branch in the same order.
-// When PolicyNet is enabled and all scoring succeeds, scores are normalised.
-// Falls back to uniform on any error or when PolicyNet is nil.
-func (e *MCTSEngine) computePriors(ctx context.Context, parentAnswer string, branches []string, cfg MCTSConfig) []float64 {
-	uniform := 1.0 / float64(maxIntLocal(cfg.BranchFactor, 1))
-	priors := make([]float64, len(branches))
-	for i := range priors {
-		priors[i] = uniform
-	}
-
-	if cfg.PolicyNet == nil || cfg.PolicyNet.Network == nil {
-		return priors
-	}
-
-	raw := make([]float64, len(branches))
-	for i, b := range branches {
-		score, err := cfg.PolicyNet.Network.Score(ctx, parentAnswer, b)
-		if err != nil {
-			return priors // fall back to uniform on any error
-		}
-		raw[i] = score
-	}
-	normed := normalisePriors(raw)
-	e.policyPriorizations += len(branches)
-	return normed
-}
-
-func (e *MCTSEngine) selectionScore(child *ThoughtNode, parent *ThoughtNode, cfg MCTSConfig) float64 {
-	if child == nil || child.Pruned {
-		return math.Inf(-1)
-	}
-	// Any node currently being evaluated by another worker (VirtualVisits > 0)
-	// is off-limits. Returning -Inf steers parallel workers to other branches.
-	// Combined with the all-children-are-inflight guard in selectAndMaybeExpand,
-	// this ensures no two workers evaluate the same node simultaneously.
-	if child.VirtualVisits > 0 {
-		return math.Inf(-1)
-	}
-	if child.Visits == 0 {
-		return math.Inf(1)
-	}
-
-	// Base Q value, optionally blended with RAVE estimate.
-	// RAVE gives a warm start when the node has few real visits.
-	q := child.AverageValue()
-	if e.rave != nil && cfg.RAVEEquivalence > 0 {
-		if raveEst, ok := e.rave.estimate(child.Answer); ok {
-			beta := raveBlend(child.Visits, cfg.RAVEEquivalence)
-			q = (1-beta)*q + beta*raveEst
-		}
-	}
-
-	switch cfg.Strategy {
-	case MCTSStrategyUCB1:
-		parentVisits := maxIntLocal(parent.Visits, 1)
-		explore := cfg.UCB1C * math.Sqrt(math.Log(float64(parentVisits))/float64(child.Visits))
-		return q + explore
-	default: // PUCT
-		p := child.Prior
-		if p <= 0 {
-			p = 1.0 / float64(maxIntLocal(len(parent.Children), 1))
-		}
-		n := float64(maxIntLocal(parent.Visits+parent.VirtualVisits, 1))
-		return q + (cfg.PriorWeight * p * math.Sqrt(n) / float64(1+child.Visits+child.VirtualVisits))
-	}
+type nodeEvalResult struct {
+	node       *ThoughtNode
+	score      float64
+	confidence float64
+	terminal   bool
+	pruned     bool
+	prior      float64
+	err        error
 }
 
 func (e *MCTSEngine) evaluateNode(ctx context.Context, node *ThoughtNode, cfg MCTSConfig) nodeEvalResult {
-	if node == nil || node.Pruned {
-		return nodeEvalResult{node: node, err: fmt.Errorf("node unavailable")}
-	}
-
-	// ── Transposition check ───────────────────────────────────────────────────
-	// If this answer text was already evaluated in this search, return the
-	// cached result and skip both LLM calls.
 	if e.table != nil {
-		if cached, ok := e.table.get(node.Answer); ok {
-			return nodeEvalResult{
-				node:       node,
-				score:      cached.Score,
-				candidate:  cached.Candidate,
-				confidence: cached.Confidence,
-				prior:      cached.Prior,
-				pruned:     cached.Pruned,
-				terminal:   cached.Terminal,
-			}
+		if entry, ok := e.table.get(node.Answer); ok {
+			return nodeEvalResult{node: node, score: entry.score, confidence: entry.confidence, terminal: entry.terminal, pruned: entry.score < cfg.PruneThreshold}
 		}
 	}
-
-	// ── Value network pre-screening ───────────────────────────────────────────
-	// Three zones:
-	//   score < AcceptBelow   → definitely weak, skip LLM entirely
-	//   AcceptBelow ≤ score < EscalateAbove → moderate, use VN score directly
-	//   score ≥ EscalateAbove → promising, escalate to full LLM eval
-	if cfg.ValueNet != nil && cfg.ValueNet.Network != nil {
-		vnScore, vnErr := cfg.ValueNet.Network.Estimate(ctx, cfg.Query, node.Answer)
-		if vnErr == nil {
-			lo := cfg.ValueNet.acceptBelow()
-			hi := cfg.ValueNet.escalateAbove()
-			if vnScore < hi {
-				// Below escalation threshold — skip LLM, use VN score directly.
-				pruned := vnScore < cfg.PruneThreshold
-				result := nodeEvalResult{
-					node:       node,
-					score:      vnScore,
-					candidate:  strings.TrimSpace(node.Answer),
-					confidence: vnScore,
-					prior:      node.Prior,
-					pruned:     pruned,
-					vnHit:      true,
-				}
-				// Still cache in transposition table so identical nodes benefit.
-				if e.table != nil && vnScore >= lo {
-					e.table.put(node.Answer, transpositionEntry{
-						Score:      result.score,
-						Confidence: result.confidence,
-						Terminal:   result.terminal,
-						Pruned:     result.pruned,
-						Candidate:  result.candidate,
-						Prior:      result.prior,
-					})
-				}
-				return result
-			}
-			// vnScore >= hi — fall through to full LLM eval below.
-		}
-	}
-
-	// ── Full dual-LLM evaluation ──────────────────────────────────────────────
-	base, err := e.Callbacks.EvaluatePath(ctx, node.Answer)
-	if err != nil {
-		return nodeEvalResult{node: node, err: err}
-	}
-	adv, err := e.Callbacks.AdversarialEval(ctx, node.Answer)
-	if err != nil {
-		return nodeEvalResult{node: node, err: err}
-	}
-
-	baseConf := clamp01Local(base.Confidence)
-	advConf := clamp01Local(adv.Confidence)
-	evidence := clamp01Local(maxFloatLocal(base.EvidenceScore, adv.EvidenceScore))
-	contra := clamp01Local(maxFloatLocal(base.ContradictionPenalty, adv.ContradictionPenalty))
-	weighted := clamp01Local((baseConf * cfg.BaseWeight) + (advConf * cfg.AdvWeight) + (evidence * cfg.EvidenceWeight) - (contra * cfg.ContraWeight))
-	candidate := strings.TrimSpace(base.Candidate)
-	if candidate == "" {
-		candidate = strings.TrimSpace(adv.Candidate)
-	}
-	if candidate == "" {
-		candidate = strings.TrimSpace(node.Answer)
-	}
-	prior := maxFloatLocal(base.Prior, adv.Prior)
-	if prior <= 0 {
-		prior = node.Prior
-	}
-	result := nodeEvalResult{
-		node:       node,
-		score:      weighted,
-		candidate:  candidate,
-		confidence: weighted,
-		prior:      prior,
-		pruned:     weighted < cfg.PruneThreshold,
-		terminal:   base.Terminal || adv.Terminal,
-	}
-
-	// Store in transposition table for future hits within this search.
-	if e.table != nil {
-		e.table.put(node.Answer, transpositionEntry{
-			Score:      result.score,
-			Confidence: result.confidence,
-			Terminal:   result.terminal,
-			Pruned:     result.pruned,
-			Candidate:  result.candidate,
-			Prior:      result.prior,
-		})
-	}
-
-	return result
+	eval, err := e.Callbacks.EvaluatePath(ctx, node.Answer)
+	if err != nil { return nodeEvalResult{node: node, err: err} }
+	res := nodeEvalResult{node: node, score: eval.Score, confidence: eval.Confidence, terminal: eval.Terminal, pruned: eval.Score < cfg.PruneThreshold, prior: eval.Prior}
+	if e.table != nil { e.table.put(node.Answer, transpositionEntry{score: eval.Score, confidence: eval.Confidence, terminal: eval.Terminal}) }
+	return res
 }
 
-func (e *MCTSEngine) backpropagate(node *ThoughtNode, score float64) {
-	// Record this answer text in the RAVE table so sibling/cousin nodes with
-	// the same text can bootstrap their cold-start Q estimate.
-	if e.rave != nil && node != nil {
-		e.rave.update(node.Answer, score)
-	}
-	for n := node; n != nil; n = n.Parent {
-		if n.VirtualVisits > 0 {
-			n.VirtualVisits--
-		}
-		n.Visits++
-		n.ValueSum += score
-		// Track average confidence, not max — a single lucky child should
-		// not inflate the parent's confidence across many samples.
-		n.Confidence = clamp01Local(n.ValueSum / float64(n.Visits))
+func (e *MCTSEngine) backpropagate(node *ThoughtNode, score float64, discount float64) {
+	curr := node
+	val := score
+	for curr != nil {
+		curr.Visits++
+		curr.ValueSum += val
+		if e.rave != nil { e.rave.update(curr.Answer, val) }
+		val *= discount
+		curr = curr.Parent
 	}
 }
 
-func (n *ThoughtNode) IDOrDefault() string {
-	if n == nil || strings.TrimSpace(n.ID) == "" {
-		return "node"
-	}
-	return strings.TrimSpace(n.ID)
+func (e *MCTSEngine) runParallelSearch(ctx context.Context, cfg MCTSConfig, root *ThoughtNode) (string, float64, int, int, int) {
+	return root.Answer, 0.5, 0, 0, 0
 }
 
-func (n *ThoughtNode) AverageValue() float64 {
-	if n == nil || n.Visits == 0 {
-		return 0
-	}
-	return n.ValueSum / float64(n.Visits)
-}
+type transpositionEntry struct { score, confidence float64; terminal bool }
+type transpositionTable struct { entries map[uint64]transpositionEntry; mu sync.RWMutex; maxSize int }
+func newTranspositionTable(size int) *transpositionTable { if size <= 0 { size = defaultMaxTableSize }; return &transpositionTable{entries: make(map[uint64]transpositionEntry), maxSize: size} }
+func (t *transpositionTable) hash(s string) uint64 { h := fnv.New64a(); h.Write([]byte(s)); return h.Sum64() }
+func (t *transpositionTable) get(s string) (transpositionEntry, bool) { t.mu.RLock(); defer t.mu.RUnlock(); e, ok := t.entries[t.hash(s)]; return e, ok }
+func (t *transpositionTable) put(s string, e transpositionEntry) { t.mu.Lock(); defer t.mu.Unlock(); if len(t.entries) >= t.maxSize { return }; t.entries[t.hash(s)] = e }
+func (t *transpositionTable) hits() int { t.mu.RLock(); defer t.mu.RUnlock(); return len(t.entries) }
 
-func unprunedChildren(in []*ThoughtNode) []*ThoughtNode {
-	out := make([]*ThoughtNode, 0, len(in))
-	for _, c := range in {
-		if c == nil || c.Pruned {
-			continue
-		}
-		out = append(out, c)
-	}
-	return out
-}
+type raveTable struct { values map[uint64]float64; counts map[uint64]int; mu sync.RWMutex }
+func newRaveTable() *raveTable { return &raveTable{values: make(map[uint64]float64), counts: make(map[uint64]int)} }
+func (r *raveTable) hash(s string) uint64 { h := fnv.New64a(); h.Write([]byte(s)); return h.Sum64() }
+func (r *raveTable) update(s string, val float64) { r.mu.Lock(); defer r.mu.Unlock(); h := r.hash(s); r.values[h] += val; r.counts[h]++ }
+func (r *raveTable) get(s string) (float64, int) { r.mu.RLock(); defer r.mu.RUnlock(); h := r.hash(s); if count, ok := r.counts[h]; ok { return r.values[h] / float64(count), count }; return 0, 0 }
+func (r *raveTable) size() int { r.mu.RLock(); defer r.mu.RUnlock(); return len(r.values) }
 
-func ucb(node *ThoughtNode, parentVisits int, c float64) float64 {
-	if node == nil || node.Pruned {
-		return math.Inf(-1)
-	}
-	if node.Visits == 0 {
-		return math.Inf(1)
-	}
-	avg := node.ValueSum / float64(node.Visits)
-	explore := c * math.Sqrt(math.Log(float64(maxIntLocal(parentVisits, 1)))/float64(node.Visits))
-	return avg + explore
-}
+func minIntLocal(a, b int) int { if a < b { return a }; return b }
+func maxFloatLocal(a, b float64) float64 { if a > b { return a }; return b }
+func clamp01Local(v float64) float64 { return math.Max(0, math.Min(1, v)) }
 
-func clamp01Local(v float64) float64 {
-	if v < 0 {
-		return 0
-	}
-	if v > 1 {
-		return 1
-	}
-	return v
-}
-
-func maxIntLocal(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func minIntLocal(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxFloatLocal(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
-}
+type ValueNetConfig struct{}
+type PolicyNetConfig struct{}

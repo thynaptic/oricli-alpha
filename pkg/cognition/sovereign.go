@@ -117,6 +117,7 @@ type SovereignEngine struct {
 	MCP          *mcp.MCPManager
 	Telegram     *telegram.Client
 	VDI          *vdi.Manager
+	Vision       *vdi.VisionGroundingService
 	SubstrateHealth *HealthMonitor
 	WSHub        EventBroadcaster
 	CurrentSensory SensoryState
@@ -124,7 +125,7 @@ type SovereignEngine struct {
 	mu           sync.Mutex
 }
 
-func NewSovereignEngine() *SovereignEngine {
+func NewSovereignEngine(genService GenerationService) *SovereignEngine {
 	constitution := safety.NewSovereignConstitution()
 	// Load Telegram config from environment
 	tgToken := os.Getenv("VITE_TELEGRAM_API")
@@ -167,6 +168,8 @@ func NewSovereignEngine() *SovereignEngine {
 	}
 	
 	engine.Generator = NewGeneratorOrchestrator(engine)
+	engine.Generator.GenService = genService // Initialize the GenService correctly
+	engine.Vision = vdi.NewVisionGroundingService(genService)
 	engine.ToT = NewToTEngine(engine.Generator)
 	engine.Audit = NewAuditEngine(engine)
 	engine.CurrentSensory = engine.Sensory.ComputeSensoryState(0.5, 0.5, "C Major")

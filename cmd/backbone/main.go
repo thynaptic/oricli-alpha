@@ -1,12 +1,13 @@
 package main
 
 import (
-        "context"
-        "log"
-        "os"
-        "os/signal"
-        "strings"
-        "syscall"
+	"context"
+	"log"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+
 	"github.com/joho/godotenv"
 	"github.com/thynaptic/oricli-go/pkg/api"
 	"github.com/thynaptic/oricli-go/pkg/bus"
@@ -19,12 +20,10 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/service"
 )
 
-const (
-	apiKeyFile = "/home/mike/Mavaia/.oricli/api_key"
-	apiKeyDir  = "/home/mike/Mavaia/.oricli"
-)
-
 func bootstrapAPIKey(st *memory.MemoryStore) string {
+	apiKeyDir := "/home/mike/Mavaia/.oricli"
+	apiKeyFile := apiKeyDir + "/api_key"
+
 	if data, err := os.ReadFile(apiKeyFile); err == nil {
 		raw := strings.TrimSpace(string(data))
 		if len(raw) > 4 {
@@ -60,7 +59,7 @@ func main() {
 
 	// 2. Core Infrastructure (Bus & Safety)
 	swarmBus := bus.NewSwarmBus(5000)
-	safety := kernel.NewSafetyFramework(100.0) // $100.00 Daily Spend Cap
+	safetyFramework := kernel.NewSafetyFramework(100.0) // $100.00 Daily Spend Cap
 	ghost := service.NewGhostClusterService(apiKeyEnv)
 	log.Println("[Boot] Ring 0 Infrastructure and Safety online.")
 
@@ -73,16 +72,22 @@ func main() {
 	}
 	log.Println("[Boot] Storage Ring (Chronos-Indexed LMDB) secured.")
 
-	// 4. Intelligence Synthesis (Sovereign Engine)
-	log.Println("[Boot] Initializing Sovereign Engine...")
-	sovEngine := cognition.NewSovereignEngine()
+	// 4. Standard Services
+	st := memory.New()
+	genService := service.NewGenerationService()
+	apiKey := bootstrapAPIKey(st)
+	_ = apiKey
 
+	// 5. Intelligence Synthesis (Sovereign Engine)
+	log.Println("[Boot] Initializing Sovereign Engine...")
+	sovEngine := cognition.NewSovereignEngine(genService)
+	
 	// Initialize VDI (Virtual Device Interface)
 	log.Println("[Boot] Initializing Sovereign VDI...")
 	if err := sovEngine.VDI.Start(); err != nil {
 		log.Printf("[Boot] Warning: Failed to start VDI browser: %v", err)
 	}
-	sovEngine.VDI.RegisterTools(sovEngine.Toolbox)
+	sovEngine.VDI.RegisterTools(sovEngine.Toolbox, sovEngine.Vision)
 
 	// Initialize MCP Bridge
 	log.Println("[Boot] Initializing MCP servers...")
@@ -92,26 +97,23 @@ func main() {
 	if err := sovEngine.Toolbox.RegisterMCPTools(context.Background(), sovEngine.MCP); err != nil {
 		log.Printf("[Boot] Warning: Failed to bridge MCP tools: %v", err)
 	}
+
 	registry := service.NewModuleRegistry("")
 	goshMod, _ := service.NewGoshModule("hive_sandbox", "/home/mike/Mavaia")
 	orch := service.NewGoOrchestrator(swarmBus, registry)
 	precog := service.NewMetacogDaemon("/home/mike/Mavaia", orch, goshMod)
-	log.Println("[Boot] Sovereign Cognition & Precog active.")
-	// 5. BOOT KERNEL (The Master Arbiter)
-	k := kernel.NewMicroKernel(mb, ghost, precog, safety)
-	log.Println("[System] Kernel Ring 0 is ACTIVE.")
-
-	// 6. Initialize Standard Services
-	st := memory.New()
-	genService := service.NewGenerationService()
-	apiKey := bootstrapAPIKey(st)
-	_ = apiKey
 	
 	graphService, _ := service.NewGraphService()
 	node.NewGraphModule(swarmBus, graphService).Start()
 	temporalSvc := service.NewTemporalService(graphService)
 	node.NewTemporalModule(swarmBus, temporalSvc).Start()
 	node.NewNativeGenerationModule(swarmBus, genService).Start()
+
+	log.Println("[Boot] Sovereign Cognition & Precog active.")
+
+	// 6. BOOT KERNEL (The Master Arbiter)
+	k := kernel.NewMicroKernel(mb, ghost, precog, safetyFramework)
+	log.Println("[System] Kernel Ring 0 is ACTIVE.")
 
 	// 7. Fleets & Autonomic Services
 	scaler := kernel.NewScalingService(swarmBus, k)
@@ -152,4 +154,5 @@ func main() {
 	sovEngine.MCP.StopAll()
 	mb.Close()
 	swarmBus.Stop()
-	log.Println("[System] Oricli-Alpha Hive OS Offline.")}
+	log.Println("[System] Oricli-Alpha Hive OS Offline.")
+}
