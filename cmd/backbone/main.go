@@ -129,6 +129,10 @@ func main() {
 	
 	apiPort := 8089
 	apiServer := api.NewServerV2(config.Load(), st, orch, agentService, monitor, apiPort)
+	
+	// Inject WS Hub into Sovereign Engine for real-time broadcasts
+	sovEngine.WSHub = apiServer.WSHub
+	
 	go apiServer.Start()
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)
 

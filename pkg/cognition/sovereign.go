@@ -76,6 +76,10 @@ type MetacogSentinel struct {
 	BiasLock   bool
 }
 
+type EventBroadcaster interface {
+	BroadcastEvent(eventType string, payload interface{})
+}
+
 // --- Pillar 5: Sovereign Engine (The Synthesis) ---
 type SovereignEngine struct {
 	Subconscious *SubconsciousField
@@ -114,6 +118,7 @@ type SovereignEngine struct {
 	Telegram     *telegram.Client
 	VDI          *vdi.Manager
 	SubstrateHealth *HealthMonitor
+	WSHub        EventBroadcaster
 	CurrentSensory SensoryState
 	CurrentHealth HealthSnapshot
 	mu           sync.Mutex
@@ -244,7 +249,14 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	composite += "\n\n" + e.SCAI.Constitution.GetSystemPrompt()
 	
 	// --- Step 10: Introspective Audit & Trace Generation ---
-	fmt.Printf("[SovereignEngine] Pipeline v2.10.0 Complete. Router: %s, Health: %s\n", reasoningMethod, e.CurrentHealth.GetSummary())
+	fmt.Printf("[SovereignEngine] Pipeline v2.9.1 Complete. Router: %s, Health: %s\n", reasoningMethod, e.CurrentHealth.GetSummary())
+
+	// 10.1 Real-Time WebSocket Synchronization (Push)
+	if e.WSHub != nil {
+		go e.WSHub.BroadcastEvent("resonance_sync", e.Resonance.Current)
+		go e.WSHub.BroadcastEvent("sensory_sync", e.CurrentSensory)
+		go e.WSHub.BroadcastEvent("health_sync", e.CurrentHealth)
+	}
 
 	aside := e.Personality.GetGroundingAside(e.Sentiment.Valence)
 	slangDirectives := e.Slang.GetDirectives(slangRes)
