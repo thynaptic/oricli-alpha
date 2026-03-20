@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/thynaptic/oricli-go/pkg/bus"
+	"github.com/thynaptic/oricli-go/pkg/kernel"
 	"github.com/thynaptic/oricli-go/pkg/memory"
 	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/state"
@@ -120,8 +122,9 @@ type SovereignEngine struct {
 	VDI          *vdi.Manager
 	Vision       *vdi.VisionGroundingService
 	Voice        *voice.VoicePiperService
-	Reform       interface{} // Use interface to avoid circular dependency
-	Curiosity    interface{} // Use interface to avoid circular dependency
+	Reform       interface{}
+	Curiosity    interface{}
+	Scheduler    *kernel.Scheduler
 	SubstrateHealth *HealthMonitor
 	WSHub        EventBroadcaster
 	CurrentSensory SensoryState
@@ -129,7 +132,7 @@ type SovereignEngine struct {
 	mu           sync.Mutex
 }
 
-func NewSovereignEngine(genService GenerationService) *SovereignEngine {
+func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *SovereignEngine {
 	constitution := safety.NewSovereignConstitution()
 	// Load Telegram config from environment
 	tgToken := os.Getenv("VITE_TELEGRAM_API")
@@ -170,6 +173,7 @@ func NewSovereignEngine(genService GenerationService) *SovereignEngine {
 		Telegram:     telegram.NewClient(tgToken, tgChatID),
 		VDI:          vdi.NewManager(),
 		Voice:        voice.NewVoicePiperService("/home/mike/puppy-princess-os/voice/piper/piper", "/home/mike/puppy-princess-os/voice/en_US-lessac-medium.onnx", nil),
+		Scheduler:    kernel.NewScheduler(swarmBus),
 	}
 	
 	engine.Generator = NewGeneratorOrchestrator(engine)

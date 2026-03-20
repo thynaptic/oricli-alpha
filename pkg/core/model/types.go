@@ -306,3 +306,18 @@ type MemoryNode struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
+
+// AgentProfile represents a declarative policy for a task-specific agent
+type AgentProfile struct {
+	Name               string              `json:"name"`
+	Description        string              `json:"description"`
+	AllowedModules     []string            `json:"allowed_modules"`
+	AllowedOperations  map[string][]string `json:"allowed_operations"`
+	BlockedModules     []string            `json:"blocked_modules"`
+	BlockedOperations  map[string][]string `json:"blocked_operations"`
+	SystemInstructions string              `json:"system_instructions"`
+	ModelPreference    string              `json:"model_preference"`
+	TaskTags           []string            `json:"task_tags"`
+	SkillOverlays      []string            `json:"skill_overlays"`
+	MetacogTokens      float64             `json:"metacog_tokens"` // The Hive's merit-based currency
+}

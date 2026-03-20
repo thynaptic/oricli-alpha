@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/thynaptic/oricli-go/pkg/bus"
+	"github.com/thynaptic/oricli-go/pkg/core/model"
 	"github.com/thynaptic/oricli-go/pkg/service"
 )
 
@@ -458,7 +459,7 @@ func (s *Server) handleListAgents(c *gin.Context) {
 }
 
 func (s *Server) handleCreateAgent(c *gin.Context) {
-	var req service.AgentProfile
+	var req model.AgentProfile
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -472,12 +473,13 @@ func (s *Server) handleCreateAgent(c *gin.Context) {
 
 func (s *Server) handleUpdateAgent(c *gin.Context) {
 	name := c.Param("name")
-	var req service.AgentProfile
+	var req model.AgentProfile
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := s.Profiles.UpdateProfile(name, req); err != nil {
+	req.Name = name
+	if err := s.Profiles.UpdateProfile(req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/cognition"
 	"github.com/thynaptic/oricli-go/pkg/core/auth"
 	"github.com/thynaptic/oricli-go/pkg/core/config"
+	"github.com/thynaptic/oricli-go/pkg/core/model"
 	"github.com/thynaptic/oricli-go/pkg/core/store/memory"
 	"github.com/thynaptic/oricli-go/pkg/kernel"
 	"github.com/thynaptic/oricli-go/pkg/node"
@@ -83,7 +84,7 @@ func main() {
 
 	// 5. Intelligence Synthesis (Sovereign Engine)
 	log.Println("[Boot] Initializing Sovereign Engine...")
-	sovEngine := cognition.NewSovereignEngine(genService)
+	sovEngine := cognition.NewSovereignEngine(genService, swarmBus)
 	
 	// Initialize Reform Daemon (The Self-Modifier)
 	reform := service.NewReformDaemon(traceStore, codeMetrics, genService, nil)
@@ -102,7 +103,7 @@ func main() {
 	if err := sovEngine.VDI.Start(); err != nil {
 		log.Printf("[Boot] Warning: Failed to start VDI browser: %v", err)
 	}
-	sovEngine.VDI.RegisterTools(sovEngine.Toolbox, sovEngine.Vision)
+	sovEngine.VDI.RegisterTools(sovEngine.Toolbox, sovEngine.Vision, sovEngine.Scheduler)
 
 	// Initialize MCP Bridge
 	log.Println("[Boot] Initializing MCP servers...")
@@ -155,7 +156,7 @@ func main() {
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)
 
 	// 9. Spawn Core Process
-	coordProfile := service.AgentProfile{Name: "Kernel_Orchestrator"}
+	coordProfile := model.AgentProfile{Name: "Kernel_Orchestrator"}
 	k.SpawnProcess(coordProfile, 1000000.0, "echo 'Hive OS Orchestrator Online.'")
 
 	log.Println("--- HIVE OS FULL MERGE COMPLETE. SOVEREIGNTY ENGAGED. ---")

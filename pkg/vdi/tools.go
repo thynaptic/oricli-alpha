@@ -4,14 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
+	"github.com/thynaptic/oricli-go/pkg/kernel"
 	"github.com/thynaptic/oricli-go/pkg/tools"
 )
 
 // --- Pillar 47: VDI Tool Bridge ---
 // Exposes VDI capabilities to the Sovereign Engine's dynamic toolbox.
 
-func (m *Manager) RegisterTools(registry *tools.Registry, vision *VisionGroundingService) {
+func (m *Manager) RegisterTools(registry *tools.Registry, vision *VisionGroundingService, scheduler *kernel.Scheduler) {
 	// 1. Browser Navigation
 	registry.Register(&tools.Tool{
 		Definition: tools.ToolDefinition{
@@ -143,5 +145,40 @@ func (m *Manager) RegisterTools(registry *tools.Registry, vision *VisionGroundin
 		},
 	})
 
-	log.Println("[VDI] Registered native System, Browser, and Visual tools to Sovereign Toolbox.")
+	// 7. Temporal Intent (Pillar 55)
+	registry.Register(&tools.Tool{
+		Definition: tools.ToolDefinition{
+			Name:        "sov_schedule_task",
+			Description: "Schedule an autonomous task to be executed by the swarm at a future time.",
+			Parameters: tools.ToolParameters{
+				Type: "object",
+				Properties: map[string]tools.ToolProperty{
+					"operation":       {Type: "string", Description: "The swarm operation to trigger (e.g., 'audit_logs')."},
+					"params":          {Type: "object", Description: "Arguments for the operation."},
+					"delay_seconds":    {Type: "number", Description: "Seconds to wait before first execution."},
+					"interval_seconds": {Type: "number", Description: "Optional: If > 0, the task repeats every N seconds."},
+				},
+				Required: []string{"operation", "delay_seconds"},
+			},
+		},
+		Category: tools.TypeSystem,
+		Handler: func(args map[string]interface{}) (string, error) {
+			op, _ := args["operation"].(string)
+			params, _ := args["params"].(map[string]interface{})
+			delaySec, _ := args["delay_seconds"].(float64)
+			intervalSec, _ := args["interval_seconds"].(float64)
+
+			if scheduler == nil {
+				return "", fmt.Errorf("scheduler not initialized")
+			}
+
+			id := scheduler.ScheduleTask(op, params, 
+				time.Duration(delaySec)*time.Second, 
+				time.Duration(intervalSec)*time.Second)
+
+			return fmt.Sprintf("Task %s scheduled successfully.", id), nil
+		},
+	})
+
+	log.Println("[VDI] Registered native System, Browser, Visual, and Temporal tools.")
 }
