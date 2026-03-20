@@ -48,6 +48,12 @@ func NewReformDaemon(ts *TraceStore, cm *CodeMetricsService, gen *GenerationServ
 	}
 }
 
+func (d *ReformDaemon) InjectWSHub(hub interface {
+	BroadcastEvent(eventType string, payload interface{})
+}) {
+	d.WSHub = hub
+}
+
 // Run starts the background monitoring loop.
 func (d *ReformDaemon) Run(ctx context.Context) {
 	d.active = true

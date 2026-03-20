@@ -15,28 +15,45 @@ import (
 type EntityType string
 
 const (
-	TypePerson   EntityType = "person"
-	TypeConcept  EntityType = "concept"
-	TypeAction   EntityType = "action"
-	TypeObject   EntityType = "object"
-	TypeLocation EntityType = "location"
+	TypePerson    EntityType = "person"
+	TypePlace     EntityType = "place"
+	TypeThing     EntityType = "thing"
+	TypeConcept   EntityType = "concept"
+	TypeEvent     EntityType = "event"
+	TypeAction    EntityType = "action"
+	TypeIntention EntityType = "intention"
+	TypePreference EntityType = "preference"
 )
+
+type RelationshipCategory string
+
+const (
+	CatBasic    RelationshipCategory = "basic"
+	CatTemporal RelationshipCategory = "temporal"
+	CatSemantic RelationshipCategory = "semantic"
+)
+
+type Relationship struct {
+	ID       string               `json:"id"`
+	SourceID string               `json:"source_id"`
+	TargetID string               `json:"target_id"`
+	Type     string               `json:"type"` // related_to, causes, before, etc.
+	Category RelationshipCategory `json:"category"`
+	Strength float64              `json:"strength"`
+	Directed bool                 `json:"directed"`
+}
 
 type Entity struct {
 	ID          string    `json:"id"`
 	Type        EntityType `json:"type"`
 	Label       string    `json:"label"`
 	Description string    `json:"description,omitempty"`
+	Keywords    []string  `json:"keywords,omitempty"`
 	Embedding   []float32 `json:"embedding"`
+	Uncertainty float64   `json:"uncertainty"` // 0.0 - 1.0 (Higher means more "curious")
+	Importance  float64   `json:"importance"`  // 0.0 - 1.0 (Higher means more valuable)
 	LastSeen    time.Time `json:"last_seen"`
-}
-
-type Relationship struct {
-	ID       string  `json:"id"`
-	SourceID string  `json:"source_id"`
-	TargetID string  `json:"target_id"`
-	Type     string  `json:"type"`
-	Strength float64 `json:"strength"`
+	AccessCount int       `json:"access_count"`
 }
 
 type WorkingMemoryGraph struct {
@@ -50,6 +67,42 @@ func NewWorkingMemoryGraph() *WorkingMemoryGraph {
 		Entities:      make(map[string]*Entity),
 		Relationships: make([]Relationship, 0),
 	}
+}
+
+// FindGaps identifies entities that require autonomous epistemic foraging.
+func (g *WorkingMemoryGraph) FindGaps() []*Entity {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	var gaps []*Entity
+	for _, e := range g.Entities {
+		// Degree: Number of relationships this entity has
+		degree := 0
+		for _, r := range g.Relationships {
+			if r.SourceID == e.ID || r.TargetID == e.ID {
+				degree++
+			}
+		}
+
+		// Heuristic: If Uncertainty is high or Degree is low, it's a gap
+		if e.Uncertainty > 0.7 || degree < 2 || len(e.Description) < 20 {
+			gaps = append(gaps, e)
+		}
+	}
+	return gaps
+}
+
+// UpdateEntity applies metadata updates to an existing entity in a thread-safe manner.
+func (g *WorkingMemoryGraph) UpdateEntity(id string, update func(*Entity)) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if e, ok := g.Entities[id]; ok {
+		update(e)
+		e.LastSeen = time.Now()
+		return true
+	}
+	return false
 }
 
 // GenerateSovereignEmbedding creates a deterministic vector from text.

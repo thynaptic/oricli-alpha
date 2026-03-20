@@ -121,6 +121,7 @@ type SovereignEngine struct {
 	Vision       *vdi.VisionGroundingService
 	Voice        *voice.VoicePiperService
 	Reform       interface{} // Use interface to avoid circular dependency
+	Curiosity    interface{} // Use interface to avoid circular dependency
 	SubstrateHealth *HealthMonitor
 	WSHub        EventBroadcaster
 	CurrentSensory SensoryState
@@ -182,12 +183,25 @@ func NewSovereignEngine(genService GenerationService) *SovereignEngine {
 	return engine
 }
 
+type HubInjector interface {
+	InjectWSHub(hub interface {
+		BroadcastEvent(eventType string, payload interface{})
+	})
+}
+
 func (e *SovereignEngine) SetWSHub(hub EventBroadcaster) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.WSHub = hub
 	if e.Voice != nil {
 		e.Voice.InjectWSHub(hub)
+	}
+	// Inject into daemons if they support it
+	if d, ok := e.Reform.(HubInjector); ok {
+		d.InjectWSHub(hub)
+	}
+	if d, ok := e.Curiosity.(HubInjector); ok {
+		d.InjectWSHub(hub)
 	}
 }
 

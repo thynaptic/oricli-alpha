@@ -90,6 +90,12 @@ func main() {
 	sovEngine.Reform = reform
 	go reform.Run(context.Background())
 	log.Println("[Boot] Reform Daemon (Self-Modifier) loop engaged.")
+
+	// Initialize Curiosity Daemon (Epistemic Foraging)
+	curiosity := service.NewCuriosityDaemon(sovEngine.Graph, sovEngine.VDI, genService, nil)
+	sovEngine.Curiosity = curiosity
+	go curiosity.Run(context.Background())
+	log.Println("[Boot] Curiosity Daemon (Epistemic Foraging) loop engaged.")
 	
 	// Initialize VDI (Virtual Device Interface)
 	log.Println("[Boot] Initializing Sovereign VDI...")
