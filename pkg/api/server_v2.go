@@ -224,7 +224,13 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 
 	responseText := res["text"].(string)
 
-	// 4. Record Temporal Event via Swarm
+	// 4. Constitutional Self-Alignment (Critique-Revision Loop)
+	responseText, _ = s.Agent.SovEngine.SelfAlign(c.Request.Context(), lastMsg, responseText)
+
+	// 5. Final Adversarial Output Audit
+	responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
+
+	// 6. Record Temporal Event via Swarm
 	s.Orchestrator.Execute("record_event", map[string]interface{}{
 		"type":        "chat_interaction",
 		"description": fmt.Sprintf("User: %s | Assistant: %s", lastMsg, responseText),
@@ -248,6 +254,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		"usage": map[string]interface{}{
 			"resonance": s.Agent.SovEngine.Resonance.Current.ERI,
 			"mode":      s.Agent.SovEngine.Resonance.Current.MusicalKey,
+			"sensory":   s.Agent.SovEngine.CurrentSensory.ToJSONMap(),
 		},
 	})
 }

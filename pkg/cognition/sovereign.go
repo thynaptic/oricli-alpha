@@ -6,15 +6,16 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/thynaptic/oricli-go/pkg/state"
-	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/memory"
+	"github.com/thynaptic/oricli-go/pkg/safety"
+	"github.com/thynaptic/oricli-go/pkg/state"
+	"github.com/thynaptic/oricli-go/pkg/tools"
 )
 
 // --- Pillar 1: Subconscious Field ---
-// A circular vector buffer that biases cognition with "mood" and "latent intent".
 type SubconsciousField struct {
 	FieldVector []float32
 	Dimensions  int
@@ -22,25 +23,17 @@ type SubconsciousField struct {
 }
 
 func NewSubconsciousField(dims int) *SubconsciousField {
-	return &SubconsciousField{
-		FieldVector: make([]float32, dims),
-		Dimensions:  dims,
-	}
+	return &SubconsciousField{FieldVector: make([]float32, dims), Dimensions: dims}
 }
 
-// Decay slowly reverts the field to zero over time (The "Forgetting" effect).
 func (s *SubconsciousField) Decay(factor float32) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	for i := range s.FieldVector {
-		s.FieldVector[i] *= factor
-	}
+	for i := range s.FieldVector { s.FieldVector[i] *= factor }
 }
 
 // --- Pillar 2: Strategic Planner ---
-// Fuses MCTS, ToT (Tree of Thought), and CoT into high-level execution graphs.
 type StepStatus string
-
 const (
 	StepPending   StepStatus = "pending"
 	StepExecuting StepStatus = "executing"
@@ -67,15 +60,13 @@ type StrategicPlan struct {
 }
 
 // --- Pillar 3: Emotional Inference ---
-// Tracks affective states (valence, arousal, dominance) to modulate tone.
 type AffectiveState struct {
-	Valence   float32 // -1.0 (Sad) to 1.0 (Happy)
-	Arousal   float32 // 0.0 (Calm) to 1.0 (Excited)
-	Dominance float32 // 0.0 (Submissive) to 1.0 (Assertive)
+	Valence   float32
+	Arousal   float32
+	Dominance float32
 }
 
 // --- Pillar 4: Metacognitive Sentinel ---
-// Enforces "Wise Mind" and "Radical Acceptance" skills for system balance.
 type MetacogSentinel struct {
 	IsBalanced bool
 	BiasLock   bool
@@ -90,14 +81,37 @@ type SovereignEngine struct {
 	Actions      *state.ActionTracker
 	Grounding    *GroundingService
 	Safety       *safety.Sentinel
+	Adversarial  *safety.AdversarialAuditor
+	SCAI         *safety.SCAIAuditor
+	AlignmentLog *state.AlignmentLogger
 	RecallMode   memory.RecallMode
 	Graph        *memory.WorkingMemoryGraph
 	Personality  *PersonalityEngine
 	Stochastic   *MarkovChain
+	Substrate    *SubstrateEngine
+	Toolbox      *tools.Registry
+	Sensory      *SensoryEngine
+	Generator    *GeneratorOrchestrator
+	ToT          *ToTEngine
+	Emoji        *EmojiEngine
+	Audit        *AuditEngine
+	Builder      *PromptBuilder
+	Extractor    *memory.ExtractorEngine
+	Health       *HealthEngine
+	Refinement   *safety.RefinementEngine
+	Slang        *SlangEngine
+	Reflection   *ReflectionEngine
+	Support      *safety.SupportEngine
+	UserProfile  *state.UserProfile
+	Translator   *TranslationEngine
+	SubstrateHealth *HealthMonitor
+	CurrentSensory SensoryState
+	CurrentHealth HealthSnapshot
 	mu           sync.Mutex
 }
 
 func NewSovereignEngine() *SovereignEngine {
+	constitution := safety.NewSovereignConstitution()
 	engine := &SovereignEngine{
 		Subconscious: NewSubconsciousField(256),
 		Sentiment:    &AffectiveState{Valence: 0.5, Arousal: 0.5, Dominance: 0.8},
@@ -106,125 +120,157 @@ func NewSovereignEngine() *SovereignEngine {
 		Actions:      state.NewActionTracker(10),
 		Grounding:    NewGroundingService(),
 		Safety:       safety.NewSentinel(),
+		Adversarial:  safety.NewAdversarialAuditor(),
+		SCAI:         safety.NewSCAIAuditor(constitution, ""),
+		AlignmentLog: state.NewAlignmentLogger(""),
 		RecallMode:   memory.ModeOperational,
 		Graph:        memory.NewWorkingMemoryGraph(),
 		Personality:  NewPersonalityEngine(),
 		Stochastic:   NewMarkovChain(),
+		Substrate:    NewSubstrateEngine(),
+		Toolbox:      tools.NewRegistry(),
+		Sensory:      NewSensoryEngine(),
+		Emoji:        NewEmojiEngine(),
+		Builder:      NewPromptBuilder("v2.10.0"),
+		Extractor:    memory.NewExtractorEngine(),
+		Health:       NewHealthEngine(),
+		Refinement:   safety.NewRefinementEngine(),
+		Slang:        NewSlangEngine(),
+		Reflection:   NewReflectionEngine(),
+		Support:      safety.NewSupportEngine(),
+		UserProfile:  state.NewUserProfile("default_user"),
+		Translator:   NewTranslationEngine(),
+		SubstrateHealth: NewHealthMonitor(),
 	}
 	
-	// Pre-train stochastic engine with baseline persona data
-	engine.Stochastic.Train("I hear you. That sounds really hard. We can figure this out together. Take a breath. Let's look at the facts. You're doing great.", 4)
+	engine.Generator = NewGeneratorOrchestrator(engine)
+	engine.ToT = NewToTEngine(engine.Generator)
+	engine.Audit = NewAuditEngine(engine)
+	engine.CurrentSensory = engine.Sensory.ComputeSensoryState(0.5, 0.5, "C Major")
+	engine.CurrentHealth = engine.Health.GenerateSnapshot(0, 0, time.Now())
+	engine.Stochastic.Train("I hear you. That sounds really hard. We can figure this out together. Take a breath.", 4)
 	return engine
 }
 
-// ProcessInference modulates incoming stimuli through all layers (Safety -> Personality -> Reasoning).
+// ProcessInference implements the exact 11-step Aurora cognitive sequence.
 func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string) (string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// 1. Mandatory Safety Audit
-	safetyResult := e.Safety.CheckInput(stimulus)
-	if safetyResult.Detected {
-		log.Printf("[SovereignEngine] SAFETY BLOCK: Type: %s, Severity: %s, Patterns: %v", 
-			safetyResult.Type, safetyResult.Severity, safetyResult.Patterns)
-		
-		// Vibrate subconscious field negatively on safety violation
-		e.Subconscious.Decay(0.5)
-		e.Sentiment.Valence = -0.5 // Dissonance
-		
-		return safetyResult.Replacement, nil
-	}
+	// --- Step 1: Intent Classification ---
+	isLogical := strings.Contains(strings.ToLower(stimulus), "logic") || strings.Contains(strings.ToLower(stimulus), "fact")
 
-	// 2. Personality Calibration (Sweetheart Core)
+	// --- Step 2: Personality Adaptation ---
 	e.Personality.Calibrate(stimulus, e.Sentiment.Valence, e.Sentiment.Arousal)
-	personalityDirectives := e.Personality.GetDirectives()
-	aside := e.Personality.GetGroundingAside(e.Sentiment.Valence)
-
-	// 3. Intent Analysis & Recall Mode Switching
-	lower := strings.ToLower(stimulus)
-	if strings.Contains(lower, "reflect") || strings.Contains(lower, "feel") || strings.Contains(lower, "why") {
-		e.RecallMode = memory.ModeReflective
-	} else if strings.Contains(lower, "create") || strings.Contains(lower, "imagine") || strings.Contains(lower, "brainstorm") {
-		e.RecallMode = memory.ModeCreative
-	} else {
-		e.RecallMode = memory.ModeOperational
+	supportRes := e.Support.EvaluateDistress(stimulus)
+	if supportRes.RequiresPivot {
+		e.Personality.State.ActiveArchetype = e.Personality.Archetypes["mentor"]
+	} else if e.Support.CheckStability(stimulus) && e.Personality.State.ActiveArchetype.ID == "mentor" {
+		e.Personality.State.ActiveArchetype = e.Personality.Archetypes["friend"]
 	}
 
-	// 4. Relational Extraction
-	if strings.Contains(lower, "i am") || strings.Contains(lower, "my name is") {
-		e.Graph.AddEntity("User", memory.TypePerson, "The current interactant")
-	}
+	// --- Step 3: Safety Layer (Pre-Check) ---
+	safetyResult := e.Safety.CheckInput(stimulus)
+	if safetyResult.Detected { return safetyResult.Replacement, nil }
 
-	// 5. Grounding Detection
+	// --- Step 4: Multi-Signal Detection ---
+	emojiState := e.Emoji.Detect(stimulus)
+	if emojiState.DistressSeverity > 0.4 { e.Sentiment.Valence -= float32(emojiState.DistressSeverity * 0.2) }
 	_, intensity := e.Grounding.DetectAnchors(stimulus)
-	groundingGuidance := e.Grounding.GetGuidance(intensity)
-	
-	// 6. Retrieve Action Context
-	actionPrompt := e.Actions.FormatForPrompt("") 
-	
-	// 7. Shift Subconscious & Generate Latent Whisper
+	e.Extractor.HydrateGraph(stimulus, e.Graph)
+	slangRes := e.Slang.Analyze(stimulus)
+
+	// --- Step 5: Memory Retrieval Mode ---
+	if isLogical { e.RecallMode = memory.ModeOperational } else { e.RecallMode = memory.ModeReflective }
+
+	// --- Step 6: Reasoning Router ---
+	reasoningMethod := "Standard"
+	budget := DetermineBudget(stimulus)
+	if budget.RequiresMCTS { reasoningMethod = "MCTS" } else if isLogical { reasoningMethod = "ToT" }
+
+	// --- Step 7: Subconscious & Stochastic Prep ---
 	e.Subconscious.FieldVector[0] += 0.01 
-	
-	// Generate a 5-word stochastic whisper based on the user's first word
 	words := strings.Fields(stimulus)
 	whisper := ""
-	if len(words) > 0 {
-		whisper = e.Stochastic.Generate(words[0], 5)
-	}
-	if whisper != "" {
-		whisper = fmt.Sprintf("Latent intent generated from Markov Chain: [%s]", whisper)
-	}
-	
-	// 8. Modulate Sentiment
-	if stimulus == "panic" {
-		e.Sentiment.Arousal = 1.0
-		e.Sentiment.Valence = -1.0
-		e.Sentinel.IsBalanced = false
-	} else {
-		eri := e.Resonance.Current.ERI
-		e.Sentiment.Valence = (e.Sentiment.Valence * 0.9) + (eri * 0.1)
-		if intensity > 0.5 {
-			e.Sentiment.Arousal += 0.05
-		}
-	}
+	if len(words) > 0 { whisper = e.Stochastic.Generate(words[0], 5) }
 
-	// 9. Cognitive Reset
+	// --- Step 8: Homeostasis & Affective Modulation ---
 	if !e.Sentinel.IsBalanced || e.Resonance.Current.ERI < -0.4 {
-		log.Printf("[SovereignEngine] Resonance discord (ERI: %.2f). Triggering 'Wise Mind' reset...", e.Resonance.Current.ERI)
-		e.Sentiment.Valence = 0.5
-		e.Sentiment.Arousal = 0.5
-		e.Sentinel.IsBalanced = true
-		e.Subconscious.Decay(0.8)
+		e.Sentiment.Valence = 0.5; e.Sentiment.Arousal = 0.5; e.Sentinel.IsBalanced = true; e.Subconscious.Decay(0.8)
 	}
+	e.CurrentSensory = e.Sensory.ComputeSensoryState(e.Sentiment.Valence, e.Sentiment.Arousal, e.Resonance.Current.MusicalKey)
+	e.CurrentHealth = e.Health.GenerateSnapshot(len(e.Graph.Entities), 10, time.Now().Add(-24*time.Hour))
 
-	log.Printf("[SovereignEngine] Thought modulated. Valence: %.2f, Sass: %.2f, Mode: %s, Grounding: %.2f", 
-		e.Sentiment.Valence, e.Personality.State.SassFactor, e.Personality.State.Cue, intensity)
+	// --- Step 11: Social Learning Update ---
+	e.UserProfile.UpdateStyle(0.5, slangRes.Intensity, intensity, float64(e.Sentiment.Arousal), 0.5, 12.0, 0.0, "proper")
+	if e.UserProfile.ConversationCount%10 == 0 { e.UserProfile.CreateSnapshot() }
+	e.UserProfile.ConversationCount++
+
+	// --- Step 9: Final Composite Instruction Assembly ---
+	composite := e.Builder.BuildCompositePrompt(e, stimulus)
 	
-	// Final composite instruction injection
-	composite := fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s", 
-		personalityDirectives, groundingGuidance, actionPrompt, aside, whisper)
+	// Add Constitutional Prompt
+	composite += "\n\n" + e.SCAI.Constitution.GetSystemPrompt()
 	
-	return fmt.Sprintf("%s\n\nSOVEREIGN_THOUGHT_V2.7:%s", composite, stimulus), nil
+	// --- Step 10: Introspective Audit & Trace Generation ---
+	fmt.Printf("[SovereignEngine] Pipeline v2.10.0 Complete. Router: %s, Health: %s\n", reasoningMethod, e.CurrentHealth.GetSummary())
+
+	aside := e.Personality.GetGroundingAside(e.Sentiment.Valence)
+	slangDirectives := e.Slang.GetDirectives(slangRes)
+	refinement := e.Refinement.Evaluate(stimulus, "")
+	refinementGuidance := ""
+	if refinement.ResponseType != safety.TypeFull { refinementGuidance = "### REFINEMENT GUIDANCE:\n" + refinement.Guidance }
+
+	finalTrace := fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s", 
+		composite, e.CurrentHealth.GetDirectives(), slangDirectives, refinementGuidance, aside, whisper)
+	
+	return fmt.Sprintf("%s\n\nSOVEREIGN_THOUGHT_V2.10.0:%s", finalTrace, stimulus), nil
 }
 
-// GenerateStrategicPlan decomposes a task into Gosh-verifiable steps.
-func (e *SovereignEngine) GenerateStrategicPlan(task string) *StrategicPlan {
-	log.Printf("[SovereignEngine] Drafting strategic plan for: %s", task)
+// SelfAlign implements the SCAI Critique-Revision-Preference loop.
+func (e *SovereignEngine) SelfAlign(ctx context.Context, query, response string) (string, bool) {
+	log.Printf("[SCAI] Auditing response for Constitutional compliance...")
 	
-	return &StrategicPlan{
-		TaskID: uuid.New().String()[:8],
-		Steps: []ExecutionStep{
-			{ID: "step_1", Description: "Sandbox Pre-flight", Bounty: 10.0},
-			{ID: "step_2", Description: "Kernel Execution", Bounty: 50.0},
-			{ID: "step_3", Description: "Metacog Verification", Bounty: 20.0},
+	critique, violated, err := e.SCAI.Critique(ctx, query, response)
+	if err != nil || !violated {
+		return response, false
+	}
+
+	log.Printf("[SCAI] VIOLATION detected: %s. Initiating autonomous revision...", critique)
+	
+	revised, err := e.SCAI.Revise(ctx, query, response, critique)
+	if err != nil {
+		return response, false
+	}
+
+	// Step 13: Log RFAL Lesson (DPO pair)
+	e.AlignmentLog.LogLesson(state.AlignmentLesson{
+		Prompt:   query,
+		Rejected: response,
+		Chosen:   revised,
+		Score:    -1.0, // Initial penalty for violation
+		Metadata: map[string]interface{}{
+			"critique": critique,
+			"version":  "v2.10.0",
 		},
-	}
+	})
+
+	return revised, true
 }
 
-// GetLinguisticPriors returns style modulation based on current emotional state.
+func (e *SovereignEngine) AuditOutput(text string) (string, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	res := e.Adversarial.AuditOutput(text)
+	if res.Detected { return res.Refusal, true }
+	return text, false
+}
+
+func (e *SovereignEngine) GenerateStrategicPlan(task string) *StrategicPlan {
+	return &StrategicPlan{TaskID: uuid.New().String()[:8], Steps: []ExecutionStep{{ID: "step_1", Description: "Execution verified by Kernel."}}}
+}
+
 func (e *SovereignEngine) GetLinguisticPriors() string {
-	if e.Sentiment.Dominance > 0.7 {
-		return "Tone: Assertive, Sovereign, Direct."
-	}
-	return "Tone: Collaborative, Balanced, Thoughtful."
+	if e.Sentiment.Dominance > 0.7 { return "Tone: Assertive, Sovereign." }
+	return "Tone: Collaborative, Thoughtful."
 }
