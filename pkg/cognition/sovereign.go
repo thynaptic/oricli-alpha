@@ -16,6 +16,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/tools"
 	"github.com/thynaptic/oricli-go/pkg/connectors/mcp"
 	"github.com/thynaptic/oricli-go/pkg/connectors/telegram"
+	"github.com/thynaptic/oricli-go/pkg/vdi"
 )
 
 // --- Pillar 1: Subconscious Field ---
@@ -111,6 +112,7 @@ type SovereignEngine struct {
 	ActiveProfile *Profile
 	MCP          *mcp.MCPManager
 	Telegram     *telegram.Client
+	VDI          *vdi.Manager
 	SubstrateHealth *HealthMonitor
 	CurrentSensory SensoryState
 	CurrentHealth HealthSnapshot
@@ -156,6 +158,7 @@ func NewSovereignEngine() *SovereignEngine {
 		SubstrateHealth: NewHealthMonitor(),
 		MCP:          mcp.NewMCPManager("oricli_core/mcp_config.json"),
 		Telegram:     telegram.NewClient(tgToken, tgChatID),
+		VDI:          vdi.NewManager(),
 	}
 	
 	engine.Generator = NewGeneratorOrchestrator(engine)

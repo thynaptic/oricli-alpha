@@ -77,15 +77,21 @@ func main() {
 	log.Println("[Boot] Initializing Sovereign Engine...")
 	sovEngine := cognition.NewSovereignEngine()
 
+	// Initialize VDI (Virtual Device Interface)
+	log.Println("[Boot] Initializing Sovereign VDI...")
+	if err := sovEngine.VDI.Start(); err != nil {
+		log.Printf("[Boot] Warning: Failed to start VDI browser: %v", err)
+	}
+	sovEngine.VDI.RegisterTools(sovEngine.Toolbox)
+
 	// Initialize MCP Bridge
 	log.Println("[Boot] Initializing MCP servers...")
 	if err := sovEngine.MCP.StartAll(context.Background()); err != nil {
-	        log.Printf("[Boot] Warning: Some MCP servers failed to start: %v", err)
+		log.Printf("[Boot] Warning: Some MCP servers failed to start: %v", err)
 	}
 	if err := sovEngine.Toolbox.RegisterMCPTools(context.Background(), sovEngine.MCP); err != nil {
-	        log.Printf("[Boot] Warning: Failed to bridge MCP tools: %v", err)
+		log.Printf("[Boot] Warning: Failed to bridge MCP tools: %v", err)
 	}
-
 	registry := service.NewModuleRegistry("")
 	goshMod, _ := service.NewGoshModule("hive_sandbox", "/home/mike/Mavaia")
 	orch := service.NewGoOrchestrator(swarmBus, registry)
@@ -138,6 +144,7 @@ func main() {
 	<-stop
 
 	log.Println("[System] Initiating graceful shutdown...")
+	sovEngine.VDI.Stop()
 	sovEngine.MCP.StopAll()
 	mb.Close()
 	swarmBus.Stop()
