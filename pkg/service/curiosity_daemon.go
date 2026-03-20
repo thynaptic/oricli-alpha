@@ -123,7 +123,7 @@ func (d *CuriosityDaemon) Forage(ctx context.Context) {
 	factSummary, _ := res["text"].(string)
 
 	// 5. Commit to Graph (Thread-Safe)
-	d.Graph.UpdateEntity(target.ID, func(e *memory.Entity) {
+	d.Graph.UpdateEntity(target.ID, 0.5, 0.5, 0.5, func(e *memory.Entity) {
 		e.Description = factSummary
 		e.Uncertainty = 0.2
 	})

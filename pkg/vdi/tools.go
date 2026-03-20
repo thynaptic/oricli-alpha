@@ -13,7 +13,7 @@ import (
 // --- Pillar 47: VDI Tool Bridge ---
 // Exposes VDI capabilities to the Sovereign Engine's dynamic toolbox.
 
-func (m *Manager) RegisterTools(registry *tools.Registry, vision *VisionGroundingService, scheduler *kernel.Scheduler) {
+func (m *Manager) RegisterTools(registry *tools.Registry, vision *VisionGroundingService, scheduler *kernel.Scheduler, indexer *FSIndexer) {
 	// 1. Browser Navigation
 	registry.Register(&tools.Tool{
 		Definition: tools.ToolDefinition{
@@ -180,5 +180,27 @@ func (m *Manager) RegisterTools(registry *tools.Registry, vision *VisionGroundin
 		},
 	})
 
-	log.Println("[VDI] Registered native System, Browser, Visual, and Temporal tools.")
+	// 8. Filesystem Indexing (Pillar 56)
+	registry.Register(&tools.Tool{
+		Definition: tools.ToolDefinition{
+			Name:        "vdi_sys_index",
+			Description: "Index a directory on the host system and map its files into the working memory graph.",
+			Parameters: tools.ToolParameters{
+				Type: "object",
+				Properties: map[string]tools.ToolProperty{
+					"path": {Type: "string", Description: "The absolute or relative path to the directory to index."},
+				},
+				Required: []string{"path"},
+			},
+		},
+		Category: tools.TypeSystem,
+		Handler: func(args map[string]interface{}) (string, error) {
+			path, _ := args["path"].(string)
+			if indexer == nil { return "", fmt.Errorf("indexer not initialized") }
+			if err := indexer.IndexRecursive(path); err != nil { return "", err }
+			return fmt.Sprintf("Successfully indexed substrate at: %s", path), nil
+		},
+	})
+
+	log.Println("[VDI] Registered native System, Browser, Visual, Temporal, and Indexing tools.")
 }

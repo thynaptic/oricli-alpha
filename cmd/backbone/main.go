@@ -103,7 +103,7 @@ func main() {
 	if err := sovEngine.VDI.Start(); err != nil {
 		log.Printf("[Boot] Warning: Failed to start VDI browser: %v", err)
 	}
-	sovEngine.VDI.RegisterTools(sovEngine.Toolbox, sovEngine.Vision, sovEngine.Scheduler)
+	sovEngine.VDI.RegisterTools(sovEngine.Toolbox, sovEngine.Vision, sovEngine.Scheduler, sovEngine.Indexer)
 
 	// Initialize MCP Bridge
 	log.Println("[Boot] Initializing MCP servers...")

@@ -125,6 +125,7 @@ type SovereignEngine struct {
 	Reform       interface{}
 	Curiosity    interface{}
 	Scheduler    *kernel.Scheduler
+	Indexer      *vdi.FSIndexer
 	SubstrateHealth *HealthMonitor
 	WSHub        EventBroadcaster
 	CurrentSensory SensoryState
@@ -174,7 +175,9 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 		VDI:          vdi.NewManager(),
 		Voice:        voice.NewVoicePiperService("/home/mike/puppy-princess-os/voice/piper/piper", "/home/mike/puppy-princess-os/voice/en_US-lessac-medium.onnx", nil),
 		Scheduler:    kernel.NewScheduler(swarmBus),
+		Indexer:      vdi.NewFSIndexer(memory.NewWorkingMemoryGraph()), // Will be synced with engine.Graph later
 	}
+	engine.Indexer.Graph = engine.Graph // Sync with engine graph
 	
 	engine.Generator = NewGeneratorOrchestrator(engine)
 	engine.Generator.GenService = genService // Initialize the GenService correctly
@@ -244,11 +247,24 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	emojiState := e.Emoji.Detect(stimulus)
 	if emojiState.DistressSeverity > 0.4 { e.Sentiment.Valence -= float32(emojiState.DistressSeverity * 0.2) }
 	_, intensity := e.Grounding.DetectAnchors(stimulus)
-	e.Extractor.HydrateGraph(stimulus, e.Graph)
 	slangRes := e.Slang.Analyze(stimulus)
 
 	// --- Step 5: Memory Retrieval Mode ---
 	if isLogical { e.RecallMode = memory.ModeOperational } else { e.RecallMode = memory.ModeReflective }
+
+	// 5.1 Proactive Personality Pivot (Affective Memory Anchoring)
+	// (Simulation: In full implementation, we'd use the retrieved entities from RAG)
+	histV, histA, _ := e.Graph.AnalyzeSubGraphAffect(nil) // Passing nil for session-wide baseline or specific entities
+	if histV < -0.3 && histA > 0.6 {
+		// History of high distress: proactive supportive shift
+		e.Personality.State.ActiveArchetype = e.Personality.Archetypes["mentor"]
+		e.Personality.State.SassFactor = 0.2
+		log.Println("[SovereignEngine] Proactive Pivot: Supportive Mode engaged based on historical affective context.")
+	} else if histV > 0.7 {
+		// History of success: proactive celebratory shift
+		e.Personality.State.ActiveArchetype = e.Personality.Archetypes["cheerleader"]
+		log.Println("[SovereignEngine] Proactive Pivot: Success Mode engaged.")
+	}
 
 	// --- Step 6: Reasoning Router ---
 	reasoningMethod := "Standard"
@@ -271,10 +287,13 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	e.CurrentSensory = e.Sensory.ComputeSensoryState(e.Sentiment.Valence, e.Sentiment.Arousal, e.Resonance.Current.MusicalKey)
 	e.CurrentHealth = e.Health.GenerateSnapshot(len(e.Graph.Entities), 10, time.Now().Add(-24*time.Hour))
 
-	// --- Step 11: Social Learning Update ---
+	// --- Step 11: Social Learning Update (The Memory Hydrator) ---
 	e.UserProfile.UpdateStyle(0.5, slangRes.Intensity, intensity, float64(e.Sentiment.Arousal), 0.5, 12.0, 0.0, "proper")
 	if e.UserProfile.ConversationCount%10 == 0 { e.UserProfile.CreateSnapshot() }
 	e.UserProfile.ConversationCount++
+	
+	// Anchor live affective state into the graph
+	go e.Extractor.HydrateGraph(stimulus, e.Graph, e.Sentiment.Valence, e.Sentiment.Arousal, e.Resonance.Current.ERI)
 
 	// --- Step 9: Final Composite Instruction Assembly ---
 	composite := e.Builder.BuildCompositePrompt(e, stimulus)
