@@ -1,11 +1,15 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/thynaptic/oricli-go/pkg/cognition"
+	"github.com/thynaptic/oricli-go/pkg/state"
 )
 
 // ToolDefinition describes a tool the agent can use
@@ -20,28 +24,33 @@ type GoAgentService struct {
 	Orchestrator   *GoOrchestrator
 	GenService     *GenerationService
 	PersonaService *PersonaService
+	SovEngine      *cognition.SovereignEngine
 	MaxSteps       int
 }
 
-func NewGoAgentService(orch *GoOrchestrator, gen *GenerationService, persona *PersonaService) *GoAgentService {
+func NewGoAgentService(orch *GoOrchestrator, gen *GenerationService, persona *PersonaService, sov *cognition.SovereignEngine) *GoAgentService {
 	return &GoAgentService{
 		Orchestrator:   orch,
 		GenService:     gen,
 		PersonaService: persona,
+		SovEngine:      sov,
 		MaxSteps:       5,
 	}
 }
 
 // Run executes the reasoning loop for a given query
 func (s *GoAgentService) Run(query string, history []map[string]string) (string, error) {
-	log.Printf("[Agent] Starting reasoning loop for: %s", query)
+	log.Printf("[Agent] Starting sovereign reasoning loop for: %s", query)
+
+	ctx := context.Background()
+	sovTrace, _ := s.SovEngine.ProcessInference(ctx, query)
 
 	context := ""
 	for i := 0; i < s.MaxSteps; i++ {
 		log.Printf("[Agent] Step %d/%d", i+1, s.MaxSteps)
 
 		// 1. Ask the model what to do
-		thought, toolCall, err := s.decideNextStep(query, context, history)
+		thought, toolCall, err := s.decideNextStep(query, context, history, sovTrace)
 		if err != nil {
 			return "", err
 		}
@@ -57,16 +66,32 @@ func (s *GoAgentService) Run(query string, history []map[string]string) (string,
 
 		// 3. Execute the tool via the Orchestrator
 		log.Printf("[Agent] Executing tool: %s with params: %v", toolCall.Name, toolCall.Params)
+		start := time.Now()
 		result, err := s.Orchestrator.Execute(toolCall.Name, toolCall.Params, 60*time.Second)
-		if err != nil {
-			log.Printf("[Agent] Tool error: %v", err)
-			context += fmt.Sprintf("\nTool %s failed: %v", toolCall.Name, err)
-			continue
-		}
+		duration := time.Since(start)
 
 		// 4. Feed the result back into context
 		resultJSON, _ := json.Marshal(result)
-		context += fmt.Sprintf("\nTool %s result: %s", toolCall.Name, string(resultJSON))
+		resStr := string(resultJSON)
+		context += fmt.Sprintf("\nTool %s result: %s", toolCall.Name, resStr)
+
+		// Record action for self-correction
+		s.SovEngine.Actions.RecordAction(state.ActionContext{
+			ID:             fmt.Sprintf("step_%d", i+1),
+			LastAction:     toolCall.Name,
+			ExpectedResult: "Success",
+			ActualResult:   resStr,
+			ConversationID: "active_session",
+		})
+
+		// Update Resonance based on performance
+		errorRate := 0.0
+		if err != nil {
+			errorRate = 1.0
+			log.Printf("[Agent] Tool error: %v", err)
+			context += fmt.Sprintf("\nTool %s failed: %v", toolCall.Name, err)
+		}
+		s.SovEngine.Resonance.UpdateIndices(duration.Seconds()*1000, 1.0, errorRate)
 	}
 
 	return "", fmt.Errorf("agent exceeded max steps (%d) without final answer", s.MaxSteps)
@@ -77,7 +102,7 @@ type toolCall struct {
 	Params map[string]interface{} `json:"params"`
 }
 
-func (s *GoAgentService) decideNextStep(query, context string, history []map[string]string) (string, *toolCall, error) {
+func (s *GoAgentService) decideNextStep(query, context string, history []map[string]string, sovTrace string) (string, *toolCall, error) {
         // Build personality-aware system prompt
         personalityID := "gen_z_cousin" // Default
         systemInstructions, temp := s.PersonaService.BuildSystemInstructions(personalityID)
@@ -98,6 +123,8 @@ func (s *GoAgentService) decideNextStep(query, context string, history []map[str
         }
 
         systemPrompt := fmt.Sprintf(`%s
+
+%s
 
 TASK INSTRUCTIONS:
 Your goal is to answer the user query accurately. You can use tools or answer directly.
@@ -122,7 +149,7 @@ Example Tool Call:
 Example Final Answer:
 %s
 
-Output Format (JSON ONLY):`, systemInstructions, exampleFinalAnswer)
+Output Format (JSON ONLY):`, systemInstructions, sovTrace, exampleFinalAnswer)
 
         userPrompt := fmt.Sprintf("User Query: %s\n\nCurrent Context: %s", query, context)
 

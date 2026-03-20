@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"log"
 	"math"
 	"math/rand"
 	"strings"
@@ -228,6 +229,16 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 		draftAnswer = "No draft answer yet."
 	}
 	cfg := e.normalizedConfig()
+
+	// --- Adaptive Budgeting Integration ---
+	// If Iterations is at default (5), assume we want adaptive optimization.
+	if cfg.Iterations == 5 && cfg.Query != "" {
+		budget := DetermineBudget(cfg.Query)
+		budget.ApplyToConfig(&cfg)
+		log.Printf("[MCTSEngine] Adaptive Optimization: Complexity %.2f -> Iterations %d, Depth %d", 
+			budget.Complexity, cfg.Iterations, cfg.RolloutDepth)
+	}
+
 	if e.Callbacks.ProposeBranches == nil || e.Callbacks.EvaluatePath == nil || e.Callbacks.AdversarialEval == nil {
 		return MCTSResult{}, fmt.Errorf("mcts engine requires ProposeBranches, EvaluatePath, and AdversarialEval callbacks")
 	}
@@ -259,6 +270,9 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 	prunedNodes := 0
 	started := time.Now()
 
+	// --- Early Convergence Guard ---
+	const convergenceThreshold = 0.95 
+
 	// ── Parallel path (MaxConcurrency > 1) ───────────────────────────────────
 	// Each worker independently selects → evaluates → backpropagates, pipelining
 	// the slow LLM eval step with concurrent tree traversals.
@@ -269,11 +283,6 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 		iterationsRun = iters
 		expandedNodes = exp
 		prunedNodes = prun
-		// Collect counters from parallel run.
-		// valueNetHits and policyPriorizations are not easily shared across
-		// goroutines without extra synchronization; they are reset at the start
-		// of SearchV2 (above) and stay 0 in the parallel path for now.
-		// TODO: thread counters through workerState in a follow-up.
 	} else {
 		// ── Sequential path (Deterministic or MaxConcurrency == 1) ───────────
 		rng := rand.New(rand.NewSource(cfg.Seed))
@@ -283,6 +292,13 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 			if ctx.Err() != nil {
 				break
 			}
+			
+			// Stop if we've found a highly confident answer (Early Convergence)
+			if bestScore >= convergenceThreshold {
+				log.Printf("[MCTSEngine] Early convergence reached (Score: %.2f). Terminating search.", bestScore)
+				break
+			}
+
 			batch := minIntLocal(cfg.MaxConcurrency, cfg.Iterations-iterationsRun)
 			selected := make([]*ThoughtNode, 0, batch)
 			treeMu.Lock()

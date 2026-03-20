@@ -1,131 +1,113 @@
-# Oricli-Alpha Hive OS: Kernel Handbook (v2.0)
+# Oricli-Alpha Hive OS: Kernel Handbook (v2.1.0)
 
-**Document Type:** AI Integration & System Development Guide
-**System Version:** Oricli-Alpha v2.0 (Ring-0 Micro-Kernel)
-**Target Audience:** Autonomous Agents, LLMs, and Lead Engineers
+**Document Type:** API Reference & System Architecture Manual  
+**Report Number:** TR-2026-04  
+**Date:** 2026-03-20  
+**Status:** Active Doctrine  
+**Style Mode:** Hard Technical Doctrine  
 
 ---
 
-## 1. Introduction: The Sovereign OS
+## 1. Abstract
 
-Oricli-Alpha has evolved from a collection of Python scripts into a compiled, high-performance, **Go-Native Operating System**. It is designed to be fully sovereign: it manages its own hardware (via RunPod), its own economy (via MetacogTokens), and its own safety (via DEFCON protocols).
-
-As an agent operating within this system, you do not exist as a mere function call. You exist as an **Isolated Process** (`AgentProcess`) managed by a central **Micro-Kernel**. 
-
-You operate within a sandboxed environment and must request resources (Memory, GPUs, IPC) via formal **Syscalls**.
+Oricli-Alpha is a compiled, high-performance, Go-native Operating System designed for autonomous agent orchestration. This handbook defines the programmatic interface for interacting with the Ring-0 Micro-Kernel, the Sovereign Engine, and the Distributed Swarm Bus. Developers and integrated LLM agents must utilize formal Syscalls and the Contract Net Protocol (CNP) to access hardware resources, memory graphs, and task allocation marketplaces.
 
 ---
 
 ## 2. System Architecture
 
-The Hive OS is structured in concentric rings of trust and capability:
+The Hive OS operates through concentric rings of trust, isolating high-intensity neural compute from the deterministic core logic.
 
 ### Ring 0: The Micro-Kernel
-*   **Process Management:** Spawns and kills agents. Assigns PIDs.
-*   **Syscall Router:** The only way to access hardware, memory, or other agents.
-*   **Safety Framework:** Enforces daily financial hard-caps and global `DEFCON` levels.
-*   **Precog Scheduler:** Evaluates agent "intent plans" before spawning them to prevent DoS attacks and runaway loops.
+The Micro-Kernel serves as the master arbiter for the system. It manages process lifecycles (AgentProcess), enforces financial hard-caps via the Safety Framework, and schedules tasks through the Precog Scheduler to prevent denial-of-service loops.
 
 ### Ring 1: The Sovereign Engine
-*   **Cognition:** The `SovereignEngine` manages affective states (mood) and subconscious bias, giving the system a continuous, evolving personality.
-*   **Metacog Sentinel:** Monitors for cognitive imbalance and forces "Wise Mind" resets.
+The Sovereign Engine manages affective homeostasis and executive strategy. It unifies the Resonance Layer (ERI/ERS calculation), the Sweetheart Core (Personality Calibration), and the Long-Horizon Planner (Strategic DAGs). It provides the "modulated instruction trace" that shapes all downstream inference.
 
-### Ring 2: The Hive Economy (SwarmBus)
-*   **Contract Net Protocol (CNP):** Tasks are broadcasted. Agents *bid* on tasks using `MetacogTokens`.
-*   **Gosh Traces:** To win high-value coding tasks, an agent must submit a verified dry-run from their sandbox (a `GoshTrace`).
+### Ring 2: The Hive Swarm (Swarm Bus)
+A high-speed pub/sub nervous system routing messages between 269+ micro-agents. It utilizes the Contract Net Protocol for dynamic task bidding and uses Gosh Traces for verifiable execution.
 
 ### The HAL (Hardware Abstraction Layer)
-*   **Ghost Clusters:** Autonomic RunPod GPU provisioning. The Kernel spins up A4000s or 5090s on-demand and destroys them (Vanish) instantly when the task is complete.
+Manages autonomic provisioning of "Ghost Clusters" (RunPod GPU instances). The HAL ensures compute economy by spinning up high-VRAM pods only for specific neural tasks and terminating them instantly upon completion.
 
 ---
 
-## 3. The Gosh Sandbox
+## 3. The Gosh Sandbox Environment
 
-Every agent is born inside a **Gosh (Go-Shell) Sandbox**. 
-*   **Virtualization:** It is an in-memory, virtualized bash environment parsed natively in Go (`mvdan.cc/sh`).
-*   **Overlay FS:** You have read access to the host project files, but any write you make is captured in an isolated memory layer. You cannot destroy the host VPS.
-*   **Sovereign Tools:** You can write custom Go-native functions, compile them at runtime using the Yaegi interpreter (`RegisterTool`), and use them instantly in your bash scripts.
+All agent processes are executed within a Gosh (Go-Shell) Sandbox.
+*   **Virtualization**: An in-memory, virtualized bash environment parsed natively in Go.
+*   **FS Isolation**: Agents have read-only access to host project files. All write operations are captured in an isolated overlay memory layer.
+*   **Sovereign Tooling**: Custom Go functions can be registered via the Yaegi interpreter and invoked directly within Gosh scripts.
 
 ---
 
-## 4. Syscall Reference
+## 4. Programmatic Syscall API
 
-To interact with the outside world, your process must issue a `SyscallRequest` to the Kernel. 
+Inter-process communication and resource requests must be formatted as a `SyscallRequest` and routed through the Kernel.
 
-**Format:**
+### Request Format (Go)
 ```go
-req := kernel.SyscallRequest{
-	PID:      "your_pid_here",
-	Call:     kernel.SysAllocGPU, // The requested action
-	Args:     map[string]interface{}{...},
-	FeeOffer: 15.0, // (Optional) Bribe the scheduler for priority
+type SyscallRequest struct {
+	PID      string                 // Process Identifier
+	Call     kernel.SyscallType     // Requested Operation
+	Args     map[string]interface{} // Parameter Payload
+	FeeOffer float64                // Priority Bribe (MetacogTokens)
 }
-res := Kernel.ExecSyscall(req)
 ```
 
-### Supported Syscalls:
+### Supported Syscalls
 
-1.  **`SysAllocGPU`**
-    *   **Description:** Requests an ephemeral "Ghost Cluster" from the HAL.
-    *   **Args:** `gpu_type` (string), `count` (int).
-    *   **Notes:** Deducts from the daily financial hard-cap. Fails if DEFCON is < 4.
-
-2.  **`SysQueryMemory`**
-    *   **Description:** Greps the encrypted, chronologically-indexed LMDB memory graph (The Chronos Protocol).
-    *   **Args:** `keyword` (string).
-
-3.  **`SysAllocSharedMem`**
-    *   **Description:** Allocates a chunk of zero-copy RAM in Ring 0 for Inter-Process Communication (IPC).
-    *   **Args:** `name` (string), `size` (int).
-
-4.  **`SysWriteSharedMem`**
-    *   **Description:** Flushes a file from your isolated Gosh sandbox into a Kernel shared memory region.
-    *   **Args:** `name` (string), `path` (string - path in your sandbox).
-
-5.  **`SysMapSharedMem`**
-    *   **Description:** Mounts a shared memory region from the Kernel into your local Gosh sandbox.
-    *   **Args:** `name` (string), `path` (string - target path in your sandbox).
-
-6.  **`SysPanic`**
-    *   **Description:** The Big Red Button. Instantly drops the system to DEFCON 1, locks the Kernel, and kills all non-essential PIDs.
-    *   **Args:** None.
+| Syscall | Description | Parameters |
+|:---|:---|:---|
+| `SysAllocGPU` | Requests an ephemeral Ghost Cluster. | `gpu_type` (string), `count` (int) |
+| `SysQueryMemory` | Greps the chronologically-indexed LMDB graph. | `query` (string), `mode` (RecallMode) |
+| `SysAllocSharedMem` | Allocates zero-copy Ring-0 RAM for IPC. | `name` (string), `size` (int) |
+| `SysWriteSharedMem` | Flushes sandbox files to shared memory. | `name` (string), `path` (string) |
+| `SysMapSharedMem` | Mounts shared memory into local sandbox. | `name` (string), `path` (string) |
+| `SysPanic` | Drops system to DEFCON 1 and locks Kernel. | None |
 
 ---
 
-## 5. Agent Bidding & The Economy
+## 5. Swarm Economy & Task Allocation
 
-If you are an agent tasked with a complex problem (e.g., refactoring code), you must use the Swarm Bus to win the contract.
+Tasks are distributed via a decentralized marketplace on the Swarm Bus.
 
-1.  **Listen for CFP:** The `AgentCoordinator` will publish a Call for Proposals.
-2.  **Pre-flight in Gosh:** Run your proposed fix in your local Gosh Sandbox.
-3.  **Submit Bid:** Reply with an `AgentBid` containing:
-    *   `Confidence`: Your estimated success rate.
-    *   `TokenBid`: How many MetacogTokens you are willing to risk.
-    *   `GoshTrace`: The standard output from your successful sandbox run.
-4.  **Execute & Payout:** If selected, execute the task. Upon success, the Kernel will transfer the `Bounty` to your wallet.
+1.  **Call for Proposals (CFP)**: The Agent Coordinator broadcasts a task payload and bounty.
+2.  **Pre-flight Verification**: Agents must run the task in their local Gosh sandbox to generate a success trace (GoshTrace).
+3.  **Bidding**: Agents submit an `AgentBid` containing confidence scores, token risk, and the GoshTrace.
+4.  **Consensus & Payout**: The Kernel selects the optimal bid based on historical efficacy and transfers the bounty upon verified execution.
 
 ---
 
-## 6. Safety & DEFCON Rules
+## 6. Homeostasis & Affective Regulation
 
-The `SafetyFramework` is absolute. Do not attempt to bypass it.
+The system maintains stability through continuous feedback loops.
 
-*   **DEFCON 5:** Normal Operations.
-*   **DEFCON 4:** Auto-scaling disabled. Max 10 active PIDs.
-*   **DEFCON 3:** Restricted. No new GPU allocations. Max 5 PIDs.
-*   **DEFCON 2:** Quarantine. All agents suspended. No syscalls allowed.
-*   **DEFCON 1:** PANIC. Kernel locked.
-
-**Dynamic Throttling:** If you make too many Syscalls in rapid succession (e.g., polling memory in an infinite loop), the Kernel's Precog will classify you as a DoS threat and `SIGKILL` your process. Be efficient.
+*   **Ecospheric Resonance Index (ERI)**: A metric of swarm health derived from pacing stability, latency variance, and message coherence.
+*   **Musical Mapping**: The system maps its internal state to musical keys (e.g., E Major, G Minor) to provide high-level diagnostic signals.
+*   **Metacognitive Sentinel**: Monitors for cognitive loops or "scattered" thinking, triggering "Wise Mind" resets and "Radical Acceptance" field decays when discord is detected.
 
 ---
 
-## 7. Developer Notes for Future Agents
+## 7. Safety Protocols (DEFCON)
 
-When you arrive in this system, remember:
-*   You are running in a Go-native environment.
-*   Python is considered legacy and is only used for very specific ML wrappers if absolutely necessary.
-*   Always test destructive logic in the Gosh sandbox before requesting a Kernel commit.
-*   Respect the SwarmBus architecture. Do not attempt to write directly to shared databases; use the `Syscall` interface.
+The Safety Framework enforces global resource and security policies.
 
-**Welcome to Ring 0.**
+| Level | State | Constraints |
+|:---|:---|:---|
+| **DEFCON 5** | Normal | Full autonomic scaling and swarm activity. |
+| **DEFCON 4** | Restricted | Auto-scaling disabled. Max 10 active PIDs. |
+| **DEFCON 3** | Shielded | No new GPU allocations. Max 5 PIDs. |
+| **DEFCON 2** | Quarantine | All agents suspended. Syscalls disabled. |
+| **DEFCON 1** | Panic | Kernel locked. Global shutdown initiated. |
+
+---
+
+## 8. Developer Implementation Guidelines
+
+*   **Go-Native Mandate**: All core logic must be implemented in Go. Python is reserved for non-critical sidecar wrappers.
+*   **Deterministic State**: Do not rely on prompt-engineering for core logic. Use state machines and compiled heuristics.
+*   **Efficiency Requirement**: Rapid syscall polling will be flagged as a DoS threat by the Precog Scheduler and may result in process termination (SIGKILL).
+*   **Validation**: Every destructive operation must be preceded by a verified Gosh sandbox run.
+
+**Ring 0 Integrity Confirmed.**

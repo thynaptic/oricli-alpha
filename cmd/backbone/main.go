@@ -111,7 +111,7 @@ func main() {
 	// 8. API Gateway
 	personaPath := "/home/mike/Mavaia/scripts/agent_profiles.json"
 	personaService, _ := service.NewPersonaService(personaPath)
-	agentService := service.NewGoAgentService(orch, genService, personaService)
+	agentService := service.NewGoAgentService(orch, genService, personaService, sovEngine)
 	monitor := service.NewModuleMonitorService(registry)
 	
 	apiPort := 8089

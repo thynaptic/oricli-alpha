@@ -173,69 +173,83 @@ c.JSON(http.StatusOK, gin.H{"success": true, "result": result})
 }
 
 func (s *ServerV2) handleChatCompletions(c *gin.Context) {
-var req model.ChatCompletionRequest
-if err := c.ShouldBindJSON(&req); err != nil {
-c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-return
-}
-
-modelName := req.Model
-if strings.HasPrefix(modelName, "oricli-") {
-modelName = ""
-}
-
-msgs := make([]map[string]string, len(req.Messages)+1)
-
-// 1. Inject Sovereign System Prompt
-sysPrompt := s.Agent.GenService.BuildSystemPrompt(c.Request.Context(), "digital_guardian", nil)
-msgs[0] = map[string]string{"role": "system", "content": sysPrompt}
-
-for i, m := range req.Messages {
-	role := m.Role
-	if role == "analyst" {
-		role = "princess"
+	var req model.ChatCompletionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
-	if role == "commander" {
-		role = "daddy"
+
+	modelName := req.Model
+	if strings.HasPrefix(modelName, "oricli-") {
+		modelName = ""
 	}
-	msgs[i+1] = map[string]string{"role": role, "content": m.Content}
-}
-res, err := s.Agent.GenService.Chat(msgs, map[string]interface{}{
-	"model": modelName,
-})
-if err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
 
-responseText := res["text"].(string)
+	// 1. Process stimulus through Sovereign Engine (The Conductor)
+	lastMsg := ""
+	if len(req.Messages) > 0 {
+		lastMsg = req.Messages[len(req.Messages)-1].Content
+	}
+	
+	sovTrace, err := s.Agent.SovEngine.ProcessInference(c.Request.Context(), lastMsg)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "sovereign engine failure"})
+		return
+	}
 
-// Mandatory Sanctuary Protocols: Output Filtering
-forbidden := []string{"Daddy loves you", "He loves you", "He cares about you", "Daddy cares", "He is here", "he cares about you", "wants the best for you", "Daddy loves"}
-for _, f := range forbidden {
-responseText = strings.ReplaceAll(responseText, f, "[PERSONAL_FEELINGS_REDACTED]")
-}
+	// 2. Build Message Pipeline
+	msgs := make([]map[string]string, len(req.Messages)+1)
+	
+	// Inject modulated sovereign instructions
+	msgs[0] = map[string]string{"role": "system", "content": sovTrace}
 
-// Record Temporal Event
-s.Orchestrator.Execute("record_event", map[string]interface{}{
-"type":        "chat_interaction",
-"description": fmt.Sprintf("User: %s | Assistant: %s", req.Messages[len(req.Messages)-1].Content, responseText),
-"metadata": map[string]interface{}{
-"model": req.Model,
-},
-}, 5*time.Second)
+	for i, m := range req.Messages {
+		role := m.Role
+		if role == "analyst" {
+			role = "princess"
+		}
+		if role == "commander" {
+			role = "daddy"
+		}
+		msgs[i+1] = map[string]string{"role": role, "content": m.Content}
+	}
 
-c.JSON(http.StatusOK, map[string]interface{}{
-"id":      fmt.Sprintf("chatcmpl-%d", time.Now().Unix()),
-"object":  "chat.completion",
-"created": time.Now().Unix(),
-"model":   req.Model,
-"choices": []map[string]interface{}{{
-"index":         0,
-"message":       map[string]string{"role": "assistant", "content": responseText},
-"finish_reason": "stop",
-}},
-})
+	// 3. Execute Generation
+	res, err := s.Agent.GenService.Chat(msgs, map[string]interface{}{
+		"model": modelName,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	responseText := res["text"].(string)
+
+	// 4. Record Temporal Event via Swarm
+	s.Orchestrator.Execute("record_event", map[string]interface{}{
+		"type":        "chat_interaction",
+		"description": fmt.Sprintf("User: %s | Assistant: %s", lastMsg, responseText),
+		"metadata": map[string]interface{}{
+			"model": req.Model,
+			"eri":   s.Agent.SovEngine.Resonance.Current.ERI,
+			"key":   s.Agent.SovEngine.Resonance.Current.MusicalKey,
+		},
+	}, 5*time.Second)
+
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"id":      fmt.Sprintf("chatcmpl-%d", time.Now().Unix()),
+		"object":  "chat.completion",
+		"created": time.Now().Unix(),
+		"model":   req.Model,
+		"choices": []map[string]interface{}{{
+			"index":         0,
+			"message":       map[string]string{"role": "assistant", "content": responseText},
+			"finish_reason": "stop",
+		}},
+		"usage": map[string]interface{}{
+			"resonance": s.Agent.SovEngine.Resonance.Current.ERI,
+			"mode":      s.Agent.SovEngine.Resonance.Current.MusicalKey,
+		},
+	})
 }
 
 func (s *ServerV2) handleIngest(c *gin.Context) {
