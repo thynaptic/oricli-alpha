@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -184,10 +185,18 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		modelName = ""
 	}
 
-	// 1. Process stimulus through Sovereign Engine (The Conductor)
+	// 1. Resolve Profile and Process stimulus through Sovereign Engine
 	lastMsg := ""
 	if len(req.Messages) > 0 {
 		lastMsg = req.Messages[len(req.Messages)-1].Content
+	}
+
+	// Hot-swap profile if requested
+	if req.Profile != "" {
+		if p, ok := s.Agent.SovEngine.Profiles.GetProfile(req.Profile); ok {
+			s.Agent.SovEngine.ActiveProfile = p
+			log.Printf("[API] Applied profile: %s", req.Profile)
+		}
 	}
 	
 	sovTrace, err := s.Agent.SovEngine.ProcessInference(c.Request.Context(), lastMsg)

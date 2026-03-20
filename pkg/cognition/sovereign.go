@@ -104,6 +104,8 @@ type SovereignEngine struct {
 	Support      *safety.SupportEngine
 	UserProfile  *state.UserProfile
 	Translator   *TranslationEngine
+	Profiles     *ProfileRegistry
+	ActiveProfile *Profile
 	SubstrateHealth *HealthMonitor
 	CurrentSensory SensoryState
 	CurrentHealth HealthSnapshot
@@ -140,6 +142,7 @@ func NewSovereignEngine() *SovereignEngine {
 		Support:      safety.NewSupportEngine(),
 		UserProfile:  state.NewUserProfile("default_user"),
 		Translator:   NewTranslationEngine(),
+		Profiles:     NewProfileRegistry("oricli_core/profiles"),
 		SubstrateHealth: NewHealthMonitor(),
 	}
 	
@@ -161,6 +164,16 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	isLogical := strings.Contains(strings.ToLower(stimulus), "logic") || strings.Contains(strings.ToLower(stimulus), "fact")
 
 	// --- Step 2: Personality Adaptation ---
+	if e.ActiveProfile != nil {
+		if e.ActiveProfile.Archetype != "" {
+			if arch, ok := e.Personality.Archetypes[e.ActiveProfile.Archetype]; ok {
+				e.Personality.State.ActiveArchetype = arch
+			}
+		}
+		if e.ActiveProfile.SassFactor > 0 {
+			e.Personality.State.SassFactor = e.ActiveProfile.SassFactor
+		}
+	}
 	e.Personality.Calibrate(stimulus, e.Sentiment.Valence, e.Sentiment.Arousal)
 	supportRes := e.Support.EvaluateDistress(stimulus)
 	if supportRes.RequiresPivot {
@@ -197,6 +210,9 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	// --- Step 8: Homeostasis & Affective Modulation ---
 	if !e.Sentinel.IsBalanced || e.Resonance.Current.ERI < -0.4 {
 		e.Sentiment.Valence = 0.5; e.Sentiment.Arousal = 0.5; e.Sentinel.IsBalanced = true; e.Subconscious.Decay(0.8)
+	}
+	if e.ActiveProfile != nil && e.ActiveProfile.Energy != "" {
+		e.Personality.State.Energy = EnergyBand(e.ActiveProfile.Energy)
 	}
 	e.CurrentSensory = e.Sensory.ComputeSensoryState(e.Sentiment.Valence, e.Sentiment.Arousal, e.Resonance.Current.MusicalKey)
 	e.CurrentHealth = e.Health.GenerateSnapshot(len(e.Graph.Entities), 10, time.Now().Add(-24*time.Hour))

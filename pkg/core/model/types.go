@@ -12,6 +12,7 @@ type Message struct {
 
 type ChatCompletionRequest struct {
 	Model            string                  `json:"model"`
+	Profile          string                  `json:"profile,omitempty"`
 	SessionID        string                  `json:"session_id,omitempty"`
 	MemoryAnchorKeys []string                `json:"-"`
 	Reasoning        *ReasoningOptions       `json:"reasoning,omitempty"`
