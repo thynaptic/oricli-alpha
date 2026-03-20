@@ -1,13 +1,12 @@
 package main
 
 import (
-	"context"
-	"log"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
-
+        "context"
+        "log"
+        "os"
+        "os/signal"
+        "strings"
+        "syscall"
 	"github.com/joho/godotenv"
 	"github.com/thynaptic/oricli-go/pkg/api"
 	"github.com/thynaptic/oricli-go/pkg/bus"
@@ -77,13 +76,21 @@ func main() {
 	// 4. Intelligence Synthesis (Sovereign Engine)
 	log.Println("[Boot] Initializing Sovereign Engine...")
 	sovEngine := cognition.NewSovereignEngine()
-	_ = sovEngine // referenced below
+
+	// Initialize MCP Bridge
+	log.Println("[Boot] Initializing MCP servers...")
+	if err := sovEngine.MCP.StartAll(context.Background()); err != nil {
+	        log.Printf("[Boot] Warning: Some MCP servers failed to start: %v", err)
+	}
+	if err := sovEngine.Toolbox.RegisterMCPTools(context.Background(), sovEngine.MCP); err != nil {
+	        log.Printf("[Boot] Warning: Failed to bridge MCP tools: %v", err)
+	}
+
 	registry := service.NewModuleRegistry("")
 	goshMod, _ := service.NewGoshModule("hive_sandbox", "/home/mike/Mavaia")
 	orch := service.NewGoOrchestrator(swarmBus, registry)
 	precog := service.NewMetacogDaemon("/home/mike/Mavaia", orch, goshMod)
 	log.Println("[Boot] Sovereign Cognition & Precog active.")
-
 	// 5. BOOT KERNEL (The Master Arbiter)
 	k := kernel.NewMicroKernel(mb, ghost, precog, safety)
 	log.Println("[System] Kernel Ring 0 is ACTIVE.")
@@ -131,7 +138,7 @@ func main() {
 	<-stop
 
 	log.Println("[System] Initiating graceful shutdown...")
+	sovEngine.MCP.StopAll()
 	mb.Close()
 	swarmBus.Stop()
-	log.Println("[System] Oricli-Alpha Hive OS Offline.")
-}
+	log.Println("[System] Oricli-Alpha Hive OS Offline.")}

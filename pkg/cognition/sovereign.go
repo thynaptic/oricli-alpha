@@ -13,6 +13,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/state"
 	"github.com/thynaptic/oricli-go/pkg/tools"
+	"github.com/thynaptic/oricli-go/pkg/connectors/mcp"
 )
 
 // --- Pillar 1: Subconscious Field ---
@@ -106,6 +107,7 @@ type SovereignEngine struct {
 	Translator   *TranslationEngine
 	Profiles     *ProfileRegistry
 	ActiveProfile *Profile
+	MCP          *mcp.MCPManager
 	SubstrateHealth *HealthMonitor
 	CurrentSensory SensoryState
 	CurrentHealth HealthSnapshot
@@ -144,6 +146,7 @@ func NewSovereignEngine() *SovereignEngine {
 		Translator:   NewTranslationEngine(),
 		Profiles:     NewProfileRegistry("oricli_core/profiles"),
 		SubstrateHealth: NewHealthMonitor(),
+		MCP:          mcp.NewMCPManager("oricli_core/mcp_config.json"),
 	}
 	
 	engine.Generator = NewGeneratorOrchestrator(engine)
