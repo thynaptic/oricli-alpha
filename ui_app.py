@@ -16,8 +16,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import signal as _signal
+import subprocess as _subprocess
 import sys
+import threading
 import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
@@ -48,12 +54,10 @@ except ImportError:
 
 
 STATIC_DIR = Path(__file__).parent / "ui_static"
-API_BASE = os.getenv("MAVAIA_API_BASE", "http://localhost:8000")
-
-# Debug: Print API_BASE at module load
-import sys
-sys.stderr.write(f"[DEBUG] UI app loaded, API_BASE={API_BASE}\n")
-sys.stderr.flush()
+API_BASE = os.getenv("MAVAIA_API_BASE", "http://localhost:8089")
+# Separate base for endpoints that live on the Python API (models, modules, health)
+# Falls back to API_BASE if not set.
+PYTHON_API_BASE = os.getenv("MAVAIA_PYTHON_API_BASE", "http://localhost:8081")
 API_KEY = os.getenv("MAVAIA_API_KEY")
 ATTACHMENT_LIMIT_MB = float(os.getenv("MAVAIA_UI_ATTACHMENT_MB", "5"))
 MAX_ATTACHMENT_BYTES = int(ATTACHMENT_LIMIT_MB * 1024 * 1024)
@@ -137,10 +141,9 @@ def _forward_with_retry(
 def health() -> Response:
     """Health check with API connectivity verification"""
     try:
-        # Check API connectivity
         with _client() as client:
             resp = client.get(
-                f"{API_BASE}/health",
+                f"{PYTHON_API_BASE}/health",
                 headers=_build_headers(),
                 timeout=5.0,
             )
@@ -152,6 +155,7 @@ def health() -> Response:
         "ok": True,
         "api_connected": api_healthy,
         "api_base": API_BASE,
+        "python_api_base": PYTHON_API_BASE,
     })
 
 
@@ -170,10 +174,19 @@ def static_files(filename: str) -> Response:
     return send_from_directory(app.static_folder, filename)
 
 
+@app.route("/<path:filename>", methods=["GET"])
+def spa_assets(filename: str) -> Response:
+    """Serve Vite build assets (e.g. /assets/*, /favicon.svg) and fall back to index.html for SPA routes."""
+    asset_path = Path(app.static_folder) / filename
+    if asset_path.exists() and asset_path.is_file():
+        return send_from_directory(app.static_folder, filename)
+    return send_from_directory(app.static_folder, "index.html")
+
+
 @app.route("/models", methods=["GET"])
 def models() -> Response:
     """Proxy to models listing endpoint"""
-    target = f"{API_BASE}/v1/models"
+    target = f"{PYTHON_API_BASE}/v1/models"
     try:
         resp = _forward_with_retry("GET", target)
         return Response(
@@ -186,7 +199,7 @@ def models() -> Response:
 @app.route("/modules", methods=["GET"])
 def modules() -> Response:
     """Proxy to modules listing endpoint"""
-    target = f"{API_BASE}/v1/modules"
+    target = f"{PYTHON_API_BASE}/v1/modules"
     try:
         resp = _forward_with_retry("GET", target)
         # Ensure we return JSON content type
@@ -224,10 +237,40 @@ def embeddings() -> Response:
         return jsonify({"error": {"message": str(exc), "type": "server_error", "code": 502}}), 502
 
 
+def _strip_artifact_xml(text: str) -> str:
+    """
+    The Go backbone wraps every response in sovereign <artifact> XML tags.
+    Strip the wrapper so the content is clean prose/code for the client.
+    e.g. <artifact type="code" language="go">...</artifact>  →  ```go\n...\n```
+    """
+    import re as _re
+    # Match <artifact ...>content</artifact> — including multi-line
+    m = _re.search(r'<artifact[^>]*language=["\']?(\w+)["\']?[^>]*>([\s\S]*?)</artifact>', text)
+    if m:
+        lang, content = m.group(1).strip(), m.group(2).strip()
+        if lang and lang not in ("text", "message", "plain"):
+            return f"```{lang}\n{content}\n```"
+        return content
+    # Fallback: strip any <artifact> tags without language
+    m2 = _re.search(r'<artifact[^>]*>([\s\S]*?)</artifact>', text)
+    if m2:
+        return m2.group(1).strip()
+    return text
+
+
 def _sse_stream(target_url: str, payload: Dict[str, Any]) -> Iterable[str]:
     """
-    Transparent SSE pass-through. If upstream already prefixes with 'data:', forward as-is;
-    otherwise wrap the chunk. Do not append extra DONE markers beyond upstream.
+    SSE pass-through with non-streaming fallback.
+
+    The Go backbone does NOT stream — it returns a single JSON blob after
+    processing. We detect that case (presence of `message.content` but no
+    `delta.content`) and convert it into a proper SSE delta event so the
+    client's stream reader receives a valid chunk.
+
+    The Go sovereign engine also wraps every response body in
+    <artifact type="..." language="...">…</artifact> XML.  We strip that
+    wrapper and convert it to a markdown code fence so the canvas extractor
+    can pick it up.
     """
     for attempt in range(RETRY_COUNT):
         try:
@@ -235,29 +278,435 @@ def _sse_stream(target_url: str, payload: Dict[str, Any]) -> Iterable[str]:
                 "POST", target_url, json=payload, headers=_build_headers(), timeout=None
             ) as r:
                 r.raise_for_status()
+                accumulated = ""
                 for chunk in r.iter_text():
                     if not chunk:
                         continue
                     trimmed = chunk.strip()
                     if trimmed.startswith("data:"):
+                        # Real SSE from upstream — pass through
                         yield f"{trimmed}\n\n"
                     else:
-                        yield f"data: {trimmed}\n\n"
+                        # Accumulate non-SSE body (Go backbone sends one big JSON)
+                        accumulated += trimmed
+
+                # If we got a plain JSON body (non-streaming response), convert it
+                if accumulated:
+                    try:
+                        body = json.loads(accumulated)
+                        # Non-streaming: choices[0].message.content
+                        content = (
+                            body.get("choices", [{}])[0]
+                            .get("message", {})
+                            .get("content", "")
+                        )
+                        if content:
+                            content = _strip_artifact_xml(content)
+                            # Emit as delta chunk + DONE so the client stream reader works
+                            delta_event = json.dumps({
+                                "id": body.get("id", "chatcmpl-0"),
+                                "object": "chat.completion.chunk",
+                                "choices": [{"index": 0, "delta": {"role": "assistant", "content": content}, "finish_reason": None}],
+                            })
+                            yield f"data: {delta_event}\n\n"
+                            done_event = json.dumps({
+                                "id": body.get("id", "chatcmpl-0"),
+                                "object": "chat.completion.chunk",
+                                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                            })
+                            yield f"data: {done_event}\n\n"
+                        else:
+                            # Error or unexpected shape — forward raw
+                            yield f"data: {accumulated}\n\n"
+                    except (json.JSONDecodeError, IndexError, KeyError):
+                        yield f"data: {accumulated}\n\n"
+                    yield "data: [DONE]\n\n"
                 return
         except Exception as exc:  # noqa: BLE001
             if attempt < RETRY_COUNT - 1:
                 time.sleep(_backoff(attempt))
                 continue
             error_payload = json.dumps({
-                "error": {
-                    "message": str(exc),
-                    "type": "server_error",
-                    "code": 500
-                }
+                "error": {"message": str(exc), "type": "server_error", "code": 500}
             })
             yield f"data: {error_payload}\n\n"
             yield "data: [DONE]\n\n"
             return
+
+
+@app.route("/agents/save", methods=["POST"])
+def save_agent() -> Response:
+    """Write a user-created agent as a .ori skill file to oricli_core/skills/."""
+    data = request.get_json(force=True) or {}
+    raw_name = data.get("name", "").strip()
+    if not raw_name:
+        return jsonify({"error": "name is required"}), 400
+
+    file_stem = re.sub(r"[^a-z0-9_]", "_", raw_name.lower())
+    file_stem = re.sub(r"_+", "_", file_stem).strip("_")
+    if not file_stem:
+        return jsonify({"error": "invalid name"}), 400
+
+    skills_dir = Path(__file__).parent / "oricli_core" / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    dest = skills_dir / f"{file_stem}.ori"
+
+    lines: list[str] = []
+    lines.append(f"@skill_name: {file_stem}")
+    lines.append(f"@description: {data.get('description') or raw_name}")
+
+    triggers = [t.strip() for t in data.get("triggers", []) if t.strip()]
+    if triggers:
+        lines.append(f"@triggers: [{', '.join(f'{chr(34)}{t}{chr(34)}' for t in triggers)}]")
+
+    assigned_skills = data.get("skills", [])
+    if assigned_skills:
+        lines.append(f"@requires_skills: [{', '.join(f'{chr(34)}{s}{chr(34)}' for s in assigned_skills)}]")
+
+    assigned_rules = data.get("rules", [])
+    if assigned_rules:
+        lines.append(f"@enforces_rules: [{', '.join(f'{chr(34)}{r}{chr(34)}' for r in assigned_rules)}]")
+
+    lines.append("")
+
+    mindset = (data.get("mindset") or "").strip()
+    if mindset:
+        lines += ["<mindset>", mindset, "</mindset>", ""]
+
+    instructions = (data.get("instructions") or "").strip()
+    if instructions:
+        lines += ["<instructions>", instructions, "</instructions>", ""]
+
+    constraints = (data.get("constraints") or "").strip()
+    if constraints:
+        lines += ["<constraints>", constraints, "</constraints>"]
+
+    dest.write_text("\n".join(lines), encoding="utf-8")
+    return jsonify({"success": True, "path": str(dest), "file": f"{file_stem}.ori"})
+
+
+@app.route("/agents/list", methods=["GET"])
+def list_agents_ori() -> Response:
+    """Return parsed .ori agent data for the UI agent switcher."""
+    skills_dir = Path(__file__).parent / "oricli_core" / "skills"
+    if not skills_dir.exists():
+        return jsonify({"agents": []})
+
+    agents = []
+    for p in sorted(skills_dir.glob("*.ori")):
+        try:
+            text = p.read_text(encoding="utf-8")
+            agent = _parse_ori(p.stem, text)
+            agents.append(agent)
+        except Exception:
+            agents.append({"id": p.stem, "name": p.stem, "description": "", "systemPrompt": "", "emoji": "🤖"})
+    return jsonify({"agents": agents})
+
+
+def _parse_ori(slug: str, text: str) -> dict:
+    """Parse a .ori file into a dict with id, name, description, systemPrompt, emoji."""
+    import re as _re
+
+    def _tag(tag: str) -> str:
+        m = _re.search(rf'<{tag}>([\s\S]*?)</{tag}>', text)
+        return m.group(1).strip() if m else ''
+
+    def _meta(key: str) -> str:
+        m = _re.search(rf'^@{key}:\s*(.+)', text, _re.MULTILINE)
+        return m.group(1).strip() if m else ''
+
+    name        = _meta('skill_name') or _meta('rule_name') or slug
+    description = _meta('description') or ''
+    mindset     = _tag('mindset')
+    instructions = _tag('instructions')
+    constraints  = _tag('constraints')
+
+    parts: list[str] = []
+    if mindset:      parts.append(mindset)
+    if instructions: parts.append(f"Instructions:\n{instructions}")
+    if constraints:  parts.append(f"Constraints:\n{constraints}")
+    system_prompt = "\n\n".join(parts) if parts else f"You are {name}. {description}"
+
+    # Pick a representative emoji based on slug keywords
+    EMOJI_MAP = {
+        'go': '🔧', 'rust': '⚙️', 'python': '🐍', 'senior_python': '🐍',
+        'api': '🔌', 'devops': '🚀', 'sre': '🚀', 'ml': '🧠', 'data': '📊',
+        'security': '🔐', 'offensive': '🔐', 'research': '🔬',
+        'architect': '🏗️', 'system': '🏗️', 'hive': '🐝',
+        'knowledge': '📚', 'curator': '📚', 'writer': '✍️',
+        'prompt': '💬', 'benchmark': '📈', 'guardian': '🛡️',
+        'planner': '🗺️', 'sovereign': '👑', 'jarvis': '🤖',
+    }
+    emoji = '🤖'
+    for k, e in EMOJI_MAP.items():
+        if k in slug.lower():
+            emoji = e
+            break
+
+    # Format display name
+    display_name = name.replace('_', ' ').title()
+
+    return {
+        "id":           slug,
+        "name":         display_name,
+        "description":  description,
+        "systemPrompt": system_prompt,
+        "emoji":        emoji,
+    }
+
+
+def _slugify(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9_]", "_", name.lower())
+    return re.sub(r"_+", "_", slug).strip("_")
+
+
+def _ori_list(items: list[str], quote: str = '"') -> str:
+    return "[" + ", ".join(f"{quote}{i}{quote}" for i in items) + "]"
+
+
+@app.route("/skills/save", methods=["POST"])
+def save_skill() -> Response:
+    """Write a user-created skill as a .ori file to oricli_core/skills/."""
+    data = request.get_json(force=True) or {}
+    raw_name = data.get("name", "").strip()
+    if not raw_name:
+        return jsonify({"error": "name is required"}), 400
+
+    slug = _slugify(raw_name)
+    if not slug:
+        return jsonify({"error": "invalid name"}), 400
+
+    dest_dir = Path(__file__).parent / "oricli_core" / "skills"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{slug}.ori"
+
+    lines: list[str] = [
+        f"@skill_name: {slug}",
+        f"@description: {data.get('description') or raw_name}",
+    ]
+    triggers = [t.strip() for t in data.get("triggers", []) if t.strip()]
+    if triggers:
+        lines.append(f"@triggers: {_ori_list(triggers)}")
+    tools = [t.strip() for t in data.get("requires_tools", []) if t.strip()]
+    if tools:
+        lines.append(f"@requires_tools: {_ori_list(tools)}")
+    lines.append("")
+
+    for tag, key in [("<mindset>", "mindset"), ("<instructions>", "instructions"), ("<constraints>", "constraints")]:
+        body = (data.get(key) or "").strip()
+        if body:
+            close = tag.replace("<", "</")
+            lines += [tag, body, close, ""]
+
+    dest.write_text("\n".join(lines), encoding="utf-8")
+    return jsonify({"success": True, "path": str(dest), "file": f"{slug}.ori"})
+
+
+@app.route("/rules/save", methods=["POST"])
+def save_rule() -> Response:
+    """Write a user-created rule as a .ori file to oricli_core/rules/."""
+    data = request.get_json(force=True) or {}
+    raw_name = data.get("name", "").strip()
+    if not raw_name:
+        return jsonify({"error": "name is required"}), 400
+
+    slug = _slugify(raw_name)
+    if not slug:
+        return jsonify({"error": "invalid name"}), 400
+
+    dest_dir = Path(__file__).parent / "oricli_core" / "rules"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{slug}.ori"
+
+    lines: list[str] = [
+        f"@rule_name: {slug}",
+        f"@description: {data.get('description') or raw_name}",
+        f"@scope: {data.get('scope') or 'global'}",
+    ]
+    categories = [c.strip() for c in data.get("categories", []) if c.strip()]
+    if categories:
+        lines.append(f"@categories: {_ori_list(categories)}")
+    lines.append("")
+
+    constraints = (data.get("constraints") or "").strip()
+    if constraints:
+        lines += ["<constraints>", constraints, "</constraints>"]
+
+    dest.write_text("\n".join(lines), encoding="utf-8")
+    return jsonify({"success": True, "path": str(dest), "file": f"{slug}.ori"})
+
+
+import urllib.parse
+from bs4 import BeautifulSoup
+
+
+def _ddg_search(query: str, max_results: int = 6) -> list:
+    """Scrape DuckDuckGo HTML results — no API key needed."""
+    try:
+        with httpx.Client(timeout=12.0, follow_redirects=True) as client:
+            resp = client.get(
+                "https://html.duckduckgo.com/html/",
+                params={"q": query},
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"},
+            )
+        soup = BeautifulSoup(resp.text, "html.parser")
+        results = []
+        for r in soup.select(".result")[:max_results]:
+            title_el = r.select_one(".result__title a, .result__a")
+            snip_el  = r.select_one(".result__snippet")
+            if not (title_el and snip_el):
+                continue
+            href = title_el.get("href", "")
+            parsed = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
+            actual_url = urllib.parse.unquote(parsed.get("uddg", [href])[0])
+            results.append({
+                "title":   title_el.get_text(strip=True),
+                "snippet": snip_el.get_text(strip=True),
+                "url":     actual_url,
+            })
+        return results
+    except Exception:
+        return []
+
+
+def _llm_complete(messages: list, max_tokens: int = 2000, timeout: float = 120.0) -> str:
+    """Synchronous LLM call — strips sovereign artifact XML wrapper from response."""
+    payload = {
+        "model": "oricli-cognitive",
+        "stream": False,
+        "max_tokens": max_tokens,
+        "messages": messages,
+    }
+    try:
+        with _client() as client:
+            resp = client.post(
+                f"{API_BASE}/v1/chat/completions",
+                json=payload,
+                headers=_build_headers(),
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            content = (
+                resp.json()
+                .get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+            return _strip_artifact_xml(content)
+    except Exception as exc:  # noqa: BLE001
+        return f"[error: {exc}]"
+
+
+def _sse_event(data: dict) -> str:
+    return f"data: {json.dumps(data)}\n\n"
+
+
+@app.route("/search", methods=["GET"])
+def search_endpoint() -> Response:
+    """Quick web search — returns JSON snippets for canvas context injection."""
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify({"error": "q required"}), 400
+    return jsonify({"query": q, "results": _ddg_search(q, max_results=6)})
+
+
+@app.route("/research/stream", methods=["POST"])
+def research_stream() -> Response:
+    """SSE research pipeline. Emits typed events: step, step_done, search_result, plan, content, done, error."""
+    from flask import stream_with_context
+    data  = request.get_json(force=True) or {}
+    topic = data.get("topic", "").strip()
+    mode  = data.get("mode", "normal")
+
+    if not topic:
+        return jsonify({"error": "topic required"}), 400
+
+    def generate():
+        try:
+            if mode == "deep":
+                yield from _research_deep(topic)
+            else:
+                yield from _research_normal(topic)
+        except Exception as exc:  # noqa: BLE001
+            yield _sse_event({"type": "error", "message": str(exc)})
+            yield _sse_event({"type": "done"})
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def _research_normal(topic: str):
+    yield _sse_event({"type": "step", "index": 0, "total": 2, "label": f'Searching the web for "{topic}"', "status": "active"})
+    results = _ddg_search(topic, max_results=6)
+    yield _sse_event({"type": "step_done", "index": 0})
+    yield _sse_event({"type": "search_result", "query": topic, "results": results})
+
+    yield _sse_event({"type": "step", "index": 1, "total": 2, "label": "Synthesizing findings", "status": "active"})
+
+    snippets = "\n\n".join(
+        f"[{i+1}] **{r['title']}**\n{r['snippet']}\nSource: {r['url']}"
+        for i, r in enumerate(results)
+    ) if results else "No web results found — answer from general knowledge."
+
+    report = _llm_complete([
+        {"role": "system", "content": "You are a research assistant. Write a comprehensive, well-structured markdown report based on the provided search results. Use ## headings, bullet points, and inline citations like [1]. End with a ## Sources section listing each URL."},
+        {"role": "user", "content": f"Research topic: {topic}\n\nSearch results:\n{snippets}\n\nWrite a complete markdown report."},
+    ], max_tokens=2000)
+
+    yield _sse_event({"type": "step_done", "index": 1})
+    yield _sse_event({"type": "content", "text": report, "title": topic})
+    yield _sse_event({"type": "done"})
+
+
+def _research_deep(topic: str):
+    import re as _re
+
+    # Step 0: Plan
+    yield _sse_event({"type": "step", "index": 0, "total": 5, "label": "Planning research questions", "status": "active"})
+    plan_resp = _llm_complete([
+        {"role": "system", "content": "You are a research planner. Output exactly 3 specific research sub-questions as a numbered list (1. 2. 3.) with no other text."},
+        {"role": "user",   "content": f"Break this into 3 targeted sub-questions for deep research: {topic}"},
+    ], max_tokens=300)
+    yield _sse_event({"type": "step_done", "index": 0})
+
+    questions = _re.findall(r'\d+\.\s*(.+)', plan_resp)
+    questions  = [q.strip() for q in questions if q.strip()][:3] or [topic]
+    total      = 1 + len(questions) + 1  # plan + per-search + synthesize
+
+    yield _sse_event({"type": "plan", "questions": questions, "total": total})
+
+    # Steps 1-N: Search each sub-question
+    all_results: list[dict] = []
+    for i, q in enumerate(questions):
+        yield _sse_event({"type": "step", "index": i + 1, "total": total, "label": f"Searching: {q[:70]}", "status": "active"})
+        results = _ddg_search(q, max_results=5)
+        all_results.append({"question": q, "results": results})
+        yield _sse_event({"type": "step_done", "index": i + 1})
+        yield _sse_event({"type": "search_result", "query": q, "results": results})
+
+    # Final: Synthesize
+    synth_idx = 1 + len(questions)
+    yield _sse_event({"type": "step", "index": synth_idx, "total": total, "label": "Synthesizing comprehensive report", "status": "active"})
+
+    ctx_parts: list[str] = []
+    for item in all_results:
+        ctx_parts.append(f"### {item['question']}")
+        for j, r in enumerate(item["results"]):
+            ctx_parts.append(f"[{j+1}] **{r['title']}**: {r['snippet']} ({r['url']})")
+    context = "\n\n".join(ctx_parts) if ctx_parts else "No results."
+
+    report = _llm_complete([
+        {"role": "system", "content": "You are an expert research synthesizer. Write a deeply detailed markdown report using ## headings. Include analysis beyond just summaries, inline citations [1][2], and a ## Sources section at the end."},
+        {"role": "user",   "content": f"Topic: {topic}\n\nResearch findings:\n{context}\n\nWrite a comprehensive deep research report."},
+    ], max_tokens=3000, timeout=180.0)
+
+    yield _sse_event({"type": "step_done", "index": synth_idx})
+    yield _sse_event({"type": "content", "text": report, "title": topic})
+    yield _sse_event({"type": "done"})
+
 
 
 @app.route("/chat", methods=["POST"])
@@ -282,6 +731,1730 @@ def chat() -> Response:
         )
     except Exception as exc:  # noqa: BLE001
         return jsonify({"error": {"message": str(exc), "type": "server_error", "code": 502}}), 502
+
+
+
+# ── MCP Server Management ─────────────────────────────────────────────────────
+
+_MCP_SERVERS_FILE = Path(__file__).parent / ".oricli" / "mcp_servers.json"
+_MCP_ACTIVE_CONFIG = Path(__file__).parent / "oricli_core" / "mcp_config.json"
+_MCP_LOCK = threading.Lock()
+
+
+def _load_mcp_servers() -> list[dict]:
+    try:
+        if _MCP_SERVERS_FILE.exists():
+            return json.loads(_MCP_SERVERS_FILE.read_text())
+    except Exception:
+        pass
+    # Bootstrap from existing mcp_config.json if present
+    try:
+        if _MCP_ACTIVE_CONFIG.exists():
+            raw = json.loads(_MCP_ACTIVE_CONFIG.read_text())
+            servers = []
+            for name, cfg in raw.get("mcpServers", {}).items():
+                servers.append({
+                    "id": name,
+                    "name": name.replace("_", " ").replace("-", " ").title(),
+                    "description": "",
+                    "command": cfg.get("command", ""),
+                    "args": cfg.get("args", []),
+                    "env": cfg.get("env", {}),
+                    "enabled": True,
+                })
+            if servers:
+                _save_mcp_servers(servers)
+            return servers
+    except Exception:
+        pass
+    return []
+
+
+def _save_mcp_servers(servers: list[dict]) -> None:
+    _MCP_SERVERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _MCP_SERVERS_FILE.write_text(json.dumps(servers, indent=2))
+    _write_active_mcp_config(servers)
+
+
+def _write_active_mcp_config(servers: list[dict]) -> None:
+    """Write the filtered mcp_config.json with only enabled servers."""
+    active: dict = {"mcpServers": {}}
+    for s in servers:
+        if s.get("enabled"):
+            entry: dict = {"command": s["command"], "args": s.get("args", [])}
+            if s.get("env"):
+                entry["env"] = s["env"]
+            active["mcpServers"][s["id"]] = entry
+    _MCP_ACTIVE_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    _MCP_ACTIVE_CONFIG.write_text(json.dumps(active, indent=2))
+
+
+@app.route("/mcp/servers", methods=["GET"])
+def list_mcp_servers() -> Response:
+    with _MCP_LOCK:
+        servers = _load_mcp_servers()
+    return jsonify({"servers": servers})
+
+
+@app.route("/mcp/servers", methods=["POST"])
+def create_mcp_server() -> Response:
+    data = request.get_json(force=True, silent=True) or {}
+    raw_id = re.sub(r"[^a-z0-9_\-]", "_", (data.get("id") or data.get("name", "")).lower())
+    raw_id = re.sub(r"_+", "_", raw_id).strip("_")
+    if not raw_id:
+        return jsonify({"error": "id or name is required"}), 400
+    server = {
+        "id":          raw_id,
+        "name":        data.get("name") or raw_id.replace("_", " ").title(),
+        "description": data.get("description", ""),
+        "command":     data.get("command", "npx"),
+        "args":        data.get("args", []),
+        "env":         data.get("env", {}),
+        "enabled":     data.get("enabled", True),
+    }
+    with _MCP_LOCK:
+        servers = _load_mcp_servers()
+        if any(s["id"] == raw_id for s in servers):
+            return jsonify({"error": f"Server '{raw_id}' already exists"}), 409
+        servers.append(server)
+        _save_mcp_servers(servers)
+    return jsonify({"server": server}), 201
+
+
+@app.route("/mcp/servers/<server_id>", methods=["PUT"])
+def update_mcp_server(server_id: str) -> Response:
+    data = request.get_json(force=True, silent=True) or {}
+    with _MCP_LOCK:
+        servers = _load_mcp_servers()
+        for i, s in enumerate(servers):
+            if s["id"] == server_id:
+                servers[i] = {**s, **{k: v for k, v in data.items() if k != "id"}}
+                _save_mcp_servers(servers)
+                return jsonify({"server": servers[i]})
+    return jsonify({"error": "not found"}), 404
+
+
+@app.route("/mcp/servers/<server_id>", methods=["DELETE"])
+def delete_mcp_server(server_id: str) -> Response:
+    with _MCP_LOCK:
+        servers = [s for s in _load_mcp_servers() if s["id"] != server_id]
+        _save_mcp_servers(servers)
+    return jsonify({"ok": True})
+
+
+@app.route("/mcp/servers/<server_id>/toggle", methods=["POST"])
+def toggle_mcp_server(server_id: str) -> Response:
+    with _MCP_LOCK:
+        servers = _load_mcp_servers()
+        for s in servers:
+            if s["id"] == server_id:
+                s["enabled"] = not s.get("enabled", False)
+                _save_mcp_servers(servers)
+                return jsonify({"server": s, "enabled": s["enabled"]})
+    return jsonify({"error": "not found"}), 404
+
+
+@app.route("/mcp/reload", methods=["POST"])
+def reload_mcp_backbone() -> Response:
+    """Restart the oricli-backbone service so it picks up the new mcp_config.json."""
+    try:
+        result = _subprocess.run(
+            ["sudo", "systemctl", "restart", "oricli-backbone.service"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode == 0:
+            return jsonify({"ok": True, "message": "Backbone restarted — MCP servers reloading."})
+        return jsonify({"ok": False, "message": result.stderr.strip() or "Restart failed"}), 500
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 500
+
+
+# ── Task Scheduler ────────────────────────────────────────────────────────────
+
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.date import DateTrigger
+    _SCHEDULER = BackgroundScheduler(timezone="UTC")
+    _SCHEDULER.start()
+    _SCHEDULER_AVAILABLE = True
+except Exception:
+    _SCHEDULER = None  # type: ignore[assignment]
+    _SCHEDULER_AVAILABLE = False
+
+_TASKS_FILE = Path(__file__).parent / ".oricli" / "tasks.json"
+_TASKS_LOCK = threading.Lock()
+
+
+def _load_tasks() -> list[dict]:
+    try:
+        if _TASKS_FILE.exists():
+            return json.loads(_TASKS_FILE.read_text())
+    except Exception:
+        pass
+    return []
+
+
+def _save_tasks(tasks: list[dict]) -> None:
+    _TASKS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _TASKS_FILE.write_text(json.dumps(tasks, indent=2))
+
+
+def _patch_task(task_id: str, patch: dict) -> None:
+    with _TASKS_LOCK:
+        tasks = _load_tasks()
+        for t in tasks:
+            if t["id"] == task_id:
+                t.update(patch)
+                break
+        _save_tasks(tasks)
+
+
+def _run_task_now(task_id: str) -> None:
+    """Execute a task: load its agent system prompt, send goal to LLM, store result."""
+    with _TASKS_LOCK:
+        tasks = _load_tasks()
+        task = next((t for t in tasks if t["id"] == task_id), None)
+    if not task:
+        return
+
+    _patch_task(task_id, {
+        "status": "running",
+        "lastRun": datetime.now(timezone.utc).isoformat(),
+    })
+
+    # Build agent system prompt from .ori file
+    system_content: str | None = None
+    agent_id = task.get("agentId")
+    if agent_id:
+        ori_path = Path(__file__).parent / "oricli_core" / "skills" / f"{agent_id}.ori"
+        if ori_path.exists():
+            ori_text = ori_path.read_text(encoding="utf-8")
+            parsed = _parse_ori(agent_id, ori_text)
+            system_content = parsed.get("systemPrompt")
+
+    messages: list[dict] = []
+    if system_content:
+        messages.append({"role": "system", "content": system_content})
+    messages.append({"role": "user", "content": task["goal"]})
+
+    try:
+        result = _llm_complete(messages)
+        _patch_task(task_id, {
+            "status": "done",
+            "lastResult": result,
+            "lastRun": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as exc:
+        _patch_task(task_id, {
+            "status": "error",
+            "lastResult": f"Error: {exc}",
+            "lastRun": datetime.now(timezone.utc).isoformat(),
+        })
+
+
+def _schedule_task(task: dict) -> None:
+    """Register a task with APScheduler based on its schedule config."""
+    if not _SCHEDULER_AVAILABLE:
+        return
+    tid = task["id"]
+    stype = task.get("scheduleType", "manual")
+
+    # Remove existing job if any
+    try:
+        _SCHEDULER.remove_job(tid)
+    except Exception:
+        pass
+
+    if stype == "cron":
+        expr = task.get("scheduleValue", "").strip()
+        if not expr:
+            return
+        parts = expr.split()
+        if len(parts) == 5:
+            m, h, dom, mon, dow = parts
+            trigger = CronTrigger(minute=m, hour=h, day=dom, month=mon, day_of_week=dow, timezone="UTC")
+            _SCHEDULER.add_job(_run_task_now, trigger, args=[tid], id=tid, replace_existing=True)
+    elif stype == "once":
+        dt_str = task.get("scheduleValue", "")
+        try:
+            run_at = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+            trigger = DateTrigger(run_date=run_at, timezone="UTC")
+            _SCHEDULER.add_job(_run_task_now, trigger, args=[tid], id=tid, replace_existing=True)
+        except Exception:
+            pass
+
+
+# Re-register persisted tasks on startup
+for _t in _load_tasks():
+    if _t.get("scheduleType") in ("cron", "once") and _t.get("status") not in ("done", "error"):
+        _schedule_task(_t)
+
+
+@app.route("/tasks", methods=["GET"])
+def list_tasks() -> Response:
+    with _TASKS_LOCK:
+        tasks = _load_tasks()
+    return jsonify({"tasks": tasks})
+
+
+@app.route("/tasks", methods=["POST"])
+def create_task() -> Response:
+    data = request.get_json(force=True, silent=True) or {}
+    if not data.get("goal"):
+        return jsonify({"error": "goal is required"}), 400
+
+    task: dict = {
+        "id":            str(uuid.uuid4()),
+        "name":          data.get("name") or data["goal"][:60],
+        "goal":          data["goal"],
+        "agentId":       data.get("agentId") or None,
+        "agentName":     data.get("agentName") or "Default",
+        "agentEmoji":    data.get("agentEmoji") or "✨",
+        "scheduleType":  data.get("scheduleType", "manual"),   # manual | once | cron
+        "scheduleValue": data.get("scheduleValue", ""),
+        "status":        "idle",
+        "lastRun":       None,
+        "lastResult":    None,
+        "createdAt":     datetime.now(timezone.utc).isoformat(),
+    }
+    with _TASKS_LOCK:
+        tasks = _load_tasks()
+        tasks.append(task)
+        _save_tasks(tasks)
+
+    _schedule_task(task)
+    return jsonify({"task": task}), 201
+
+
+@app.route("/tasks/<task_id>", methods=["DELETE"])
+def delete_task(task_id: str) -> Response:
+    if _SCHEDULER_AVAILABLE:
+        try:
+            _SCHEDULER.remove_job(task_id)
+        except Exception:
+            pass
+    with _TASKS_LOCK:
+        tasks = [t for t in _load_tasks() if t["id"] != task_id]
+        _save_tasks(tasks)
+    return jsonify({"ok": True})
+
+
+@app.route("/tasks/<task_id>/run", methods=["POST"])
+def run_task(task_id: str) -> Response:
+    """Trigger a task immediately (non-blocking)."""
+    with _TASKS_LOCK:
+        tasks = _load_tasks()
+        task = next((t for t in tasks if t["id"] == task_id), None)
+    if not task:
+        return jsonify({"error": "task not found"}), 404
+    threading.Thread(target=_run_task_now, args=[task_id], daemon=True).start()
+    return jsonify({"ok": True, "status": "running"})
+
+
+# ── Connections (External API integrations) ───────────────────────────────────
+
+_CONNECTIONS_FILE = Path(__file__).parent / ".oricli" / "connections.json"
+_CONN_LOCK = threading.Lock()
+
+
+def _load_connections() -> dict:
+    try:
+        if _CONNECTIONS_FILE.exists():
+            return json.loads(_CONNECTIONS_FILE.read_text())
+    except Exception:
+        pass
+    return {}
+
+
+def _save_connections(data: dict) -> None:
+    _CONNECTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _CONNECTIONS_FILE.write_text(json.dumps(data, indent=2))
+
+
+@app.route("/connections", methods=["GET"])
+def list_connections() -> Response:
+    with _CONN_LOCK:
+        data = _load_connections()
+    return jsonify({"connections": data})
+
+
+@app.route("/connections/<conn_id>", methods=["PUT"])
+def save_connection(conn_id: str) -> Response:
+    payload = request.get_json(force=True, silent=True) or {}
+    with _CONN_LOCK:
+        data = _load_connections()
+        existing = data.get(conn_id, {})
+        data[conn_id] = {**existing, **payload, "id": conn_id, "updatedAt": datetime.now(timezone.utc).isoformat()}
+        _save_connections(data)
+    return jsonify({"connection": data[conn_id]})
+
+
+@app.route("/connections/<conn_id>", methods=["DELETE"])
+def delete_connection(conn_id: str) -> Response:
+    with _CONN_LOCK:
+        data = _load_connections()
+        data.pop(conn_id, None)
+        _save_connections(data)
+    return jsonify({"ok": True})
+
+
+@app.route("/connections/<conn_id>/test", methods=["POST"])
+def test_connection(conn_id: str) -> Response:
+    """Lightweight connectivity test for each integration type."""
+    with _CONN_LOCK:
+        data = _load_connections()
+    cfg = data.get(conn_id, {})
+    creds = cfg.get("credentials", {})
+
+    try:
+        ok, msg = _test_conn(conn_id, creds)
+        return jsonify({"ok": ok, "message": msg})
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)})
+
+
+def _test_conn(conn_id: str, creds: dict) -> tuple[bool, str]:
+    """Returns (success, message) for a connection test."""
+    import httpx as _hx
+
+    def _get(url: str, headers: dict = {}, params: dict = {}, timeout: float = 8.0):
+        r = _hx.get(url, headers=headers, params=params, timeout=timeout)
+        r.raise_for_status()
+        return r
+
+    # ── Communication ─────────────────────────────────────────────────────────
+    if conn_id == "discord":
+        token = creds.get("bot_token", "")
+        if not token: return False, "Bot token required"
+        r = _get("https://discord.com/api/v10/users/@me", headers={"Authorization": f"Bot {token}"})
+        return True, f"Connected as {r.json().get('username', 'unknown')}"
+
+    if conn_id == "telegram":
+        token = creds.get("bot_token", "")
+        if not token: return False, "Bot token required"
+        r = _get(f"https://api.telegram.org/bot{token}/getMe")
+        name = r.json().get("result", {}).get("username", "unknown")
+        return True, f"Connected as @{name}"
+
+    if conn_id == "slack":
+        token = creds.get("bot_token", "")
+        if not token: return False, "Bot token required"
+        r = _get("https://slack.com/api/auth.test", headers={"Authorization": f"Bearer {token}"})
+        d = r.json()
+        if not d.get("ok"): return False, d.get("error", "Auth failed")
+        return True, f"Connected to {d.get('team', 'workspace')} as {d.get('user', 'bot')}"
+
+    if conn_id == "ms_teams":
+        # Just validate the tenant / client id fields are set
+        if not creds.get("client_id") or not creds.get("tenant_id"):
+            return False, "Client ID and Tenant ID required"
+        return True, "Credentials saved (OAuth flow required to activate)"
+
+    # ── Productivity ──────────────────────────────────────────────────────────
+    if conn_id == "notion":
+        token = creds.get("api_key", "")
+        if not token: return False, "API key required"
+        r = _get("https://api.notion.com/v1/users/me", headers={"Authorization": f"Bearer {token}", "Notion-Version": "2022-06-28"})
+        name = r.json().get("name") or r.json().get("bot", {}).get("owner", {}).get("user", {}).get("name", "bot")
+        return True, f"Connected as {name}"
+
+    if conn_id == "todoist":
+        token = creds.get("api_token", "")
+        if not token: return False, "API token required"
+        r = _get("https://api.todoist.com/sync/v9/user", headers={"Authorization": f"Bearer {token}"})
+        return True, f"Connected as {r.json().get('full_name', 'user')}"
+
+    if conn_id == "trello":
+        key = creds.get("api_key", ""); token = creds.get("token", "")
+        if not key or not token: return False, "API key and token required"
+        r = _get("https://api.trello.com/1/members/me", params={"key": key, "token": token})
+        return True, f"Connected as {r.json().get('fullName', r.json().get('username', 'user'))}"
+
+    if conn_id == "airtable":
+        token = creds.get("api_key", "")
+        if not token: return False, "API key required"
+        r = _get("https://api.airtable.com/v0/meta/whoami", headers={"Authorization": f"Bearer {token}"})
+        return True, f"Connected as {r.json().get('id', 'user')}"
+
+    if conn_id == "linear":
+        token = creds.get("api_key", "")
+        if not token: return False, "API key required"
+        r = _hx.post("https://api.linear.app/graphql", json={"query": "{ viewer { name } }"},
+                     headers={"Authorization": token}, timeout=8)
+        r.raise_for_status()
+        name = r.json().get("data", {}).get("viewer", {}).get("name", "user")
+        return True, f"Connected as {name}"
+
+    if conn_id == "asana":
+        token = creds.get("personal_access_token", "")
+        if not token: return False, "Personal access token required"
+        r = _get("https://app.asana.com/api/1.0/users/me", headers={"Authorization": f"Bearer {token}"})
+        return True, f"Connected as {r.json().get('data', {}).get('name', 'user')}"
+
+    # ── Enterprise ────────────────────────────────────────────────────────────
+    if conn_id == "google_workspace":
+        if not creds.get("service_account_json") and not creds.get("api_key"):
+            return False, "Service account JSON or API key required"
+        return True, "Credentials saved (OAuth/service-account flow required)"
+
+    if conn_id == "microsoft_365":
+        if not creds.get("client_id") or not creds.get("tenant_id"):
+            return False, "Client ID and Tenant ID required"
+        return True, "Credentials saved (OAuth flow required to activate)"
+
+    if conn_id == "workday":
+        if not creds.get("tenant_url") or not creds.get("client_id"):
+            return False, "Tenant URL and Client ID required"
+        return True, "Credentials saved (OAuth flow required)"
+
+    if conn_id == "hubspot":
+        token = creds.get("access_token", "") or creds.get("api_key", "")
+        if not token: return False, "Access token required"
+        r = _get("https://api.hubapi.com/crm/v3/owners", headers={"Authorization": f"Bearer {token}"})
+        count = len(r.json().get("results", []))
+        return True, f"Connected — {count} owner(s) found"
+
+    if conn_id == "salesforce":
+        if not creds.get("instance_url") or not creds.get("access_token"):
+            return False, "Instance URL and access token required"
+        r = _get(f"{creds['instance_url']}/services/data/v57.0/", headers={"Authorization": f"Bearer {creds['access_token']}"})
+        return True, f"Connected to {creds['instance_url']}"
+
+    if conn_id == "jira":
+        email = creds.get("email", ""); token = creds.get("api_token", ""); domain = creds.get("domain", "")
+        if not email or not token or not domain: return False, "Email, API token, and domain required"
+        import base64 as _b64
+        auth = _b64.b64encode(f"{email}:{token}".encode()).decode()
+        r = _get(f"https://{domain}/rest/api/3/myself", headers={"Authorization": f"Basic {auth}"})
+        return True, f"Connected as {r.json().get('displayName', 'user')}"
+
+    # ── Research & Knowledge ──────────────────────────────────────────────────
+    if conn_id == "arxiv":
+        r = _get("https://export.arxiv.org/api/query", params={"search_query": "ti:test", "max_results": "1"})
+        return True, "arXiv API reachable (no key required)"
+
+    if conn_id == "pubmed":
+        r = _get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi", params={"db": "pubmed", "term": "test", "retmax": "1", "format": "json"})
+        return True, "PubMed API reachable (no key required)"
+
+    if conn_id == "semantic_scholar":
+        r = _get("https://api.semanticscholar.org/graph/v1/paper/search", params={"query": "test", "limit": "1"})
+        return True, "Semantic Scholar reachable (no key required)"
+
+    if conn_id == "newsapi":
+        key = creds.get("api_key", "")
+        if not key: return False, "API key required"
+        r = _get("https://newsapi.org/v2/top-headlines", params={"country": "us", "pageSize": "1", "apiKey": key})
+        return True, f"Connected — {r.json().get('totalResults', 0)} articles available"
+
+    if conn_id == "reddit":
+        cid = creds.get("client_id", ""); secret = creds.get("client_secret", "")
+        if not cid or not secret: return False, "Client ID and secret required"
+        ua = creds.get("user_agent", "SovereignClaw/1.0")
+        r = _hx.post("https://www.reddit.com/api/v1/access_token",
+                     auth=(cid, secret), data={"grant_type": "client_credentials"},
+                     headers={"User-Agent": ua}, timeout=8)
+        if r.status_code != 200: return False, f"Auth failed ({r.status_code})"
+        return True, "Connected (app-only OAuth)"
+
+    if conn_id == "wikipedia":
+        r = _get("https://en.wikipedia.org/w/api.php", params={"action": "query", "format": "json", "titles": "Test"})
+        return True, "Wikipedia API reachable (no key required)"
+
+    if conn_id == "youtube":
+        key = creds.get("api_key", "")
+        if not key: return False, "API key required"
+        r = _get("https://www.googleapis.com/youtube/v3/videos", params={"part": "id", "id": "dQw4w9WgXcQ", "key": key})
+        return True, f"Connected — {len(r.json().get('items', []))} result(s)"
+
+    if conn_id == "github_api":
+        token = creds.get("personal_access_token", "")
+        if not token: return False, "Personal access token required"
+        r = _get("https://api.github.com/user", headers={"Authorization": f"Bearer {token}"})
+        return True, f"Connected as {r.json().get('login', 'user')}"
+
+    if conn_id == "gitlab":
+        token = creds.get("personal_access_token", ""); host = creds.get("host", "https://gitlab.com")
+        if not token: return False, "Personal access token required"
+        r = _get(f"{host}/api/v4/user", headers={"PRIVATE-TOKEN": token})
+        return True, f"Connected as {r.json().get('username', 'user')}"
+
+    if conn_id == "pinecone":
+        key = creds.get("api_key", ""); env = creds.get("environment", "")
+        if not key: return False, "API key required"
+        r = _get(f"https://controller.{env}.pinecone.io/databases", headers={"Api-Key": key})
+        return True, f"Connected — {len(r.json())} index(es)"
+
+    if conn_id == "supabase":
+        url = creds.get("url", ""); key = creds.get("anon_key", "")
+        if not url or not key: return False, "URL and anon key required"
+        r = _get(f"{url}/rest/v1/", headers={"apikey": key, "Authorization": f"Bearer {key}"})
+        return True, f"Connected to {url}"
+
+    # Generic fallback — just validate required fields are non-empty
+    required = [v for v in creds.values() if v]
+    if required:
+        return True, "Credentials saved (live test not available for this integration)"
+    return False, "No credentials provided"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Workflows — persistent multi-step execution engine
+# ══════════════════════════════════════════════════════════════════════════════
+
+_WORKFLOWS_FILE   = Path(__file__).parent / ".oricli" / "workflows.json"
+_WORKFLOW_RUNS_FILE = Path(__file__).parent / ".oricli" / "workflow_runs.json"
+_WF_LOCK  = threading.Lock()
+_WFR_LOCK = threading.Lock()
+
+
+def _load_workflows() -> list:
+    if _WORKFLOWS_FILE.exists():
+        try:
+            return json.loads(_WORKFLOWS_FILE.read_text())
+        except Exception:
+            pass
+    return []
+
+
+def _save_workflows(data: list) -> None:
+    _WORKFLOWS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _WORKFLOWS_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _load_runs() -> dict:
+    if _WORKFLOW_RUNS_FILE.exists():
+        try:
+            return json.loads(_WORKFLOW_RUNS_FILE.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _save_runs(data: dict) -> None:
+    _WORKFLOW_RUNS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _WORKFLOW_RUNS_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _wf_interpolate(text: str, context: dict) -> str:
+    """Replace {{output}}, {{step_N_output}}, {{var}} in step text."""
+    import re as _re
+    def replacer(m):
+        key = m.group(1).strip()
+        return str(context.get(key, m.group(0)))
+    return _re.sub(r'\{\{([^}]+)\}\}', replacer, text or "")
+
+
+def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_prompt: str = "") -> dict:
+    """Execute one step. Returns {output, status, error}."""
+    import httpx as _hx
+
+    # Shared constants
+    _LLM_TIMEOUT   = 300.0   # 5 min — local models are slow under load
+    _MAX_CTX_CHARS = 12_000  # truncate large previous outputs before sending to LLM
+
+    step_type  = step.get("type", "prompt")
+    step_input = _wf_interpolate(step.get("value", "") or step.get("input", ""), context)
+    result: dict = {"status": "done", "output": "", "error": None}
+
+    def _trim(text: str, limit: int = _MAX_CTX_CHARS) -> str:
+        if len(text) <= limit:
+            return text
+        return text[:limit] + f"\n\n…[truncated, {len(text) - limit} chars omitted]"
+
+    try:
+        if step_type == "prompt":
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            if context.get("output"):
+                messages.append({"role": "system", "content": f"Prior context:\n\n{_trim(context['output'])}"})
+            messages.append({"role": "user", "content": step_input or "Continue."})
+            result["output"] = _llm_complete(messages, max_tokens=3000, timeout=_LLM_TIMEOUT)
+
+        elif step_type == "summarize":
+            target = context.get("output", "")
+            if not target:
+                result["output"] = "(nothing to summarize)"
+            else:
+                instruction = step_input.strip() or "Summarize the following content concisely, highlighting key points and any action items."
+                result["output"] = _llm_complete([
+                    {"role": "system", "content": "You are a concise summarizer. Extract the essential information without losing important facts."},
+                    {"role": "user", "content": f"{instruction}\n\n---\n{_trim(target)}"},
+                ], max_tokens=1500, timeout=_LLM_TIMEOUT)
+
+        elif step_type == "transform":
+            target = context.get("output", step_input)
+            result["output"] = _llm_complete([
+                {"role": "system", "content": "Transform the input according to the instruction. Return only the transformed result."},
+                {"role": "user", "content": f"Instruction: {step_input}\n\nInput:\n{_trim(target)}"},
+            ], max_tokens=3000, timeout=_LLM_TIMEOUT)
+
+        elif step_type == "extract":
+            target = context.get("output", step_input)
+            result["output"] = _llm_complete([
+                {"role": "system", "content": "Extract the requested information. Return valid JSON only."},
+                {"role": "user", "content": f"Extract: {step_input}\n\nSource:\n{_trim(target)}"},
+            ], max_tokens=2000, timeout=_LLM_TIMEOUT)
+
+        elif step_type == "web":
+            query = step_input or context.get("output", "")
+            results = _ddg_search(query, max_results=5)
+            if results:
+                lines = [f"**{r.get('title', '')}**\n{r.get('snippet', r.get('body', ''))}\n{r.get('url', '')}" for r in results]
+                result["output"] = f"Web search results for: {query}\n\n" + "\n\n---\n\n".join(lines)
+            else:
+                result["output"] = f"No results found for: {query}"
+
+        elif step_type == "fetch_url":
+            url = step_input.strip()
+            if not url.startswith("http"):
+                raise ValueError(f"Invalid URL: {url}")
+            r = _hx.get(url, timeout=20, follow_redirects=True,
+                        headers={"User-Agent": "SovereignClaw/1.0"})
+            r.raise_for_status()
+            import html as _html
+            import re as _re
+            text = _html.unescape(_re.sub(r"<[^>]+>", " ", r.text))
+            text = _re.sub(r"\s{3,}", "\n", text)[:8000]
+            result["output"] = f"Content from {url}:\n\n{text.strip()}"
+
+        elif step_type == "rag_query":
+            query = step_input or context.get("output", "")
+            r = _hx.post(
+                f"{_BACKBONE_URL}/v1/knowledge/query",
+                json={"query": query, "limit": 8},
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                timeout=30,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                facts = data.get("facts") or data.get("results") or []
+                result["output"] = f"Knowledge query: {query}\n\n" + "\n\n".join(str(f) for f in facts[:8])
+            else:
+                result["output"] = f"RAG query returned {r.status_code}"
+
+        elif step_type == "condition":
+            # Evaluate a condition on the previous output
+            prev = context.get("output", "")
+            result["output"] = _llm_complete([
+                {"role": "system", "content": "Evaluate the following condition against the context. Reply with only 'true' or 'false'."},
+                {"role": "user", "content": f"Condition: {step_input}\n\nContext: {prev}"},
+            ], max_tokens=10)
+
+        elif step_type == "notify":
+            # Send a notification via a configured connection
+            # Format: "connection_id: message" e.g. "discord: {{output}}"
+            parts = step_input.split(":", 1)
+            conn_id = parts[0].strip().lower()
+            message = parts[1].strip() if len(parts) > 1 else context.get("output", "Workflow notification")
+
+            with _CONN_LOCK:
+                conns = _load_connections()
+            cfg = conns.get(conn_id, {})
+            creds = cfg.get("credentials", {})
+
+            if conn_id == "discord" and creds.get("bot_token"):
+                channel_id = creds.get("guild_id", step.get("channel", ""))
+                if channel_id:
+                    r = _hx.post(
+                        f"https://discord.com/api/v10/channels/{channel_id}/messages",
+                        headers={"Authorization": f"Bot {creds['bot_token']}", "Content-Type": "application/json"},
+                        json={"content": message[:2000]},
+                        timeout=15,
+                    )
+                    result["output"] = f"Discord notification sent (status {r.status_code})"
+                else:
+                    result["output"] = "Discord notify: no channel_id configured"
+            elif conn_id == "telegram" and creds.get("bot_token"):
+                chat_id = creds.get("default_chat_id", "")
+                if chat_id:
+                    r = _hx.post(
+                        f"https://api.telegram.org/bot{creds['bot_token']}/sendMessage",
+                        json={"chat_id": chat_id, "text": message[:4096]},
+                        timeout=15,
+                    )
+                    result["output"] = f"Telegram notification sent (status {r.status_code})"
+                else:
+                    result["output"] = "Telegram notify: no chat_id configured"
+            elif conn_id == "slack" and creds.get("bot_token"):
+                channel = creds.get("default_channel", "#general")
+                r = _hx.post(
+                    "https://slack.com/api/chat.postMessage",
+                    headers={"Authorization": f"Bearer {creds['bot_token']}"},
+                    json={"channel": channel, "text": message},
+                    timeout=15,
+                )
+                result["output"] = f"Slack notification sent (status {r.status_code})"
+            else:
+                result["output"] = f"Notify: connection '{conn_id}' not configured or not supported"
+
+        elif step_type == "code":
+            # Sandboxed Python exec — restricted builtins
+            import io, contextlib
+            safe_globals: dict = {
+                "__builtins__": {
+                    "print": print, "len": len, "range": range, "str": str, "int": int,
+                    "float": float, "list": list, "dict": dict, "tuple": tuple, "set": set,
+                    "bool": bool, "abs": abs, "round": round, "min": min, "max": max,
+                    "sum": sum, "sorted": sorted, "enumerate": enumerate, "zip": zip,
+                    "map": map, "filter": filter, "isinstance": isinstance, "type": type,
+                    "repr": repr, "json": __import__("json"),
+                },
+                "input_text": context.get("output", ""),
+                "context": dict(context),
+            }
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                exec(step_input, safe_globals)  # noqa: S102
+            result["output"] = buf.getvalue() or safe_globals.get("result", "(no output)")
+
+        else:
+            result["output"] = f"Unknown step type: {step_type}"
+
+    except Exception as exc:
+        result["status"] = "error"
+        result["error"] = str(exc)
+        result["output"] = f"[Error in step: {exc}]"
+
+    return result
+
+
+def _run_workflow_job(wf_id: str, run_id: str) -> None:
+    """Background thread: execute all workflow steps sequentially."""
+    with _WF_LOCK:
+        workflows = _load_workflows()
+    wf = next((w for w in workflows if w["id"] == wf_id), None)
+    if not wf:
+        return
+
+    steps = wf.get("steps", [])
+    system_prompt = ""
+    agent_id = wf.get("agentId")
+    if agent_id:
+        ori_path = Path(__file__).parent / "oricli_core" / "skills" / f"{agent_id}.ori"
+        if ori_path.exists():
+            parsed = _parse_ori(agent_id, ori_path.read_text(encoding="utf-8"))
+            system_prompt = parsed.get("systemPrompt", "")
+
+    def update_run(patch: dict):
+        with _WFR_LOCK:
+            runs = _load_runs()
+            run = runs.get(run_id, {})
+            run.update(patch)
+            runs[run_id] = run
+            _save_runs(runs)
+
+    update_run({"status": "running", "started": datetime.now(timezone.utc).isoformat(),
+                "steps": [{"status": "pending", "output": "", "error": None} for _ in steps]})
+
+    context: dict = {"output": "", "step_0_output": ""}
+    all_outputs = []
+
+    for idx, step in enumerate(steps):
+        # Mark step as running
+        with _WFR_LOCK:
+            runs = _load_runs()
+            run = runs.get(run_id, {})
+            run["steps"][idx]["status"] = "running"
+            run["steps"][idx]["started"] = datetime.now(timezone.utc).isoformat()
+            runs[run_id] = run
+            _save_runs(runs)
+
+        step_result = _execute_step(step, context, run_id, idx, system_prompt)
+        all_outputs.append(step_result["output"])
+
+        # Update context for chaining
+        context["output"] = step_result["output"]
+        context[f"step_{idx}_output"] = step_result["output"]
+        context[f"step_{idx + 1}_input"] = step_result["output"]
+
+        # Persist step result
+        with _WFR_LOCK:
+            runs = _load_runs()
+            run = runs.get(run_id, {})
+            run["steps"][idx].update({
+                "status":   step_result["status"],
+                "output":   step_result["output"],
+                "error":    step_result["error"],
+                "finished": datetime.now(timezone.utc).isoformat(),
+            })
+            runs[run_id] = run
+            _save_runs(runs)
+
+        if step_result["status"] == "error" and step.get("haltOnError", True):
+            update_run({"status": "error", "finished": datetime.now(timezone.utc).isoformat(),
+                        "final_output": step_result["output"]})
+            return
+
+    update_run({"status": "done", "finished": datetime.now(timezone.utc).isoformat(),
+                "final_output": context["output"]})
+
+
+# ── Workflow CRUD routes ──────────────────────────────────────────────────────
+
+@app.route("/workflows", methods=["GET"])
+def list_workflows_api() -> Response:
+    with _WF_LOCK:
+        return jsonify({"workflows": _load_workflows()})
+
+
+@app.route("/workflows", methods=["POST"])
+def create_workflow() -> Response:
+    body = request.get_json(silent=True) or {}
+    wf = {
+        "id":          str(uuid.uuid4()),
+        "name":        body.get("name", "Untitled workflow"),
+        "description": body.get("description", ""),
+        "agentId":     body.get("agentId"),
+        "agentName":   body.get("agentName", "Default"),
+        "agentEmoji":  body.get("agentEmoji", "✨"),
+        "steps":       body.get("steps", []),
+        "createdAt":   datetime.now(timezone.utc).isoformat(),
+        "updatedAt":   datetime.now(timezone.utc).isoformat(),
+    }
+    with _WF_LOCK:
+        wfs = _load_workflows()
+        wfs.append(wf)
+        _save_workflows(wfs)
+    return jsonify({"workflow": wf})
+
+
+@app.route("/workflows/<wf_id>", methods=["PUT"])
+def update_workflow(wf_id: str) -> Response:
+    body = request.get_json(silent=True) or {}
+    with _WF_LOCK:
+        wfs = _load_workflows()
+        for wf in wfs:
+            if wf["id"] == wf_id:
+                wf.update({k: v for k, v in body.items() if k not in ("id", "createdAt")})
+                wf["updatedAt"] = datetime.now(timezone.utc).isoformat()
+                break
+        _save_workflows(wfs)
+    return jsonify({"ok": True})
+
+
+@app.route("/workflows/<wf_id>", methods=["DELETE"])
+def delete_workflow_api(wf_id: str) -> Response:
+    with _WF_LOCK:
+        wfs = _load_workflows()
+        wfs = [w for w in wfs if w["id"] != wf_id]
+        _save_workflows(wfs)
+    return jsonify({"ok": True})
+
+
+@app.route("/workflows/<wf_id>/run", methods=["POST"])
+def run_workflow(wf_id: str) -> Response:
+    run_id = str(uuid.uuid4())
+    with _WFR_LOCK:
+        runs = _load_runs()
+        runs[run_id] = {
+            "id":        run_id,
+            "wf_id":     wf_id,
+            "status":    "queued",
+            "steps":     [],
+            "created":   datetime.now(timezone.utc).isoformat(),
+            "final_output": None,
+        }
+        _save_runs(runs)
+    t = threading.Thread(target=_run_workflow_job, args=(wf_id, run_id), daemon=True)
+    t.start()
+    return jsonify({"run_id": run_id, "status": "queued"})
+
+
+@app.route("/workflows/runs/<run_id>", methods=["GET"])
+def get_run_status(run_id: str) -> Response:
+    with _WFR_LOCK:
+        runs = _load_runs()
+    run = runs.get(run_id)
+    if not run:
+        return jsonify({"error": "run not found"}), 404
+    return jsonify(run)
+
+
+@app.route("/workflows/<wf_id>/runs", methods=["GET"])
+def list_wf_runs(wf_id: str) -> Response:
+    with _WFR_LOCK:
+        runs = _load_runs()
+    wf_runs = sorted(
+        [r for r in runs.values() if r.get("wf_id") == wf_id],
+        key=lambda r: r.get("created", ""), reverse=True
+    )[:20]
+    return jsonify({"runs": wf_runs})
+
+
+
+
+_INDEX_STATUS_FILE = Path(__file__).parent / ".oricli" / "index_status.json"
+_INDEX_LOCK = threading.Lock()
+_BACKBONE_URL = os.getenv("MAVAIA_BACKBONE_URL", "http://localhost:8089")
+_BACKBONE_KEY = os.getenv("MAVAIA_API_KEY", "glm.8eHruhzb.IPtP2toLOSKATWc5f_KXrRQOO6JcvFBB")
+
+
+def _load_index_status() -> dict:
+    if _INDEX_STATUS_FILE.exists():
+        try:
+            return json.loads(_INDEX_STATUS_FILE.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _save_index_status(data: dict) -> None:
+    _INDEX_STATUS_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _ingest_doc(text: str, source: str, metadata: dict) -> bool:
+    """POST a single document to the Go backbone /v1/ingest endpoint."""
+    import httpx as _hx
+    payload = {"text": text, "source": source, "metadata": metadata}
+    try:
+        r = _hx.post(
+            f"{_BACKBONE_URL}/v1/ingest",
+            json=payload,
+            headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+            timeout=30.0,
+        )
+        return r.status_code < 400
+    except Exception:
+        return False
+
+
+def _ingest_batch(docs: list[dict], source_prefix: str) -> int:
+    """Ingest a list of {title, content, source, metadata} dicts. Returns count ingested."""
+    count = 0
+    for doc in docs:
+        text = f"# {doc.get('title', '')}\n\n{doc.get('content', '')}".strip()
+        if not text or len(text) < 20:
+            continue
+        meta = {"title": doc.get("title", ""), "source_type": source_prefix, **doc.get("metadata", {})}
+        if _ingest_doc(text, doc.get("source", source_prefix), meta):
+            count += 1
+    return count
+
+
+# ── Per-service fetchers ───────────────────────────────────────────────────────
+
+def _fetch_notion(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    token = creds.get("api_key", "")
+    if not token:
+        raise ValueError("Notion API key required")
+    db_id = opts.get("query") or creds.get("database_id", "")
+    headers = {"Authorization": f"Bearer {token}", "Notion-Version": "2022-06-28", "Content-Type": "application/json"}
+    docs = []
+    if db_id:
+        # Query a database
+        url = f"https://api.notion.com/v1/databases/{db_id}/query"
+        body: dict = {"page_size": min(int(opts.get("max_results", 50)), 100)}
+        r = _hx.post(url, headers=headers, json=body, timeout=15)
+        r.raise_for_status()
+        for page in r.json().get("results", []):
+            pid = page["id"]
+            title_parts = []
+            for prop in page.get("properties", {}).values():
+                if prop.get("type") == "title":
+                    title_parts = [t["plain_text"] for t in prop.get("title", [])]
+                    break
+            title = " ".join(title_parts) or pid
+            # Fetch page blocks for content
+            blocks_r = _hx.get(f"https://api.notion.com/v1/blocks/{pid}/children", headers=headers, timeout=15)
+            content_parts = []
+            if blocks_r.status_code == 200:
+                for blk in blocks_r.json().get("results", []):
+                    rt = blk.get(blk.get("type", ""), {}).get("rich_text", [])
+                    content_parts.append(" ".join(t.get("plain_text", "") for t in rt))
+            docs.append({"title": title, "content": "\n".join(content_parts), "source": f"notion:{pid}", "metadata": {"url": f"https://notion.so/{pid.replace('-', '')}"}})
+    else:
+        # Search all pages
+        r = _hx.post("https://api.notion.com/v1/search", headers=headers, json={"page_size": min(int(opts.get("max_results", 30)), 100)}, timeout=15)
+        r.raise_for_status()
+        for obj in r.json().get("results", []):
+            pid = obj["id"]
+            title = ""
+            if obj.get("object") == "page":
+                for prop in obj.get("properties", {}).values():
+                    if prop.get("type") == "title":
+                        title = " ".join(t["plain_text"] for t in prop.get("title", []))
+                        break
+            elif obj.get("object") == "database":
+                title_list = obj.get("title", [])
+                title = " ".join(t.get("plain_text", "") for t in title_list)
+            docs.append({"title": title or pid, "content": f"Notion object: {obj.get('object')} — {title}", "source": f"notion:{pid}", "metadata": {}})
+    return docs
+
+
+def _fetch_github(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    token = creds.get("personal_access_token", "") or creds.get("api_key", "")
+    repo = opts.get("query") or creds.get("default_owner", "")
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    docs = []
+    max_r = int(opts.get("max_results", 30))
+    if "/" in str(repo):
+        # Repo issues
+        r = _hx.get(f"https://api.github.com/repos/{repo}/issues", headers=headers, params={"state": "all", "per_page": min(max_r, 100)}, timeout=15)
+        r.raise_for_status()
+        for issue in r.json():
+            docs.append({
+                "title": f"#{issue['number']}: {issue['title']}",
+                "content": issue.get("body") or "",
+                "source": f"github:{repo}:issue:{issue['number']}",
+                "metadata": {"url": issue["html_url"], "state": issue["state"]},
+            })
+        # README
+        readme_r = _hx.get(f"https://api.github.com/repos/{repo}/readme", headers=headers, timeout=15)
+        if readme_r.status_code == 200:
+            import base64
+            content = base64.b64decode(readme_r.json()["content"]).decode("utf-8", errors="replace")
+            docs.append({"title": f"{repo} README", "content": content, "source": f"github:{repo}:readme", "metadata": {}})
+    else:
+        # Search public repos for user/org
+        r = _hx.get(f"https://api.github.com/users/{repo}/repos", headers=headers, params={"per_page": min(max_r, 100), "sort": "updated"}, timeout=15)
+        if r.status_code == 200:
+            for rep in r.json()[:max_r]:
+                docs.append({
+                    "title": rep["full_name"],
+                    "content": rep.get("description") or "",
+                    "source": f"github:{rep['full_name']}",
+                    "metadata": {"url": rep["html_url"], "language": rep.get("language", "")},
+                })
+    return docs
+
+
+def _fetch_gitlab(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    token = creds.get("personal_access_token", "")
+    host = creds.get("host", "https://gitlab.com").rstrip("/")
+    query = opts.get("query", "")
+    headers = {"PRIVATE-TOKEN": token} if token else {}
+    docs = []
+    max_r = int(opts.get("max_results", 30))
+    if query:
+        r = _hx.get(f"{host}/api/v4/projects/{query.replace('/', '%2F')}/issues",
+                    headers=headers, params={"per_page": min(max_r, 100)}, timeout=15)
+        if r.status_code == 200:
+            for issue in r.json():
+                docs.append({"title": f"#{issue['iid']}: {issue['title']}", "content": issue.get("description") or "",
+                              "source": f"gitlab:{query}:issue:{issue['iid']}", "metadata": {"url": issue.get("web_url", "")}})
+    return docs
+
+
+def _fetch_jira(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    import base64
+    domain = creds.get("domain", "")
+    email = creds.get("email", "")
+    token = creds.get("api_token", "")
+    if not all([domain, email, token]):
+        raise ValueError("Jira domain, email and API token required")
+    auth = base64.b64encode(f"{email}:{token}".encode()).decode()
+    headers = {"Authorization": f"Basic {auth}", "Content-Type": "application/json"}
+    jql = opts.get("query") or "ORDER BY updated DESC"
+    max_r = int(opts.get("max_results", 30))
+    r = _hx.get(f"https://{domain}/rest/api/3/search",
+                headers=headers, params={"jql": jql, "maxResults": min(max_r, 100), "fields": "summary,description,status"}, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for issue in r.json().get("issues", []):
+        f = issue.get("fields", {})
+        desc = f.get("description") or {}
+        text = ""
+        if isinstance(desc, dict):
+            for block in desc.get("content", []):
+                for child in block.get("content", []):
+                    text += child.get("text", "") + " "
+        docs.append({"title": f"{issue['key']}: {f.get('summary', '')}", "content": text.strip(),
+                     "source": f"jira:{issue['key']}", "metadata": {"status": f.get("status", {}).get("name", "")}})
+    return docs
+
+
+def _fetch_linear(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    token = creds.get("api_key", "")
+    if not token:
+        raise ValueError("Linear API key required")
+    query_str = opts.get("query", "")
+    max_r = int(opts.get("max_results", 30))
+    gql = """
+    query($first: Int, $filter: IssueFilter) {
+      issues(first: $first, filter: $filter, orderBy: updatedAt) {
+        nodes { id title description state { name } url }
+      }
+    }
+    """
+    variables: dict = {"first": min(max_r, 100)}
+    if query_str:
+        variables["filter"] = {"title": {"containsIgnoreCase": query_str}}
+    r = _hx.post("https://api.linear.app/graphql",
+                 headers={"Authorization": token, "Content-Type": "application/json"},
+                 json={"query": gql, "variables": variables}, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for issue in r.json().get("data", {}).get("issues", {}).get("nodes", []):
+        docs.append({"title": issue["title"], "content": issue.get("description") or "",
+                     "source": f"linear:{issue['id']}", "metadata": {"url": issue.get("url", ""), "state": issue.get("state", {}).get("name", "")}})
+    return docs
+
+
+def _fetch_asana(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    token = creds.get("personal_access_token", "")
+    if not token:
+        raise ValueError("Asana personal access token required")
+    workspace = creds.get("workspace_gid", "")
+    headers = {"Authorization": f"Bearer {token}"}
+    max_r = int(opts.get("max_results", 30))
+    params: dict = {"limit": min(max_r, 100), "opt_fields": "name,notes,completed,due_on"}
+    if workspace:
+        params["workspace"] = workspace
+    r = _hx.get("https://app.asana.com/api/1.0/tasks", headers=headers, params=params, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for task in r.json().get("data", []):
+        docs.append({"title": task["name"], "content": task.get("notes") or "",
+                     "source": f"asana:{task['gid']}", "metadata": {"completed": str(task.get("completed", False))}})
+    return docs
+
+
+def _fetch_todoist(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    token = creds.get("api_token", "")
+    if not token:
+        raise ValueError("Todoist API token required")
+    max_r = int(opts.get("max_results", 50))
+    params: dict = {}
+    if opts.get("query"):
+        params["filter"] = opts["query"]
+    r = _hx.get("https://api.todoist.com/rest/v2/tasks",
+                headers={"Authorization": f"Bearer {token}"}, params=params, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for task in r.json()[:max_r]:
+        docs.append({"title": task["content"], "content": task.get("description") or "",
+                     "source": f"todoist:{task['id']}", "metadata": {"priority": str(task.get("priority", 1)), "due": task.get("due", {}).get("string", "") if task.get("due") else ""}})
+    return docs
+
+
+def _fetch_trello(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    api_key = creds.get("api_key", "")
+    token = creds.get("token", "")
+    board_id = opts.get("query") or creds.get("board_id", "")
+    if not all([api_key, token, board_id]):
+        raise ValueError("Trello API key, token and board ID required")
+    params = {"key": api_key, "token": token}
+    r = _hx.get(f"https://api.trello.com/1/boards/{board_id}/cards", params={**params, "fields": "name,desc,url"}, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for card in r.json()[:int(opts.get("max_results", 50))]:
+        docs.append({"title": card["name"], "content": card.get("desc") or "",
+                     "source": f"trello:{card['id']}", "metadata": {"url": card.get("url", "")}})
+    return docs
+
+
+def _fetch_airtable(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    token = creds.get("api_key", "")
+    base_id = opts.get("query") or creds.get("base_id", "")
+    if not all([token, base_id]):
+        raise ValueError("Airtable token and base ID required")
+    headers = {"Authorization": f"Bearer {token}"}
+    # List tables first
+    meta_r = _hx.get(f"https://api.airtable.com/v0/meta/bases/{base_id}/tables", headers=headers, timeout=15)
+    meta_r.raise_for_status()
+    tables = meta_r.json().get("tables", [])
+    docs = []
+    max_r = int(opts.get("max_results", 50))
+    for table in tables[:3]:
+        r = _hx.get(f"https://api.airtable.com/v0/{base_id}/{table['id']}", headers=headers, params={"maxRecords": max_r}, timeout=15)
+        if r.status_code != 200:
+            continue
+        for record in r.json().get("records", []):
+            fields = record.get("fields", {})
+            title = next(iter(fields.values()), record["id"])
+            content = " | ".join(f"{k}: {v}" for k, v in fields.items() if isinstance(v, str))
+            docs.append({"title": str(title), "content": content, "source": f"airtable:{record['id']}", "metadata": {"table": table["name"]}})
+    return docs
+
+
+def _fetch_discord(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    token = creds.get("bot_token", "")
+    if not token:
+        raise ValueError("Discord bot token required")
+    channel_id = opts.get("query") or ""
+    headers = {"Authorization": f"Bot {token}"}
+    docs = []
+    max_r = int(opts.get("max_results", 50))
+    if channel_id:
+        r = _hx.get(f"https://discord.com/api/v10/channels/{channel_id}/messages",
+                    headers=headers, params={"limit": min(max_r, 100)}, timeout=15)
+        r.raise_for_status()
+        for msg in r.json():
+            if msg.get("content"):
+                docs.append({"title": f"@{msg['author']['username']} at {msg['timestamp'][:10]}",
+                             "content": msg["content"], "source": f"discord:{channel_id}:{msg['id']}", "metadata": {"channel": channel_id}})
+    else:
+        guild_id = creds.get("guild_id", "")
+        if guild_id:
+            ch_r = _hx.get(f"https://discord.com/api/v10/guilds/{guild_id}/channels", headers=headers, timeout=15)
+            ch_r.raise_for_status()
+            for ch in ch_r.json()[:5]:
+                if ch.get("type") == 0:
+                    msg_r = _hx.get(f"https://discord.com/api/v10/channels/{ch['id']}/messages",
+                                    headers=headers, params={"limit": 20}, timeout=15)
+                    if msg_r.status_code == 200:
+                        for msg in msg_r.json():
+                            if msg.get("content"):
+                                docs.append({"title": f"#{ch['name']} — @{msg['author']['username']}",
+                                             "content": msg["content"], "source": f"discord:{ch['id']}:{msg['id']}", "metadata": {"channel": ch["name"]}})
+    return docs
+
+
+def _fetch_telegram(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    token = creds.get("bot_token", "")
+    if not token:
+        raise ValueError("Telegram bot token required")
+    r = _hx.get(f"https://api.telegram.org/bot{token}/getUpdates", params={"limit": int(opts.get("max_results", 50))}, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for upd in r.json().get("result", []):
+        msg = upd.get("message") or upd.get("channel_post") or {}
+        text = msg.get("text", "")
+        if text:
+            chat = msg.get("chat", {})
+            docs.append({"title": f"Telegram: {chat.get('title', chat.get('first_name', 'chat'))}",
+                         "content": text, "source": f"telegram:{msg.get('message_id', upd['update_id'])}", "metadata": {"chat_id": str(chat.get("id", ""))}})
+    return docs
+
+
+def _fetch_slack(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    token = creds.get("bot_token", "")
+    if not token:
+        raise ValueError("Slack bot token required")
+    query = opts.get("query", "")
+    max_r = int(opts.get("max_results", 30))
+    headers = {"Authorization": f"Bearer {token}"}
+    docs = []
+    if query:
+        r = _hx.get("https://slack.com/api/search.messages", headers=headers, params={"query": query, "count": min(max_r, 100)}, timeout=15)
+        r.raise_for_status()
+        for match in r.json().get("messages", {}).get("matches", []):
+            docs.append({"title": f"#{match.get('channel', {}).get('name', 'unknown')} — Slack",
+                         "content": match.get("text", ""), "source": f"slack:{match.get('ts', '')}", "metadata": {}})
+    else:
+        # List recent messages from default channel
+        channel = creds.get("default_channel", "general").lstrip("#")
+        ch_r = _hx.get("https://slack.com/api/conversations.list", headers=headers, params={"limit": 200}, timeout=15)
+        ch_id = ""
+        if ch_r.status_code == 200:
+            for ch in ch_r.json().get("channels", []):
+                if ch.get("name") == channel:
+                    ch_id = ch["id"]
+                    break
+        if ch_id:
+            hist_r = _hx.get("https://slack.com/api/conversations.history",
+                              headers=headers, params={"channel": ch_id, "limit": max_r}, timeout=15)
+            if hist_r.status_code == 200:
+                for msg in hist_r.json().get("messages", []):
+                    if msg.get("text"):
+                        docs.append({"title": f"#{channel} — Slack", "content": msg["text"],
+                                     "source": f"slack:{ch_id}:{msg['ts']}", "metadata": {"channel": channel}})
+    return docs
+
+
+def _fetch_hubspot(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    token = creds.get("access_token", "")
+    if not token:
+        raise ValueError("HubSpot access token required")
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    max_r = int(opts.get("max_results", 30))
+    entity = opts.get("query", "contacts")
+    r = _hx.get(f"https://api.hubapi.com/crm/v3/objects/{entity}",
+                headers=headers, params={"limit": min(max_r, 100), "properties": "firstname,lastname,email,name,title,description"}, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for obj in r.json().get("results", []):
+        props = obj.get("properties", {})
+        name = " ".join(filter(None, [props.get("firstname", ""), props.get("lastname", ""), props.get("name", "")])) or obj["id"]
+        content = " | ".join(f"{k}: {v}" for k, v in props.items() if v and k not in ("hs_object_id", "createdate", "lastmodifieddate"))
+        docs.append({"title": name.strip(), "content": content, "source": f"hubspot:{obj['id']}", "metadata": {"entity": entity}})
+    return docs
+
+
+def _fetch_supabase(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    url = creds.get("url", "").rstrip("/")
+    key = creds.get("service_role_key") or creds.get("anon_key", "")
+    table = opts.get("query", "")
+    if not all([url, key, table]):
+        raise ValueError("Supabase URL, key, and table name (in query field) required")
+    max_r = int(opts.get("max_results", 50))
+    r = _hx.get(f"{url}/rest/v1/{table}",
+                headers={"apikey": key, "Authorization": f"Bearer {key}", "Range": f"0-{max_r - 1}"}, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for row in r.json():
+        title = row.get("title") or row.get("name") or row.get("id") or "record"
+        content = " | ".join(f"{k}: {v}" for k, v in row.items() if isinstance(v, (str, int, float)) and v)
+        docs.append({"title": str(title), "content": content, "source": f"supabase:{table}:{row.get('id', '')}", "metadata": {"table": table}})
+    return docs
+
+
+def _fetch_salesforce(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    instance_url = creds.get("instance_url", "").rstrip("/")
+    token = creds.get("access_token", "")
+    if not all([instance_url, token]):
+        raise ValueError("Salesforce instance URL and access token required")
+    soql = opts.get("query") or "SELECT Id, Name, Description FROM Account LIMIT 30"
+    r = _hx.get(f"{instance_url}/services/data/v59.0/query",
+                headers={"Authorization": f"Bearer {token}"}, params={"q": soql}, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for rec in r.json().get("records", []):
+        name = rec.get("Name", rec.get("Id", "record"))
+        content = " | ".join(f"{k}: {v}" for k, v in rec.items() if isinstance(v, (str, int, float)) and k != "attributes")
+        docs.append({"title": name, "content": content, "source": f"salesforce:{rec.get('Id', '')}", "metadata": {}})
+    return docs
+
+
+# ── Research fetchers (mostly free) ──────────────────────────────────────────
+
+def _fetch_arxiv(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    import xml.etree.ElementTree as ET
+    query = opts.get("query") or creds.get("default_categories", "cs.AI")
+    max_r = int(opts.get("max_results") or creds.get("max_results") or 10)
+    r = _hx.get("https://export.arxiv.org/api/query",
+                params={"search_query": f"all:{query}", "max_results": max_r, "sortBy": "relevance"}, timeout=20)
+    r.raise_for_status()
+    ns = "http://www.w3.org/2005/Atom"
+    root = ET.fromstring(r.text)
+    docs = []
+    for entry in root.findall(f"{{{ns}}}entry"):
+        title = (entry.find(f"{{{ns}}}title") or entry).text or ""
+        summary = (entry.find(f"{{{ns}}}summary") or entry).text or ""
+        link = next((l.get("href", "") for l in entry.findall(f"{{{ns}}}link") if l.get("title") == "pdf"), "")
+        arxiv_id = (entry.find(f"{{{ns}}}id") or entry).text or ""
+        docs.append({"title": title.strip(), "content": summary.strip(),
+                     "source": f"arxiv:{arxiv_id.split('/')[-1]}", "metadata": {"url": link or arxiv_id}})
+    return docs
+
+
+def _fetch_pubmed(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    query = opts.get("query", "")
+    if not query:
+        raise ValueError("Search query required for PubMed")
+    api_key = creds.get("api_key", "")
+    max_r = int(opts.get("max_results", 10))
+    params: dict = {"db": "pubmed", "term": query, "retmax": max_r, "retmode": "json"}
+    if api_key:
+        params["api_key"] = api_key
+    search_r = _hx.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi", params=params, timeout=20)
+    search_r.raise_for_status()
+    ids = search_r.json().get("esearchresult", {}).get("idlist", [])
+    if not ids:
+        return []
+    fetch_params: dict = {"db": "pubmed", "id": ",".join(ids), "retmode": "xml", "rettype": "abstract"}
+    if api_key:
+        fetch_params["api_key"] = api_key
+    fetch_r = _hx.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi", params=fetch_params, timeout=20)
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(fetch_r.text)
+    docs = []
+    for article in root.iter("PubmedArticle"):
+        pmid_el = article.find(".//PMID")
+        title_el = article.find(".//ArticleTitle")
+        abstract_el = article.find(".//AbstractText")
+        pmid = pmid_el.text if pmid_el is not None else ""
+        title = title_el.text if title_el is not None else ""
+        abstract = abstract_el.text if abstract_el is not None else ""
+        docs.append({"title": title, "content": abstract, "source": f"pubmed:{pmid}",
+                     "metadata": {"url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"}})
+    return docs
+
+
+def _fetch_semantic_scholar(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    query = opts.get("query", "")
+    if not query:
+        raise ValueError("Search query required for Semantic Scholar")
+    api_key = creds.get("api_key", "")
+    max_r = int(opts.get("max_results", 10))
+    headers = {}
+    if api_key:
+        headers["x-api-key"] = api_key
+    r = _hx.get("https://api.semanticscholar.org/graph/v1/paper/search",
+                headers=headers, params={"query": query, "limit": min(max_r, 100), "fields": "title,abstract,url,year,authors"}, timeout=20)
+    r.raise_for_status()
+    docs = []
+    for paper in r.json().get("data", []):
+        authors = ", ".join(a.get("name", "") for a in paper.get("authors", [])[:3])
+        content = paper.get("abstract") or ""
+        if authors:
+            content = f"Authors: {authors}\n\n{content}"
+        docs.append({"title": paper.get("title", ""), "content": content,
+                     "source": f"s2:{paper.get('paperId', '')}", "metadata": {"url": paper.get("url", ""), "year": str(paper.get("year", ""))}})
+    return docs
+
+
+def _fetch_wikipedia(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    query = opts.get("query", "")
+    if not query:
+        raise ValueError("Search query required for Wikipedia")
+    lang = creds.get("default_language", "en")
+    max_r = int(opts.get("max_results", 5))
+    base = f"https://{lang}.wikipedia.org/w/api.php"
+    search_r = _hx.get(base, params={"action": "query", "list": "search", "srsearch": query, "srlimit": max_r, "format": "json"}, timeout=15)
+    search_r.raise_for_status()
+    docs = []
+    for result in search_r.json().get("query", {}).get("search", []):
+        page_r = _hx.get(base, params={"action": "query", "titles": result["title"], "prop": "extracts", "exintro": True, "format": "json"}, timeout=15)
+        if page_r.status_code == 200:
+            pages = page_r.json().get("query", {}).get("pages", {})
+            for page in pages.values():
+                import html
+                extract = html.unescape(re.sub(r"<[^>]+>", "", page.get("extract", "")))
+                docs.append({"title": page.get("title", result["title"]), "content": extract,
+                             "source": f"wikipedia:{result['title'].replace(' ', '_')}",
+                             "metadata": {"url": f"https://{lang}.wikipedia.org/wiki/{result['title'].replace(' ', '_')}"}})
+    return docs
+
+
+def _fetch_newsapi(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    api_key = creds.get("api_key", "")
+    if not api_key:
+        raise ValueError("NewsAPI key required")
+    query = opts.get("query", "")
+    if not query:
+        raise ValueError("Search query required for NewsAPI")
+    lang = creds.get("default_language", "en")
+    max_r = int(opts.get("max_results", 20))
+    r = _hx.get("https://newsapi.org/v2/everything",
+                params={"q": query, "language": lang, "pageSize": min(max_r, 100), "sortBy": "relevancy"},
+                headers={"X-Api-Key": api_key}, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for article in r.json().get("articles", []):
+        content = " ".join(filter(None, [article.get("description", ""), article.get("content", "")]))
+        docs.append({"title": article.get("title", ""), "content": content,
+                     "source": f"newsapi:{article.get('url', '')}",
+                     "metadata": {"url": article.get("url", ""), "source": article.get("source", {}).get("name", "")}})
+    return docs
+
+
+def _fetch_reddit(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    client_id = creds.get("client_id", "")
+    client_secret = creds.get("client_secret", "")
+    user_agent = creds.get("user_agent", "SovereignClaw/1.0")
+    if not all([client_id, client_secret]):
+        raise ValueError("Reddit client_id and client_secret required")
+    # Obtain app-only token
+    token_r = _hx.post("https://www.reddit.com/api/v1/access_token",
+                        auth=(client_id, client_secret), data={"grant_type": "client_credentials"},
+                        headers={"User-Agent": user_agent}, timeout=15)
+    token_r.raise_for_status()
+    access_token = token_r.json().get("access_token", "")
+    query = opts.get("query", "")
+    max_r = int(opts.get("max_results", 20))
+    headers = {"Authorization": f"Bearer {access_token}", "User-Agent": user_agent}
+    endpoint = f"https://oauth.reddit.com/search" if query else "https://oauth.reddit.com/hot"
+    params: dict = {"limit": min(max_r, 100)}
+    if query:
+        params["q"] = query
+        params["type"] = "link"
+    r = _hx.get(endpoint, headers=headers, params=params, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for post in r.json().get("data", {}).get("children", []):
+        d = post.get("data", {})
+        content = d.get("selftext") or d.get("url", "")
+        docs.append({"title": d.get("title", ""), "content": content,
+                     "source": f"reddit:{d.get('id', '')}", "metadata": {"subreddit": d.get("subreddit", ""), "score": str(d.get("score", 0))}})
+    return docs
+
+
+def _fetch_youtube(creds: dict, opts: dict) -> list[dict]:
+    import httpx as _hx
+    api_key = creds.get("api_key", "")
+    if not api_key:
+        raise ValueError("YouTube Data API key required")
+    query = opts.get("query", "")
+    if not query:
+        raise ValueError("Search query required for YouTube")
+    max_r = int(opts.get("max_results", 10))
+    r = _hx.get("https://www.googleapis.com/youtube/v3/search",
+                params={"part": "snippet", "q": query, "maxResults": min(max_r, 50), "type": "video", "key": api_key}, timeout=15)
+    r.raise_for_status()
+    docs = []
+    for item in r.json().get("items", []):
+        snip = item.get("snippet", {})
+        vid_id = item.get("id", {}).get("videoId", "")
+        docs.append({"title": snip.get("title", ""), "content": snip.get("description", ""),
+                     "source": f"youtube:{vid_id}",
+                     "metadata": {"url": f"https://youtube.com/watch?v={vid_id}", "channel": snip.get("channelTitle", "")}})
+    return docs
+
+
+def _fetch_github_api(creds: dict, opts: dict) -> list[dict]:
+    return _fetch_github(creds, opts)
+
+
+# ── Master dispatcher ─────────────────────────────────────────────────────────
+
+_FETCHERS: dict = {
+    "discord":          _fetch_discord,
+    "telegram":         _fetch_telegram,
+    "slack":            _fetch_slack,
+    "notion":           _fetch_notion,
+    "todoist":          _fetch_todoist,
+    "trello":           _fetch_trello,
+    "airtable":         _fetch_airtable,
+    "linear":           _fetch_linear,
+    "asana":            _fetch_asana,
+    "jira":             _fetch_jira,
+    "salesforce":       _fetch_salesforce,
+    "hubspot":          _fetch_hubspot,
+    "supabase":         _fetch_supabase,
+    "arxiv":            _fetch_arxiv,
+    "pubmed":           _fetch_pubmed,
+    "semantic_scholar": _fetch_semantic_scholar,
+    "newsapi":          _fetch_newsapi,
+    "reddit":           _fetch_reddit,
+    "wikipedia":        _fetch_wikipedia,
+    "youtube":          _fetch_youtube,
+    "github_api":       _fetch_github_api,
+    "gitlab":           _fetch_gitlab,
+}
+
+
+def _run_index_job(conn_id: str, creds: dict, opts: dict) -> None:
+    """Background thread: fetch docs and ingest into RAG backbone."""
+    status_data: dict = {}
+    with _INDEX_LOCK:
+        status_data = _load_index_status()
+        status_data[conn_id] = {"status": "indexing", "started": datetime.now(timezone.utc).isoformat(), "docs": 0, "error": None}
+        _save_index_status(status_data)
+
+    try:
+        fetcher = _FETCHERS.get(conn_id)
+        if fetcher is None:
+            raise ValueError(f"No fetcher implemented for '{conn_id}'")
+        docs = fetcher(creds, opts)
+        count = _ingest_batch(docs, conn_id)
+        with _INDEX_LOCK:
+            status_data = _load_index_status()
+            status_data[conn_id] = {
+                "status": "indexed",
+                "last_indexed": datetime.now(timezone.utc).isoformat(),
+                "docs": count,
+                "total_fetched": len(docs),
+                "error": None,
+            }
+            _save_index_status(status_data)
+    except Exception as exc:
+        with _INDEX_LOCK:
+            status_data = _load_index_status()
+            status_data[conn_id] = {
+                "status": "error",
+                "last_indexed": datetime.now(timezone.utc).isoformat(),
+                "docs": 0,
+                "error": str(exc),
+            }
+            _save_index_status(status_data)
+
+
+@app.route("/connections/index/status", methods=["GET"])
+def get_all_index_status() -> Response:
+    with _INDEX_LOCK:
+        return jsonify(_load_index_status())
+
+
+@app.route("/connections/<conn_id>/index", methods=["POST"])
+def index_connection(conn_id: str) -> Response:
+    """Trigger background RAG indexing for a connection."""
+    with _CONN_LOCK:
+        data = _load_connections()
+    cfg = data.get(conn_id, {})
+    creds = cfg.get("credentials", {})
+    opts = request.get_json(silent=True) or {}
+
+    if not cfg:
+        return jsonify({"ok": False, "error": "Connection not configured"}), 400
+    if not creds:
+        return jsonify({"ok": False, "error": "No credentials saved for this connection"}), 400
+    if conn_id not in _FETCHERS:
+        return jsonify({"ok": False, "error": f"Indexing not yet supported for '{conn_id}'"}), 400
+
+    t = threading.Thread(target=_run_index_job, args=(conn_id, creds, opts), daemon=True)
+    t.start()
+    return jsonify({"ok": True, "status": "indexing", "message": f"Indexing {conn_id} in background…"})
+
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Logs — proxy backbone trace + loglines endpoints, serve UI log tail
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/logs/traces")
+def logs_traces() -> Response:
+    limit = request.args.get("limit", "50")
+    try:
+        with _client() as client:
+            r = client.get(
+                f"{_BACKBONE_URL}/v1/traces",
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                params={"limit": limit},
+                timeout=10,
+            )
+            return jsonify(r.json())
+    except Exception as exc:
+        return jsonify({"success": False, "traces": [], "error": str(exc)})
+
+
+@app.route("/logs/raw")
+def logs_raw() -> Response:
+    n = int(request.args.get("n", "300"))
+    sources = request.args.getlist("source") or ["backbone", "ui"]
+    lines_out = []
+
+    if "backbone" in sources:
+        log_path = Path(__file__).parent / "go_backbone.log"
+        if log_path.exists():
+            try:
+                raw = log_path.read_text(errors="replace").splitlines()
+                for l in raw[-n:]:
+                    lines_out.append({"source": "backbone", "raw": l})
+            except Exception:
+                pass
+
+    if "ui" in sources:
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["journalctl", "-u", "sovereignclaw-ui.service", "-n", str(n), "--no-pager", "-o", "short"],
+                capture_output=True, text=True, timeout=5,
+            )
+            for l in result.stdout.splitlines():
+                lines_out.append({"source": "ui", "raw": l})
+        except Exception:
+            pass
+
+    # Sort backbone lines by timestamp prefix if present, keep ui lines at end
+    return jsonify({"lines": lines_out[-n:], "total": len(lines_out)})
 
 
 def main() -> None:

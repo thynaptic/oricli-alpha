@@ -218,7 +218,7 @@ func (d *DreamDaemon) forageForKnowledge() {
 	log.Println("[DreamDaemon] Scanning Knowledge Graph for low-confidence nodes...")
 
 	// Query for nodes with few relationships (orphans)
-	cypher := "MATCH (n) WHERE size((n)--()) < 2 RETURN n.id as id, labels(n) as labels LIMIT 1"
+	cypher := "MATCH (n) WHERE COUNT { (n)--() } < 2 RETURN n.id as id, labels(n) as labels LIMIT 1"
 	results, err := d.Graph.ExecuteQuery(cypher, nil)
 	if err != nil {
 		log.Printf("[DreamDaemon] Neo4j query failed: %v", err)

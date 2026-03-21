@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/thynaptic/oricli-go/pkg/api"
@@ -105,14 +106,18 @@ func main() {
 	}
 	sovEngine.VDI.RegisterTools(sovEngine.Toolbox, sovEngine.Vision, sovEngine.Scheduler, sovEngine.Indexer)
 
-	// Initialize MCP Bridge
-	log.Println("[Boot] Initializing MCP servers...")
-	if err := sovEngine.MCP.StartAll(context.Background()); err != nil {
-		log.Printf("[Boot] Warning: Some MCP servers failed to start: %v", err)
-	}
-	if err := sovEngine.Toolbox.RegisterMCPTools(context.Background(), sovEngine.MCP); err != nil {
-		log.Printf("[Boot] Warning: Failed to bridge MCP tools: %v", err)
-	}
+	// Initialize MCP Bridge (async — non-blocking, each server has its own 2-min budget)
+	go func() {
+		log.Println("[Boot] Initializing MCP servers...")
+		if err := sovEngine.MCP.StartAll(context.Background()); err != nil {
+			log.Printf("[Boot] Warning: Some MCP servers failed to start: %v", err)
+		}
+		toolCtx, toolCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := sovEngine.Toolbox.RegisterMCPTools(toolCtx, sovEngine.MCP); err != nil {
+			log.Printf("[Boot] Warning: Failed to bridge MCP tools: %v", err)
+		}
+		toolCancel()
+	}()
 
 	registry := service.NewModuleRegistry("")
 	goshMod, _ := service.NewGoshModule("hive_sandbox", "/home/mike/Mavaia")
@@ -147,6 +152,7 @@ func main() {
 	
 	apiPort := 8089
 	apiServer := api.NewServerV2(config.Load(), st, orch, agentService, monitor, apiPort)
+	apiServer.Traces = traceStore
 	
 	// Inject WS Hub into Sovereign Engine for real-time broadcasts
 	sovEngine.SetWSHub(apiServer.WSHub)

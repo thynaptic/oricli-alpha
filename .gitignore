@@ -142,6 +142,26 @@ oricli_core/evaluation/test_reporter.py
 bin/
 *.exe
 *.out
+backbone
+backbone_debug
+
+# Runtime / memory artefacts
+.memory/
+.oricli/
+pkg/rag/.memory/
+
+# Legacy / archived copies
+oricli_core_old/
+
+# SovereignClaw UI (separate repo)
+ui_sovereignclaw/
+sovereignclaw-ui.service
+
+# Flutter UI (oricli_ui — separate artefact)
+oricli_ui/
+
+# UI static build output
+ui_static/
 
 # Go test cache
 /tmp/

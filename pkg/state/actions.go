@@ -19,6 +19,7 @@ type ActionContext struct {
 	Mismatch       string    `json:"mismatch,omitempty"`
 	CorrectionPlan string    `json:"correction_plan,omitempty"`
 	ConversationID string    `json:"conversation_id,omitempty"`
+	MessageID      string    `json:"message_id,omitempty"`
 }
 
 type ActionTracker struct {

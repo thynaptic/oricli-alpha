@@ -1,11 +1,12 @@
 package service
 
 import (
-	"log"
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -14,10 +15,11 @@ import (
 
 // GenerationService handles direct requests to Ollama for high-speed prose
 type GenerationService struct {
-	BaseURL      string
-	GenerateURL  string
-	DefaultModel string
-	HTTPClient   *http.Client
+	BaseURL        string
+	GenerateURL    string
+	DefaultModel   string
+	HTTPClient     *http.Client // non-streaming calls (has a timeout)
+	StreamClient   *http.Client // streaming calls (no Timeout — rely on context cancellation)
 }
 
 func NewGenerationService() *GenerationService {
@@ -30,11 +32,20 @@ func NewGenerationService() *GenerationService {
 	if model == "" {
 		model = "llama3.2:latest"
 	}
+	// Shared transport with generous limits for the EPYC host
+	transport := &http.Transport{
+		MaxIdleConns:        10,
+		IdleConnTimeout:     120 * time.Second,
+		DisableCompression:  false,
+	}
 	return &GenerationService{
-		BaseURL:      url,
-		GenerateURL:  genUrl,
+		BaseURL:     url,
+		GenerateURL: genUrl,
 		DefaultModel: model,
-		HTTPClient:   &http.Client{Timeout: 300 * time.Second},
+		// Non-streaming: 5-minute ceiling is fine
+		HTTPClient: &http.Client{Timeout: 300 * time.Second, Transport: transport},
+		// Streaming: NO deadline — context cancellation (browser disconnect) handles cleanup
+		StreamClient: &http.Client{Timeout: 0, Transport: transport},
 	}
 }// --- PROMPT ENGINEERING & PHRASING ---
 
@@ -76,7 +87,7 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
 	}
-	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": 8}}
+	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": 24, "num_ctx": 32768, "num_predict": -1}}
 
 	if temp, ok := options["temperature"].(float64); ok {
 		payload["options"].(map[string]interface{})["temperature"] = temp
@@ -126,7 +137,7 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 		ollamaMessages[i] = m
 	}
 
-	payload := map[string]interface{}{"model": model, "messages": ollamaMessages, "stream": false, "options": map[string]interface{}{"num_thread": 8}}
+	payload := map[string]interface{}{"model": model, "messages": ollamaMessages, "stream": false, "options": map[string]interface{}{"num_thread": 24, "num_ctx": 4096, "num_predict": 1024}}
 
 	if temp, ok := options["temperature"].(float64); ok {
 		payload["options"].(map[string]interface{})["temperature"] = temp
@@ -148,6 +159,93 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 	}
 	return nil, fmt.Errorf("invalid response format")
 }
+
+// ChatStream sends a streaming chat request to Ollama and returns a channel of token strings.
+// The channel is closed when the stream completes or the context is cancelled.
+func (s *GenerationService) ChatStream(ctx context.Context, messages []map[string]string, options map[string]interface{}) (<-chan string, error) {
+	model := s.DefaultModel
+	if m, ok := options["model"].(string); ok && m != "" {
+		model = m
+	}
+
+	ollamaMessages := make([]map[string]interface{}, len(messages))
+	for i, msg := range messages {
+		ollamaMessages[i] = map[string]interface{}{
+			"role":    msg["role"],
+			"content": msg["content"],
+		}
+	}
+
+	// Default to fast-chat settings; callers pass options["options"] to override.
+	// Large-context canvas requests override num_ctx/num_predict via rawOpts below.
+	payload := map[string]interface{}{
+		"model":    model,
+		"messages": ollamaMessages,
+		"stream":   true,
+		"options": map[string]interface{}{
+			"num_thread":  24,   // utilise EPYC cores
+			"num_ctx":     4096, // fast for regular chat; canvas overrides to 32768
+			"num_predict": 1024, // sane default; canvas overrides to -1
+		},
+	}
+	if temp, ok := options["temperature"].(float64); ok {
+		payload["options"].(map[string]interface{})["temperature"] = temp
+	}
+	// Allow callers to override num_predict / num_ctx / other Ollama options
+	if rawOpts, ok := options["options"].(map[string]interface{}); ok {
+		for k, v := range rawOpts {
+			payload["options"].(map[string]interface{})[k] = v
+		}
+	}
+
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, "POST", s.GenerateURL+"/api/chat", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.StreamClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("Ollama returned status %d for streaming chat", resp.StatusCode)
+	}
+
+	ch := make(chan string, 64)
+	go func() {
+		defer resp.Body.Close()
+		defer close(ch)
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				continue
+			}
+			var chunk map[string]interface{}
+			if err := json.Unmarshal([]byte(line), &chunk); err != nil {
+				continue
+			}
+			if msg, ok := chunk["message"].(map[string]interface{}); ok {
+				if content, ok := msg["content"].(string); ok && content != "" {
+					select {
+					case ch <- content:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+			if done, ok := chunk["done"].(bool); ok && done {
+				return
+			}
+		}
+	}()
+
+	return ch, nil
+}
+
 func (s *GenerationService) postJSON(path string, payload interface{}) (map[string]interface{}, error) {
 	body, _ := json.Marshal(payload)
 	targetURL := s.BaseURL
