@@ -1,8 +1,12 @@
 package service
 
 import (
+	"net/http"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // OperationMetrics tracks metrics for a single operation
@@ -110,4 +114,57 @@ func (c *MetricsCollector) GetAllMetrics() map[string]*ModuleMetrics {
 		res[k] = v
 	}
 	return res
+}
+
+// PrometheusHandler returns an http.Handler that exposes all collected metrics
+// in Prometheus text exposition format. Wire to GET /metrics on the API server.
+func (c *MetricsCollector) PrometheusHandler() http.Handler {
+	registry := prometheus.NewRegistry()
+
+	requestsTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "oricli_requests_total",
+		Help: "Total number of operations executed per module.",
+	}, []string{"module", "operation"})
+
+	requestsSucceeded := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "oricli_requests_succeeded_total",
+		Help: "Total number of successful operations per module.",
+	}, []string{"module", "operation"})
+
+	requestsFailed := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "oricli_requests_failed_total",
+		Help: "Total number of failed operations per module.",
+	}, []string{"module", "operation"})
+
+	requestDuration := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "oricli_request_duration_avg_seconds",
+		Help: "Average operation duration in seconds per module.",
+	}, []string{"module", "operation"})
+
+	backboneInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "oricli_backbone_info",
+		Help: "Static info gauge for the Oricli backbone.",
+	}, []string{"version"})
+
+	registry.MustRegister(requestsTotal, requestsSucceeded, requestsFailed, requestDuration, backboneInfo)
+	backboneInfo.WithLabelValues("v2").Set(1)
+
+	// Snapshot current MetricsCollector state into Prometheus metrics on each scrape.
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c.mu.RLock()
+		for _, mod := range c.metrics {
+			for _, op := range mod.Operations {
+				labels := prometheus.Labels{"module": mod.ModuleName, "operation": op.Operation}
+				requestsTotal.With(labels).Add(float64(op.CallCount))
+				requestsSucceeded.With(labels).Add(float64(op.SuccessCount))
+				requestsFailed.With(labels).Add(float64(op.FailureCount))
+				if op.CallCount > 0 {
+					avg := float64(op.TotalTime) / float64(op.CallCount) / float64(time.Second)
+					requestDuration.With(labels).Set(avg)
+				}
+			}
+		}
+		c.mu.RUnlock()
+		promhttp.HandlerFor(registry, promhttp.HandlerOpts{}).ServeHTTP(w, r)
+	})
 }

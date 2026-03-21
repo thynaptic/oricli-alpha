@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: "oricli-sovereign"
+
+scrape_configs:
+  # Oricli backbone — Prometheus text metrics
+  - job_name: "oricli_backbone"
+    static_configs:
+      - targets: ["host.docker.internal:8089"]
+    metrics_path: "/v1/metrics"
+    scrape_interval: 15s
+
+  # cAdvisor — container-level CPU/RAM/network metrics
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["cadvisor:8080"]
+    scrape_interval: 15s
+
+  # Prometheus self-scrape
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

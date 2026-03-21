@@ -1,10 +1,14 @@
 package api
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,9 +28,12 @@ type ServerV2 struct {
 	Orchestrator *service.GoOrchestrator
 	Agent        *service.GoAgentService
 	Monitor      *service.ModuleMonitorService
+	Traces       *service.TraceStore
 	WSHub        *Hub
 	Router       *gin.Engine
 	Port         int
+	ActionRouter *service.ActionRouter
+	Metrics      *service.MetricsCollector
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -83,10 +90,17 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		Orchestrator: orch,
 		Agent:        agent,
 		Monitor:      mon,
+		Traces:       service.NewTraceStore(nil),
 		WSHub:        hub,
 		Router:       r,
 		Port:         port,
+		Metrics:      service.NewMetricsCollector(),
 	}
+
+	// Wire ActionRouter for trigger-word intent dispatch
+	research := service.NewResearchOrchestrator(agent)
+	curiosity := service.NewCuriosityDaemon(agent.SovEngine.Graph, agent.SovEngine.VDI, agent.GenService, hub)
+	s.ActionRouter = service.NewActionRouter(research, curiosity, hub)
 
 	s.setupRoutes()
 	return s
@@ -115,6 +129,12 @@ func (s *ServerV2) setupRoutes() {
 	// Public
 	v1.GET("/health", s.handleHealth)
 	v1.GET("/ws", s.handleWS)
+	v1.GET("/traces", s.handleGetTraces)
+	v1.GET("/loglines", s.handleLogLines)
+	// Prometheus metrics endpoint — scraped by local Prometheus container
+	v1.GET("/metrics", func(c *gin.Context) {
+		s.Metrics.PrometheusHandler().ServeHTTP(c.Writer, c.Request)
+	})
 
 	// Protected
 	protected := v1.Group("/", s.authMiddleware())
@@ -139,7 +159,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 
 	modelName := req.Model
-	if strings.HasPrefix(modelName, "oricli-") {
+	if strings.HasPrefix(modelName, "oricli-") || modelName == "default" || modelName == "" {
 		modelName = ""
 	}
 
@@ -154,39 +174,128 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			log.Printf("[API] Applied profile: %s", req.Profile)
 		}
 	}
-	
+
 	sovTrace, err := s.Agent.SovEngine.ProcessInference(c.Request.Context(), lastMsg)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "sovereign engine failure"})
 		return
 	}
 
-	msgs := make([]map[string]string, len(req.Messages)+1)
-	msgs[0] = map[string]string{"role": "system", "content": sovTrace}
+	// Merge client-provided system message (if any) with the sovereign trace
+	// so Ollama sees a single authoritative system prompt.
+	clientSystem := ""
+	msgStart := 0
+	if len(req.Messages) > 0 && req.Messages[0].Role == "system" {
+		clientSystem = req.Messages[0].Content
+		msgStart = 1
+	}
+	systemContent := sovTrace
+	if clientSystem != "" {
+		systemContent = sovTrace + "\n\n---\n\n" + clientSystem
+	}
 
-	for i, m := range req.Messages {
+	msgs := make([]map[string]string, len(req.Messages)-msgStart+1)
+	msgs[0] = map[string]string{"role": "system", "content": systemContent}
+	for i, m := range req.Messages[msgStart:] {
 		role := m.Role
-		if role == "analyst" { role = "princess" }
-		if role == "commander" { role = "daddy" }
+		if role == "analyst" {
+			role = "princess"
+		}
+		if role == "commander" {
+			role = "daddy"
+		}
 		msgs[i+1] = map[string]string{"role": role, "content": m.Content}
 	}
 
-	res, err := s.Agent.GenService.Chat(msgs, map[string]interface{}{"model": modelName})
+	chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
+
+	// Detect trigger-word action intent and dispatch async agent task
+	type dispatchMeta struct {
+		jobID   string
+		action  string
+		subject string
+	}
+	var dispatch *dispatchMeta
+	if s.ActionRouter != nil {
+		if act := service.DetectAction(lastMsg); act != nil {
+			jid := fmt.Sprintf("job-%d", time.Now().UnixNano())
+			dispatch = &dispatchMeta{jobID: jid, action: string(act.Type), subject: act.Subject}
+			s.ActionRouter.Dispatch(c.Request.Context(), jid, act)
+		}
+	}
+
+	// Stream tokens via SSE so the UI renders progressively
+	streamOpts := map[string]interface{}{"model": modelName}
+	if req.MaxTokens != nil && *req.MaxTokens >= 8192 {
+		// Canvas / large-output request — unlock full context window
+		streamOpts["options"] = map[string]interface{}{
+			"num_predict": -1,
+			"num_ctx":     32768,
+		}
+	}
+	tokenCh, err := s.Agent.GenService.ChatStream(c.Request.Context(), msgs, streamOpts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	responseText := res["text"].(string)
-	responseText, _ = s.Agent.SovEngine.SelfAlign(c.Request.Context(), lastMsg, responseText)
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("X-Accel-Buffering", "no")
+
+	// Emit agent_dispatch SSE event before the first token so the UI renders
+	// the dispatch card immediately
+	if dispatch != nil {
+		dispatchEvt := map[string]interface{}{
+			"type":    "agent_dispatch",
+			"action":  dispatch.action,
+			"subject": dispatch.subject,
+			"job_id":  dispatch.jobID,
+			"prompt":  lastMsg, // full original message for canvas passthrough
+		}
+		data, _ := json.Marshal(dispatchEvt)
+		c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+		c.Writer.Flush()
+	}
+
+	var responseBuilder strings.Builder
+	c.Stream(func(w io.Writer) bool {
+		token, ok := <-tokenCh
+		if !ok {
+			// Stream complete — send finish chunk
+			doneChunk := map[string]interface{}{
+				"id":     chatID,
+				"object": "chat.completion.chunk",
+				"choices": []map[string]interface{}{
+					{"index": 0, "delta": map[string]interface{}{}, "finish_reason": "stop"},
+				},
+			}
+			data, _ := json.Marshal(doneChunk)
+			fmt.Fprintf(w, "data: %s\n\n", string(data))
+			return false
+		}
+		responseBuilder.WriteString(token)
+		chunk := map[string]interface{}{
+			"id":     chatID,
+			"object": "chat.completion.chunk",
+			"choices": []map[string]interface{}{
+				{"index": 0, "delta": map[string]interface{}{"role": "assistant", "content": token}, "finish_reason": nil},
+			},
+		}
+		data, _ := json.Marshal(chunk)
+		fmt.Fprintf(w, "data: %s\n\n", string(data))
+		return true
+	})
+
+	// Post-stream: async jobs on the full assembled response
+	responseText := responseBuilder.String()
 	responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
 
-	// Trigger Voice Synthesis (Async)
 	if s.Agent.SovEngine.Voice != nil {
 		go s.Agent.SovEngine.Voice.Synthesize(responseText, s.Agent.SovEngine.Resonance.Current.ERI, 0.5, s.Agent.SovEngine.Resonance.Current.MusicalKey)
 	}
 
-	s.Orchestrator.Execute("record_event", map[string]interface{}{
+	go s.Orchestrator.Execute("record_event", map[string]interface{}{
 		"type":        "chat_interaction",
 		"description": fmt.Sprintf("User: %s | Assistant: %s", lastMsg, responseText),
 		"metadata": map[string]interface{}{
@@ -195,23 +304,6 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			"key":   s.Agent.SovEngine.Resonance.Current.MusicalKey,
 		},
 	}, 5*time.Second)
-
-	c.JSON(http.StatusOK, map[string]interface{}{
-		"id":      fmt.Sprintf("chatcmpl-%d", time.Now().Unix()),
-		"object":  "chat.completion",
-		"created": time.Now().Unix(),
-		"model":   req.Model,
-		"choices": []map[string]interface{}{{
-			"index":         0,
-			"message":       map[string]string{"role": "assistant", "content": responseText},
-			"finish_reason": "stop",
-		}},
-		"usage": map[string]interface{}{
-			"resonance": s.Agent.SovEngine.Resonance.Current.ERI,
-			"mode":      s.Agent.SovEngine.Resonance.Current.MusicalKey,
-			"sensory":   s.Agent.SovEngine.CurrentSensory.ToJSONMap(),
-		},
-	})
 }
 
 func (s *ServerV2) handleTelegramWebhook(c *gin.Context) {
@@ -301,6 +393,42 @@ func (s *ServerV2) handleIngestWeb(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, res)
+}
+
+func (s *ServerV2) handleGetTraces(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, _ := strconv.Atoi(limitStr)
+	if limit < 1 || limit > 500 {
+		limit = 50
+	}
+	traces := s.Traces.ListRecent(limit)
+	c.JSON(http.StatusOK, gin.H{"success": true, "traces": traces, "count": len(traces)})
+}
+
+func (s *ServerV2) handleLogLines(c *gin.Context) {
+	nStr := c.DefaultQuery("n", "200")
+	n, _ := strconv.Atoi(nStr)
+	if n < 1 || n > 2000 {
+		n = 200
+	}
+	logPath := "/home/mike/Mavaia/go_backbone.log"
+	f, err := os.Open(logPath)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"lines": []string{}, "error": err.Error()})
+		return
+	}
+	defer f.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	// Return last n lines
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	c.JSON(http.StatusOK, gin.H{"lines": lines, "total": len(lines)})
 }
 
 func (s *ServerV2) Start() error {

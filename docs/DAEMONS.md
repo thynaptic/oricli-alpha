@@ -67,13 +67,14 @@ Oricli-Alpha maintains seven background daemons that run as goroutines within th
 
 - **Role**: Proactively identifies gaps in Oricli's knowledge graph and fills them via autonomous web research — no user prompt required.
 - **Trigger**: Scheduled tick every **15 minutes** (context-aware: only forages when no active inference is running).
-- **Forage Cycle**:
-  1. Calls `WorkingMemoryGraph.FindGaps()` to identify low-confidence or under-connected nodes.
-  2. Broadcasts `curiosity_sync` event to the WebSocket hub (UI shows real-time foraging status).
-  3. **Primary path**: VDI browser navigates to a DuckDuckGo search for the target entity.
-  4. **Fallback path**: Colly scraper (`CollySearcher`) hits DDG Lite directly if VDI is unavailable.
-  5. Extracted text is summarized by the generation service and written back to the graph.
-- **WebSocket events**: `curiosity_sync { target_entity, action, result }`
+- **Forage Priority Chain**:
+  1. **SearXNG** (primary) — queries the local sovereign SearXNG Docker instance (`127.0.0.1:8080`). Aggregates Google, Bing, DuckDuckGo, and Wikipedia in one shot; returns clean JSON with titles, URLs, and snippets. No bot detection issues.
+  2. **Colly page fetcher** — follows the top URLs from SearXNG results to extract full body text from each page. This layer was always reliable; only the search-page step was blocked.
+  3. **VDI / chromedp** (secondary) — headless browser session; used if SearXNG is unavailable and `Chromium` is installed on the host.
+  4. **CollySearcher DDG** (last resort) — Colly directly scrapes DDG Lite; prone to bot-detection blocks on VPS.
+- **Supporting service**: `SearXNGSearcher` (`pkg/service/searxng_searcher.go`) wraps the SearXNG REST API. `IsAvailable()` health-checks `127.0.0.1:8080/healthz` before each forage. SearXNG runs as `oricli-searxng` Docker container, managed by `oricli-searxng.service` (systemd).
+- **Forage outcome**: Extracted text is distilled into 3–5 facts by the generation service and written back to the WorkingMemoryGraph node.
+- **WebSocket events**: `curiosity_sync { target_entity, action, findings }`
 
 ---
 

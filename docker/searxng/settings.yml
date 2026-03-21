@@ -1,0 +1,68 @@
+# SearXNG settings for Oricli — Sovereign local search instance
+# Bound to 127.0.0.1:8080 — NOT externally exposed
+
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "Oricli Search"
+  privacypolicy_url: false
+  contact_url: false
+  enable_metrics: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  max_page: 5
+  formats:
+    - html
+    - json
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  secret_key: "oricli-sovereign-search-2025-mavaia-thynaptic"
+  base_url: "http://127.0.0.1:8080/"
+  image_proxy: false
+  http_protocol_version: "1.1"
+  method: "GET"
+
+ui:
+  static_use_hash: true
+  default_locale: "en"
+  theme_args:
+    simple_style: dark
+
+# Engines: only fast, reliable ones for autonomous foraging
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    timeout: 6.0
+    disabled: false
+
+  - name: bing
+    engine: bing
+    shortcut: b
+    timeout: 6.0
+    disabled: false
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: d
+    timeout: 6.0
+    disabled: false
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: w
+    timeout: 4.0
+    disabled: false
+
+outgoing:
+  request_timeout: 8.0
+  max_request_timeout: 15.0
+  pool_connections: 100
+  pool_maxsize: 20
+  enable_http2: true

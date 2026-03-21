@@ -27,7 +27,8 @@ type CuriosityDaemon struct {
 	WSHub      interface {
 		BroadcastEvent(eventType string, payload interface{})
 	}
-	
+	Searcher *CollySearcher  // DDG fallback
+	SearXNG  *SearXNGSearcher // primary sovereign search
 	active bool
 }
 
@@ -35,10 +36,12 @@ func NewCuriosityDaemon(graph *memory.WorkingMemoryGraph, vdi *vdi.Manager, gen 
 	BroadcastEvent(eventType string, payload interface{})
 }) *CuriosityDaemon {
 	return &CuriosityDaemon{
-		Graph: graph,
-		VDI:   vdi,
-		Gen:   gen,
-		WSHub: hub,
+		Graph:    graph,
+		VDI:      vdi,
+		Gen:      gen,
+		WSHub:    hub,
+		Searcher: NewCollySearcher(),
+		SearXNG:  NewSearXNGSearcher(),
 	}
 }
 
@@ -75,7 +78,7 @@ func (d *CuriosityDaemon) Forage(ctx context.Context) {
 		return
 	}
 
-	// 2. Select Target (Pick the first gap for now)
+	// 2. Select Target
 	target := gaps[0]
 	log.Printf("[CuriosityDaemon] Identifying knowledge gap: %s. Foraging...", target.Label)
 
@@ -86,20 +89,38 @@ func (d *CuriosityDaemon) Forage(ctx context.Context) {
 		})
 	}
 
-	// 3. Web Foraging via VDI
-	// Step A: Search
-	searchURL := fmt.Sprintf("https://duckduckgo.com/html/?q=%s+facts+summary", strings.ReplaceAll(target.Label, " ", "+"))
-	_, err := d.VDI.Navigate(searchURL)
-	if err != nil {
-		log.Printf("[CuriosityDaemon] Search failed for %s: %v", target.Label, err)
-		return
+	// 3. Web Foraging — priority: SearXNG (sovereign) → VDI browser → Colly/DDG fallback
+	var rawText string
+	var fetchErr error
+
+	// Primary: local SearXNG instance (multi-engine aggregation, clean JSON)
+	if d.SearXNG != nil {
+		rawText, fetchErr = d.SearXNG.Search(target.Label + " facts summary")
+		if fetchErr != nil {
+			log.Printf("[CuriosityDaemon] SearXNG forage failed for %s: %v — trying VDI", target.Label, fetchErr)
+		}
 	}
 
-	// Step B: Scrape Results
-	rawText, err := d.VDI.Scrape()
-	if err != nil {
-		log.Printf("[CuriosityDaemon] Scrape failed for %s: %v", target.Label, err)
-		return
+	// Secondary: VDI headless browser (requires Chromium installed on host)
+	if rawText == "" && d.VDI != nil && d.VDI.IsAvailable() {
+		searchURL := fmt.Sprintf("https://duckduckgo.com/html/?q=%s+facts+summary",
+			strings.ReplaceAll(target.Label, " ", "+"))
+		_, fetchErr = d.VDI.Navigate(searchURL)
+		if fetchErr == nil {
+			rawText, fetchErr = d.VDI.Scrape()
+		}
+		if fetchErr != nil {
+			log.Printf("[CuriosityDaemon] VDI forage failed for %s: %v — falling back to Colly", target.Label, fetchErr)
+		}
+	}
+
+	// Last resort: Colly DDG scraper
+	if rawText == "" {
+		rawText, fetchErr = d.Searcher.Search(target.Label + " facts summary")
+		if fetchErr != nil {
+			log.Printf("[CuriosityDaemon] Colly forage also failed for %s: %v — skipping", target.Label, fetchErr)
+			return
+		}
 	}
 
 	if d.WSHub != nil {
@@ -113,7 +134,7 @@ func (d *CuriosityDaemon) Forage(ctx context.Context) {
 	prompt := fmt.Sprintf("Extract 3-5 key facts about '%s' from the following text. Format as a concise description suitable for a knowledge graph.\n\nTEXT: %s", target.Label, rawText)
 	res, err := d.Gen.Generate(prompt, map[string]interface{}{
 		"system": "Epistemic Curator",
-		"model":  "llama3.2:latest",
+		"model":  "ministral-3:3b",
 	})
 	if err != nil {
 		log.Printf("[CuriosityDaemon] Fact extraction failed for %s: %v", target.Label, err)
@@ -122,7 +143,7 @@ func (d *CuriosityDaemon) Forage(ctx context.Context) {
 
 	factSummary, _ := res["text"].(string)
 
-	// 5. Commit to Graph (Thread-Safe)
+	// 5. Commit to Graph
 	d.Graph.UpdateEntity(target.ID, 0.5, 0.5, 0.5, func(e *memory.Entity) {
 		e.Description = factSummary
 		e.Uncertainty = 0.2

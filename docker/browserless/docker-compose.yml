@@ -1,0 +1,21 @@
+services:
+  browserless:
+    image: browserless/chrome:latest
+    container_name: oricli-browserless
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - MAX_CONCURRENT_SESSIONS=5
+      - MAX_QUEUE_LENGTH=10
+      - PREBOOT_CHROME=true
+      - KEEP_ALIVE=true
+      - DEFAULT_LAUNCH_ARGS=["--disable-dev-shm-usage","--no-sandbox","--disable-gpu","--disable-extensions"]
+      - TIMEOUT=60000
+      - EXIT_ON_HEALTH_FAILURE=true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    shm_size: "512mb"

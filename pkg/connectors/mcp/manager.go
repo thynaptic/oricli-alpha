@@ -20,6 +20,7 @@ type MCPConfig struct {
 type ServerConfig struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args"`
+	Enabled *bool    `json:"enabled,omitempty"` // nil = enabled by default
 }
 
 type MCPManager struct {
@@ -46,32 +47,46 @@ func (m *MCPManager) LoadConfig(path string) error {
 	return json.Unmarshal(data, &m.Config)
 }
 
-// StartAll connects to all configured MCP servers and performs handshakes.
+// StartAll connects to all configured MCP servers concurrently.
+// Each server gets its own timeout (perServerTimeout) to allow for first-time
+// npm downloads. Servers are started in parallel so one slow download never
+// blocks the others.
 func (m *MCPManager) StartAll(ctx context.Context) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	const perServerTimeout = 120 * time.Second
 
+	var wg sync.WaitGroup
 	for name, cfg := range m.Config.Servers {
-		log.Printf("[MCPManager] Connecting to server: %s...", name)
-		client := NewClient(cfg.Command, cfg.Args)
-		if err := client.Start(); err != nil {
-			log.Printf("[MCPManager] Error starting %s: %v", name, err)
+		if cfg.Enabled != nil && !*cfg.Enabled {
+			log.Printf("[MCPManager] Skipping disabled server: %s", name)
 			continue
 		}
 
-		// Perform handshake
-		initCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		_, err := client.Initialize(initCtx)
-		cancel()
-		if err != nil {
-			log.Printf("[MCPManager] Failed to initialize %s: %v", name, err)
-			client.Stop()
-			continue
-		}
+		wg.Add(1)
+		go func(name string, cfg ServerConfig) {
+			defer wg.Done()
+			log.Printf("[MCPManager] Connecting to server: %s...", name)
+			client := NewClient(cfg.Command, cfg.Args)
+			if err := client.Start(); err != nil {
+				log.Printf("[MCPManager] Error starting %s: %v", name, err)
+				return
+			}
 
-		m.Clients[name] = client
-		log.Printf("[MCPManager] Server %s initialized successfully.", name)
+			initCtx, cancel := context.WithTimeout(ctx, perServerTimeout)
+			defer cancel()
+			_, err := client.Initialize(initCtx)
+			if err != nil {
+				log.Printf("[MCPManager] Failed to initialize %s: %v", name, err)
+				client.Stop()
+				return
+			}
+
+			m.mu.Lock()
+			m.Clients[name] = client
+			m.mu.Unlock()
+			log.Printf("[MCPManager] Server %s initialized successfully.", name)
+		}(name, cfg)
 	}
+	wg.Wait()
 	return nil
 }
 

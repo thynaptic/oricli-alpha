@@ -182,7 +182,7 @@ func (c *Client) Initialize(ctx context.Context) (*InitializeResult, error) {
 
 // ListTools fetches available tools from the server.
 func (c *Client) ListTools(ctx context.Context) ([]MCPTool, error) {
-	resBytes, err := c.Call(ctx, "tools/list", nil)
+	resBytes, err := c.Call(ctx, "tools/list", map[string]interface{}{})
 	if err != nil {
 		return nil, err
 	}

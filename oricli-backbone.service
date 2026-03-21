@@ -5,6 +5,12 @@ After=network.target
 [Service]
 Environment=OLLAMA_URL=http://localhost:11434
 Environment=OLLAMA_MODEL=qwen2.5-coder:3b
+Environment=ORICLI_BROWSERLESS_URL=ws://localhost:3000
+Environment=MAVAIA_S3_ENDPOINT=http://localhost:9000
+Environment=AWS_ACCESS_KEY_ID=oricli-admin
+Environment=AWS_SECRET_ACCESS_KEY=oricli-sovereign-2025
+Environment=AWS_BUCKET_NAME=oricli-state
+Environment=AWS_DEFAULT_REGION=us-east-1
 Type=simple
 User=mike
 Group=mike
