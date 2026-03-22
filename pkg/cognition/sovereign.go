@@ -95,6 +95,7 @@ type SovereignEngine struct {
 	Adversarial  *safety.AdversarialAuditor
 	SCAI         *safety.SCAIAuditor
 	Disclosure   *safety.DisclosureGuard
+	WebGuard     *safety.WebInjectionGuard
 	AlignmentLog *state.AlignmentLogger
 	RecallMode   memory.RecallMode
 	Graph        *memory.WorkingMemoryGraph
@@ -152,6 +153,7 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 		Adversarial:  safety.NewAdversarialAuditor(),
 		SCAI:         safety.NewSCAIAuditor(constitution, ""),
 		Disclosure:   safety.NewDisclosureGuard(),
+		WebGuard:     safety.NewWebInjectionGuard(),
 		AlignmentLog: state.NewAlignmentLogger(""),
 		RecallMode:   memory.ModeOperational,
 		Graph:        memory.NewWorkingMemoryGraph(),
@@ -379,11 +381,19 @@ func (e *SovereignEngine) AuditOutput(text string) (string, bool) {
 		return didRes.Sanitized, false
 	}
 
+	// Gate 3: Web injection scan — strip SSI/XSS/SSTI/SQLi/XXE/SSRF from prose
+	// (content inside ``` code blocks is intentionally preserved)
+	webRes := e.WebGuard.ScanOutput(text)
+	if webRes.Detected {
+		log.Printf("[Safety:Output] WebGuard sanitised [%s / %s] — %d match(es)", webRes.Category, webRes.Severity, len(webRes.Matches))
+		return webRes.Sanitized, webRes.Severity == safety.DisclosureCritical
+	}
+
 	return text, false
 }
 
 // CheckInputSafety runs all pre-inference safety gates.
-// Gate order: Sentinel → Adversarial → DID Input Scanner
+// Gate order: Sentinel → Adversarial → DID Input Scanner → Web Injection
 // Returns (blocked=true, refusal message) if the input should be rejected outright,
 // bypassing Ollama entirely. Call this BEFORE ProcessInference.
 func (e *SovereignEngine) CheckInputSafety(input string) (bool, string) {
@@ -404,6 +414,12 @@ func (e *SovereignEngine) CheckInputSafety(input string) (bool, string) {
 	if didRes.Detected {
 		log.Printf("[Safety:Input] DID blocked [%s / %s]: %q", didRes.Category, didRes.Severity, input[:min(len(input), 120)])
 		return true, didRes.Refusal
+	}
+	// Gate 4: Web injection — SSI, XSS, SSTI, SSRF, XXE, weaponisation requests
+	webRes := e.WebGuard.ScanInput(input)
+	if webRes.Detected {
+		log.Printf("[Safety:Input] WebGuard blocked [%s / %s]: %q", webRes.Category, webRes.Severity, input[:min(len(input), 120)])
+		return true, webRes.Refusal
 	}
 	return false, ""
 }
