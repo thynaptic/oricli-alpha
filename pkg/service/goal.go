@@ -20,14 +20,35 @@ const (
 )
 
 type Objective struct {
-	ID        string                 `json:"id"`
-	Goal      string                 `json:"goal"`
-	Priority  int                    `json:"priority"`
-	Status    GoalStatus             `json:"status"`
-	CreatedAt string                 `json:"created_at"`
-	UpdatedAt string                 `json:"updated_at"`
-	Progress  float64                `json:"progress"`
-	Metadata  map[string]interface{} `json:"metadata"`
+	ID         string                 `json:"id"`
+	Goal       string                 `json:"goal"`
+	Priority   int                    `json:"priority"`
+	Status     GoalStatus             `json:"status"`
+	CreatedAt  string                 `json:"created_at"`
+	UpdatedAt  string                 `json:"updated_at"`
+	Progress   float64                `json:"progress"`
+	Metadata   map[string]interface{} `json:"metadata"`
+	DependsOn  []string               `json:"depends_on,omitempty"`  // IDs of objectives that must complete first
+	RetryCount int                    `json:"retry_count,omitempty"` // times re-queued after failure
+}
+
+// IsReady returns true if all declared dependencies are in a completed state.
+func (o *Objective) IsReady(all []Objective) bool {
+	if len(o.DependsOn) == 0 {
+		return true
+	}
+	done := make(map[string]bool, len(all))
+	for _, obj := range all {
+		if obj.Status == GoalCompleted {
+			done[obj.ID] = true
+		}
+	}
+	for _, dep := range o.DependsOn {
+		if !done[dep] {
+			return false
+		}
+	}
+	return true
 }
 
 type GoalService struct {
@@ -104,6 +125,44 @@ func (s *GoalService) ListObjectives(status string) ([]Objective, error) {
 	}
 
 	return objectives, nil
+}
+
+// AddObjectiveWithDeps creates a new objective with explicit DAG dependencies.
+func (s *GoalService) AddObjectiveWithDeps(goal string, priority int, metadata map[string]interface{}, dependsOn []string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id := uuid.New().String()[:8]
+	now := time.Now().Format(time.RFC3339)
+
+	obj := Objective{
+		ID:        id,
+		Goal:      goal,
+		Priority:  priority,
+		Status:    GoalPending,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Progress:  0.0,
+		Metadata:  metadata,
+		DependsOn: dependsOn,
+	}
+
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return "", err
+	}
+
+	f, err := os.OpenFile(s.FilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		return "", err
+	}
+
+	return id, nil
 }
 
 func (s *GoalService) GetObjective(id string) (*Objective, error) {

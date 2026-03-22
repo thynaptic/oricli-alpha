@@ -186,6 +186,65 @@ func (s *SearXNGSearcher) SearchPage(query string) ([]*searchResult, error) {
 	return results, nil
 }
 
+// WebSearchResult is a structured result from SearXNG with the URL exposed for VDI deep-forage.
+type WebSearchResult struct {
+	Title   string
+	URL     string
+	Snippet string
+}
+
+// SearchWithURLs returns up to MaxResults structured results (Title, URL, Snippet) for a
+// structured SearchQuery. It does NOT fetch page bodies — results are passed to the
+// CuriosityDaemon which fires VDI.NavigateAndExtract on the top URLs.
+func (s *SearXNGSearcher) SearchWithURLs(q searchintent.SearchQuery) ([]WebSearchResult, error) {
+	params := fmt.Sprintf("%s/search?q=%s&format=json&categories=%s&language=en",
+		s.BaseURL, url.QueryEscape(q.FormattedQuery), string(q.Category))
+	if q.TimeRange != searchintent.TimeRangeNone {
+		params += "&time_range=" + string(q.TimeRange)
+	}
+
+	req, err := http.NewRequest("GET", params, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Oricli/2.0 (Sovereign Research Agent)")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("searxng returned %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var sr searxngResponse
+	if err := json.Unmarshal(body, &sr); err != nil {
+		return nil, err
+	}
+
+	var out []WebSearchResult
+	for _, r := range sr.Results {
+		if len(out) >= s.MaxResults {
+			break
+		}
+		if !strings.HasPrefix(r.URL, "http") {
+			continue
+		}
+		out = append(out, WebSearchResult{Title: r.Title, URL: r.URL, Snippet: r.Content})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("searxng returned no results for %q", q.FormattedQuery)
+	}
+	log.Printf("[SearXNG] SearchWithURLs (%s) — %d results for %q", q.Intent, len(out), q.RawTopic)
+	return out, nil
+}
+
 // SearchWithIntent uses a structured SearchQuery to set SearXNG categories and
 // time filters before searching, then delegates to Search().
 func (s *SearXNGSearcher) SearchWithIntent(q searchintent.SearchQuery) (string, error) {

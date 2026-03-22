@@ -5,6 +5,7 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // ActionType identifies what kind of agent task was detected.
@@ -82,6 +83,16 @@ func DetectAction(message string) *DetectedAction {
 	return nil
 }
 
+// JobStatus tracks the completion state of a dispatched job.
+type JobStatus string
+
+const (
+	JobStatusPending   JobStatus = "pending"
+	JobStatusRunning   JobStatus = "running"
+	JobStatusCompleted JobStatus = "completed"
+	JobStatusFailed    JobStatus = "failed"
+)
+
 // ActionRouter dispatches detected actions to the appropriate backend services.
 type ActionRouter struct {
 	ResearchOrchestrator *ResearchOrchestrator
@@ -89,6 +100,9 @@ type ActionRouter struct {
 	WSHub                interface {
 		BroadcastEvent(eventType string, payload interface{})
 	}
+
+	jobMu  sync.Mutex
+	jobs   map[string]JobStatus // jobID → status
 }
 
 func NewActionRouter(
@@ -100,7 +114,19 @@ func NewActionRouter(
 		ResearchOrchestrator: research,
 		CuriosityDaemon:      curiosity,
 		WSHub:                hub,
+		jobs:                 make(map[string]JobStatus),
 	}
+}
+
+// JobStatus returns the current status of a dispatched job.
+// Returns JobStatusPending if the jobID is unknown.
+func (r *ActionRouter) JobStatus(jobID string) JobStatus {
+	r.jobMu.Lock()
+	defer r.jobMu.Unlock()
+	if s, ok := r.jobs[jobID]; ok {
+		return s
+	}
+	return JobStatusPending
 }
 
 // Dispatch runs the action in a goroutine and broadcasts progress/results via WS.
@@ -161,6 +187,18 @@ func (r *ActionRouter) runWorkflow(ctx context.Context, jobID string, action *De
 }
 
 func (r *ActionRouter) broadcast(jobID string, action *DetectedAction, status, summary, errMsg string) {
+	// Update internal job status map
+	r.jobMu.Lock()
+	switch status {
+	case "done":
+		r.jobs[jobID] = JobStatusCompleted
+	case "error":
+		r.jobs[jobID] = JobStatusFailed
+	case "running":
+		r.jobs[jobID] = JobStatusRunning
+	}
+	r.jobMu.Unlock()
+
 	if r.WSHub == nil {
 		return
 	}

@@ -58,7 +58,66 @@ func (m *Manager) Scrape() (string, error) {
 	return clean, nil
 }
 
-// Click interacts with an element on the page using a CSS selector.
+// NavigateAndExtract navigates to url, waits for the DOM to settle, scrapes
+// the main content, strips common chrome (nav/header/footer/ads), and returns
+// clean text capped at maxChars. Designed for CuriosityDaemon deep-forage.
+func (m *Manager) NavigateAndExtract(url string, maxChars int) (string, error) {
+	ctx, cancel := m.GetBrowserContext(10 * time.Second)
+	if ctx == nil {
+		return "", fmt.Errorf("VDI browser is not initialized")
+	}
+	defer cancel()
+
+	// Try content selectors in priority order; fall back to body.
+	contentSelectors := []string{"article", "main", "[role=main]", ".content", "#content", "body"}
+
+	var rawText string
+	if err := chromedp.Run(ctx, chromedp.Navigate(url), chromedp.WaitVisible("body", chromedp.ByQuery)); err != nil {
+		return "", fmt.Errorf("NavigateAndExtract navigation failed for %s: %v", url, err)
+	}
+
+	for _, sel := range contentSelectors {
+		var t string
+		if err := chromedp.Run(ctx, chromedp.Text(sel, &t, chromedp.NodeVisible, chromedp.ByQuery)); err == nil {
+			if len(strings.TrimSpace(t)) > 100 {
+				rawText = t
+				break
+			}
+		}
+	}
+
+	return cleanPageText(rawText, maxChars), nil
+}
+
+// cleanPageText normalises whitespace and strips common boilerplate lines.
+func cleanPageText(raw string, maxChars int) string {
+	lines := strings.Split(raw, "\n")
+	var kept []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if len(line) < 20 {
+			continue // skip nav crumbs, single words, button labels
+		}
+		// Skip lines that look like navigation/cookie banners
+		lower := strings.ToLower(line)
+		if strings.HasPrefix(lower, "cookie") ||
+			strings.HasPrefix(lower, "accept") ||
+			strings.HasPrefix(lower, "subscribe") ||
+			strings.HasPrefix(lower, "advertisement") ||
+			strings.HasPrefix(lower, "skip to") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	result := strings.Join(kept, " ")
+	result = strings.Join(strings.Fields(result), " ")
+	if maxChars > 0 && len(result) > maxChars {
+		result = result[:maxChars] + "… [truncated]"
+	}
+	return result
+}
+
+
 func (m *Manager) Click(selector string) (string, error) {
 	ctx, cancel := m.GetBrowserContext(15 * time.Second)
 	if ctx == nil {

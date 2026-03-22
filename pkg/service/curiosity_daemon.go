@@ -102,26 +102,59 @@ func (d *CuriosityDaemon) Forage(ctx context.Context) {
 		})
 	}
 
-	// 3. Web Foraging — priority: SearXNG intent-aware → VDI browser → Colly fallback
+	// 3. Web Foraging — priority: SearXNG (with URL list) → parallel VDI deep-forage → Colly fallback
 	var rawText string
 	var fetchErr error
 
 	if d.SearXNG != nil {
-		rawText, fetchErr = d.SearXNG.SearchWithIntent(sq)
-		if fetchErr != nil {
-			log.Printf("[CuriosityDaemon] SearXNG forage failed for %q: %v — trying VDI", target.Label, fetchErr)
+		// Try SearchWithURLs first to get real article URLs for VDI deep-forage
+		results, urlErr := d.SearXNG.SearchWithURLs(sq)
+		if urlErr == nil && len(results) > 0 && d.VDI != nil && d.VDI.IsAvailable() {
+			// Launch parallel VDI fetches on top-2 URLs (5s timeout each)
+			type forage struct{ text string }
+			topN := results
+			if len(topN) > 2 {
+				topN = topN[:2]
+			}
+			forageCh := make(chan forage, len(topN))
+			for _, r := range topN {
+				url := r.URL
+				go func() {
+					text, err := d.VDI.NavigateAndExtract(url, 2500)
+					if err != nil || strings.TrimSpace(text) == "" {
+						forageCh <- forage{}
+						return
+					}
+					forageCh <- forage{text: text}
+				}()
+			}
+			// Collect with 5s per goroutine (hard cap)
+			timer := time.NewTimer(5 * time.Second * time.Duration(len(topN)))
+			var parts []string
+			for i := 0; i < len(topN); i++ {
+				select {
+				case f := <-forageCh:
+					if f.text != "" {
+						parts = append(parts, f.text)
+					}
+				case <-timer.C:
+				}
+			}
+			timer.Stop()
+			if len(parts) > 0 {
+				rawText = strings.Join(parts, "\n\n")
+				if len(rawText) > 5000 {
+					rawText = rawText[:5000] + "… [truncated]"
+				}
+				log.Printf("[CuriosityDaemon] VDI deep-forage yielded %d chars for %q", len(rawText), target.Label)
+			}
 		}
-	}
-
-	if rawText == "" && d.VDI != nil && d.VDI.IsAvailable() {
-		searchURL := fmt.Sprintf("https://duckduckgo.com/html/?q=%s",
-			strings.ReplaceAll(sq.FormattedQuery, " ", "+"))
-		_, fetchErr = d.VDI.Navigate(searchURL)
-		if fetchErr == nil {
-			rawText, fetchErr = d.VDI.Scrape()
-		}
-		if fetchErr != nil {
-			log.Printf("[CuriosityDaemon] VDI forage failed for %q: %v — falling back to Colly", target.Label, fetchErr)
+		// If VDI came up empty, fall back to snippet-only SearchWithIntent
+		if rawText == "" {
+			rawText, fetchErr = d.SearXNG.SearchWithIntent(sq)
+			if fetchErr != nil {
+				log.Printf("[CuriosityDaemon] SearXNG forage failed for %q: %v — trying Colly", target.Label, fetchErr)
+			}
 		}
 	}
 

@@ -35,6 +35,8 @@ type ServerV2 struct {
 	Router       *gin.Engine
 	Port         int
 	ActionRouter *service.ActionRouter
+	GoalService  *service.GoalService
+	GoalExecutor *service.GoalExecutor
 	Metrics      *service.MetricsCollector
 	RateLimiter  *safety.RateLimiter
 	SovAuth      *sovereign.SovereignAuth
@@ -155,6 +157,12 @@ func (s *ServerV2) setupRoutes() {
 		protected.POST("/ingest", s.handleIngest)
 		protected.POST("/ingest/web", s.handleIngestWeb)
 		protected.POST("/telegram/webhook", s.handleTelegramWebhook)
+
+		// DAG Goal Management
+		protected.GET("/goals", s.handleListGoals)
+		protected.POST("/goals", s.handleCreateGoal)
+		protected.PUT("/goals/:id", s.handleUpdateGoal)
+		protected.DELETE("/goals/:id", s.handleDeleteGoal)
 	}
 }
 
@@ -579,4 +587,94 @@ func (s *ServerV2) handleSovereignAuth(c *gin.Context, rawMsg, sessionKey string
 		"✅ **Sovereign session established — Level %d (%s)**\n\nCapabilities unlocked: %s\n\nSession expires in 1 hour of inactivity. Type `/auth off` to end.",
 		level, levelName, capabilities,
 	))
+}
+
+// --- DAG Goal Handlers ---
+
+func (s *ServerV2) handleListGoals(c *gin.Context) {
+	if s.GoalService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "goal service not available"})
+		return
+	}
+	status := c.Query("status") // optional filter: pending | active | completed | failed
+	goals, err := s.GoalService.ListObjectives(status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"goals": goals, "count": len(goals)})
+}
+
+func (s *ServerV2) handleCreateGoal(c *gin.Context) {
+	if s.GoalService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "goal service not available"})
+		return
+	}
+	var body struct {
+		Goal      string                 `json:"goal"`
+		Priority  int                    `json:"priority"`
+		DependsOn []string               `json:"depends_on"`
+		Metadata  map[string]interface{} `json:"metadata"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Goal == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "goal field required"})
+		return
+	}
+	if body.Priority == 0 {
+		body.Priority = 5 // default priority
+	}
+	meta := body.Metadata
+	if meta == nil {
+		meta = map[string]interface{}{}
+	}
+	if len(body.DependsOn) > 0 {
+		meta["depends_on_raw"] = body.DependsOn
+	}
+	id, err := s.GoalService.AddObjectiveWithDeps(body.Goal, body.Priority, meta, body.DependsOn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"id": id, "goal": body.Goal})
+}
+
+func (s *ServerV2) handleUpdateGoal(c *gin.Context) {
+	if s.GoalService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "goal service not available"})
+		return
+	}
+	id := c.Param("id")
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	found, err := s.GoalService.UpdateObjective(id, updates)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "goal not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": id})
+}
+
+func (s *ServerV2) handleDeleteGoal(c *gin.Context) {
+	if s.GoalService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "goal service not available"})
+		return
+	}
+	id := c.Param("id")
+	found, err := s.GoalService.DeleteObjective(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "goal not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": id})
 }

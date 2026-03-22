@@ -134,7 +134,11 @@ func main() {
 	log.Println("[Boot] Initializing Sovereign Engine...")
 	sovEngine := cognition.NewSovereignEngine(genService, swarmBus)
 	
-	// Initialize Reform Daemon (The Self-Modifier)
+	// Initialize GoalService + GoalExecutor (DAG Autonomous Execution)
+	goalDataPath := "/home/mike/Mavaia/.oricli/global_objectives.jsonl"
+	goalService := service.NewGoalService(goalDataPath)
+	goalExecutor := service.NewGoalExecutor(goalService, nil, 30*time.Second) // Router injected below
+	log.Println("[Boot] DAG GoalService initialized.")
 	reform := service.NewReformDaemon(traceStore, codeMetrics, genService, nil)
 	sovEngine.Reform = reform
 	go reform.Run(context.Background())
@@ -200,10 +204,17 @@ func main() {
 	apiPort := 8089
 	apiServer := api.NewServerV2(config.Load(), st, orch, agentService, monitor, apiPort)
 	apiServer.Traces = traceStore
-	
+	apiServer.GoalService = goalService
+
 	// Inject WS Hub into Sovereign Engine for real-time broadcasts
 	sovEngine.SetWSHub(apiServer.WSHub)
 	reform.WSHub = apiServer.WSHub
+
+	// Wire ActionRouter into GoalExecutor (router created inside NewServerV2)
+	goalExecutor.Router = apiServer.ActionRouter
+	apiServer.GoalExecutor = goalExecutor
+	go goalExecutor.Start(context.Background())
+	log.Println("[Boot] DAG GoalExecutor autonomous execution loop started.")
 	
 	go apiServer.Start()
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)
