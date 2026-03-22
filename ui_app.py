@@ -722,7 +722,11 @@ def chat() -> Response:
     target_url = f"{API_BASE}/v1/chat/completions"
 
     if stream:
-        return Response(_sse_stream(target_url, payload), mimetype="text/event-stream")
+        return Response(
+            _sse_stream(target_url, payload),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     try:
         resp = _forward_with_retry("POST", target_url, json_body=payload)

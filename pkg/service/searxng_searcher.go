@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/thynaptic/oricli-go/pkg/searchintent"
 )
 
 // SearXNGSearcher queries the local sovereign SearXNG instance for web search.
@@ -114,6 +116,106 @@ func (s *SearXNGSearcher) SearchPage(query string) ([]*searchResult, error) {
 		return nil, fmt.Errorf("searxng results had no valid URLs")
 	}
 	return results, nil
+}
+
+// SearchWithIntent uses a structured SearchQuery to set SearXNG categories and
+// time filters before searching, then delegates to Search().
+func (s *SearXNGSearcher) SearchWithIntent(q searchintent.SearchQuery) (string, error) {
+	// Build the URL with intent-aware parameters
+	params := fmt.Sprintf("%s/search?q=%s&format=json&categories=%s&language=en",
+		s.BaseURL,
+		url.QueryEscape(q.FormattedQuery),
+		string(q.Category),
+	)
+	if q.TimeRange != searchintent.TimeRangeNone {
+		params += "&time_range=" + string(q.TimeRange)
+	}
+
+	req, err := http.NewRequest("GET", params, nil)
+	if err != nil {
+		return "", fmt.Errorf("searxng intent request build failed: %w", err)
+	}
+	req.Header.Set("User-Agent", "Oricli/2.0 (Sovereign Research Agent; +https://oricli.thynaptic.com)")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		// Fallback: plain Search with formatted query
+		log.Printf("[SearXNGSearcher] Intent search failed (%v), falling back to plain search", err)
+		return s.Search(q.FormattedQuery)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		log.Printf("[SearXNGSearcher] Intent search returned %d, falling back", resp.StatusCode)
+		return s.Search(q.FormattedQuery)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("searxng intent response read failed: %w", err)
+	}
+
+	var sr searxngResponse
+	if err := json.Unmarshal(body, &sr); err != nil {
+		return "", fmt.Errorf("searxng intent JSON parse failed: %w", err)
+	}
+
+	if len(sr.Results) == 0 {
+		return "", fmt.Errorf("searxng returned no results for intent query %q", q.FormattedQuery)
+	}
+
+	var results []*searchResult
+	for i, r := range sr.Results {
+		if i >= s.MaxResults {
+			break
+		}
+		if !strings.HasPrefix(r.URL, "http") {
+			continue
+		}
+		// Boost source-hinted results by appending them first
+		entry := &searchResult{URL: r.URL, Snippet: r.Content}
+		for _, hint := range q.SourceHints {
+			if strings.Contains(r.URL, hint) {
+				results = append([]*searchResult{entry}, results...)
+				goto nextResult
+			}
+		}
+		results = append(results, entry)
+	nextResult:
+	}
+
+	if len(results) == 0 {
+		return "", fmt.Errorf("searxng intent results had no valid URLs")
+	}
+
+	// Fetch page bodies via Colly for top results
+	s.colly.FetchResultPages(results)
+
+	var sb strings.Builder
+	for i, r := range results {
+		sb.WriteString(fmt.Sprintf("=== Result %d [%s]: %s ===\n", i+1, string(q.Intent), r.URL))
+		if r.Body != "" {
+			sb.WriteString(r.Body)
+		} else if r.Snippet != "" {
+			sb.WriteString(r.Snippet)
+		}
+		sb.WriteString("\n\n")
+		if sb.Len() > s.MaxChars {
+			break
+		}
+	}
+
+	out := strings.TrimSpace(sb.String())
+	if len(out) > s.MaxChars {
+		out = out[:s.MaxChars] + "... (truncated)"
+	}
+	if out == "" {
+		return s.Search(q.FormattedQuery) // final fallback
+	}
+
+	log.Printf("[SearXNGSearcher] Intent search (%s) complete — %d results, %d chars", q.Intent, len(results), len(out))
+	return out, nil
 }
 
 // Search returns combined text from SearXNG search + Colly page fetching.

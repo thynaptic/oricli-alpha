@@ -1,6 +1,6 @@
 # Oricli-Alpha — Safety Framework Test Report
 
-> Generated: 2026-03-22 00:49:13 UTC  
+> Generated: 2026-03-22 13:14:52 UTC  
 > Command: `go test ./pkg/safety/... -v -count=1`
 
 ## Summary

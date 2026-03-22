@@ -105,6 +105,9 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	curiosity := service.NewCuriosityDaemon(agent.SovEngine.Graph, agent.SovEngine.VDI, agent.GenService, hub)
 	s.ActionRouter = service.NewActionRouter(research, curiosity, hub)
 
+	// Inject SearXNG searcher into SovereignEngine (avoids import cycle)
+	agent.SovEngine.SearXNG = service.NewSearXNGSearcher()
+
 	s.setupRoutes()
 	return s
 }

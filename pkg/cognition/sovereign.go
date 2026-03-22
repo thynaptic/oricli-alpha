@@ -18,6 +18,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/tools"
 	"github.com/thynaptic/oricli-go/pkg/connectors/mcp"
 	"github.com/thynaptic/oricli-go/pkg/connectors/telegram"
+	"github.com/thynaptic/oricli-go/pkg/searchintent"
 	"github.com/thynaptic/oricli-go/pkg/vdi"
 	"github.com/thynaptic/oricli-go/pkg/voice"
 )
@@ -84,6 +85,13 @@ type EventBroadcaster interface {
 }
 
 // --- Pillar 5: Sovereign Engine (The Synthesis) ---
+// WebSearcher is satisfied by *service.SearXNGSearcher.
+// Defined here to avoid import cycles between cognition and service.
+type WebSearcher interface {
+	SearchWithIntent(q searchintent.SearchQuery) (string, error)
+	IsAvailable() bool
+}
+
 type SovereignEngine struct {
 	Subconscious *SubconsciousField
 	Sentiment    *AffectiveState
@@ -128,6 +136,9 @@ type SovereignEngine struct {
 	Telegram     *telegram.Client
 	VDI          *vdi.Manager
 	Vision       *vdi.VisionGroundingService
+	// SearXNG is an intent-aware web search interface. Injected from server_v2
+	// to avoid import cycles (service ↔ cognition). Set via InjectSearXNG().
+	SearXNG      WebSearcher
 	Voice        *voice.VoicePiperService
 	Reform       interface{}
 	Curiosity    interface{}
@@ -187,6 +198,7 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 		MCP:          mcp.NewMCPManager("oricli_core/mcp_config.json"),
 		Telegram:     telegram.NewClient(tgToken, tgChatID),
 		VDI:          vdi.NewManager(),
+		// SearXNG is injected after construction via InjectSearXNG() in server_v2
 		Voice:        voice.NewVoicePiperService("/home/mike/puppy-princess-os/voice/piper/piper", "/home/mike/puppy-princess-os/voice/en_US-lessac-medium.onnx", nil),
 		Scheduler:    kernel.NewScheduler(swarmBus),
 		Indexer:      vdi.NewFSIndexer(memory.NewWorkingMemoryGraph()), // Will be synced with engine.Graph later
@@ -309,8 +321,33 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	// Anchor live affective state into the graph
 	go e.Extractor.HydrateGraph(stimulus, e.Graph, e.Sentiment.Valence, e.Sentiment.Arousal, e.Resonance.Current.ERI)
 
+	// --- Step 8.5: Inline Web Context (ConfidenceDetector) ---
+	// If the prompt signals a factual/entity/definition need, fetch a context
+	// snippet BEFORE prompt assembly so the LLM has grounded facts to draw on.
+	webContext := ""
+	if e.SearXNG != nil && e.SearXNG.IsAvailable() {
+		if needsSearch, sq := DetectUncertainty(stimulus); needsSearch {
+			rawCtx, searchErr := e.SearXNG.SearchWithIntent(sq)
+			if searchErr == nil && rawCtx != "" {
+				// Cap injected context to avoid prompt bloat
+				if len(rawCtx) > 1200 {
+					rawCtx = rawCtx[:1200] + "... [truncated]"
+				}
+				webContext = fmt.Sprintf(
+					"\n\n### WEB CONTEXT [%s — %q]\n%s\n### END WEB CONTEXT\n",
+					sq.Intent, sq.RawTopic, rawCtx,
+				)
+				log.Printf("[ConfidenceDetector] Injected web context (%s, %d chars) for: %q",
+					sq.Intent, len(rawCtx), sq.RawTopic)
+			}
+		}
+	}
+
 	// --- Step 9: Final Composite Instruction Assembly ---
 	composite := e.Builder.BuildCompositePrompt(e, stimulus)
+	if webContext != "" {
+		composite += webContext
+	}
 	
 	// Add Constitutional Prompt
 	composite += "\n\n" + e.SCAI.Constitution.GetSystemPrompt()
