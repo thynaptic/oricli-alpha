@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
@@ -23,6 +24,11 @@ type SearXNGSearcher struct {
 	Timeout    time.Duration
 	client     *http.Client
 	colly      *CollySearcher
+
+	// availability cache — avoids a healthz ping on every inference (30s TTL)
+	availMu  sync.Mutex
+	availVal bool
+	availAt  time.Time
 }
 
 // searxngResponse is the JSON envelope returned by SearXNG.
@@ -51,14 +57,76 @@ func NewSearXNGSearcher() *SearXNGSearcher {
 }
 
 // IsAvailable performs a lightweight health check against the SearXNG instance.
+// Result is cached for 30 seconds to avoid a network round-trip on every inference.
 func (s *SearXNGSearcher) IsAvailable() bool {
+	s.availMu.Lock()
+	defer s.availMu.Unlock()
+	if time.Since(s.availAt) < 30*time.Second {
+		return s.availVal
+	}
 	c := &http.Client{Timeout: 3 * time.Second}
 	resp, err := c.Get(s.BaseURL + "/healthz")
-	if err != nil {
-		return false
+	ok := err == nil && resp != nil && resp.StatusCode == 200
+	if err == nil && resp != nil {
+		resp.Body.Close()
 	}
-	resp.Body.Close()
-	return resp.StatusCode == 200
+	s.availVal = ok
+	s.availAt = time.Now()
+	return ok
+}
+
+// SearchWithIntentFast is optimised for inline chat inference: snippets only (no Colly
+// page fetch), hard 3-second timeout. Sufficient for context injection; full page
+// fetching is left for the CuriosityDaemon which can afford longer waits.
+func (s *SearXNGSearcher) SearchWithIntentFast(q searchintent.SearchQuery) (string, error) {
+	c := &http.Client{Timeout: 3 * time.Second}
+	params := fmt.Sprintf("%s/search?q=%s&format=json&categories=%s&language=en",
+		s.BaseURL, url.QueryEscape(q.FormattedQuery), string(q.Category))
+	if q.TimeRange != searchintent.TimeRangeNone {
+		params += "&time_range=" + string(q.TimeRange)
+	}
+
+	req, err := http.NewRequest("GET", params, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Oricli/2.0 (Sovereign Research Agent)")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("searxng returned %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var sr searxngResponse
+	if err := json.Unmarshal(body, &sr); err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	for i, r := range sr.Results {
+		if i >= s.MaxResults || !strings.HasPrefix(r.URL, "http") || r.Content == "" {
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("[%s] %s\n", r.URL, r.Content))
+		if sb.Len() > 1200 {
+			break
+		}
+	}
+	out := strings.TrimSpace(sb.String())
+	if out == "" {
+		return "", fmt.Errorf("no snippets returned")
+	}
+	log.Printf("[SearXNG] Fast search (%s) — %d chars for %q", q.Intent, len(out), q.RawTopic)
+	return out, nil
 }
 
 // SearchPage returns structured results (URL + snippet) for query via SearXNG JSON API.

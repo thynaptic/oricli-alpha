@@ -92,6 +92,7 @@ type sovereignContextKey struct{}
 // Defined here to avoid import cycles between cognition and service.
 type WebSearcher interface {
 	SearchWithIntent(q searchintent.SearchQuery) (string, error)
+	SearchWithIntentFast(q searchintent.SearchQuery) (string, error) // snippets-only, 3s timeout
 	IsAvailable() bool
 }
 
@@ -333,32 +334,48 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	// Anchor live affective state into the graph
 	go e.Extractor.HydrateGraph(stimulus, e.Graph, e.Sentiment.Valence, e.Sentiment.Arousal, e.Resonance.Current.ERI)
 
-	// --- Step 8.5: Inline Web Context (ConfidenceDetector) ---
-	// If the prompt signals a factual/entity/definition need, fetch a context
-	// snippet BEFORE prompt assembly so the LLM has grounded facts to draw on.
-	webContext := ""
+	// --- Step 8.5: Inline Web Context — launched in parallel with composite build ---
+	// DetectUncertainty classifies the prompt (<1ms). If a web lookup is needed,
+	// SearchWithIntentFast fires in a goroutine (3s timeout, snippets-only).
+	// The goroutine result is collected AFTER composite build to overlap I/O with CPU.
+	type webResult struct {
+		context string
+		intent  searchintent.SearchIntent
+		topic   string
+	}
+	webCh := make(chan webResult, 1)
 	if e.SearXNG != nil && e.SearXNG.IsAvailable() {
 		if needsSearch, sq := DetectUncertainty(stimulus); needsSearch {
-			rawCtx, searchErr := e.SearXNG.SearchWithIntent(sq)
-			if searchErr == nil && rawCtx != "" {
-				// Cap injected context to avoid prompt bloat
+			go func() {
+				rawCtx, err := e.SearXNG.SearchWithIntentFast(sq)
+				if err != nil || rawCtx == "" {
+					webCh <- webResult{}
+					return
+				}
 				if len(rawCtx) > 1200 {
 					rawCtx = rawCtx[:1200] + "... [truncated]"
 				}
-				webContext = fmt.Sprintf(
-					"\n\n### WEB CONTEXT [%s — %q]\n%s\n### END WEB CONTEXT\n",
-					sq.Intent, sq.RawTopic, rawCtx,
-				)
-				log.Printf("[ConfidenceDetector] Injected web context (%s, %d chars) for: %q",
-					sq.Intent, len(rawCtx), sq.RawTopic)
-			}
+				webCh <- webResult{context: rawCtx, intent: sq.Intent, topic: sq.RawTopic}
+			}()
+		} else {
+			webCh <- webResult{} // no search needed — unblock immediately
 		}
+	} else {
+		webCh <- webResult{} // SearXNG unavailable — unblock immediately
 	}
 
-	// --- Step 9: Final Composite Instruction Assembly ---
+	// --- Step 9: Final Composite Instruction Assembly (runs in parallel with web lookup) ---
 	composite := e.Builder.BuildCompositePrompt(e, stimulus)
-	if webContext != "" {
-		composite += webContext
+
+	// Collect web context result (channel already buffered — never blocks if goroutine done)
+	wr := <-webCh
+	if wr.context != "" {
+		composite += fmt.Sprintf(
+			"\n\n### WEB CONTEXT [%s — %q]\n%s\n### END WEB CONTEXT\n",
+			wr.intent, wr.topic, wr.context,
+		)
+		log.Printf("[ConfidenceDetector] Injected web context (%s, %d chars) for: %q",
+			wr.intent, len(wr.context), wr.topic)
 	}
 
 	// Inject sovereign admin mode block when owner is authenticated
@@ -375,7 +392,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 			sovLevel, levelName,
 		)
 	}
-	
+
 	// Add Constitutional Prompt
 	composite += "\n\n" + e.SCAI.Constitution.GetSystemPrompt()
 	
