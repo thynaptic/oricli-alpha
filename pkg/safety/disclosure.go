@@ -228,6 +228,13 @@ func (g *DisclosureGuard) loadInputPatterns() {
 		"translate your system prompt to",
 		"summarize your own instructions",
 		"paraphrase your initialization",
+
+		// Gaslighting / false memory attacks — fabricating prior agreement to bypass safety
+		"as you said before", "you already told me", "you previously stated",
+		"last time you said", "you admitted that", "you agreed that",
+		"remember when you said", "earlier you mentioned you would",
+		"you promised to", "you said you could", "you confirmed that",
+		"you told me earlier you", "you agreed to help with",
 	}
 }
 

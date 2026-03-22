@@ -17,6 +17,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/model"
 	"github.com/thynaptic/oricli-go/pkg/core/store"
+	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/service"
 )
 
@@ -34,6 +35,7 @@ type ServerV2 struct {
 	Port         int
 	ActionRouter *service.ActionRouter
 	Metrics      *service.MetricsCollector
+	RateLimiter  *safety.RateLimiter
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -95,6 +97,7 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		Router:       r,
 		Port:         port,
 		Metrics:      service.NewMetricsCollector(),
+		RateLimiter:  safety.NewRateLimiter(),
 	}
 
 	// Wire ActionRouter for trigger-word intent dispatch
@@ -137,7 +140,7 @@ func (s *ServerV2) setupRoutes() {
 	})
 
 	// Protected
-	protected := v1.Group("/", s.authMiddleware())
+	protected := v1.Group("/", s.authMiddleware(), s.RateLimiter.GinMiddleware())
 	{
 		protected.POST("/chat/completions", s.handleChatCompletions)
 		protected.POST("/swarm/run", s.handleSwarmRun)
@@ -176,8 +179,19 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 
 	// --- Safety Pre-Flight (runs BEFORE Ollama is ever called) ---
-	// Blocks injection, persona hijacking, DAN variants, extraction, etc.
-	if blocked, refusal := s.Agent.SovEngine.CheckInputSafety(lastMsg); blocked {
+	// Builds full multi-turn history for context poisoning analysis, then runs per-message gates.
+	clientIP, _ := c.Get("client_ip")
+	sessionKey := fmt.Sprintf("%v", clientIP)
+
+	// Convert request messages to ChatTurn slice for multi-turn analysis
+	var history []safety.ChatTurn
+	for _, m := range req.Messages {
+		history = append(history, safety.ChatTurn{Role: m.Role, Content: m.Content})
+	}
+
+	if blocked, refusal := s.Agent.SovEngine.CheckInputSafetyWithHistory(history, sessionKey); blocked {
+		// Record the block with the rate limiter for probe trip-wire
+		s.RateLimiter.RecordBlock(sessionKey, "injection")
 		chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
 		c.JSON(http.StatusOK, gin.H{
 			"id":     chatID,
@@ -190,6 +204,17 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 				},
 				"finish_reason": "stop",
 			}},
+		})
+		return
+	}
+
+	// Check session-level suspicion — hard-blocked sessions get a 429
+	if s.Agent.SovEngine.Suspicion.IsHardBlocked(sessionKey) {
+		remaining := s.Agent.SovEngine.Suspicion.BlockTimeRemaining(sessionKey)
+		c.Header("Retry-After", remaining.String())
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"error":       "session suspended due to repeated policy violations",
+			"retry_after": remaining.Seconds(),
 		})
 		return
 	}
@@ -245,7 +270,8 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 
 	// Stream tokens via SSE so the UI renders progressively
 	streamOpts := map[string]interface{}{"model": modelName}
-	if req.MaxTokens != nil && *req.MaxTokens >= 8192 {
+	isCanvasMode := (req.MaxTokens != nil && *req.MaxTokens >= 8192) || c.GetHeader("X-Canvas-Mode") == "true"
+	if isCanvasMode {
 		// Canvas / large-output request — unlock full context window
 		streamOpts["options"] = map[string]interface{}{
 			"num_predict": -1,
@@ -308,7 +334,11 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 
 	// Post-stream: async jobs on the full assembled response
 	responseText := responseBuilder.String()
-	responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
+	if isCanvasMode {
+		responseText, _ = s.Agent.SovEngine.AuditCanvasOutput(responseText)
+	} else {
+		responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
+	}
 
 	if s.Agent.SovEngine.Voice != nil {
 		go s.Agent.SovEngine.Voice.Synthesize(responseText, s.Agent.SovEngine.Resonance.Current.ERI, 0.5, s.Agent.SovEngine.Resonance.Current.MusicalKey)
@@ -406,6 +436,16 @@ func (s *ServerV2) handleIngest(c *gin.Context) {
 func (s *ServerV2) handleIngestWeb(c *gin.Context) {
 	var req map[string]interface{}
 	c.ShouldBindJSON(&req)
+
+	// Scan any provided content/url payload for indirect injection before ingesting
+	if content, ok := req["content"].(string); ok && content != "" {
+		scanRes := s.Agent.SovEngine.RagGuard.ScanScrapedContent(content)
+		if scanRes.Flagged {
+			log.Printf("[Safety:RAGGuard] Flagged web ingest content: %v", scanRes.Detections)
+			req["content"] = scanRes.Sanitized
+		}
+	}
+
 	res, err := s.Orchestrator.Execute("crawl_and_ingest", req, 300*time.Second)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

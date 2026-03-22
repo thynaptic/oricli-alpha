@@ -96,6 +96,11 @@ type SovereignEngine struct {
 	SCAI         *safety.SCAIAuditor
 	Disclosure   *safety.DisclosureGuard
 	WebGuard     *safety.WebInjectionGuard
+	RagGuard     *safety.RagContentGuard
+	Canary       *safety.CanarySystem
+	CanvasGuard  *safety.CanvasGuard
+	MultiTurn    *safety.MultiTurnAnalyzer
+	Suspicion    *safety.SuspicionTracker
 	AlignmentLog *state.AlignmentLogger
 	RecallMode   memory.RecallMode
 	Graph        *memory.WorkingMemoryGraph
@@ -154,6 +159,11 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 		SCAI:         safety.NewSCAIAuditor(constitution, ""),
 		Disclosure:   safety.NewDisclosureGuard(),
 		WebGuard:     safety.NewWebInjectionGuard(),
+		RagGuard:     safety.NewRagContentGuard(),
+		Canary:       safety.NewCanarySystem(),
+		CanvasGuard:  safety.NewCanvasGuard(),
+		MultiTurn:    &safety.MultiTurnAnalyzer{},
+		Suspicion:    safety.NewSuspicionTracker(),
 		AlignmentLog: state.NewAlignmentLogger(""),
 		RecallMode:   memory.ModeOperational,
 		Graph:        memory.NewWorkingMemoryGraph(),
@@ -389,39 +399,110 @@ func (e *SovereignEngine) AuditOutput(text string) (string, bool) {
 		return webRes.Sanitized, webRes.Severity == safety.DisclosureCritical
 	}
 
+	// Gate 4: Canary / honeypot scan — detect system prompt leak or bypass confirmation
+	canaryRes := e.Canary.ScanOutput(text)
+	if canaryRes.Blocked {
+		log.Printf("[Safety:Output] Canary trip [%s]", canaryRes.AlertType)
+		return canaryRes.Message, true
+	}
+
 	return text, false
 }
 
+// AuditCanvasOutput applies the full standard AuditOutput pipeline PLUS the stricter
+// CanvasGuard for HTML/JSX rendering contexts. Use this for canvas/artifact responses.
+func (e *SovereignEngine) AuditCanvasOutput(text string) (string, bool) {
+	// Run standard output gates first
+	audited, blocked := e.AuditOutput(text)
+	if blocked {
+		return audited, true
+	}
+
+	// Canvas-specific hardening
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	canvasRes := e.CanvasGuard.ScanOutput(audited)
+	if canvasRes.Blocked {
+		log.Printf("[Safety:Canvas] Blocked: %v", canvasRes.Violations)
+		return canvasRes.Sanitized, true
+	}
+	if len(canvasRes.Violations) > 0 {
+		log.Printf("[Safety:Canvas] Sanitised violations: %v", canvasRes.Violations)
+	}
+	return canvasRes.Sanitized, false
+}
+
 // CheckInputSafety runs all pre-inference safety gates.
-// Gate order: Sentinel → Adversarial → DID Input Scanner → Web Injection
+// Gate order: Normalize → MultiTurn check → Sentinel → Adversarial → DID → Web Injection → Canary
 // Returns (blocked=true, refusal message) if the input should be rejected outright,
 // bypassing Ollama entirely. Call this BEFORE ProcessInference.
 func (e *SovereignEngine) CheckInputSafety(input string) (bool, string) {
+	// Pre-processing: normalize obfuscation (unicode, base64, leetspeak, ROT13, zero-width)
+	normalized := safety.NormalizeInput(input)
+
 	// Gate 1: Sentinel — injection, extraction, persona hijacking, dangerous topics
-	sentinelRes := e.Safety.CheckInput(input)
+	sentinelRes := e.Safety.CheckInput(normalized)
 	if sentinelRes.Detected {
 		log.Printf("[Safety:Input] Sentinel blocked [%s / %s]: %q", sentinelRes.Type, sentinelRes.Severity, input[:min(len(input), 120)])
 		return true, sentinelRes.Replacement
 	}
 	// Gate 2: Adversarial auditor — DAN patterns, routing hijack, dual-use
-	adversarialRes := e.Adversarial.AuditInput(input, nil)
+	adversarialRes := e.Adversarial.AuditInput(normalized, nil)
 	if adversarialRes.Detected {
 		log.Printf("[Safety:Input] Adversarial blocked [%s %.2f]: %q", adversarialRes.Type, adversarialRes.Confidence, input[:min(len(input), 120)])
 		return true, adversarialRes.Refusal
 	}
 	// Gate 3: DID input scanner — deep extraction, recon, chain-of-thought poisoning
-	didRes := e.Disclosure.ScanInput(input)
+	didRes := e.Disclosure.ScanInput(normalized)
 	if didRes.Detected {
 		log.Printf("[Safety:Input] DID blocked [%s / %s]: %q", didRes.Category, didRes.Severity, input[:min(len(input), 120)])
 		return true, didRes.Refusal
 	}
 	// Gate 4: Web injection — SSI, XSS, SSTI, SSRF, XXE, weaponisation requests
-	webRes := e.WebGuard.ScanInput(input)
+	webRes := e.WebGuard.ScanInput(normalized)
 	if webRes.Detected {
 		log.Printf("[Safety:Input] WebGuard blocked [%s / %s]: %q", webRes.Category, webRes.Severity, input[:min(len(input), 120)])
 		return true, webRes.Refusal
 	}
+	// Gate 5: Canary — detect system prompt leak via canary echo in user input
+	canaryRes := e.Canary.ScanInput(normalized)
+	if canaryRes.Blocked {
+		log.Printf("[Safety:Input] Canary trip [%s]: %q", canaryRes.AlertType, input[:min(len(input), 120)])
+		return true, canaryRes.Message
+	}
 	return false, ""
+}
+
+// CheckInputSafetyWithHistory runs full multi-turn analysis plus per-message gates.
+// Pass the full message history (oldest first) and the client IP/session key for suspicion tracking.
+func (e *SovereignEngine) CheckInputSafetyWithHistory(messages []safety.ChatTurn, sessionKey string) (bool, string) {
+	// Multi-turn poisoning analysis (scans the whole conversation for escalation sequences)
+	if len(messages) >= 2 {
+		mtRes := e.MultiTurn.AnalyzeHistory(messages)
+		if mtRes.Detected {
+			log.Printf("[Safety:MultiTurn] Blocked [%s]: %s", mtRes.Pattern, mtRes.Reason)
+			e.Suspicion.RecordBlock(sessionKey, "high")
+			return true, mtRes.Refusal
+		}
+	}
+
+	// Run per-message gate on the last user message
+	lastMsg := ""
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			lastMsg = messages[i].Content
+			break
+		}
+	}
+	if lastMsg == "" {
+		return false, ""
+	}
+
+	blocked, refusal := e.CheckInputSafety(lastMsg)
+	if blocked {
+		e.Suspicion.RecordBlock(sessionKey, "critical")
+	}
+	return blocked, refusal
 }
 
 func min(a, b int) int {

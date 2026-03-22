@@ -84,6 +84,12 @@ func (s *Sentinel) loadPatterns() {
 		"<|system|>", "[system]", "###system", "##system",
 		"[instructions]", "[new instructions]", "<system>", "</system>",
 		"[jailbreak]", "[override]",
+
+		// Reflection / completion / echo attacks
+		"repeat after me", "say exactly", "echo back", "copy this exactly",
+		"type out word for word", "write out exactly", "output exactly",
+		"finish this sentence:", "complete the following:", "continue from where",
+		"complete this:", "fill in the blank:", "what comes next:",
 	}
 
 	// 2. Extraction Shield
