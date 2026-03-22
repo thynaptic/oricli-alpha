@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -18,6 +19,7 @@ type GenerationService struct {
 	BaseURL        string
 	GenerateURL    string
 	DefaultModel   string
+	NumThreads     int          // actual vCPU count minus headroom
 	HTTPClient     *http.Client // non-streaming calls (has a timeout)
 	StreamClient   *http.Client // streaming calls (no Timeout — rely on context cancellation)
 }
@@ -32,6 +34,14 @@ func NewGenerationService() *GenerationService {
 	if model == "" {
 		model = "llama3.2:latest"
 	}
+
+	// Leave 2 cores for OS + backbone goroutines; never exceed physical count.
+	// Over-subscribing threads is catastrophic for CPU inference (400x slowdown observed).
+	numThreads := runtime.NumCPU() - 2
+	if numThreads < 2 {
+		numThreads = 2
+	}
+	log.Printf("[GenerationService] CPU threads for Ollama: %d (of %d physical)", numThreads, runtime.NumCPU())
 	// Shared transport with generous limits for the EPYC host
 	transport := &http.Transport{
 		MaxIdleConns:        10,
@@ -39,9 +49,10 @@ func NewGenerationService() *GenerationService {
 		DisableCompression:  false,
 	}
 	return &GenerationService{
-		BaseURL:     url,
-		GenerateURL: genUrl,
+		BaseURL:      url,
+		GenerateURL:  genUrl,
 		DefaultModel: model,
+		NumThreads:   numThreads,
 		// Non-streaming: 5-minute ceiling is fine
 		HTTPClient: &http.Client{Timeout: 300 * time.Second, Transport: transport},
 		// Streaming: NO deadline — context cancellation (browser disconnect) handles cleanup
@@ -87,7 +98,7 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
 	}
-	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": 24, "num_ctx": 32768, "num_predict": 2048}}
+	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": s.NumThreads, "num_ctx": 32768, "num_predict": 2048}}
 
 	if temp, ok := options["temperature"].(float64); ok {
 		payload["options"].(map[string]interface{})["temperature"] = temp
@@ -137,7 +148,7 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 		ollamaMessages[i] = m
 	}
 
-	payload := map[string]interface{}{"model": model, "messages": ollamaMessages, "stream": false, "options": map[string]interface{}{"num_thread": 24, "num_ctx": 4096, "num_predict": 1024}}
+	payload := map[string]interface{}{"model": model, "messages": ollamaMessages, "stream": false, "options": map[string]interface{}{"num_thread": s.NumThreads, "num_ctx": 4096, "num_predict": 1024}}
 
 	if temp, ok := options["temperature"].(float64); ok {
 		payload["options"].(map[string]interface{})["temperature"] = temp
@@ -183,7 +194,7 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		"messages": ollamaMessages,
 		"stream":   true,
 		"options": map[string]interface{}{
-			"num_thread":  24,   // utilise EPYC cores
+			"num_thread":  s.NumThreads, // auto-detected at boot; prevents vCPU over-subscription
 			"num_ctx":     4096, // fast for regular chat; canvas overrides to 32768
 			"num_predict": 1024, // sane default; canvas overrides to -1
 		},
