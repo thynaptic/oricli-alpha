@@ -87,7 +87,7 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
 	}
-	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": 24, "num_ctx": 32768, "num_predict": -1}}
+	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": 24, "num_ctx": 32768, "num_predict": 2048}}
 
 	if temp, ok := options["temperature"].(float64); ok {
 		payload["options"].(map[string]interface{})["temperature"] = temp
@@ -256,15 +256,21 @@ func (s *GenerationService) postJSON(path string, payload interface{}) (map[stri
 	url := fmt.Sprintf("%s%s", targetURL, path)
 	log.Printf("[DEBUG] Sending to Ollama %s: %s", url, string(body))
 
-        resp, err := s.HTTPClient.Post(url, "application/json", bytes.NewReader(body))
-        if err != nil { return nil, err }
-        defer resp.Body.Close()
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
 
-        if resp.StatusCode >= 400 {
-            log.Printf("[DEBUG] Ollama returned status %d for path %s", resp.StatusCode, path)
-        }
+	resp, err := s.HTTPClient.Do(req)
+	if err != nil { return nil, err }
+	defer resp.Body.Close()
 
-        var result map[string]interface{}
-        json.NewDecoder(resp.Body).Decode(&result)
-        return result, nil
+	if resp.StatusCode >= 400 {
+		log.Printf("[DEBUG] Ollama returned status %d for path %s", resp.StatusCode, path)
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	return result, nil
 }

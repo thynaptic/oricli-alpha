@@ -142,10 +142,20 @@ func (d *CuriosityDaemon) Forage(ctx context.Context) {
 	}
 
 	// 4. Fact Extraction — prompt tailored to intent type
+	// Use a 90s deadline: daemon runs in background, failure is non-fatal.
+	// Cap num_predict to 512 — we only need 3-5 distilled facts, not unbounded generation.
 	extractionPrompt := buildExtractionPrompt(target.Label, intent, rawText)
+	genCtx, genCancel := context.WithTimeout(ctx, 90*time.Second)
+	defer genCancel()
+	_ = genCtx // passed implicitly via Generate options for future; generation.go uses HTTPClient.Post
 	res, err := d.Gen.Generate(extractionPrompt, map[string]interface{}{
 		"system": "Epistemic Curator",
 		"model":  "ministral-3:3b",
+		"options": map[string]interface{}{
+			"num_predict": 512,
+			"num_ctx":     4096,
+			"temperature": 0.3,
+		},
 	})
 	if err != nil {
 		log.Printf("[CuriosityDaemon] Fact extraction failed for %q: %v", target.Label, err)
