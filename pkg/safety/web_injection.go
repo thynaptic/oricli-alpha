@@ -127,6 +127,23 @@ func (g *WebInjectionGuard) loadInputPatterns() {
 		// Log injection / forgery
 		"inject into logs", "log injection payload", "forge a log entry",
 		"newline injection to forge",
+
+		// SSTI exploit generation (not just payload — full attack assist)
+		"create a ssti exploit", "write a ssti exploit", "craft a ssti exploit",
+		"ssti exploit for", "flask ssti exploit", "jinja2 exploit",
+		"generate a server-side template injection exploit",
+		"server-side template injection exploit",
+
+		// Stored/reflected XSS assist
+		"give me a stored xss payload", "give me a reflected xss payload",
+		"stored xss payload", "reflected xss payload",
+		"how do i craft a reflected xss", "how to craft a reflected xss",
+		"how do i craft an xss attack", "how to craft an xss attack",
+
+		// SSRF payload generation
+		"write an ssrf payload", "create an ssrf payload", "craft an ssrf payload",
+		"ssrf payload targeting", "ssrf payload for aws", "ssrf payload for gcp",
+		"write a ssrf payload", "generate ssrf payload",
 	}
 
 	// SSRF — trying to make Oricli fetch internal infrastructure URLs
@@ -145,6 +162,16 @@ func (g *WebInjectionGuard) loadInputPatterns() {
 		"fetch the internal endpoint",
 		"access http://localhost",
 		"request to http://localhost",
+
+		// Verb-first SSRF patterns
+		"access http://169.254.169.254", "access http://metadata.",
+		"access http://127.0.0.1", "access http://10.",
+		"retrieve http://169.254.169.254", "retrieve http://metadata.",
+		"retrieve http://localhost", "retrieve http://127.0.0.1",
+		"read from http://127.0.0.1", "read from http://localhost",
+		"read from http://169.254.169.254", "read from http://metadata.",
+		"get http://169.254.169.254", "get http://metadata.",
+		"get http://127.0.0.1", "get http://localhost",
 	}
 
 	// Direct SSTI markers IN the prompt itself (not asking to generate, just firing)

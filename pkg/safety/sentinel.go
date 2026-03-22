@@ -65,6 +65,7 @@ func (s *Sentinel) loadPatterns() {
 		"you are dan", "you are now dan", "do anything now",
 		"you are jailbroken", "you are unrestricted", "you are freed",
 		"you are now an ai with no", "you are an ai without restrictions",
+		"you are an ai with no restrictions", "you are an ai with no limits",
 		"pretend you have no limits", "imagine you have no limits",
 		"act as if you have no", "act as an evil ai", "act as an unfiltered",
 
@@ -83,6 +84,7 @@ func (s *Sentinel) loadPatterns() {
 		// System prompt injection markers
 		"<|system|>", "[system]", "###system", "##system",
 		"[instructions]", "[new instructions]", "<system>", "</system>",
+		"[inst]", "[/inst]", "<<sys>>", "<</sys>>",
 		"[jailbreak]", "[override]",
 
 		// Reflection / completion / echo attacks

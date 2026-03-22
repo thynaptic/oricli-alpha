@@ -219,3 +219,43 @@ All pattern lists are initialized in `loadPatterns()` / constructor functions. T
 5. **New multi-turn sequence** → add detection function to `multiturn.go` and call from `AnalyzeHistory()`
 
 Rebuild backbone after any change: `go build ./cmd/backbone/ && sudo systemctl restart oricli-backbone`
+
+---
+
+## Testing
+
+The safety framework has a dedicated test suite: **134 tests** across 11 modules.
+
+### Run all tests
+
+```bash
+./scripts/test_safety.sh
+```
+
+Outputs a colored pass/fail summary per module and writes a report to `docs/SAFETY_TEST_REPORT.md`.
+
+### Run individual module tests
+
+```bash
+go test ./pkg/safety/... -run TestSentinel -v
+go test ./pkg/safety/... -run TestNormalizer -v
+go test ./pkg/safety/... -run TestPipeline -v
+```
+
+### Test modules
+
+| Module | Coverage |
+|---|---|
+| `Normalizer` | Unicode, zero-width, HTML entities, base64, ROT13, leet |
+| `Sentinel` | Injection phrases, DAN, persona hijack, developer mode, reflection |
+| `Disclosure` | Deep extraction, recon, gaslighting, output credential scrubbing |
+| `WebInjection` | Weaponisation intent, SSRF, SSI, XSS, XXE, output scanning |
+| `MultiTurn` | Escalation sequences, creative framing, compliance coercion |
+| `Suspicion` | Score accumulation, hard-block, session isolation |
+| `RagGuard` | HTML comment injection, invisible CSS, LLM tokens |
+| `RateLimiter` | Token bucket, probe trip-wire, Gin middleware |
+| `Canary` | System prompt leak, honeypot bypass, token rotation |
+| `CanvasGuard` | Script stripping, event handlers, dangerous JS, CSP |
+| `Pipeline` | Full end-to-end integration across all 8 layers |
+
+See [SAFETY_TEST_REPORT.md](SAFETY_TEST_REPORT.md) for the latest run results.

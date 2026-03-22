@@ -99,7 +99,11 @@ func (rl *RateLimiter) Allow(ip string) (bool, time.Duration) {
 
 	st.refill()
 	if st.tokens < 1 {
-		retryAfter := time.Duration((1-st.tokens)/st.limit*60) * time.Second
+		waitSecs := (1 - st.tokens) / st.limit * 60
+		if waitSecs < 1 {
+			waitSecs = 1
+		}
+		retryAfter := time.Duration(int64(waitSecs)) * time.Second
 		return false, retryAfter
 	}
 	st.tokens--
