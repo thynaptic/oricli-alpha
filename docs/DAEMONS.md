@@ -1,7 +1,7 @@
 # Oricli-Alpha Autonomous Daemons
 
 **Document Type:** Technical Reference  
-**Version:** v2.3.0  
+**Version:** v2.4.0  
 **Status:** Active  
 
 Oricli-Alpha maintains seven background daemons that run as goroutines within the Go-native backbone (`pkg/service/daemon.go`, `curiosity_daemon.go`, `reform_daemon.go`, `pkg/kernel/scaling.go`). They are started at boot and communicate with the system exclusively through the Swarm Bus — zero polling overhead on the main inference path.
@@ -110,12 +110,12 @@ After fetching raw content, the distillation prompt is customized per intent:
 
 ### Search Stack
 
-1. **SearXNG** (primary) — `SearchWithIntent(q SearchQuery)` sets SearXNG `categories` and `time_range` based on intent. Source-hinted results (e.g. wikipedia.org for DEFINITION) are front-promoted. Aggregates Google, Bing, DuckDuckGo, and Wikipedia in one shot. No bot detection issues.
-2. **Colly page fetcher** — follows top URLs to extract full body text from each page.
-3. **VDI / chromedp** (secondary) — headless browser session; used if SearXNG is unavailable.
-4. **CollySearcher DDG** (last resort) — Colly directly scrapes DDG Lite; prone to bot-detection on VPS.
+1. **SearXNG `SearchWithURLs()`** (primary) — returns structured `[]WebSearchResult` with real article URLs, titles, and snippets. Intent-aware categories + time_range applied. Source-hinted results (e.g. `wikipedia.org` for DEFINITION) are front-promoted.
+2. **VDI Deep-Forage** (parallel, primary tier 2) — takes top-2 URLs from SearXNG, fires `VDI.NavigateAndExtract()` in parallel goroutines (5-second timeout each). Navigates actual article pages, applies semantic content selector fallback chain (`article` → `main` → `[role=main]` → `.content` → `body`), strips nav/cookie/ad boilerplate, merges text up to 5000 chars. Yields far richer factual text than snippets alone.
+3. **SearXNG `SearchWithIntent()`** (snippet fallback) — used if VDI is unavailable or returns empty. Colly page-fetcher follows top URLs for body text.
+4. **CollySearcher DDG** (last resort) — Colly directly scrapes DDG Lite. Prone to bot-detection on VPS.
 
-**Supporting service:** `SearXNGSearcher` (`pkg/service/searxng_searcher.go`). `IsAvailable()` health-checks `127.0.0.1:8080/healthz` before each forage. SearXNG runs as `oricli-searxng` Docker container, managed by `oricli-searxng.service`.
+**Supporting service:** `SearXNGSearcher` (`pkg/service/searxng_searcher.go`). `IsAvailable()` health-checks `127.0.0.1:8080/healthz` before each forage with a 30-second cache TTL (no ping-per-inference). SearXNG runs as `oricli-searxng` Docker container, managed by `oricli-searxng.service`.
 
 **Forage outcome:** Extracted text is distilled into 3–5 facts by the generation service and written back to the WorkingMemoryGraph node.
 
@@ -174,14 +174,64 @@ This block is appended to the composite prompt before the SCAI constitution, the
 ## 6. Reform Daemon
 **"The Self-Modifier"** | `pkg/service/reform_daemon.go` → `ReformDaemon`
 
-- **Role**: Continuously audits execution traces for performance bottlenecks and drafts autonomous code refactors to fix them.
+- **Role**: Continuously audits execution traces for performance bottlenecks and autonomously proposes — and for non-sensitive paths, deploys — code refactors through a multi-stage Code Constitution pipeline.
 - **Trigger**: Scheduled tick every **10 minutes**.
-- **Audit Cycle**:
-  1. Calls `TraceStore.FindBottlenecks(2s latency threshold, 0.7 confidence floor)`.
-  2. For each bottleneck trace, generates a reform proposal via `GenerateReform` — uses the generation service to produce a Go code diff targeting the problematic file.
-  3. Broadcasts `reform_proposal` event to the WebSocket hub for operator review.
-- **Output**: Reform proposals are surfaced to the UI, not auto-applied. The operator approves before a patch is merged.
-- **WebSocket events**: `reform_proposal { file, original, proposed, rationale }`
+
+### Code Constitution
+
+Before any code is generated, the **Code Constitution** (`pkg/reform/constitution.go`) is injected as the LLM system prompt. It mirrors the `pkg/safety/constitution.go` pattern but enforces engineering mandates instead of safety principles:
+
+| Principle | Mandate |
+|---|---|
+| **Complete Implementation Only** | No TODO, FIXME, stubs, `panic("not implemented")`, or empty function bodies |
+| **Surgical Scope** | Only modify the specific function causing the traced bottleneck |
+| **Compile-Clean Standard** | All imports used, no type mismatches, `go fmt` and `go vet` clean |
+| **Perimeter Sovereignty** | No new external dependencies, no unauthorized network egress |
+| **Safety Inviolability** | `pkg/safety/`, `pkg/sovereign/`, `pkg/kernel/` are read-only — hardcoded, always |
+| **Benchmark Justification** | Proposal must include a concrete improvement claim in a comment |
+| **Idiomatic Go** | Follows codebase style — explicit error returns, no goroutine leaks |
+
+### 4-Stage Code Verifier
+
+After generation, `CodeVerifier.Verify()` (`pkg/reform/verifier.go`) runs before the build system is touched:
+
+1. **Forbidden pattern scan** — regex blocks `TODO/FIXME/HACK/XXX`, `panic("not implemented")`, empty function bodies, lone blank identifier stubs
+2. **`gofmt -l`** — proposal must already be formatted
+3. **`go vet`** — semantic checks in isolated temp dir
+4. **`go build`** — full compile in isolated temp module with minimal `go.mod`
+
+Any failure at any stage rejects the proposal. The rejection reason is logged and broadcast.
+
+### Auto-Deploy Pipeline
+
+```
+TraceStore.FindBottlenecks()
+→ GenerateReform()   [Code Constitution injected as system prompt]
+→ CodeVerifier.Verify()   [4-stage gate — REJECT on any failure]
+→ IsSensitive check   [kernel/safety/sovereign → propose-only, NEVER deploy]
+→ go test ./pkg/...   [REJECT on any regression]
+→ go build -o bin/oricli-go-v2.candidate ./cmd/backbone/
+→ atomic rename candidate → bin/oricli-go-v2
+→ systemctl restart oricli-backbone
+→ 60s rollback watchdog   [restore backup binary if service not active]
+```
+
+- **`deployGate` constant**: set to `true` to enable auto-deploy. `false` reverts to propose-only globally.
+- **Rollback**: if the service is not `active` 60 seconds after restart, the previous binary and source file are atomically restored and the service is restarted again. A `reform_rollback` WS event fires.
+
+**WebSocket events:** `reform_proposal { file, old_code, new_code, benefit, benchmark_result, is_sensitive, auto_deployed }`, `reform_rollback { file, reason }`
+
+---
+
+## 6.1 DAG Goal Executor
+**"The Autonomous Planner"** | `pkg/service/goal_executor.go` → `GoalExecutor`
+
+- **Role**: Persistent execution loop for sovereign DAG objectives. Polls `GoalService` for pending objectives whose dependencies are resolved and dispatches them to `ActionRouter`.
+- **Trigger**: Polls every **30 seconds**.
+- **Restart Safety**: On backbone boot, any objective stuck in `active` (interrupted mid-execution) is automatically rehydrated to `pending` for re-queuing.
+- **DAG Model**: Each `Objective` has `DependsOn []string` — a list of IDs that must reach `completed` status before this objective is eligible to run. `IsReady(all []Objective)` evaluates the dependency graph at dispatch time.
+- **Dispatch**: Synthesizes a `DetectedAction` (defaults to `ActionResearch`) from the objective goal text and fires it into the `ActionRouter`. An `awaitCompletion` goroutine polls job status and updates the objective to `completed` or `failed`.
+- **API**: `GET/POST/PUT/DELETE /v1/goals` — full CRUD for sovereign objectives.
 
 ---
 
@@ -200,18 +250,19 @@ This block is appended to the composite prompt before the SCAI constitution, the
 
 ## Daemon Boot Sequence
 
-All seven daemons start at backbone boot as goroutines. MCP init is also async. None of them block the primary inference path.
+All daemons start at backbone boot as goroutines. None block the primary inference path.
 
 ```
 main.go boot
-├── ReformDaemon.Run(ctx)         → goroutine
-├── CuriosityDaemon.Run(ctx)      → goroutine
-├── ScalingService.Run()          → goroutine
-├── DreamDaemon.Run()             → goroutine
-├── MetacogDaemon.Run()           → goroutine (via GoOrchestrator)
-├── JITDaemon.Run()               → goroutine  [not yet wired in main.go — pending]
-├── ToolDaemon.Run()              → goroutine  [not yet wired in main.go — pending]
-└── MCP.StartAll()                → goroutine (per-server, 2-min timeout each)
+├── ReformDaemon.Run(ctx)          → goroutine (Code Constitution pipeline active)
+├── CuriosityDaemon.Run(ctx)       → goroutine (VDI deep-forage enabled)
+├── ScalingService.Run()           → goroutine
+├── DreamDaemon.Run()              → goroutine
+├── MetacogDaemon.Run()            → goroutine (via GoOrchestrator)
+├── GoalExecutor.Start(ctx)        → goroutine (DAG autonomous execution)
+├── JITDaemon.Run()                → goroutine  [not yet wired in main.go — pending]
+├── ToolDaemon.Run()               → goroutine  [not yet wired in main.go — pending]
+└── MCP.StartAll()                 → goroutine (per-server, 2-min timeout each)
 ```
 
 ---

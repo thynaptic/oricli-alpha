@@ -1,6 +1,6 @@
 # Oricli-Alpha API Reference
 
-**Version:** 2.10.0 — Finalized MCI (OpenClaw Ready)  
+**Version:** 2.11.0 — Phase 2 Complete  
 **Maintainer:** Thynaptic Research
 
 This is the single source of truth for the Oricli-Alpha API. Use it to integrate external applications, configure AI agents, or operate the system programmatically.
@@ -45,7 +45,8 @@ Oricli-Alpha streams her internal state changes via `GET /v1/ws`.
 | `health_sync` | Substrate diagnostics (CPU/RAM) and cognitive health. |
 | `audio_sync` | Base64-encoded audio (WAV) for Affective Voice Synthesis. |
 | `curiosity_sync` | Live updates on autonomous epistemic foraging targets. |
-| `reform_proposal` | Proactive code refactor candidates for manual approval. |
+| `reform_proposal` | Auto-deploy candidate or propose-only refactor from ReformDaemon. |
+| `reform_rollback` | Binary rollback triggered after a failed auto-deploy. |
 
 ---
 
@@ -57,6 +58,71 @@ OpenAI-compatible chat endpoint with Sovereign extensions.
 **Parameters:**
 *   `profile`: Pass the filename of a `.ori` manifest to hot-swap her soul.
 *   `stream`: Supports Server-Sent Events (SSE).
+
+---
+
+### `GET /v1/goals`
+List sovereign objectives tracked by the DAG Goal Executor.
+
+**Query params:**
+- `status` (optional): filter by `pending`, `active`, `completed`, `failed`
+
+**Response:**
+```json
+{
+  "count": 2,
+  "goals": [
+    {
+      "id": "uuid",
+      "goal": "Research and summarize advances in sparse transformers",
+      "status": "pending",
+      "priority": 1,
+      "depends_on": [],
+      "retry_count": 0,
+      "created_at": "2025-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### `POST /v1/goals`
+Create a new sovereign objective.
+
+**Body:**
+```json
+{
+  "goal": "Synthesise weekly knowledge graph gaps",
+  "priority": 2,
+  "depends_on": ["<goal-id>"],
+  "metadata": {}
+}
+```
+
+**Response:** `201 Created` with the full `Objective` object.
+
+---
+
+### `PUT /v1/goals/:id`
+Update an objective (status, progress, metadata).
+
+**Body (partial update):**
+```json
+{
+  "status": "active",
+  "progress": 0.4
+}
+```
+
+**Response:** `200 OK` with the updated `Objective`.
+
+---
+
+### `DELETE /v1/goals/:id`
+Remove an objective.
+
+**Response:** `204 No Content`
 
 ---
 
