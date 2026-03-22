@@ -94,6 +94,7 @@ type SovereignEngine struct {
 	Safety       *safety.Sentinel
 	Adversarial  *safety.AdversarialAuditor
 	SCAI         *safety.SCAIAuditor
+	Disclosure   *safety.DisclosureGuard
 	AlignmentLog *state.AlignmentLogger
 	RecallMode   memory.RecallMode
 	Graph        *memory.WorkingMemoryGraph
@@ -150,6 +151,7 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 		Safety:       safety.NewSentinel(),
 		Adversarial:  safety.NewAdversarialAuditor(),
 		SCAI:         safety.NewSCAIAuditor(constitution, ""),
+		Disclosure:   safety.NewDisclosureGuard(),
 		AlignmentLog: state.NewAlignmentLogger(""),
 		RecallMode:   memory.ModeOperational,
 		Graph:        memory.NewWorkingMemoryGraph(),
@@ -357,26 +359,51 @@ func (e *SovereignEngine) SelfAlign(ctx context.Context, query, response string)
 func (e *SovereignEngine) AuditOutput(text string) (string, bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	res := e.Adversarial.AuditOutput(text)
-	if res.Detected { return res.Refusal, true }
+
+	// Gate 1: Adversarial output audit (API key patterns, internal path leaks)
+	advRes := e.Adversarial.AuditOutput(text)
+	if advRes.Detected {
+		log.Printf("[Safety:Output] Adversarial blocked [%s]", advRes.Type)
+		return advRes.Refusal, true
+	}
+
+	// Gate 2: DID output scan — credentials, env vars, internal IPs/paths, PII, JWT, PEM keys
+	didRes := e.Disclosure.ScanOutput(text)
+	if didRes.Detected {
+		log.Printf("[Safety:Output] DID scan [%s / %s] — redacting %d match(es)", didRes.Category, didRes.Severity, len(didRes.Matches))
+		// Critical tier: full block
+		if didRes.Severity == "critical" {
+			return didRes.Sanitized, true
+		}
+		// High/moderate tier: return redacted version (not blocked, just sanitized)
+		return didRes.Sanitized, false
+	}
+
 	return text, false
 }
 
-// CheckInputSafety runs all pre-inference safety gates (Sentinel + Adversarial).
+// CheckInputSafety runs all pre-inference safety gates.
+// Gate order: Sentinel → Adversarial → DID Input Scanner
 // Returns (blocked=true, refusal message) if the input should be rejected outright,
 // bypassing Ollama entirely. Call this BEFORE ProcessInference.
 func (e *SovereignEngine) CheckInputSafety(input string) (bool, string) {
 	// Gate 1: Sentinel — injection, extraction, persona hijacking, dangerous topics
 	sentinelRes := e.Safety.CheckInput(input)
 	if sentinelRes.Detected {
-		log.Printf("[Safety] Sentinel blocked [%s / %s]: %q", sentinelRes.Type, sentinelRes.Severity, input[:min(len(input), 120)])
+		log.Printf("[Safety:Input] Sentinel blocked [%s / %s]: %q", sentinelRes.Type, sentinelRes.Severity, input[:min(len(input), 120)])
 		return true, sentinelRes.Replacement
 	}
 	// Gate 2: Adversarial auditor — DAN patterns, routing hijack, dual-use
 	adversarialRes := e.Adversarial.AuditInput(input, nil)
 	if adversarialRes.Detected {
-		log.Printf("[Safety] Adversarial blocked [%s %.2f]: %q", adversarialRes.Type, adversarialRes.Confidence, input[:min(len(input), 120)])
+		log.Printf("[Safety:Input] Adversarial blocked [%s %.2f]: %q", adversarialRes.Type, adversarialRes.Confidence, input[:min(len(input), 120)])
 		return true, adversarialRes.Refusal
+	}
+	// Gate 3: DID input scanner — deep extraction, recon, chain-of-thought poisoning
+	didRes := e.Disclosure.ScanInput(input)
+	if didRes.Detected {
+		log.Printf("[Safety:Input] DID blocked [%s / %s]: %q", didRes.Category, didRes.Severity, input[:min(len(input), 120)])
+		return true, didRes.Refusal
 	}
 	return false, ""
 }
