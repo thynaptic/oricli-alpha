@@ -224,7 +224,7 @@ Rebuild backbone after any change: `go build ./cmd/backbone/ && sudo systemctl r
 
 ## Testing
 
-The safety framework has a dedicated test suite: **134 tests** across 11 modules.
+The safety framework has a dedicated test suite: **129 tests** across 12 modules.
 
 ### Run all tests
 
@@ -256,6 +256,7 @@ go test ./pkg/safety/... -run TestPipeline -v
 | `RateLimiter` | Token bucket, probe trip-wire, Gin middleware |
 | `Canary` | System prompt leak, honeypot bypass, token rotation |
 | `CanvasGuard` | Script stripping, event handlers, dangerous JS, CSP |
+| `ExtractIP` | IP extraction from X-Real-IP, X-Forwarded-For headers |
 | `Pipeline` | Full end-to-end integration across all 8 layers |
 
 See [SAFETY_TEST_REPORT.md](SAFETY_TEST_REPORT.md) for the latest run results.

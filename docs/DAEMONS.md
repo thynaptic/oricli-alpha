@@ -1,10 +1,12 @@
 # Oricli-Alpha Autonomous Daemons
 
 **Document Type:** Technical Reference  
-**Version:** v2.2.0  
+**Version:** v2.3.0  
 **Status:** Active  
 
 Oricli-Alpha maintains seven background daemons that run as goroutines within the Go-native backbone (`pkg/service/daemon.go`, `curiosity_daemon.go`, `reform_daemon.go`, `pkg/kernel/scaling.go`). They are started at boot and communicate with the system exclusively through the Swarm Bus — zero polling overhead on the main inference path.
+
+> **Note:** Section 5.1 (ConfidenceDetector / Inline Search) is not a daemon — it fires synchronously inside `ProcessInference()` and is documented here for colocation with the CuriosityDaemon's search architecture.
 
 ---
 
@@ -67,14 +69,105 @@ Oricli-Alpha maintains seven background daemons that run as goroutines within th
 
 - **Role**: Proactively identifies gaps in Oricli's knowledge graph and fills them via autonomous web research — no user prompt required.
 - **Trigger**: Scheduled tick every **15 minutes** (context-aware: only forages when no active inference is running).
-- **Forage Priority Chain**:
-  1. **SearXNG** (primary) — queries the local sovereign SearXNG Docker instance (`127.0.0.1:8080`). Aggregates Google, Bing, DuckDuckGo, and Wikipedia in one shot; returns clean JSON with titles, URLs, and snippets. No bot detection issues.
-  2. **Colly page fetcher** — follows the top URLs from SearXNG results to extract full body text from each page. This layer was always reliable; only the search-page step was blocked.
-  3. **VDI / chromedp** (secondary) — headless browser session; used if SearXNG is unavailable and `Chromium` is installed on the host.
-  4. **CollySearcher DDG** (last resort) — Colly directly scrapes DDG Lite; prone to bot-detection blocks on VPS.
-- **Supporting service**: `SearXNGSearcher` (`pkg/service/searxng_searcher.go`) wraps the SearXNG REST API. `IsAvailable()` health-checks `127.0.0.1:8080/healthz` before each forage. SearXNG runs as `oricli-searxng` Docker container, managed by `oricli-searxng.service` (systemd).
-- **Forage outcome**: Extracted text is distilled into 3–5 facts by the generation service and written back to the WorkingMemoryGraph node.
-- **WebSocket events**: `curiosity_sync { target_entity, action, findings }`
+
+### Gap Prioritization
+
+Gaps are no longer selected arbitrarily. The daemon scores every knowledge gap by:
+
+```
+score = entity.Importance × entity.Uncertainty
+```
+
+The highest-scoring entity is selected for foraging first — ensuring the most critical unknowns are resolved before low-importance gaps.
+
+### Structured Search Intent
+
+Before querying, the daemon classifies the knowledge gap into one of **8 intent types** using `ClassifySearchIntent()` (pure heuristic, <1ms):
+
+| Intent | Signal | Query Strategy | SearXNG Category |
+|---|---|---|---|
+| `DEFINITION` | Single abstract noun, "what is", "meaning of" | `define {term}` | general |
+| `FACTUAL` | "when did", "who is", "how many", specific question | Direct question form | general |
+| `ENTITY` | Proper noun (CamelCase / title-case), org/person name | `{name} Wikipedia` | general |
+| `TOPIC` | Multi-word concept, no question prefix | Multi-pass broad search | general |
+| `TECHNICAL` | Code keyword, framework name, `v\d+` version | `{term} documentation` | it |
+| `CURRENT_EVENTS` | "latest", "recent", "news", year mention | time_range=week | news |
+| `COMPARATIVE` | "vs", "difference between", "compare" | Dual-source lookup | general |
+| `PROCEDURAL` | "how to", "steps to", "guide for" | `how to {topic} guide` | general |
+
+Each intent maps to tailored SearXNG parameters (`categories`, `time_range`) and source hints (Wikipedia for definitions/facts, official docs/GitHub/StackOverflow for technical).
+
+### Intent-Tailored Extraction Prompts
+
+After fetching raw content, the distillation prompt is customized per intent:
+
+- **DEFINITION** → asks for etymology, core meaning, usage examples
+- **FACTUAL** → asks for dates, numbers, named entities, verifiable facts
+- **ENTITY** → asks for origin, what it does, why it matters
+- **TECHNICAL** → asks for API surface, typical use case, version notes
+- **PROCEDURAL** → asks for numbered steps with prerequisites
+- **CURRENT_EVENTS** → asks for key parties, timeline, current status
+
+### Search Stack
+
+1. **SearXNG** (primary) — `SearchWithIntent(q SearchQuery)` sets SearXNG `categories` and `time_range` based on intent. Source-hinted results (e.g. wikipedia.org for DEFINITION) are front-promoted. Aggregates Google, Bing, DuckDuckGo, and Wikipedia in one shot. No bot detection issues.
+2. **Colly page fetcher** — follows top URLs to extract full body text from each page.
+3. **VDI / chromedp** (secondary) — headless browser session; used if SearXNG is unavailable.
+4. **CollySearcher DDG** (last resort) — Colly directly scrapes DDG Lite; prone to bot-detection on VPS.
+
+**Supporting service:** `SearXNGSearcher` (`pkg/service/searxng_searcher.go`). `IsAvailable()` health-checks `127.0.0.1:8080/healthz` before each forage. SearXNG runs as `oricli-searxng` Docker container, managed by `oricli-searxng.service`.
+
+**Forage outcome:** Extracted text is distilled into 3–5 facts by the generation service and written back to the WorkingMemoryGraph node.
+
+**WebSocket events:** `curiosity_sync { target_entity, action, findings, intent }`
+
+---
+
+## 5.1 Inline Search — ConfidenceDetector
+**"The Reflexive Lookup"** | `pkg/cognition/confidence.go` → `DetectUncertainty()`
+
+Unlike the CuriosityDaemon (which forages proactively on a 15-minute timer), the ConfidenceDetector fires **synchronously during live chat inference** — before Ollama is ever called.
+
+- **Trigger**: A user prompt that contains knowledge-seeking signals ("what is", "what does", "who is", "when did", "how to", "explain", "define", etc.) with an extractable topic.
+- **Speed**: Pure regex/keyword — zero LLM calls, <1ms. Never slows inference.
+- **Exclusions**: Conversational messages, short greetings, and pure emotional/support prompts are fast-rejected by `isConversational()`.
+
+### Pipeline position
+
+```
+USER MESSAGE
+     │
+     ▼
+[Safety Pipeline — 8 gates]
+     │
+     ▼
+[ConfidenceDetector]         ← fires here — classifies intent from FULL prompt
+     │  if factual/entity/definition/technical/procedural need detected:
+     ▼
+[SearXNG SearchWithIntent]   ← fetches grounded web context (≤1200 chars)
+     │
+     ▼
+[ProcessInference composite] ← context injected as ### WEB CONTEXT [...] block
+     │
+     ▼
+[Ollama generation]          ← LLM now has real facts to draw from
+```
+
+### Intent classification
+
+The intent is classified from the **original user prompt** (not the extracted topic), ensuring "how to set up nginx?" correctly maps to `PROCEDURAL` even though the extracted topic is "set up nginx".
+
+### Context injection
+
+Injected context is capped at **1200 chars** to avoid prompt bloat:
+
+```
+### WEB CONTEXT [TECHNICAL — "nginx reverse proxy"]
+<snippet from SearXNG result>
+### END WEB CONTEXT
+```
+
+This block is appended to the composite prompt before the SCAI constitution, then normal inference proceeds.
 
 ---
 
