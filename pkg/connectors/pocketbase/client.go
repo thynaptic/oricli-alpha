@@ -21,6 +21,7 @@ type Client struct {
 	baseURL  string
 	email    string
 	password string
+	authPath string // admin: /api/admins/auth-with-password | user: /api/collections/users/auth-with-password
 
 	mu      sync.RWMutex
 	token   string
@@ -29,23 +30,38 @@ type Client struct {
 	http *http.Client
 }
 
-// NewClientFromEnv creates a Client from PB_BASE_URL, PB_ADMIN_EMAIL,
+// NewClientFromEnv creates an admin Client from PB_BASE_URL, PB_ADMIN_EMAIL,
 // PB_ADMIN_PASSWORD env vars.
 func NewClientFromEnv() *Client {
 	return &Client{
 		baseURL:  strings.TrimRight(os.Getenv("PB_BASE_URL"), "/"),
 		email:    os.Getenv("PB_ADMIN_EMAIL"),
 		password: os.Getenv("PB_ADMIN_PASSWORD"),
+		authPath: "/api/admins/auth-with-password",
 		http:     &http.Client{Timeout: 20 * time.Second},
 	}
 }
 
-// NewClient creates a Client with explicit credentials.
+// NewClient creates an admin Client with explicit credentials.
 func NewClient(baseURL, email, password string) *Client {
 	return &Client{
 		baseURL:  strings.TrimRight(baseURL, "/"),
 		email:    email,
 		password: password,
+		authPath: "/api/admins/auth-with-password",
+		http:     &http.Client{Timeout: 20 * time.Second},
+	}
+}
+
+// NewUserClient creates a user-scoped Client (non-admin) for a regular PocketBase
+// user account. Uses /api/collections/users/auth-with-password.
+// Records written with this client are owned by the authenticated user.
+func NewUserClient(baseURL, email, password string) *Client {
+	return &Client{
+		baseURL:  strings.TrimRight(baseURL, "/"),
+		email:    email,
+		password: password,
+		authPath: "/api/collections/users/auth-with-password",
 		http:     &http.Client{Timeout: 20 * time.Second},
 	}
 }
@@ -61,14 +77,14 @@ type authResponse struct {
 	Token string `json:"token"`
 }
 
-// authenticate fetches a fresh admin token and caches it.
+// authenticate fetches a fresh token and caches it.
 func (c *Client) authenticate(ctx context.Context) error {
 	body, _ := json.Marshal(map[string]string{
 		"identity": c.email,
 		"password": c.password,
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.baseURL+"/api/admins/auth-with-password", bytes.NewReader(body))
+		c.baseURL+c.authPath, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
