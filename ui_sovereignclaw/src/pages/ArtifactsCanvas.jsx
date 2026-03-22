@@ -8,7 +8,7 @@ import {
   Plus, X, Send, Square, Copy, Check, Edit3, Eye, History,
   Download, Trash2, Wand2, Minimize2, Maximize2, FileCode2,
   FileText, Table2, Code2, Globe, GitCommit, RotateCcw, ExternalLink,
-  RefreshCw, Pencil,
+  RefreshCw, Pencil, ImageIcon, Loader2, AlertCircle,
 } from 'lucide-react';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -457,10 +457,160 @@ function VersionPanel({ doc, onRestore, onClose }) {
   );
 }
 
+// ─── Image Generation Panel ───────────────────────────────────────────────────
+
+function ImageGenPanel({ onInsertToCanvas }) {
+  const [prompt, setPrompt] = useState('');
+  const [negPrompt, setNegPrompt] = useState('');
+  const [size, setSize] = useState('768x768');
+  const [steps, setSteps] = useState(20);
+  const [showNeg, setShowNeg] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [warming, setWarming] = useState(false);
+  const [result, setResult] = useState(null); // base64 PNG
+  const [error, setError] = useState(null);
+
+  async function generate() {
+    if (!prompt.trim()) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const r = await fetch('/images/generations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt.trim(), negative_prompt: negPrompt.trim(), size, steps: Number(steps) }),
+      });
+      const data = await r.json();
+      if (data.warming) {
+        setWarming(true);
+        setError('GPU is warming up (~60–120s). Try again shortly.');
+      } else if (data.error) {
+        setError(data.error);
+      } else if (data.data?.[0]?.b64_json) {
+        setResult(data.data[0].b64_json);
+        setWarming(false);
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0, overflow: 'hidden' }}>
+      {/* Form */}
+      <div style={{ padding: '20px 24px 16px', display: 'flex', flexDirection: 'column', gap: 10, borderBottom: '1px solid var(--color-sc-border)' }}>
+        <textarea
+          value={prompt}
+          onChange={e => setPrompt(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate(); }}
+          placeholder="Describe the image you want to generate…"
+          rows={3}
+          style={{
+            background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border2)',
+            borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--color-sc-text)',
+            resize: 'none', outline: 'none', fontFamily: 'var(--font-grotesk)', lineHeight: 1.5,
+          }}
+        />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={size} onChange={e => setSize(e.target.value)} style={{ background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 6, padding: '5px 8px', fontSize: 12, color: 'var(--color-sc-text)', cursor: 'pointer' }}>
+            <option value="512x512">512 × 512</option>
+            <option value="768x768">768 × 768</option>
+            <option value="1024x1024">1024 × 1024</option>
+            <option value="1024x768">1024 × 768</option>
+            <option value="768x1024">768 × 1024</option>
+          </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-sc-text-muted)' }}>
+            <span>Steps:</span>
+            <input type="number" min={10} max={50} value={steps} onChange={e => setSteps(e.target.value)} style={{ width: 50, background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 6, padding: '4px 6px', fontSize: 12, color: 'var(--color-sc-text)', textAlign: 'center' }} />
+          </div>
+          <button onClick={() => setShowNeg(n => !n)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 11, color: showNeg ? 'var(--color-sc-gold)' : 'var(--color-sc-text-dim)', padding: '4px 6px' }}>
+            {showNeg ? '– Negative' : '+ Negative'}
+          </button>
+          <button
+            onClick={generate}
+            disabled={loading || !prompt.trim()}
+            style={{
+              marginLeft: 'auto', padding: '7px 18px', borderRadius: 8, border: 'none', cursor: loading || !prompt.trim() ? 'not-allowed' : 'pointer',
+              background: loading || !prompt.trim() ? 'rgba(255,255,255,0.06)' : 'var(--color-sc-gold)',
+              color: loading || !prompt.trim() ? 'var(--color-sc-text-dim)' : '#0D0D0D',
+              fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
+            }}
+          >
+            {loading ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Generating…</> : <><ImageIcon size={13} /> Generate</>}
+          </button>
+        </div>
+        {showNeg && (
+          <input
+            value={negPrompt}
+            onChange={e => setNegPrompt(e.target.value)}
+            placeholder="Negative prompt (e.g. blurry, low quality, text)"
+            style={{ background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border2)', borderRadius: 6, padding: '7px 10px', fontSize: 12, color: 'var(--color-sc-text)', outline: 'none' }}
+          />
+        )}
+      </div>
+
+      {/* Result area */}
+      <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, flexDirection: 'column', gap: 16 }}>
+        {loading && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: 'var(--color-sc-text-muted)' }}>
+            <Loader2 size={32} style={{ animation: 'spin 1.2s linear infinite', color: 'var(--color-sc-gold)' }} />
+            <div style={{ fontSize: 13 }}>{warming ? 'GPU warming up (~60–120s)…' : 'Generating image…'}</div>
+          </div>
+        )}
+        {error && !loading && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', maxWidth: 420 }}>
+            <AlertCircle size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
+            <div style={{ fontSize: 13, color: 'var(--color-sc-text)' }}>{error}</div>
+          </div>
+        )}
+        {result && !loading && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <img
+              src={`data:image/png;base64,${result}`}
+              alt="Generated"
+              style={{ maxWidth: '100%', maxHeight: 480, borderRadius: 10, border: '1px solid var(--color-sc-border)', boxShadow: '0 4px 24px rgba(0,0,0,0.35)' }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => {
+                  const a = document.createElement('a');
+                  a.href = `data:image/png;base64,${result}`;
+                  a.download = 'sovereign-gen.png';
+                  a.click();
+                }}
+                style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid var(--color-sc-border)', background: 'transparent', color: 'var(--color-sc-text-muted)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+              >
+                <Download size={12} /> Save
+              </button>
+              {onInsertToCanvas && (
+                <button
+                  onClick={() => onInsertToCanvas(`<img src="data:image/png;base64,${result}" style="max-width:100%;border-radius:8px;" alt="${prompt.slice(0, 60)}" />`)}
+                  style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: 'rgba(196,164,74,0.15)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, fontWeight: 600 }}
+                >
+                  <FileCode2 size={12} /> Insert to Canvas
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {!result && !loading && !error && (
+          <div style={{ textAlign: 'center', color: 'var(--color-sc-text-dim)', fontSize: 13 }}>
+            <ImageIcon size={32} style={{ opacity: 0.12, marginBottom: 10, display: 'block', margin: '0 auto 10px' }} />
+            Enter a prompt above and hit Generate
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Canvas panel (right side) ────────────────────────────────────────────────
 
 function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
-  const [mode, setMode] = useState('preview'); // 'preview' | 'edit'
+  const [mode, setMode] = useState('preview'); // 'preview' | 'edit' | 'image'
   const [showVersions, setShowVersions] = useState(false);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [previewSel, setPreviewSel] = useState({ text: '', rect: null });
@@ -542,6 +692,9 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
             <button onClick={() => setMode('edit')} title="Edit" style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: mode === 'edit' ? 'rgba(196,164,74,0.15)' : 'transparent', color: mode === 'edit' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
               <Edit3 size={12} /> Edit
             </button>
+            <button onClick={() => setMode('image')} title="Generate Image" style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: mode === 'image' ? 'rgba(196,164,74,0.15)' : 'transparent', color: mode === 'image' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
+              <ImageIcon size={12} /> Image
+            </button>
             {/* Actions */}
             <div style={{ width: 1, background: 'var(--color-sc-border)', margin: '4px 4px' }} />
             <div style={{ position: 'relative' }}>
@@ -563,7 +716,9 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
       {/* Content area */}
       {doc ? (
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-          {mode === 'preview' ? (
+          {mode === 'image' ? (
+            <ImageGenPanel onInsertToCanvas={(imgTag) => onUpdate({ content: imgTag, type: 'html' })} />
+          ) : mode === 'preview' ? (
             <div ref={previewRef} onMouseUp={handlePreviewMouseUp} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <ArtifactRenderer doc={displayDoc} partial={streaming && liveArtifact?.partial} />
               {previewSel.text && previewSel.rect && (

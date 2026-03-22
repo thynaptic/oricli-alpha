@@ -41,6 +41,7 @@ type ServerV2 struct {
 	RateLimiter  *safety.RateLimiter
 	SovAuth      *sovereign.SovereignAuth
 	ExecHandler  *sovereign.SovereignExecHandler
+	ImageGen     *service.ImageGenManager
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -105,6 +106,7 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		RateLimiter:  safety.NewRateLimiter(),
 		SovAuth:      sovereign.NewSovereignAuth(),
 		ExecHandler:  sovereign.NewSovereignExecHandler(),
+		ImageGen:     service.NewImageGenManager(),
 	}
 
 	// Wire ActionRouter for trigger-word intent dispatch
@@ -153,6 +155,7 @@ func (s *ServerV2) setupRoutes() {
 	protected := v1.Group("/", s.authMiddleware(), s.RateLimiter.GinMiddleware())
 	{
 		protected.POST("/chat/completions", s.handleChatCompletions)
+		protected.POST("/images/generations", s.handleImageGenerations)
 		protected.POST("/swarm/run", s.handleSwarmRun)
 		protected.POST("/ingest", s.handleIngest)
 		protected.POST("/ingest/web", s.handleIngestWeb)
@@ -460,6 +463,51 @@ func (s *ServerV2) handleTelegramWebhook(c *gin.Context) {
 
 	s.Agent.SovEngine.Telegram.SendMessage(update.Message.Chat.ID, responseText, "HTML")
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+// handleImageGenerations is an OpenAI-compatible POST /v1/images/generations endpoint.
+// It routes to the RunPod A1111 image gen pod (lazy spin-up on first request).
+func (s *ServerV2) handleImageGenerations(c *gin.Context) {
+	var req service.ImageGenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Prompt == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt is required"})
+		return
+	}
+
+	if s.ImageGen == nil || !s.ImageGen.IsEnabled() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":   "image generation is not enabled",
+			"hint":    "Set RUNPOD_IMAGEGEN_ENABLED=true in .env and restart",
+			"warming": false,
+		})
+		return
+	}
+
+	if s.ImageGen.WarmingUp() {
+		c.JSON(http.StatusAccepted, gin.H{
+			"error":   "image engine is warming up, retry in ~60s",
+			"warming": true,
+			"status":  s.ImageGen.Status(),
+		})
+		return
+	}
+
+	b64, err := s.ImageGen.GenerateImage(c.Request.Context(), req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "warming": s.ImageGen.WarmingUp()})
+		return
+	}
+
+	c.JSON(http.StatusOK, service.ImageGenResponse{
+		Created: time.Now().Unix(),
+		Data: []struct {
+			B64JSON string `json:"b64_json"`
+		}{{B64JSON: b64}},
+	})
 }
 
 func (s *ServerV2) handleSwarmRun(c *gin.Context) {

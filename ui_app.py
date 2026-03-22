@@ -237,6 +237,20 @@ def embeddings() -> Response:
         return jsonify({"error": {"message": str(exc), "type": "server_error", "code": 502}}), 502
 
 
+@app.route("/images/generations", methods=["POST"])
+def image_generations() -> Response:
+    """Proxy to RunPod image generation endpoint."""
+    payload = request.get_json(silent=True) or {}
+    target = f"{API_BASE}/v1/images/generations"
+    try:
+        resp = _forward_with_retry("POST", target, json_body=payload)
+        return Response(
+            resp.content, status=resp.status_code, content_type=resp.headers.get("content-type", "application/json")
+        )
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": {"message": str(exc), "type": "server_error", "code": 502}}), 502
+
+
 def _strip_artifact_xml(text: str) -> str:
     """
     The Go backbone wraps every response in sovereign <artifact> XML tags.

@@ -27,6 +27,8 @@ const (
 
 // RunPodManager manages a single KoboldCpp inference pod on RunPod.
 // It implements lazy spin-up, idle auto-terminate, and a hard budget guard.
+// The model is auto-selected from the baked-in catalog based on available GPU VRAM.
+// Set RUNPOD_MODEL_URL_CODE or RUNPOD_MODEL_URL_RESEARCH to override per-tier.
 type RunPodManager struct {
 	client      *runpod.Client
 	enabled     bool
@@ -34,7 +36,9 @@ type RunPodManager struct {
 	monthlyCap  float64       // hard monthly spend cap ($)
 	idleTimeout time.Duration // auto-terminate after this idle period
 	minVRAM     int           // minimum GPU VRAM (GB)
-	modelURL    string        // GGUF download URL for KoboldCpp
+	// Per-tier URL overrides (optional — catalog is used when empty)
+	modelURLCode     string
+	modelURLResearch string
 
 	mu          sync.Mutex
 	state       RunPodState
@@ -50,34 +54,34 @@ type RunPodManager struct {
 }
 
 // NewRunPodManager reads config from env and returns a RunPodManager.
-// Set RUNPOD_ENABLED=true to activate.
+// Only RUNPOD_ENABLED=true is required — model is auto-selected from the catalog.
 func NewRunPodManager() *RunPodManager {
 	enabled := os.Getenv("RUNPOD_ENABLED") == "true"
 	apiKey := os.Getenv("RUNPOD_API_KEY")
 	if apiKey == "" {
-		apiKey = os.Getenv("OricliAlpha_Key") // fall back to existing key
+		apiKey = os.Getenv("OricliAlpha_Key")
 	}
 
 	maxHourly := parseFloatEnv("RUNPOD_MAX_HOURLY", 1.50)
 	monthlyCap := parseFloatEnv("RUNPOD_MONTHLY_CAP", 50.00)
 	idleMin := parseFloatEnv("RUNPOD_IDLE_TIMEOUT_MIN", 15)
-	minVRAM := int(parseFloatEnv("RUNPOD_GPU_MIN_VRAM", 16))
-	modelURL := os.Getenv("RUNPOD_MODEL_URL")
+	minVRAM := int(parseFloatEnv("RUNPOD_GPU_MIN_VRAM", 8))
 
 	mgr := &RunPodManager{
-		client:      runpod.NewClient(apiKey),
-		enabled:     enabled && apiKey != "",
-		maxHourly:   maxHourly,
-		monthlyCap:  monthlyCap,
-		idleTimeout: time.Duration(idleMin) * time.Minute,
-		minVRAM:     minVRAM,
-		modelURL:    modelURL,
-		state:       StateOff,
-		httpClient:  &http.Client{Timeout: 0}, // streaming — no timeout
+		client:           runpod.NewClient(apiKey),
+		enabled:          enabled && apiKey != "",
+		maxHourly:        maxHourly,
+		monthlyCap:       monthlyCap,
+		idleTimeout:      time.Duration(idleMin) * time.Minute,
+		minVRAM:          minVRAM,
+		modelURLCode:     os.Getenv("RUNPOD_MODEL_URL_CODE"),
+		modelURLResearch: os.Getenv("RUNPOD_MODEL_URL_RESEARCH"),
+		state:            StateOff,
+		httpClient:       &http.Client{Timeout: 0},
 	}
 
 	if mgr.enabled {
-		log.Printf("[RunPodMgr] enabled — max $%.2f/hr, cap $%.2f/mo, idle %v, minVRAM %dGB",
+		log.Printf("[RunPodMgr] enabled — max $%.2f/hr, cap $%.2f/mo, idle %v, minVRAM %dGB (model auto-selected from catalog)",
 			maxHourly, monthlyCap, mgr.idleTimeout, minVRAM)
 	} else {
 		log.Printf("[RunPodMgr] disabled (set RUNPOD_ENABLED=true to activate)")
@@ -87,12 +91,12 @@ func NewRunPodManager() *RunPodManager {
 
 // IsEnabled reports whether RunPod routing is active.
 func (m *RunPodManager) IsEnabled() bool {
-	return m.enabled && m.modelURL != ""
+	return m.enabled
 }
 
 // Ensure brings the pod to the warm state if needed and returns the endpoint URL.
 // Concurrent callers wait for the same warmup — no duplicate pods.
-func (m *RunPodManager) Ensure(ctx context.Context) (string, error) {
+func (m *RunPodManager) Ensure(ctx context.Context, tier string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -114,7 +118,6 @@ func (m *RunPodManager) Ensure(ctx context.Context) (string, error) {
 	}
 
 	if m.state == StateWarming {
-		// Already warming — wait for it (release lock, poll)
 		m.mu.Unlock()
 		endpoint, err := m.waitWarm(ctx)
 		m.mu.Lock()
@@ -124,7 +127,7 @@ func (m *RunPodManager) Ensure(ctx context.Context) (string, error) {
 	// StateOff — spin up
 	m.state = StateWarming
 	m.mu.Unlock()
-	endpoint, err := m.spinUp(ctx)
+	endpoint, err := m.spinUp(ctx, tier)
 	m.mu.Lock()
 	if err != nil {
 		m.state = StateOff
@@ -135,7 +138,7 @@ func (m *RunPodManager) Ensure(ctx context.Context) (string, error) {
 	return endpoint, nil
 }
 
-func (m *RunPodManager) spinUp(ctx context.Context) (string, error) {
+func (m *RunPodManager) spinUp(ctx context.Context, tier string) (string, error) {
 	log.Printf("[RunPodMgr] selecting GPU (≥%dGB VRAM, max $%.2f/hr)...", m.minVRAM, m.maxHourly)
 	gpu, err := m.client.SelectBestGPU(m.minVRAM, m.maxHourly)
 	if err != nil {
@@ -143,18 +146,26 @@ func (m *RunPodManager) spinUp(ctx context.Context) (string, error) {
 	}
 	log.Printf("[RunPodMgr] selected GPU: %s (%dGB, $%.3f/hr)", gpu.DisplayName, gpu.MemoryInGb, gpu.SecurePrice)
 
-	pod, err := m.client.CreateInferencePod(gpu.ID, m.modelURL)
+	// Auto-select model from catalog based on GPU VRAM; env override takes precedence
+	var override string
+	if tier == "research" {
+		override = m.modelURLResearch
+	} else {
+		override = m.modelURLCode
+	}
+	modelURL := runpod.ModelURLForTier(tier, gpu.MemoryInGb, override)
+	log.Printf("[RunPodMgr] loading model for tier=%s vram=%dGB: %s", tier, gpu.MemoryInGb, modelURL)
+
+	pod, err := m.client.CreateInferencePod(gpu.ID, modelURL)
 	if err != nil {
 		return "", fmt.Errorf("pod creation failed: %w", err)
 	}
 	pod.HourlyRate = gpu.SecurePrice
 	log.Printf("[RunPodMgr] pod %s created — waiting for KoboldCpp to be ready...", pod.PodID)
 
-	// Give the pod up to 5 minutes to boot and load the model
 	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	if err := m.client.WaitForReady(waitCtx, pod); err != nil {
-		// Terminate on timeout to avoid billing for a stuck pod
 		_ = m.client.TerminatePod(pod.PodID)
 		return "", fmt.Errorf("pod %s never became ready: %w", pod.PodID, err)
 	}
@@ -164,7 +175,6 @@ func (m *RunPodManager) spinUp(ctx context.Context) (string, error) {
 	m.mu.Unlock()
 
 	log.Printf("[RunPodMgr] pod %s warm — endpoint: %s", pod.PodID, pod.EndpointURL)
-	// Start spend accumulator goroutine
 	go m.trackSpend(pod)
 
 	return pod.EndpointURL, nil
@@ -253,10 +263,9 @@ func (m *RunPodManager) trackSpend(pod *runpod.InferencePod) {
 }
 
 // ChatStream routes a streaming request to the warm KoboldCpp pod.
-// It returns a channel of token strings, matching the GenerationService.ChatStream contract.
-// The caller should fall back to Ollama if this returns an error.
-func (m *RunPodManager) ChatStream(ctx context.Context, messages []map[string]string, options map[string]interface{}) (<-chan string, error) {
-	endpoint, err := m.Ensure(ctx)
+// tier is used to auto-select the right model from the catalog on first spin-up.
+func (m *RunPodManager) ChatStream(ctx context.Context, messages []map[string]string, options map[string]interface{}, tier string) (<-chan string, error) {
+	endpoint, err := m.Ensure(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
