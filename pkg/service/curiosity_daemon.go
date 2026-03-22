@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/thynaptic/oricli-go/pkg/memory"
@@ -13,17 +16,35 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/vdi"
 )
 
-// --- Pillar 53: Curiosity Daemon (Epistemic Foraging) ---
-// Proactively fills gaps in the Working Memory Graph using classified,
-// intent-aware queries rather than blind label + "facts summary" lookups.
+// ─── Curiosity Daemon — Idle-Burst Epistemic Forager ─────────────────────────
+//
+// Phase 1 (always-on, zero-cost): Seeds accumulate from every conversation.
+//   Each user message extracts topic seeds and queues them.
+//
+// Phase 2 (idle-only): When no requests for CURIOSITY_IDLE_MIN (default 20 min),
+//   the daemon enters a research burst — burns through the seed queue, then fills
+//   knowledge graph gaps. Stops immediately on any new request.
+//
+// This mirrors biological memory consolidation:
+//   accumulate during the day → process during rest.
 
+// CuriosityEvent is broadcast over WebSocket to surface foraging activity in the UI.
 type CuriosityEvent struct {
 	TargetEntity string `json:"target_entity"`
 	Intent       string `json:"intent,omitempty"`
-	Action       string `json:"action"` // "searching", "scraping", "committing"
+	Action       string `json:"action"` // "searching", "scraping", "committing", "session_start", "session_end"
 	Findings     string `json:"findings,omitempty"`
 }
 
+// CuriositySeed is a topic extracted from a conversation that warrants research.
+type CuriositySeed struct {
+	Topic    string
+	Source   string // e.g. "conversation", "graph_gap"
+	Priority float64
+	AddedAt  time.Time
+}
+
+// CuriosityDaemon accumulates seeds from conversations and forages during idle periods.
 type CuriosityDaemon struct {
 	Graph   *memory.WorkingMemoryGraph
 	VDI     *vdi.Manager
@@ -31,22 +52,42 @@ type CuriosityDaemon struct {
 	WSHub   interface {
 		BroadcastEvent(eventType string, payload interface{})
 	}
-	Searcher *CollySearcher   // DDG fallback
-	SearXNG  *SearXNGSearcher // primary sovereign search
-	active   bool
+	Searcher *CollySearcher
+	SearXNG  *SearXNGSearcher
+
+	// Seed queue — populated by conversation traffic, consumed during idle bursts
+	seedMu   sync.Mutex
+	seeds    []CuriositySeed
+	seenKeys map[string]struct{} // dedup
+
+	// Activity tracking — updated on every chat request
+	lastActivity atomic.Int64 // UnixNano
+	idleThreshold time.Duration
+
+	// Interrupt channel — signals active burst to stop
+	interruptCh chan struct{}
+	interruptMu sync.Mutex
+
+	active bool
 }
 
 func NewCuriosityDaemon(graph *memory.WorkingMemoryGraph, vdi *vdi.Manager, gen *GenerationService, hub interface {
 	BroadcastEvent(eventType string, payload interface{})
 }) *CuriosityDaemon {
-	return &CuriosityDaemon{
-		Graph:    graph,
-		VDI:      vdi,
-		Gen:      gen,
-		WSHub:    hub,
-		Searcher: NewCollySearcher(),
-		SearXNG:  NewSearXNGSearcher(),
+	idleMin := parseFloatEnv("CURIOSITY_IDLE_MIN", 20)
+	d := &CuriosityDaemon{
+		Graph:         graph,
+		VDI:           vdi,
+		Gen:           gen,
+		WSHub:         hub,
+		Searcher:      NewCollySearcher(),
+		SearXNG:       NewSearXNGSearcher(),
+		seenKeys:      make(map[string]struct{}),
+		idleThreshold: time.Duration(idleMin) * time.Minute,
+		interruptCh:   make(chan struct{}, 1),
 	}
+	d.lastActivity.Store(time.Now().UnixNano())
+	return d
 }
 
 func (d *CuriosityDaemon) InjectWSHub(hub interface {
@@ -55,13 +96,54 @@ func (d *CuriosityDaemon) InjectWSHub(hub interface {
 	d.WSHub = hub
 }
 
-// Run starts the epistemic foraging loop.
+// NotifyActivity must be called on every incoming chat request.
+// It resets the idle timer and interrupts any active research burst.
+func (d *CuriosityDaemon) NotifyActivity() {
+	d.lastActivity.Store(time.Now().UnixNano())
+	// Non-blocking send — burst goroutine drains this
+	d.interruptMu.Lock()
+	select {
+	case d.interruptCh <- struct{}{}:
+	default:
+	}
+	d.interruptMu.Unlock()
+}
+
+// AddSeed adds a topic to the research queue if not already seen.
+// Called during message handling — must be O(1) and non-blocking.
+func (d *CuriosityDaemon) AddSeed(topic, source string) {
+	key := strings.ToLower(strings.TrimSpace(topic))
+	if key == "" || len(key) < 4 {
+		return
+	}
+	d.seedMu.Lock()
+	defer d.seedMu.Unlock()
+	if _, exists := d.seenKeys[key]; exists {
+		return
+	}
+	d.seenKeys[key] = struct{}{}
+	d.seeds = append(d.seeds, CuriositySeed{
+		Topic:   topic,
+		Source:  source,
+		AddedAt: time.Now(),
+	})
+}
+
+// SeedFromMessage extracts curiosity seeds from a user message and queues them.
+// Lightweight — no inference, just pattern matching.
+func (d *CuriosityDaemon) SeedFromMessage(msg string) {
+	for _, topic := range extractTopics(msg) {
+		d.AddSeed(topic, "conversation")
+	}
+}
+
+// Run starts the idle-detection loop. Blocks until ctx is cancelled.
 func (d *CuriosityDaemon) Run(ctx context.Context) {
 	d.active = true
-	ticker := time.NewTicker(15 * time.Minute)
+	ticker := time.NewTicker(60 * time.Second) // check idle every minute
 	defer ticker.Stop()
 
-	log.Println("[CuriosityDaemon] Epistemic loop engaged.")
+	log.Printf("[CuriosityDaemon] Idle-burst mode engaged — forages after %v of silence.", d.idleThreshold)
 
 	for {
 		select {
@@ -69,53 +151,125 @@ func (d *CuriosityDaemon) Run(ctx context.Context) {
 			d.active = false
 			return
 		case <-ticker.C:
-			d.Forage(ctx)
+			idleSince := time.Since(time.Unix(0, d.lastActivity.Load()))
+			if idleSince >= d.idleThreshold {
+				log.Printf("[CuriosityDaemon] System idle for %v — starting research burst", idleSince.Round(time.Second))
+				d.runBurst(ctx)
+			}
 		}
 	}
 }
 
-func (d *CuriosityDaemon) Forage(ctx context.Context) {
-	// 1. Find and prioritise gaps — sort by Importance × Uncertainty (highest first)
-	gaps := d.Graph.FindGaps()
-	if len(gaps) == 0 {
-		return
+// runBurst processes the seed queue then fills knowledge graph gaps.
+// Stops as soon as ctx is cancelled or activity is detected.
+func (d *CuriosityDaemon) runBurst(ctx context.Context) {
+	// Drain the interrupt channel before starting so we don't stop immediately
+	select {
+	case <-d.interruptCh:
+	default:
 	}
-	sort.Slice(gaps, func(i, j int) bool {
-		scoreI := gaps[i].Importance * gaps[i].Uncertainty
-		scoreJ := gaps[j].Importance * gaps[j].Uncertainty
-		return scoreI > scoreJ
-	})
-	target := gaps[0]
 
-	// 2. Classify intent — understand WHAT kind of knowledge is missing
-	intent := searchintent.ClassifySearchIntent(target.Label)
-	sq := searchintent.BuildSearchQuery(target.Label, intent)
-
-	log.Printf("[CuriosityDaemon] Gap: %q | Intent: %s | Query: %q",
-		target.Label, intent, sq.FormattedQuery)
+	sessionStart := time.Now()
+	processed := 0
 
 	if d.WSHub != nil {
 		d.WSHub.BroadcastEvent("curiosity_sync", CuriosityEvent{
-			TargetEntity: target.Label,
+			Action: "session_start",
+		})
+	}
+
+	// Phase A: Seed queue (conversation-derived, high signal)
+	for {
+		if d.interrupted(ctx) {
+			log.Printf("[CuriosityDaemon] Burst interrupted after %d items (%v)", processed, time.Since(sessionStart).Round(time.Second))
+			return
+		}
+
+		seed := d.popSeed()
+		if seed == nil {
+			break
+		}
+		d.forageTopic(ctx, seed.Topic)
+		processed++
+	}
+
+	// Phase B: Knowledge graph gaps (lower signal, fills structural holes)
+	gaps := d.Graph.FindGaps()
+	sort.Slice(gaps, func(i, j int) bool {
+		return gaps[i].Importance*gaps[i].Uncertainty > gaps[j].Importance*gaps[j].Uncertainty
+	})
+
+	for _, gap := range gaps {
+		if d.interrupted(ctx) {
+			break
+		}
+		d.forageTopic(ctx, gap.Label)
+		processed++
+		// Small pause between gap fills to avoid hammering search
+		time.Sleep(3 * time.Second)
+	}
+
+	log.Printf("[CuriosityDaemon] Research burst complete — %d items in %v", processed, time.Since(sessionStart).Round(time.Second))
+
+	if d.WSHub != nil {
+		d.WSHub.BroadcastEvent("curiosity_sync", CuriosityEvent{
+			Action:   "session_end",
+			Findings: fmt.Sprintf("%d items researched in %v", processed, time.Since(sessionStart).Round(time.Second)),
+		})
+	}
+}
+
+// interrupted returns true if activity was detected or ctx was cancelled.
+func (d *CuriosityDaemon) interrupted(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	case <-d.interruptCh:
+		log.Printf("[CuriosityDaemon] Activity detected — pausing research burst")
+		return true
+	default:
+		return false
+	}
+}
+
+// popSeed removes and returns the highest-priority seed, or nil if queue is empty.
+func (d *CuriosityDaemon) popSeed() *CuriositySeed {
+	d.seedMu.Lock()
+	defer d.seedMu.Unlock()
+	if len(d.seeds) == 0 {
+		return nil
+	}
+	seed := d.seeds[0]
+	d.seeds = d.seeds[1:]
+	return &seed
+}
+
+// forageTopic researches a single topic: search → scrape → extract → commit.
+func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string) {
+	intent := searchintent.ClassifySearchIntent(topic)
+	sq := searchintent.BuildSearchQuery(topic, intent)
+
+	log.Printf("[CuriosityDaemon] Researching: %q (intent: %s)", topic, intent)
+
+	if d.WSHub != nil {
+		d.WSHub.BroadcastEvent("curiosity_sync", CuriosityEvent{
+			TargetEntity: topic,
 			Intent:       string(intent),
 			Action:       "searching",
 		})
 	}
 
-	// 3. Web Foraging — priority: SearXNG (with URL list) → parallel VDI deep-forage → Colly fallback
+	// Web search — SearXNG + VDI deep-forage → Colly fallback
 	var rawText string
-	var fetchErr error
 
 	if d.SearXNG != nil {
-		// Try SearchWithURLs first to get real article URLs for VDI deep-forage
 		results, urlErr := d.SearXNG.SearchWithURLs(sq)
 		if urlErr == nil && len(results) > 0 && d.VDI != nil && d.VDI.IsAvailable() {
-			// Launch parallel VDI fetches on top-2 URLs (5s timeout each)
-			type forage struct{ text string }
 			topN := results
 			if len(topN) > 2 {
 				topN = topN[:2]
 			}
+			type forage struct{ text string }
 			forageCh := make(chan forage, len(topN))
 			for _, r := range topN {
 				url := r.URL
@@ -128,7 +282,6 @@ func (d *CuriosityDaemon) Forage(ctx context.Context) {
 					forageCh <- forage{text: text}
 				}()
 			}
-			// Collect with 5s per goroutine (hard cap)
 			timer := time.NewTimer(5 * time.Second * time.Duration(len(topN)))
 			var parts []string
 			for i := 0; i < len(topN); i++ {
@@ -146,41 +299,35 @@ func (d *CuriosityDaemon) Forage(ctx context.Context) {
 				if len(rawText) > 5000 {
 					rawText = rawText[:5000] + "… [truncated]"
 				}
-				log.Printf("[CuriosityDaemon] VDI deep-forage yielded %d chars for %q", len(rawText), target.Label)
 			}
 		}
-		// If VDI came up empty, fall back to snippet-only SearchWithIntent
 		if rawText == "" {
-			rawText, fetchErr = d.SearXNG.SearchWithIntent(sq)
-			if fetchErr != nil {
-				log.Printf("[CuriosityDaemon] SearXNG forage failed for %q: %v — trying Colly", target.Label, fetchErr)
-			}
+			rawText, _ = d.SearXNG.SearchWithIntent(sq)
 		}
 	}
-
 	if rawText == "" {
-		rawText, fetchErr = d.Searcher.Search(sq.FormattedQuery)
-		if fetchErr != nil {
-			log.Printf("[CuriosityDaemon] Colly forage also failed for %q: %v — skipping", target.Label, fetchErr)
+		var err error
+		rawText, err = d.Searcher.Search(sq.FormattedQuery)
+		if err != nil {
+			log.Printf("[CuriosityDaemon] All search paths failed for %q: %v", topic, err)
 			return
 		}
 	}
 
 	if d.WSHub != nil {
 		d.WSHub.BroadcastEvent("curiosity_sync", CuriosityEvent{
-			TargetEntity: target.Label,
+			TargetEntity: topic,
 			Intent:       string(intent),
 			Action:       "scraping",
 		})
 	}
 
-	// 4. Fact Extraction — prompt tailored to intent type
-	// Use a 90s deadline: daemon runs in background, failure is non-fatal.
-	// Cap num_predict to 512 — we only need 3-5 distilled facts, not unbounded generation.
-	extractionPrompt := buildExtractionPrompt(target.Label, intent, rawText)
-	genCtx, genCancel := context.WithTimeout(ctx, 90*time.Second)
-	defer genCancel()
-	_ = genCtx // passed implicitly via Generate options for future; generation.go uses HTTPClient.Post
+	// Fact extraction with 90s deadline
+	extractionPrompt := buildExtractionPrompt(topic, intent, rawText)
+	genCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+
+	_ = genCtx
 	res, err := d.Gen.Generate(extractionPrompt, map[string]interface{}{
 		"system": "Epistemic Curator",
 		"model":  "ministral-3:3b",
@@ -191,31 +338,99 @@ func (d *CuriosityDaemon) Forage(ctx context.Context) {
 		},
 	})
 	if err != nil {
-		log.Printf("[CuriosityDaemon] Fact extraction failed for %q: %v", target.Label, err)
+		log.Printf("[CuriosityDaemon] Extraction failed for %q: %v", topic, err)
 		return
 	}
 
 	factSummary, _ := res["text"].(string)
 
-	// 5. Commit to Graph
-	d.Graph.UpdateEntity(target.ID, 0.5, 0.5, 0.5, func(e *memory.Entity) {
-		e.Description = factSummary
-		e.Uncertainty = 0.2
-	})
+	// Find or create entity in graph and commit
+	gaps := d.Graph.FindGaps()
+	for _, g := range gaps {
+		if strings.EqualFold(g.Label, topic) {
+			d.Graph.UpdateEntity(g.ID, 0.5, 0.5, 0.5, func(e *memory.Entity) {
+				e.Description = factSummary
+				e.Uncertainty = 0.2
+			})
+			break
+		}
+	}
 
 	if d.WSHub != nil {
 		d.WSHub.BroadcastEvent("curiosity_sync", CuriosityEvent{
-			TargetEntity: target.Label,
+			TargetEntity: topic,
 			Intent:       string(intent),
 			Action:       "committing",
 			Findings:     factSummary,
 		})
 	}
 
-	log.Printf("[CuriosityDaemon] Filled gap: %q (intent: %s)", target.Label, intent)
+	log.Printf("[CuriosityDaemon] Committed: %q", topic)
 }
 
-// buildExtractionPrompt returns an intent-tailored extraction instruction.
+// SeedQueueDepth returns the number of pending seeds (for diagnostics).
+func (d *CuriosityDaemon) SeedQueueDepth() int {
+	d.seedMu.Lock()
+	defer d.seedMu.Unlock()
+	return len(d.seeds)
+}
+
+// IdleSince returns how long the system has been idle.
+func (d *CuriosityDaemon) IdleSince() time.Duration {
+	return time.Since(time.Unix(0, d.lastActivity.Load()))
+}
+
+// ─── Topic extraction ─────────────────────────────────────────────────────────
+
+var (
+	reQuestion    = regexp.MustCompile(`(?i)(what|who|how|why|when|where|which|explain|tell me about|what is|what are)\s+([a-z][a-z0-9\s\-]{3,60})\??`)
+	reNamedEntity = regexp.MustCompile(`\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b`)
+	reTechTerm    = regexp.MustCompile(`\b([A-Z][a-zA-Z0-9]{2,}(?:\.[a-zA-Z]{2,})?)\b`) // CamelCase / acronyms
+)
+
+// extractTopics pulls candidate research topics from a user message.
+// Deliberately lightweight — no inference, just pattern matching.
+func extractTopics(msg string) []string {
+	seen := make(map[string]struct{})
+	var topics []string
+
+	add := func(t string) {
+		t = strings.TrimSpace(t)
+		if len(t) < 4 || len(t) > 80 {
+			return
+		}
+		key := strings.ToLower(t)
+		if _, ok := seen[key]; !ok {
+			seen[key] = struct{}{}
+			topics = append(topics, t)
+		}
+	}
+
+	// Questions → extract the subject
+	for _, m := range reQuestion.FindAllStringSubmatch(msg, 3) {
+		if len(m) >= 3 {
+			add(strings.TrimSpace(m[2]))
+		}
+	}
+
+	// Named entities (multi-word capitalized)
+	for _, m := range reNamedEntity.FindAllString(msg, 5) {
+		add(m)
+	}
+
+	// CamelCase / tech acronyms (skip common words)
+	skip := map[string]bool{"I": true, "The": true, "A": true, "Is": true, "It": true, "We": true, "You": true, "He": true, "She": true}
+	for _, m := range reTechTerm.FindAllString(msg, 5) {
+		if !skip[m] {
+			add(m)
+		}
+	}
+
+	return topics
+}
+
+// ─── Extraction prompt builder (unchanged) ───────────────────────────────────
+
 func buildExtractionPrompt(label string, intent searchintent.SearchIntent, rawText string) string {
 	var instruction string
 	switch intent {
@@ -233,10 +448,10 @@ func buildExtractionPrompt(label string, intent searchintent.SearchIntent, rawTe
 		instruction = fmt.Sprintf("Extract the key differences and similarities between the items in %q. Organise as: Item A — Item B — Key Difference.", label)
 	case searchintent.IntentProcedural:
 		instruction = fmt.Sprintf("Extract the core steps or procedure for %q from the text. List as numbered steps, 3-6 items max.", label)
-	default: // IntentTopic
+	default:
 		instruction = fmt.Sprintf("Extract 3-5 key facts about %q from the text. Format as a concise description suitable for a knowledge graph.", label)
 	}
-
 	return fmt.Sprintf("%s\n\nTEXT:\n%s", instruction, rawText)
 }
+
 

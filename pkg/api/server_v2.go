@@ -190,6 +190,14 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		lastMsg = req.Messages[len(req.Messages)-1].Content
 	}
 
+	// Notify curiosity daemon of activity + seed from user message
+	if cd := s.ActionRouter.CuriosityDaemon; cd != nil {
+		cd.NotifyActivity()
+		if lastMsg != "" {
+			cd.SeedFromMessage(lastMsg)
+		}
+	}
+
 	if req.Profile != "" {
 		if p, ok := s.Agent.SovEngine.Profiles.GetProfile(req.Profile); ok {
 			s.Agent.SovEngine.ActiveProfile = p
