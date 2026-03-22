@@ -33,6 +33,11 @@ func Bootstrap(ctx context.Context, c *Client) error {
 		log.Printf("[pb-bootstrap] created collection %q", schema.Name)
 	}
 
+	// Migrate existing collections to add epistemic hygiene fields if missing.
+	if err := MigrateEpistemicFields(ctx, c); err != nil {
+		log.Printf("[pb-bootstrap] epistemic migration warning: %v", err)
+	}
+
 	// Ensure Oricli's analyst account exists
 	email := os.Getenv("PB_ORICLI_EMAIL")
 	if email == "" {
@@ -102,19 +107,26 @@ func OricliUserPassword() string {
 
 // memoriesSchema stores conversation fragments and curiosity findings.
 // author: "oricli" for her own thoughts/findings, "user" for conversation-derived.
+// Epistemic hygiene fields:
+//   provenance     — origin quality: user_stated|web_verified|synthetic_l1|synthetic_l2+|conversation
+//   topic_volatility — decay class: stable|current|ephemeral
+//   lineage_depth  — how many synthetic hops from ground truth (0=direct, 1=curiosity, 2+=derived)
 func memoriesSchema() CollectionSchema {
 	return CollectionSchema{
 		Name: "memories",
 		Type: "base",
 		Schema: []FieldSchema{
 			{Name: "content", Type: "text", Required: true},
-			{Name: "source", Type: "text"},    // "conversation" | "curiosity" | "summary"
-			{Name: "author", Type: "text"},    // "oricli" | "user" | "system"
+			{Name: "source", Type: "text"},
+			{Name: "author", Type: "text"},
 			{Name: "topic", Type: "text"},
 			{Name: "session_id", Type: "text"},
 			{Name: "importance", Type: "number"},
 			{Name: "access_count", Type: "number"},
-			{Name: "last_accessed", Type: "text"}, // ISO8601
+			{Name: "last_accessed", Type: "text"},
+			{Name: "provenance", Type: "text"},       // epistemic hygiene
+			{Name: "topic_volatility", Type: "text"}, // stable|current|ephemeral
+			{Name: "lineage_depth", Type: "number"},  // 0=ground truth, 1=synthetic_l1, ...
 			{
 				Name:    "embedding",
 				Type:    "json",
@@ -134,9 +146,12 @@ func knowledgeFragmentsSchema() CollectionSchema {
 			{Name: "topic", Type: "text", Required: true},
 			{Name: "intent", Type: "text"},
 			{Name: "content", Type: "text", Required: true},
-			{Name: "author", Type: "text"}, // always "oricli"
+			{Name: "author", Type: "text"},
 			{Name: "importance", Type: "number"},
 			{Name: "access_count", Type: "number"},
+			{Name: "provenance", Type: "text"},       // always "synthetic_l1" for curiosity
+			{Name: "topic_volatility", Type: "text"},
+			{Name: "lineage_depth", Type: "number"},
 			{
 				Name:    "embedding",
 				Type:    "json",
@@ -180,4 +195,29 @@ func conversationSummariesSchema() CollectionSchema {
 			},
 		},
 	}
+}
+
+// epistemicFields are the three hygiene fields added to memories + knowledge_fragments.
+var epistemicFields = []FieldSchema{
+{Name: "provenance", Type: "text"},
+{Name: "topic_volatility", Type: "text"},
+{Name: "lineage_depth", Type: "number"},
+}
+
+// MigrateEpistemicFields patches existing memories and knowledge_fragments collections
+// to add provenance, topic_volatility, and lineage_depth fields if they are missing.
+// Safe to call on every startup — PatchCollectionSchema is idempotent.
+func MigrateEpistemicFields(ctx context.Context, c *Client) error {
+for _, coll := range []string{"memories", "knowledge_fragments"} {
+exists, err := c.CollectionExists(ctx, coll)
+if err != nil || !exists {
+continue
+}
+if err := c.PatchCollectionSchema(ctx, coll, epistemicFields); err != nil {
+log.Printf("[pb-migrate] %s: patch warning: %v", coll, err)
+} else {
+log.Printf("[pb-migrate] %s: epistemic fields OK", coll)
+}
+}
+return nil
 }

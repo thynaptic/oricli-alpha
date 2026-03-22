@@ -263,6 +263,16 @@ func (d *CuriosityDaemon) popSeed() *CuriositySeed {
 
 // forageTopic researches a single topic: search → scrape → extract → commit.
 func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string) {
+	// Novelty cap: skip topics we already have ≥3 knowledge fragments for.
+	// This prevents the synthetic echo-chamber — Oricli must explore new territory.
+	if d.MemoryBank != nil {
+		count := d.MemoryBank.KnowledgeCount(ctx, topic)
+		if count >= 3 {
+			log.Printf("[CuriosityDaemon] skipping %q — already has %d fragments (novelty cap)", topic, count)
+			return
+		}
+	}
+
 	intent := searchintent.ClassifySearchIntent(topic)
 	sq := searchintent.BuildSearchQuery(topic, intent)
 

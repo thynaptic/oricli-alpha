@@ -219,6 +219,62 @@ func (c *Client) CollectionExists(ctx context.Context, name string) (bool, error
 	return false, nil
 }
 
+// GetCollectionSchema returns the raw schema map for a collection (for migration checks).
+func (c *Client) GetCollectionSchema(ctx context.Context, name string) (map[string]any, error) {
+	var result map[string]any
+	if err := c.doJSON(ctx, http.MethodGet, "/api/collections/"+name, nil, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// PatchCollectionSchema sends a PATCH to add fields to an existing collection.
+// Merges new fields into the collection's schema array.
+func (c *Client) PatchCollectionSchema(ctx context.Context, name string, newFields []FieldSchema) error {
+	// Fetch current schema
+	current, err := c.GetCollectionSchema(ctx, name)
+	if err != nil {
+		return err
+	}
+
+	// Extract existing field names
+	existing := map[string]bool{}
+	if schema, ok := current["schema"].([]any); ok {
+		for _, f := range schema {
+			if fm, ok := f.(map[string]any); ok {
+				if n, ok := fm["name"].(string); ok {
+					existing[n] = true
+				}
+			}
+		}
+	}
+
+	// Build patch payload with only genuinely new fields
+	var toAdd []map[string]any
+	for _, f := range newFields {
+		if existing[f.Name] {
+			continue
+		}
+		field := map[string]any{"name": f.Name, "type": f.Type, "required": f.Required}
+		if f.Options != nil {
+			field["options"] = f.Options
+		}
+		toAdd = append(toAdd, field)
+	}
+	if len(toAdd) == 0 {
+		return nil // nothing to add
+	}
+
+	// Append to existing schema array then PATCH
+	existingSchema := current["schema"]
+	existingList, _ := existingSchema.([]any)
+	for _, f := range toAdd {
+		existingList = append(existingList, f)
+	}
+	current["schema"] = existingList
+	return c.doJSON(ctx, http.MethodPatch, "/api/collections/"+name, current, nil)
+}
+
 // CreateCollection creates a collection with the given schema.
 func (c *Client) CreateCollection(ctx context.Context, schema CollectionSchema) error {
 	return c.doJSON(ctx, http.MethodPost, "/api/collections", schema, nil)

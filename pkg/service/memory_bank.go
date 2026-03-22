@@ -32,16 +32,85 @@ type MemoryBank struct {
 	enabled      bool
 }
 
+// ─── Epistemic Hygiene Types ──────────────────────────────────────────────────
+
+// Provenance describes the origin quality of a memory. Higher trust = more RAG weight.
+type Provenance string
+
+const (
+	ProvenanceUserStated   Provenance = "user_stated"   // user explicitly stated this fact (anchor — never recycled)
+	ProvenanceWebVerified  Provenance = "web_verified"  // retrieved directly from a live URL with timestamp
+	ProvenanceConversation Provenance = "conversation"  // inferred from chat exchange
+	ProvenanceSyntheticL1  Provenance = "synthetic_l1"  // curiosity: summarised from web results
+	ProvenanceSyntheticL2  Provenance = "synthetic_l2+" // derived from another synthetic memory
+)
+
+// RAG weight multiplier per provenance level.
+// user_stated anchors always bypass normal ranking and inject first.
+var provenanceWeight = map[Provenance]float32{
+	ProvenanceUserStated:   1.5,
+	ProvenanceWebVerified:  1.2,
+	ProvenanceConversation: 0.9,
+	ProvenanceSyntheticL1:  0.85,
+	ProvenanceSyntheticL2:  0.6,
+}
+
+// Volatility controls the decay half-life used in Recycle().
+type Volatility string
+
+const (
+	VolatilityStable    Volatility = "stable"    // 180-day half-life  — science, fundamentals
+	VolatilityCurrent   Volatility = "current"   // 30-day half-life   — tech, AI, software
+	VolatilityEphemeral Volatility = "ephemeral" // 7-day half-life    — prices, news, events
+)
+
+// halfLifeDays returns the decay half-life in days for a volatility class.
+func (v Volatility) halfLifeDays() float64 {
+	switch v {
+	case VolatilityEphemeral:
+		return 7
+	case VolatilityCurrent:
+		return 30
+	default:
+		return 180
+	}
+}
+
+// InferVolatility classifies a topic string into a volatility class based on
+// keywords. Used when volatility is not explicitly provided by the caller.
+func InferVolatility(topic string) Volatility {
+	t := strings.ToLower(topic)
+	ephemeralKeywords := []string{"price", "market", "stock", "news", "today", "breaking", "weather", "score", "event", "election", "earnings"}
+	for _, kw := range ephemeralKeywords {
+		if strings.Contains(t, kw) {
+			return VolatilityEphemeral
+		}
+	}
+	currentKeywords := []string{"ai", "gpt", "llm", "model", "framework", "library", "api", "release", "version", "update", "software", "cloud", "crypto", "blockchain", "startup", "tech"}
+	for _, kw := range currentKeywords {
+		if strings.Contains(t, kw) {
+			return VolatilityCurrent
+		}
+	}
+	return VolatilityStable
+}
+
+// ─── MemoryFragment ───────────────────────────────────────────────────────────
+
 // MemoryFragment is a unit of long-term memory.
 type MemoryFragment struct {
-	ID          string
-	Content     string
-	Source      string  // "conversation" | "curiosity" | "summary"
-	Topic       string
-	SessionID   string
-	Importance  float64 // 0.0–1.0
-	AccessCount int
+	ID           string
+	Content      string
+	Source       string     // "conversation" | "curiosity" | "summary"
+	Topic        string
+	SessionID    string
+	Importance   float64    // 0.0–1.0
+	AccessCount  int
 	LastAccessed time.Time
+	// Epistemic hygiene
+	Provenance   Provenance // origin quality — controls RAG weight
+	Volatility   Volatility // decay class — controls Recycle half-life
+	LineageDepth int        // synthetic hops from ground truth (0=direct)
 }
 
 // NewMemoryBank creates a MemoryBank from environment config.
@@ -110,14 +179,17 @@ func (m *MemoryBank) Write(frag MemoryFragment) {
 		}
 
 		data := map[string]any{
-			"content":       frag.Content,
-			"source":        frag.Source,
-			"author":        author,
-			"topic":         frag.Topic,
-			"session_id":    frag.SessionID,
-			"importance":    frag.Importance,
-			"access_count":  0,
-			"last_accessed": time.Now().UTC().Format(time.RFC3339),
+			"content":         frag.Content,
+			"source":          frag.Source,
+			"author":          author,
+			"topic":           frag.Topic,
+			"session_id":      frag.SessionID,
+			"importance":      frag.Importance,
+			"access_count":    0,
+			"last_accessed":   time.Now().UTC().Format(time.RFC3339),
+			"provenance":      string(frag.Provenance),
+			"topic_volatility": string(frag.Volatility),
+			"lineage_depth":   frag.LineageDepth,
 		}
 		id, err := client.CreateRecord(ctx, "memories", data)
 		if err != nil {
@@ -139,21 +211,25 @@ func (m *MemoryBank) Write(frag MemoryFragment) {
 }
 
 // WriteKnowledgeFragment stores a CuriosityDaemon finding under Oricli's
-// analyst account — these are her own epistemic discoveries.
+// analyst account — these are her own epistemic discoveries (provenance=synthetic_l1).
 func (m *MemoryBank) WriteKnowledgeFragment(topic, intent, content string, importance float64) {
 	if !m.enabled {
 		return
 	}
+	vol := InferVolatility(topic)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		data := map[string]any{
-			"topic":        topic,
-			"intent":       intent,
-			"content":      content,
-			"author":       "oricli",
-			"importance":   importance,
-			"access_count": 0,
+			"topic":           topic,
+			"intent":          intent,
+			"content":         content,
+			"author":          "oricli",
+			"importance":      importance,
+			"access_count":    0,
+			"provenance":      string(ProvenanceSyntheticL1),
+			"topic_volatility": string(vol),
+			"lineage_depth":   1,
 		}
 		id, err := m.oricliClient.CreateRecord(ctx, "knowledge_fragments", data)
 		if err != nil {
@@ -216,25 +292,49 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 	scored := make([]scoredFrag, 0, len(result.Items))
 
 	for _, item := range result.Items {
+		prov := Provenance(stringField(item, "provenance"))
+		if prov == "" {
+			prov = ProvenanceSyntheticL1 // legacy records default to lowest-trust synthetic
+		}
+		lineage := intField(item, "lineage_depth")
+
 		frag := MemoryFragment{
-			ID:          stringField(item, "id"),
-			Content:     stringField(item, "content"),
-			Source:      stringField(item, "source"),
-			Topic:       stringField(item, "topic"),
-			SessionID:   stringField(item, "session_id"),
-			Importance:  floatField(item, "importance"),
-			AccessCount: intField(item, "access_count"),
+			ID:           stringField(item, "id"),
+			Content:      stringField(item, "content"),
+			Source:       stringField(item, "source"),
+			Topic:        stringField(item, "topic"),
+			SessionID:    stringField(item, "session_id"),
+			Importance:   floatField(item, "importance"),
+			AccessCount:  intField(item, "access_count"),
+			Provenance:   prov,
+			Volatility:   Volatility(stringField(item, "topic_volatility")),
+			LineageDepth: lineage,
 		}
 
-		// Score: cosine similarity if both embeddings available, else importance
-		var score float32
+		// ── Scoring ──────────────────────────────────────────────────────────
+		// Base: cosine similarity (or importance as fallback)
+		var base float32
 		if queryVec != nil {
 			if docVec := JSONToFloat32(item["embedding"]); docVec != nil {
-				score = CosineSimilarity(queryVec, docVec)
+				base = CosineSimilarity(queryVec, docVec)
 			}
 		}
-		if score == 0 {
-			score = float32(frag.Importance) // graceful fallback
+		if base == 0 {
+			base = float32(frag.Importance)
+		}
+
+		// Provenance multiplier — penalises deep synthetic lineage
+		weight, ok := provenanceWeight[prov]
+		if !ok {
+			// Handle "synthetic_l2+" and any unknown values by provenance prefix
+			weight = float32(0.6) / float32(max(lineage, 1))
+		}
+
+		score := base * weight
+
+		// user_stated anchors get a large bonus so they always float to the top
+		if prov == ProvenanceUserStated {
+			score += 10.0
 		}
 
 		scored = append(scored, scoredFrag{frag: frag, score: score})
@@ -287,6 +387,24 @@ func (m *MemoryBank) QueryKnowledgeFragments(ctx context.Context, limit int) ([]
 	return topics, nil
 }
 
+// KnowledgeCount returns how many knowledge_fragments exist for a given topic.
+// Used by CuriosityDaemon for novelty-cap enforcement.
+func (m *MemoryBank) KnowledgeCount(ctx context.Context, topic string) int {
+	if !m.enabled {
+		return 0
+	}
+	safe := strings.ReplaceAll(topic, `"`, `'`)
+	if len(safe) > 80 {
+		safe = safe[:80]
+	}
+	filter := fmt.Sprintf(`topic ~ "%s"`, safe)
+	result, err := m.adminClient.QueryRecords(ctx, "knowledge_fragments", filter, "", 1)
+	if err != nil {
+		return 0
+	}
+	return result.TotalItems
+}
+
 // FormatRAGContext formats memory fragments as a system prompt injection block.
 // Capped at maxChars to avoid bloating the context window.
 func FormatRAGContext(frags []MemoryFragment, maxChars int) string {
@@ -308,14 +426,26 @@ func FormatRAGContext(frags []MemoryFragment, maxChars int) string {
 // ─── Memory Recycling ─────────────────────────────────────────────────────────
 
 // retentionScore computes a decay-adjusted importance score.
-// retention = importance × log(1 + access_count) × e^(-age_days/180)
-func retentionScore(importance float64, accessCount int, created time.Time) float64 {
+// Uses per-record volatility class for the half-life instead of a hardcoded 180 days.
+// Formula: importance × log(1 + access_count) × e^(-age_days / halfLife)
+// user_stated anchors always return +Inf so they are never pruned.
+func retentionScore(importance float64, accessCount int, created time.Time, prov Provenance, vol Volatility) float64 {
+	if prov == ProvenanceUserStated {
+		return math.Inf(1) // anchors are immortal
+	}
+	halfLife := vol.halfLifeDays()
+	if halfLife == 0 {
+		halfLife = 180
+	}
 	ageDays := time.Since(created).Hours() / 24
-	return importance * math.Log1p(float64(accessCount)) * math.Exp(-ageDays/180)
+	return importance * math.Log1p(float64(accessCount)) * math.Exp(-ageDays/halfLife)
 }
 
 // Recycle prunes the bottom 10% of memories by retention score when
 // the total record count exceeds PB_MEMORY_MAX_RECORDS. Runs async.
+// Rules:
+//   - user_stated (anchor) memories are never pruned
+//   - Decay half-life is per-record based on topic_volatility field
 func (m *MemoryBank) Recycle() {
 	if !m.enabled {
 		return
@@ -329,24 +459,61 @@ func (m *MemoryBank) Recycle() {
 			return
 		}
 
-		pruneCount := count / 10 // 10% of total
-		log.Printf("[memory-bank] recycling %d low-retention memories (total=%d, max=%d)", pruneCount, count, m.maxRecs)
+		pruneCount := count / 10
+		log.Printf("[memory-bank] recycling up to %d low-retention memories (total=%d, max=%d)", pruneCount, count, m.maxRecs)
 
-		// Fetch bottom-importance, oldest records
-		result, err := m.adminClient.QueryRecords(ctx, "memories", "", "importance,created", pruneCount)
+		// Fetch oldest + lowest-importance candidates, excluding user_stated anchors
+		filter := `provenance != "user_stated"`
+		result, err := m.adminClient.QueryRecords(ctx, "memories", filter, "importance,created", pruneCount*3)
 		if err != nil {
 			log.Printf("[memory-bank] recycle query error: %v", err)
 			return
 		}
 
-		pruned := 0
+		// Score each candidate and sort ascending (worst first)
+		type candidate struct {
+			id    string
+			score float64
+		}
+		candidates := make([]candidate, 0, len(result.Items))
 		for _, item := range result.Items {
 			id := stringField(item, "id")
 			if id == "" {
 				continue
 			}
-			if err := m.adminClient.DeleteRecord(ctx, "memories", id); err != nil {
-				log.Printf("[memory-bank] recycle delete %s: %v", id, err)
+			imp := floatField(item, "importance")
+			acc := intField(item, "access_count")
+			prov := Provenance(stringField(item, "provenance"))
+			vol := Volatility(stringField(item, "topic_volatility"))
+			if vol == "" {
+				vol = InferVolatility(stringField(item, "topic"))
+			}
+			// Parse created timestamp
+			var created time.Time
+			if ts := stringField(item, "created"); ts != "" {
+				created, _ = time.Parse(time.RFC3339, ts)
+			}
+			if created.IsZero() {
+				created = time.Now().Add(-24 * time.Hour)
+			}
+			candidates = append(candidates, candidate{id: id, score: retentionScore(imp, acc, created, prov, vol)})
+		}
+
+		// Sort ascending by score (lowest = most pruneable)
+		for i := 1; i < len(candidates); i++ {
+			for j := i; j > 0 && candidates[j].score < candidates[j-1].score; j-- {
+				candidates[j], candidates[j-1] = candidates[j-1], candidates[j]
+			}
+		}
+
+		// Prune bottom pruneCount
+		if pruneCount > len(candidates) {
+			pruneCount = len(candidates)
+		}
+		pruned := 0
+		for _, c := range candidates[:pruneCount] {
+			if err := m.adminClient.DeleteRecord(ctx, "memories", c.id); err != nil {
+				log.Printf("[memory-bank] recycle delete %s: %v", c.id, err)
 			} else {
 				pruned++
 			}

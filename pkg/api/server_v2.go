@@ -485,10 +485,13 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			combined := fmt.Sprintf("User: %s\n\nOricli: %s", lastMsg, resp)
 
 			s.MemoryBank.Write(service.MemoryFragment{
-				Content:    combined,
-				Source:     "conversation",
-				Topic:      topic,
-				Importance: 0.4,
+				Content:      combined,
+				Source:       "conversation",
+				Topic:        topic,
+				Importance:   0.4,
+				Provenance:   service.ProvenanceConversation,
+				Volatility:   service.InferVolatility(topic),
+				LineageDepth: 0,
 			})
 		}()
 	}
