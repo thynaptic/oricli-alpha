@@ -46,9 +46,11 @@ type RunPodManager struct {
 	lastTraffic time.Time
 	idleTimer   *time.Timer
 
-	// Approximate spend tracking (resets on process restart — persists in .env ideally)
+	// Approximate spend tracking (resets on process restart — persists via MemoryBank)
 	monthSpend float64
 	spendMu    sync.Mutex
+
+	MemoryBank  *MemoryBank // PocketBase spend persistence (optional)
 
 	httpClient *http.Client
 }
@@ -243,6 +245,7 @@ func (m *RunPodManager) trackSpend(pod *runpod.InferencePod) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	perMin := pod.HourlyRate / 60.0
+	month := time.Now().Format("2006-01")
 	for range ticker.C {
 		m.mu.Lock()
 		active := m.pod != nil && m.pod.PodID == pod.PodID
@@ -254,11 +257,33 @@ func (m *RunPodManager) trackSpend(pod *runpod.InferencePod) {
 		m.monthSpend += perMin
 		spend := m.monthSpend
 		m.spendMu.Unlock()
+
+		// Persist to PocketBase so spend survives daemon restarts
+		if m.MemoryBank != nil {
+			m.MemoryBank.PersistSpend("inference", month, spend)
+		}
+
 		if spend >= m.monthlyCap {
 			log.Printf("[RunPodMgr] monthly cap $%.2f reached — shutting down pod", m.monthlyCap)
 			m.Shutdown()
 			return
 		}
+	}
+}
+
+// LoadSpendFromBank restores this month's accumulated spend from PocketBase.
+// Call once during startup so monthSpend survives process restarts.
+func (m *RunPodManager) LoadSpendFromBank(ctx context.Context) {
+	if m.MemoryBank == nil || !m.MemoryBank.IsEnabled() {
+		return
+	}
+	month := time.Now().Format("2006-01")
+	stored := m.MemoryBank.LoadSpend(ctx, "inference", month)
+	if stored > 0 {
+		m.spendMu.Lock()
+		m.monthSpend = stored
+		m.spendMu.Unlock()
+		log.Printf("[RunPodMgr] restored month spend $%.4f from PocketBase", stored)
 	}
 }
 

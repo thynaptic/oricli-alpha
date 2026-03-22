@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,6 +43,7 @@ type ServerV2 struct {
 	SovAuth      *sovereign.SovereignAuth
 	ExecHandler  *sovereign.SovereignExecHandler
 	ImageGen     *service.ImageGenManager
+	MemoryBank   *service.MemoryBank
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -109,10 +111,32 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		ImageGen:     service.NewImageGenManager(),
 	}
 
+	// Bootstrap PocketBase long-term memory bank
+	mb := service.NewMemoryBank()
+	s.MemoryBank = mb
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := mb.Bootstrap(ctx); err != nil {
+			log.Printf("[ServerV2] PocketBase bootstrap error: %v", err)
+		}
+	}()
+
 	// Wire ActionRouter for trigger-word intent dispatch
 	research := service.NewResearchOrchestrator(agent)
 	curiosity := service.NewCuriosityDaemon(agent.SovEngine.Graph, agent.SovEngine.VDI, agent.GenService, hub)
+	curiosity.MemoryBank = mb
 	s.ActionRouter = service.NewActionRouter(research, curiosity, hub)
+
+	// Restore this month's RunPod spend from PocketBase
+	if rp := agent.GenService.RunPodMgr; rp != nil {
+		rp.MemoryBank = mb
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			rp.LoadSpendFromBank(ctx)
+		}()
+	}
 
 	// Inject SearXNG searcher into SovereignEngine (avoids import cycle)
 	agent.SovEngine.SearXNG = service.NewSearXNGSearcher()
@@ -292,6 +316,16 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	systemContent := sovTrace
 	if clientSystem != "" {
 		systemContent = sovTrace + "\n\n---\n\n" + clientSystem
+	}
+
+	// Inject relevant long-term memories as RAG context prefix
+	if s.MemoryBank != nil && s.MemoryBank.IsEnabled() && lastMsg != "" {
+		if frags, err := s.MemoryBank.QuerySimilar(c.Request.Context(), lastMsg, 5); err == nil && len(frags) > 0 {
+			ragCtx := service.FormatRAGContext(frags, 1200)
+			if ragCtx != "" {
+				systemContent = ragCtx + "\n\n---\n\n" + systemContent
+			}
+		}
 	}
 
 	msgs := make([]map[string]string, len(req.Messages)-msgStart+1)

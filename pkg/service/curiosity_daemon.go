@@ -52,8 +52,9 @@ type CuriosityDaemon struct {
 	WSHub   interface {
 		BroadcastEvent(eventType string, payload interface{})
 	}
-	Searcher *CollySearcher
-	SearXNG  *SearXNGSearcher
+	Searcher    *CollySearcher
+	SearXNG     *SearXNGSearcher
+	MemoryBank  *MemoryBank // PocketBase long-term memory (optional)
 
 	// Seed queue — populated by conversation traffic, consumed during idle bursts
 	seedMu   sync.Mutex
@@ -167,6 +168,22 @@ func (d *CuriosityDaemon) runBurst(ctx context.Context) {
 	select {
 	case <-d.interruptCh:
 	default:
+	}
+
+	// Pre-load known topics from PocketBase so we don't re-research them
+	if d.MemoryBank != nil && d.MemoryBank.IsEnabled() {
+		knownTopics, err := d.MemoryBank.QueryKnowledgeFragments(ctx, 500)
+		if err == nil {
+			d.seedMu.Lock()
+			for _, t := range knownTopics {
+				key := strings.ToLower(t)
+				d.seenKeys[key] = struct{}{} // mark as already researched
+			}
+			d.seedMu.Unlock()
+			if len(knownTopics) > 0 {
+				log.Printf("[CuriosityDaemon] Pre-loaded %d known topics from PocketBase", len(knownTopics))
+			}
+		}
 	}
 
 	sessionStart := time.Now()
@@ -366,6 +383,11 @@ func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string) {
 	}
 
 	log.Printf("[CuriosityDaemon] Committed: %q", topic)
+
+	// Persist finding to PocketBase long-term memory bank (async, non-blocking)
+	if d.MemoryBank != nil {
+		d.MemoryBank.WriteKnowledgeFragment(topic, string(intent), factSummary, 0.7)
+	}
 }
 
 // SeedQueueDepth returns the number of pending seeds (for diagnostics).
