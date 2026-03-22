@@ -178,7 +178,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 
 	modelName := req.Model
-	if strings.HasPrefix(modelName, "oricli-") || modelName == "default" || modelName == "" {
+	if strings.HasPrefix(modelName, "oricli") || modelName == "default" || modelName == "" {
 		modelName = ""
 	}
 
@@ -205,10 +205,14 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		history = append(history, safety.ChatTurn{Role: m.Role, Content: m.Content})
 	}
 
-	// --- Sovereign /auth command interception ---
-	// This runs BEFORE safety checks — it's the owner authenticating, not a user prompt.
-	if strings.HasPrefix(strings.TrimSpace(lastMsg), "/auth") {
-		s.handleSovereignAuth(c, lastMsg, sessionKey)
+	// --- Sovereign auth command interception ---
+	// /admin <key>  → Level 1 (elevated chat)
+	// /exec <key>   → Level 2 (elevated chat + system commands)
+	// /auth off     → end session (legacy alias kept)
+	trimmedMsg := strings.TrimSpace(lastMsg)
+	lowerMsg := strings.ToLower(trimmedMsg)
+	if strings.HasPrefix(lowerMsg, "/admin") || strings.HasPrefix(lowerMsg, "/exec") || lowerMsg == "/auth off" {
+		s.handleSovereignAuth(c, trimmedMsg, sessionKey)
 		return
 	}
 
@@ -312,8 +316,19 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Stream tokens via SSE so the UI renders progressively
 	streamOpts := map[string]interface{}{"model": modelName}
 	isCanvasMode := (req.MaxTokens != nil && *req.MaxTokens >= 8192) || c.GetHeader("X-Canvas-Mode") == "true"
+	isResearchAction := dispatch != nil && (dispatch.action == "research" || dispatch.action == "analyze")
+	isCodeAction := dispatch != nil && dispatch.action == "create"
+
+	switch {
+	case isResearchAction:
+		// Deep research / analysis — route to heavy model; user expects a wait
+		streamOpts["use_research_model"] = true
+	case isCanvasMode || isCodeAction:
+		// Canvas generation or explicit code create — mid-tier model
+		streamOpts["use_code_model"] = true
+	}
 	if isCanvasMode {
-		// Canvas / large-output request — unlock full context window
+		// Unlock full context window for large-output canvas requests
 		streamOpts["options"] = map[string]interface{}{
 			"num_predict": -1,
 			"num_ctx":     32768,
@@ -332,12 +347,19 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Emit agent_dispatch SSE event before the first token so the UI renders
 	// the dispatch card immediately
 	if dispatch != nil {
+		modelTier := "chat"
+		if isResearchAction {
+			modelTier = "research"
+		} else if isCanvasMode || isCodeAction {
+			modelTier = "code"
+		}
 		dispatchEvt := map[string]interface{}{
-			"type":    "agent_dispatch",
-			"action":  dispatch.action,
-			"subject": dispatch.subject,
-			"job_id":  dispatch.jobID,
-			"prompt":  lastMsg, // full original message for canvas passthrough
+			"type":        "agent_dispatch",
+			"action":      dispatch.action,
+			"subject":     dispatch.subject,
+			"job_id":      dispatch.jobID,
+			"prompt":      lastMsg, // full original message for canvas passthrough
+			"model_tier":  modelTier,
 		}
 		data, _ := json.Marshal(dispatchEvt)
 		c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
@@ -537,10 +559,9 @@ func (s *ServerV2) Start() error {
 	return s.Router.Run(addr)
 }
 
-// handleSovereignAuth handles /auth <key> and /auth off commands.
+// handleSovereignAuth handles /admin <key>, /exec <key>, and /auth off.
 // The raw key is scrubbed from all logs immediately.
 func (s *ServerV2) handleSovereignAuth(c *gin.Context, rawMsg, sessionKey string) {
-	// Scrub key before any log write
 	scrubbed := sovereign.ScrubKey(rawMsg)
 	log.Printf("[SovereignAuth] auth attempt from %s: %s", sessionKey, scrubbed)
 
@@ -561,10 +582,10 @@ func (s *ServerV2) handleSovereignAuth(c *gin.Context, rawMsg, sessionKey string
 		return
 	}
 
-	// Extract key — everything after "/auth "
+	// Extract key — everything after the command word (/admin or /exec)
 	parts := strings.SplitN(trimmed, " ", 2)
 	if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
-		respond("Usage: `/auth <key>` to authenticate or `/auth off` to end session.")
+		respond("Usage: `/admin <key>` or `/exec <key>` — `/auth off` to end session.")
 		return
 	}
 	rawKey := strings.TrimSpace(parts[1])

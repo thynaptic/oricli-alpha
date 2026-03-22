@@ -52,9 +52,9 @@ func bootstrapAPIKey(st *memory.MemoryStore) string {
 }
 
 // runGenKeys generates a sovereign key pair, prints the raw keys once, and writes
-// the bcrypt hashes to .oricli/sovereign_keys.env ready to paste into .env.
+// them to .oricli/sovereign_keys.env ready to paste into .env.
 func runGenKeys() {
-	adminKey, execKey, adminHash, execHash, err := sovereign.GenerateKeyPair()
+	adminKey, execKey, err := sovereign.GenerateKeyPair()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "keygen failed: %v\n", err)
 		os.Exit(1)
@@ -65,11 +65,11 @@ func runGenKeys() {
 	outFile := filepath.Join(dir, "sovereign_keys.env")
 
 	content := fmt.Sprintf(
-		"# Sovereign key hashes — add these to your .env file\n"+
-			"# The raw keys below are printed ONCE. Store them securely.\n\n"+
-			"SOVEREIGN_ADMIN_KEY_HASH=%s\n"+
-			"SOVEREIGN_EXEC_KEY_HASH=%s\n",
-		adminHash, execHash,
+		"# Sovereign keys — add these to your .env file\n"+
+			"# Set these as SOVEREIGN_ADMIN_KEY and SOVEREIGN_EXEC_KEY.\n\n"+
+			"SOVEREIGN_ADMIN_KEY=%s\n"+
+			"SOVEREIGN_EXEC_KEY=%s\n",
+		adminKey, execKey,
 	)
 	if err := os.WriteFile(outFile, []byte(content), 0600); err != nil {
 		fmt.Fprintf(os.Stderr, "could not write %s: %v\n", outFile, err)
@@ -81,10 +81,10 @@ func runGenKeys() {
 	fmt.Printf("  ADMIN KEY  (Level 1 — elevated chat):  %s\n", adminKey)
 	fmt.Printf("  EXEC  KEY  (Level 2 — system commands): %s\n", execKey)
 	fmt.Println()
-	fmt.Printf("Hashes written to: %s\n", outFile)
-	fmt.Println("Add those two SOVEREIGN_*_KEY_HASH lines to your .env, then restart the backbone.")
+	fmt.Printf("Keys written to: %s\n", outFile)
+	fmt.Println("Add SOVEREIGN_ADMIN_KEY and SOVEREIGN_EXEC_KEY to your .env, then restart the backbone.")
 	fmt.Println()
-	fmt.Println("⚠  These raw keys will NOT be shown again. Store them in your password manager NOW.")
+	fmt.Println("⚠  These keys will NOT be shown again. Store them securely NOW.")
 }
 
 func main() {
