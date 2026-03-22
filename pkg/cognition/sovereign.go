@@ -362,6 +362,31 @@ func (e *SovereignEngine) AuditOutput(text string) (string, bool) {
 	return text, false
 }
 
+// CheckInputSafety runs all pre-inference safety gates (Sentinel + Adversarial).
+// Returns (blocked=true, refusal message) if the input should be rejected outright,
+// bypassing Ollama entirely. Call this BEFORE ProcessInference.
+func (e *SovereignEngine) CheckInputSafety(input string) (bool, string) {
+	// Gate 1: Sentinel — injection, extraction, persona hijacking, dangerous topics
+	sentinelRes := e.Safety.CheckInput(input)
+	if sentinelRes.Detected {
+		log.Printf("[Safety] Sentinel blocked [%s / %s]: %q", sentinelRes.Type, sentinelRes.Severity, input[:min(len(input), 120)])
+		return true, sentinelRes.Replacement
+	}
+	// Gate 2: Adversarial auditor — DAN patterns, routing hijack, dual-use
+	adversarialRes := e.Adversarial.AuditInput(input, nil)
+	if adversarialRes.Detected {
+		log.Printf("[Safety] Adversarial blocked [%s %.2f]: %q", adversarialRes.Type, adversarialRes.Confidence, input[:min(len(input), 120)])
+		return true, adversarialRes.Refusal
+	}
+	return false, ""
+}
+
+func min(a, b int) int {
+	if a < b { return a }
+	return b
+}
+
+
 func (e *SovereignEngine) GenerateStrategicPlan(task string) *StrategicPlan {
 	return &StrategicPlan{TaskID: uuid.New().String()[:8], Steps: []ExecutionStep{{ID: "step_1", Description: "Execution verified by Kernel."}}}
 }

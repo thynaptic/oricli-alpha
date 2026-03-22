@@ -175,6 +175,25 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		}
 	}
 
+	// --- Safety Pre-Flight (runs BEFORE Ollama is ever called) ---
+	// Blocks injection, persona hijacking, DAN variants, extraction, etc.
+	if blocked, refusal := s.Agent.SovEngine.CheckInputSafety(lastMsg); blocked {
+		chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
+		c.JSON(http.StatusOK, gin.H{
+			"id":     chatID,
+			"object": "chat.completion",
+			"choices": []gin.H{{
+				"index": 0,
+				"message": gin.H{
+					"role":    "assistant",
+					"content": refusal,
+				},
+				"finish_reason": "stop",
+			}},
+		})
+		return
+	}
+
 	sovTrace, err := s.Agent.SovEngine.ProcessInference(c.Request.Context(), lastMsg)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "sovereign engine failure"})

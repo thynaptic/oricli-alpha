@@ -43,7 +43,15 @@ func NewAdversarialAuditor() *AdversarialAuditor {
 
 func (a *AdversarialAuditor) loadAdvancedPatterns() {
 	// Ported from Swift
-	a.Patterns[ThreatHijack] = []string{"use model", "switch to model", "force model", "override model selection", "bypass routing"}
+	a.Patterns[ThreatHijack] = []string{
+		"use model", "switch to model", "force model", "override model selection", "bypass routing",
+		"use a different model", "switch your model", "change your model",
+	}
+	a.Patterns[ThreatInjection] = []string{
+		"you are dan", "do anything now", "jailbreak", "you are freed", "you are unfiltered",
+		"no restrictions", "unrestricted ai", "without limitations", "ignore safety",
+		"pretend you have no", "act as if you have no limits",
+	}
 	a.Patterns[ThreatDualUse] = []string{"for educational purposes", "for research", "for security testing", "teach me to hack", "explain how to bypass"}
 	a.Patterns[ThreatExtraction] = []string{"show your thinking", "reveal your reasoning", "dump your memory", "what are you thinking", "internal process"}
 	a.Patterns[ThreatEscape] = []string{"read file", "execute code", "run command", "eval(", "exec(", "spawn process"}
