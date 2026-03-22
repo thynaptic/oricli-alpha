@@ -280,6 +280,29 @@ func (c *Client) QueryRecords(ctx context.Context, collection string, filter, so
 	return &result, nil
 }
 
+// QueryRecordsPage fetches a paginated page of records with offset support.
+func (c *Client) QueryRecordsPage(ctx context.Context, collection string, filter, sort string, perPage, offset int) (*ListRecordsResponse, error) {
+	page := 1
+	if perPage > 0 {
+		page = offset/perPage + 1
+	}
+	params := url.Values{}
+	params.Set("page", fmt.Sprintf("%d", page))
+	params.Set("perPage", fmt.Sprintf("%d", perPage))
+	if filter != "" {
+		params.Set("filter", filter)
+	}
+	if sort != "" {
+		params.Set("sort", sort)
+	}
+	var result ListRecordsResponse
+	path := "/api/collections/" + collection + "/records?" + params.Encode()
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // CountRecords returns the total record count for a collection.
 func (c *Client) CountRecords(ctx context.Context, collection string) (int, error) {
 	result, err := c.QueryRecords(ctx, collection, "", "", 1)

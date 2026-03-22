@@ -190,6 +190,9 @@ func (s *ServerV2) setupRoutes() {
 		protected.POST("/goals", s.handleCreateGoal)
 		protected.PUT("/goals/:id", s.handleUpdateGoal)
 		protected.DELETE("/goals/:id", s.handleDeleteGoal)
+
+		protected.GET("/memories", s.handleListMemories)
+		protected.GET("/memories/knowledge", s.handleListKnowledge)
 	}
 }
 
@@ -461,6 +464,34 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			"key":   s.Agent.SovEngine.Resonance.Current.MusicalKey,
 		},
 	}, 5*time.Second)
+
+	// Conversation write-back: persist this exchange to PocketBase long-term memory.
+	// Only when both sides have meaningful content. Fires in background, never blocks.
+	if s.MemoryBank != nil && s.MemoryBank.IsEnabled() &&
+		len(lastMsg) > 50 && len(responseText) > 50 {
+		go func() {
+			// Extract a short topic from the user's message (first 5 words)
+			words := strings.Fields(lastMsg)
+			if len(words) > 5 {
+				words = words[:5]
+			}
+			topic := strings.Join(words, " ")
+
+			// Combine user + assistant turn, cap response at 400 chars
+			resp := responseText
+			if len(resp) > 400 {
+				resp = resp[:400] + "…"
+			}
+			combined := fmt.Sprintf("User: %s\n\nOricli: %s", lastMsg, resp)
+
+			s.MemoryBank.Write(service.MemoryFragment{
+				Content:    combined,
+				Source:     "conversation",
+				Topic:      topic,
+				Importance: 0.4,
+			})
+		}()
+	}
 }
 
 func (s *ServerV2) handleTelegramWebhook(c *gin.Context) {
@@ -788,4 +819,79 @@ func (s *ServerV2) handleDeleteGoal(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": id})
+}
+
+// handleListMemories proxies GET /v1/memories to PocketBase.
+// Query params: source, author, topic, page (default 1), perPage (default 20, max 100).
+func (s *ServerV2) handleListMemories(c *gin.Context) {
+if s.MemoryBank == nil || !s.MemoryBank.IsEnabled() {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "memory bank not available"})
+return
+}
+
+ctx := c.Request.Context()
+source := c.DefaultQuery("source", "")
+author := c.DefaultQuery("author", "")
+topic := c.DefaultQuery("topic", "")
+page := 1
+perPage := 20
+if v := c.Query("page"); v != "" {
+if n, err := strconv.Atoi(v); err == nil && n > 0 {
+page = n
+}
+}
+if v := c.Query("perPage"); v != "" {
+if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+perPage = n
+}
+}
+
+items, total, err := s.MemoryBank.ListMemories(ctx, source, author, topic, page, perPage)
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{
+"items":   items,
+"total":   total,
+"page":    page,
+"perPage": perPage,
+})
+}
+
+// handleListKnowledge proxies GET /v1/memories/knowledge to PocketBase.
+// Query params: topic, author, page (default 1), perPage (default 20, max 100).
+func (s *ServerV2) handleListKnowledge(c *gin.Context) {
+if s.MemoryBank == nil || !s.MemoryBank.IsEnabled() {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "memory bank not available"})
+return
+}
+
+ctx := c.Request.Context()
+topic := c.DefaultQuery("topic", "")
+author := c.DefaultQuery("author", "")
+page := 1
+perPage := 20
+if v := c.Query("page"); v != "" {
+if n, err := strconv.Atoi(v); err == nil && n > 0 {
+page = n
+}
+}
+if v := c.Query("perPage"); v != "" {
+if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+perPage = n
+}
+}
+
+items, total, err := s.MemoryBank.ListKnowledgeFragments(ctx, topic, author, page, perPage)
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{
+"items":   items,
+"total":   total,
+"page":    page,
+"perPage": perPage,
+})
 }

@@ -26,7 +26,8 @@ import (
 //                  and internal thoughts (visible as "oricli" in PB admin UI)
 type MemoryBank struct {
 	adminClient  *pb.Client
-	oricliClient *pb.Client // authenticated as oricli@thynaptic.com (role: analyst)
+	oricliClient *pb.Client
+	embedder     *Embedder
 	maxRecs      int
 	enabled      bool
 }
@@ -68,6 +69,7 @@ func NewMemoryBank() *MemoryBank {
 	return &MemoryBank{
 		adminClient:  adminClient,
 		oricliClient: oricliClient,
+		embedder:     NewEmbedder(),
 		maxRecs:      maxRecs,
 		enabled:      true,
 	}
@@ -117,9 +119,22 @@ func (m *MemoryBank) Write(frag MemoryFragment) {
 			"access_count":  0,
 			"last_accessed": time.Now().UTC().Format(time.RFC3339),
 		}
-		if _, err := client.CreateRecord(ctx, "memories", data); err != nil {
+		id, err := client.CreateRecord(ctx, "memories", data)
+		if err != nil {
 			log.Printf("[memory-bank] write error: %v", err)
+			return
 		}
+		// Async embedding — patch the record after creation so write latency is unchanged
+		go func() {
+			ectx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			vec := m.embedder.Embed(ectx, frag.Content)
+			if vec != nil {
+				_ = client.UpdateRecord(ectx, "memories", id, map[string]any{
+					"embedding": Float32ToJSON(vec),
+				})
+			}
+		}()
 	}()
 }
 
@@ -140,9 +155,21 @@ func (m *MemoryBank) WriteKnowledgeFragment(topic, intent, content string, impor
 			"importance":   importance,
 			"access_count": 0,
 		}
-		if _, err := m.oricliClient.CreateRecord(ctx, "knowledge_fragments", data); err != nil {
+		id, err := m.oricliClient.CreateRecord(ctx, "knowledge_fragments", data)
+		if err != nil {
 			log.Printf("[memory-bank] knowledge fragment write error: %v", err)
+			return
 		}
+		go func() {
+			ectx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			vec := m.embedder.Embed(ectx, topic+" "+content)
+			if vec != nil {
+				_ = m.oricliClient.UpdateRecord(ectx, "knowledge_fragments", id, map[string]any{
+					"embedding": Float32ToJSON(vec),
+				})
+			}
+		}()
 	}()
 }
 
@@ -151,45 +178,90 @@ func (m *MemoryBank) WriteKnowledgeFragment(topic, intent, content string, impor
 // QuerySimilar fetches the topN most recent memories matching a topic keyword.
 // Uses PocketBase filter (keyword contains match) — no embedding needed for MVP.
 // Returns a formatted context block ready for system prompt injection.
-func (m *MemoryBank) QuerySimilar(ctx context.Context, topic string, topN int) ([]MemoryFragment, error) {
+// QuerySimilar fetches the topN most relevant memories for a query.
+// Strategy:
+//  1. Keyword pre-filter (topic/content contains match) → up to 50 candidates
+//  2. Generate query embedding via nomic-embed-text
+//  3. Cosine re-rank candidates that have embeddings populated
+//  4. Fall back to importance/recency order if embeddings unavailable
+func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) ([]MemoryFragment, error) {
 	if !m.enabled {
 		return nil, nil
 	}
 
-	// Sanitize topic for PocketBase filter syntax
-	safe := strings.ReplaceAll(topic, `"`, `'`)
+	// Sanitize for PocketBase filter syntax
+	safe := strings.ReplaceAll(query, `"`, `'`)
 	safe = strings.ReplaceAll(safe, `\`, ``)
 	if len(safe) > 100 {
 		safe = safe[:100]
 	}
 
+	// Fetch up to 50 keyword candidates — more candidates = better cosine ranking
 	filter := fmt.Sprintf(`topic ~ "%s" || content ~ "%s"`, safe, safe)
-	result, err := m.adminClient.QueryRecords(ctx, "memories", filter, "-importance,-created", topN)
+	result, err := m.adminClient.QueryRecords(ctx, "memories", filter, "-importance,-created", 50)
 	if err != nil {
 		return nil, err
 	}
+	if len(result.Items) == 0 {
+		return nil, nil
+	}
 
-	frags := make([]MemoryFragment, 0, len(result.Items))
+	// Generate query embedding for cosine re-ranking
+	queryVec := m.embedder.Embed(ctx, query)
+
+	type scoredFrag struct {
+		frag  MemoryFragment
+		score float32
+	}
+	scored := make([]scoredFrag, 0, len(result.Items))
+
 	for _, item := range result.Items {
 		frag := MemoryFragment{
-			ID:         stringField(item, "id"),
-			Content:    stringField(item, "content"),
-			Source:     stringField(item, "source"),
-			Topic:      stringField(item, "topic"),
-			SessionID:  stringField(item, "session_id"),
-			Importance: floatField(item, "importance"),
+			ID:          stringField(item, "id"),
+			Content:     stringField(item, "content"),
+			Source:      stringField(item, "source"),
+			Topic:       stringField(item, "topic"),
+			SessionID:   stringField(item, "session_id"),
+			Importance:  floatField(item, "importance"),
 			AccessCount: intField(item, "access_count"),
 		}
-		frags = append(frags, frag)
 
-		// bump access count asynchronously
-		id := frag.ID
-		count := frag.AccessCount + 1
+		// Score: cosine similarity if both embeddings available, else importance
+		var score float32
+		if queryVec != nil {
+			if docVec := JSONToFloat32(item["embedding"]); docVec != nil {
+				score = CosineSimilarity(queryVec, docVec)
+			}
+		}
+		if score == 0 {
+			score = float32(frag.Importance) // graceful fallback
+		}
+
+		scored = append(scored, scoredFrag{frag: frag, score: score})
+	}
+
+	// Sort descending by score
+	for i := 1; i < len(scored); i++ {
+		for j := i; j > 0 && scored[j].score > scored[j-1].score; j-- {
+			scored[j], scored[j-1] = scored[j-1], scored[j]
+		}
+	}
+
+	// Take topN
+	if topN > len(scored) {
+		topN = len(scored)
+	}
+	frags := make([]MemoryFragment, topN)
+	for i := 0; i < topN; i++ {
+		frags[i] = scored[i].frag
+		// Bump access count asynchronously
+		id := frags[i].ID
+		count := frags[i].AccessCount + 1
 		go func() {
 			uctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			_ = m.adminClient.UpdateRecord(uctx, "memories", id, map[string]any{
-				"access_count": count,
+				"access_count":  count,
 				"last_accessed": time.Now().UTC().Format(time.RFC3339),
 			})
 		}()
@@ -373,4 +445,75 @@ func floatField(m map[string]any, key string) float64 {
 
 func intField(m map[string]any, key string) int {
 	return int(floatField(m, key))
+}
+
+// ─── Paginated List (for Memory Browser API) ─────────────────────────────────
+
+// PBMemoryRecord is a raw PocketBase record map for API responses.
+// Named "PBMemoryRecord" to avoid collision with LMDB's MemoryRecord in memory.go.
+type PBMemoryRecord map[string]any
+
+// ListMemories fetches paginated memory records with optional filters.
+func (m *MemoryBank) ListMemories(ctx context.Context, source, author, topic string, page, perPage int) ([]PBMemoryRecord, int, error) {
+if !m.enabled {
+return nil, 0, nil
+}
+
+var clauses []string
+if source != "" {
+clauses = append(clauses, fmt.Sprintf("source = \"%s\"", strings.ReplaceAll(source, "\"", "'")))
+}
+if author != "" {
+clauses = append(clauses, fmt.Sprintf("author = \"%s\"", strings.ReplaceAll(author, "\"", "'")))
+}
+if topic != "" {
+safe := strings.ReplaceAll(topic, "\"", "'")
+clauses = append(clauses, fmt.Sprintf("topic ~ \"%s\"", safe))
+}
+
+filter := strings.Join(clauses, " && ")
+offset := (page - 1) * perPage
+
+result, err := m.adminClient.QueryRecordsPage(ctx, "memories", filter, "-created", perPage, offset)
+if err != nil {
+return nil, 0, err
+}
+
+recs := make([]PBMemoryRecord, len(result.Items))
+for i, item := range result.Items {
+delete(item, "embedding")
+recs[i] = PBMemoryRecord(item)
+}
+return recs, result.TotalItems, nil
+}
+
+// ListKnowledgeFragments fetches paginated knowledge_fragment records.
+func (m *MemoryBank) ListKnowledgeFragments(ctx context.Context, topic, author string, page, perPage int) ([]PBMemoryRecord, int, error) {
+if !m.enabled {
+return nil, 0, nil
+}
+
+var clauses []string
+if topic != "" {
+safe := strings.ReplaceAll(topic, "\"", "'")
+clauses = append(clauses, fmt.Sprintf("topic ~ \"%s\"", safe))
+}
+if author != "" {
+clauses = append(clauses, fmt.Sprintf("author = \"%s\"", strings.ReplaceAll(author, "\"", "'")))
+}
+
+filter := strings.Join(clauses, " && ")
+offset := (page - 1) * perPage
+
+result, err := m.adminClient.QueryRecordsPage(ctx, "knowledge_fragments", filter, "-created", perPage, offset)
+if err != nil {
+return nil, 0, err
+}
+
+recs := make([]PBMemoryRecord, len(result.Items))
+for i, item := range result.Items {
+delete(item, "embedding")
+recs[i] = PBMemoryRecord(item)
+}
+return recs, result.TotalItems, nil
 }

@@ -2427,6 +2427,39 @@ def index_connection(conn_id: str) -> Response:
 # Logs — proxy backbone trace + loglines endpoints, serve UI log tail
 # ══════════════════════════════════════════════════════════════════════════════
 
+@app.route("/api/v1/memories")
+def proxy_memories() -> Response:
+    """Proxy GET /api/v1/memories → backbone /v1/memories."""
+    params = request.args.to_dict(flat=False)
+    try:
+        with _client() as client:
+            r = client.get(
+                f"{_BACKBONE_URL}/v1/memories",
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                params=params,
+                timeout=15,
+            )
+            return jsonify(r.json()), r.status_code
+    except Exception as exc:
+        return jsonify({"error": str(exc), "items": [], "total": 0}), 502
+
+
+@app.route("/api/v1/memories/knowledge")
+def proxy_memories_knowledge() -> Response:
+    """Proxy GET /api/v1/memories/knowledge → backbone /v1/memories/knowledge."""
+    params = request.args.to_dict(flat=False)
+    try:
+        with _client() as client:
+            r = client.get(
+                f"{_BACKBONE_URL}/v1/memories/knowledge",
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                params=params,
+                timeout=15,
+            )
+            return jsonify(r.json()), r.status_code
+    except Exception as exc:
+        return jsonify({"error": str(exc), "items": [], "total": 0}), 502
+
 @app.route("/logs/traces")
 def logs_traces() -> Response:
     limit = request.args.get("limit", "50")
