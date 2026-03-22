@@ -18,10 +18,13 @@ import (
 type GenerationService struct {
 	BaseURL        string
 	GenerateURL    string
-	DefaultModel   string
-	NumThreads     int          // actual vCPU count minus headroom
-	HTTPClient     *http.Client // non-streaming calls (has a timeout)
-	StreamClient   *http.Client // streaming calls (no Timeout — rely on context cancellation)
+	DefaultModel   string // fast model  — chat          (e.g. qwen2.5-coder:3b)
+	CodeModel      string // mid model   — canvas / code  (e.g. qwen2.5-coder:7b)
+	ResearchModel  string // heavy model — research / deep tasks (e.g. deepseek-coder-v2:16b)
+	NumThreads     int
+	HTTPClient     *http.Client
+	StreamClient   *http.Client
+	RunPodMgr      *RunPodManager // nil when disabled
 }
 
 func NewGenerationService() *GenerationService {
@@ -34,6 +37,14 @@ func NewGenerationService() *GenerationService {
 	if model == "" {
 		model = "llama3.2:latest"
 	}
+	codeModel := os.Getenv("OLLAMA_CODE_MODEL")
+	if codeModel == "" {
+		codeModel = model
+	}
+	researchModel := os.Getenv("OLLAMA_RESEARCH_MODEL")
+	if researchModel == "" {
+		researchModel = codeModel // fall back to code model if not set
+	}
 
 	// Leave 2 cores for OS + backbone goroutines; never exceed physical count.
 	// Over-subscribing threads is catastrophic for CPU inference (400x slowdown observed).
@@ -41,7 +52,8 @@ func NewGenerationService() *GenerationService {
 	if numThreads < 2 {
 		numThreads = 2
 	}
-	log.Printf("[GenerationService] CPU threads for Ollama: %d (of %d physical)", numThreads, runtime.NumCPU())
+	log.Printf("[GenerationService] CPU threads: %d / Chat: %s / Code: %s / Research: %s",
+		numThreads, model, codeModel, researchModel)
 	// Shared transport with generous limits for the EPYC host
 	transport := &http.Transport{
 		MaxIdleConns:        10,
@@ -49,14 +61,15 @@ func NewGenerationService() *GenerationService {
 		DisableCompression:  false,
 	}
 	return &GenerationService{
-		BaseURL:      url,
-		GenerateURL:  genUrl,
-		DefaultModel: model,
-		NumThreads:   numThreads,
-		// Non-streaming: 5-minute ceiling is fine
-		HTTPClient: &http.Client{Timeout: 300 * time.Second, Transport: transport},
-		// Streaming: NO deadline — context cancellation (browser disconnect) handles cleanup
-		StreamClient: &http.Client{Timeout: 0, Transport: transport},
+		BaseURL:       url,
+		GenerateURL:   genUrl,
+		DefaultModel:  model,
+		CodeModel:     codeModel,
+		ResearchModel: researchModel,
+		NumThreads:    numThreads,
+		HTTPClient:    &http.Client{Timeout: 300 * time.Second, Transport: transport},
+		StreamClient:  &http.Client{Timeout: 0, Transport: transport},
+		RunPodMgr:     NewRunPodManager(),
 	}
 }// --- PROMPT ENGINEERING & PHRASING ---
 
@@ -171,13 +184,36 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 	return nil, fmt.Errorf("invalid response format")
 }
 
-// ChatStream sends a streaming chat request to Ollama and returns a channel of token strings.
-// The channel is closed when the stream completes or the context is cancelled.
+// ChatStream sends a streaming chat request and returns a channel of token strings.
+// For code/research tiers, it attempts RunPod GPU inference first, falling back
+// to local Ollama if RunPod is unavailable, over budget, or returns an error.
 func (s *GenerationService) ChatStream(ctx context.Context, messages []map[string]string, options map[string]interface{}) (<-chan string, error) {
 	model := s.DefaultModel
+	useResearch := false
+	useCode := false
+
+	// Explicit model override takes highest priority
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
+	} else if r, ok := options["use_research_model"].(bool); ok && r {
+		model = s.ResearchModel
+		useResearch = true
+	} else if c, ok := options["use_code_model"].(bool); ok && c {
+		model = s.CodeModel
+		useCode = true
 	}
+
+	// Route code/research tiers to RunPod when enabled — Ollama is fallback
+	if (useResearch || useCode) && s.RunPodMgr != nil && s.RunPodMgr.IsEnabled() {
+		ch, err := s.RunPodMgr.ChatStream(ctx, messages, options)
+		if err != nil {
+			log.Printf("[GenerationService] RunPod unavailable (%v) — falling back to Ollama", err)
+		} else {
+			return ch, nil
+		}
+	}
+
+	// ── Ollama path ──────────────────────────────────────────────────────────
 
 	ollamaMessages := make([]map[string]interface{}, len(messages))
 	for i, msg := range messages {
