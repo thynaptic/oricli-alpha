@@ -67,66 +67,101 @@ Oricli-Alpha maintains seven background daemons that run as goroutines within th
 ## 5. Curiosity Daemon
 **"The Epistemic Forager"** | `pkg/service/curiosity_daemon.go` → `CuriosityDaemon`
 
-- **Role**: Proactively identifies gaps in Oricli's knowledge graph and fills them via autonomous web research — no user prompt required.
-- **Trigger**: Scheduled tick every **15 minutes** (context-aware: only forages when no active inference is running).
+- **Role**: Proactively fills gaps in Oricli's knowledge graph via autonomous web research. Zero compute cost during active use — forages only during idle periods, mirroring biological memory consolidation.
+- **Architecture**: Two-phase idle-burst (refactored from always-on ticker in commit `124af08`).
+
+### Phase 1 — Passive Seed Accumulation (always-on, zero cost)
+
+Every user message is scanned by `SeedFromMessage(msg)` — pure regex, <1ms, no inference, never blocks a response. Three extraction patterns:
+
+- **Question subjects**: entities after "what is", "who is", "how does", etc.
+- **Named entities**: multi-word capitalized phrases (e.g. "Sovereign Engine")
+- **CamelCase / acronyms**: technical identifiers (e.g. `WorkingMemoryGraph`, `LMDB`)
+
+Seeds are deduplicated into a persistent `seenKeys` map (never cleared — prevents re-researching known topics in the same session). Seeds from PocketBase `knowledge_fragments` are pre-loaded at each burst start to skip topics researched in prior sessions.
+
+`NotifyActivity()` is called on every chat request to record the last active timestamp (atomic int64 UnixNano).
+
+### Phase 2 — Idle-Burst Research (idle-only, interruptible)
+
+A 60-second ticker checks whether the system has been idle for longer than `CURIOSITY_IDLE_MIN` (default: **20 minutes**). When the threshold is met:
+
+1. **Pre-load**: Load known topics from PocketBase `knowledge_fragments` → add to `seenKeys` (skip already-researched)
+2. **Phase A** — Seed queue: burn through conversation-derived seeds (high signal — directly relevant to what the user cares about)
+3. **Phase B** — Graph gaps: score all `WorkingMemoryGraph` nodes by `Importance × Uncertainty`, forage highest-priority gaps
+
+Any new chat request interrupts the burst immediately via a non-blocking channel signal. The daemon stops after the current `forageTopic()` call finishes — never mid-write.
+
+```
+Idle threshold reached
+       │
+       ▼
+Pre-load known PB topics → mark as seenKeys
+       │
+       ▼
+Phase A: Pop seeds from queue → forageTopic() × N
+       │    (interrupt check on every iteration)
+       ▼
+Phase B: Graph gaps sorted by Importance×Uncertainty → forageTopic() × M
+       │    (3s pause between gap fills, interrupt check each)
+       ▼
+Log burst complete (count, elapsed)
+```
+
+### forageTopic() Pipeline
+
+Each topic goes through the same search-extract-commit pipeline:
+
+1. `ClassifySearchIntent(topic)` → intent type (8 types, <1ms)
+2. `SearXNG SearchWithURLs()` → structured results with real URLs
+3. `VDI.NavigateAndExtract()` on top-2 URLs (parallel, 5s timeout) → rich article text
+4. Fallback: `SearXNG SearchWithIntent()` → snippets; then Colly DDG as last resort
+5. Intent-tailored extraction prompt → `GenerationService.Generate()` (90s deadline, `ministral-3:3b`)
+6. Commit 3–5 extracted facts to `WorkingMemoryGraph.UpdateEntity()`
+7. **`MemoryBank.WriteKnowledgeFragment(topic, intent, factSummary, 0.7)`** — persists finding to PocketBase under Oricli's analyst account (author=oricli)
 
 ### Gap Prioritization
-
-Gaps are no longer selected arbitrarily. The daemon scores every knowledge gap by:
 
 ```
 score = entity.Importance × entity.Uncertainty
 ```
 
-The highest-scoring entity is selected for foraging first — ensuring the most critical unknowns are resolved before low-importance gaps.
+Highest-scoring entity forages first — critical unknowns resolved before low-importance gaps.
 
 ### Structured Search Intent
-
-Before querying, the daemon classifies the knowledge gap into one of **8 intent types** using `ClassifySearchIntent()` (pure heuristic, <1ms):
 
 | Intent | Signal | Query Strategy | SearXNG Category |
 |---|---|---|---|
 | `DEFINITION` | Single abstract noun, "what is", "meaning of" | `define {term}` | general |
-| `FACTUAL` | "when did", "who is", "how many", specific question | Direct question form | general |
-| `ENTITY` | Proper noun (CamelCase / title-case), org/person name | `{name} Wikipedia` | general |
+| `FACTUAL` | "when did", "who is", "how many" | Direct question form | general |
+| `ENTITY` | Proper noun (CamelCase / title-case), org/person | `{name} Wikipedia` | general |
 | `TOPIC` | Multi-word concept, no question prefix | Multi-pass broad search | general |
 | `TECHNICAL` | Code keyword, framework name, `v\d+` version | `{term} documentation` | it |
 | `CURRENT_EVENTS` | "latest", "recent", "news", year mention | time_range=week | news |
 | `COMPARATIVE` | "vs", "difference between", "compare" | Dual-source lookup | general |
 | `PROCEDURAL` | "how to", "steps to", "guide for" | `how to {topic} guide` | general |
 
-Each intent maps to tailored SearXNG parameters (`categories`, `time_range`) and source hints (Wikipedia for definitions/facts, official docs/GitHub/StackOverflow for technical).
+### PocketBase Persistence
 
-### Intent-Tailored Extraction Prompts
+After each `forageTopic()` commit, findings are written to PocketBase `knowledge_fragments` under Oricli's analyst account:
 
-After fetching raw content, the distillation prompt is customized per intent:
+```go
+MemoryBank.WriteKnowledgeFragment(topic, intent, factSummary, 0.7)
+// → author: "oricli", collection: knowledge_fragments
+```
 
-- **DEFINITION** → asks for etymology, core meaning, usage examples
-- **FACTUAL** → asks for dates, numbers, named entities, verifiable facts
-- **ENTITY** → asks for origin, what it does, why it matters
-- **TECHNICAL** → asks for API surface, typical use case, version notes
-- **PROCEDURAL** → asks for numbered steps with prerequisites
-- **CURRENT_EVENTS** → asks for key parties, timeline, current status
+On the next burst start, these are pre-loaded and marked as `seenKeys` — Oricli never re-researches a topic she already knows across sessions.
 
-### Search Stack
+**Supporting service:** `SearXNGSearcher` (`pkg/service/searxng_searcher.go`). Health-checks `127.0.0.1:8080/healthz` with 30s TTL cache. SearXNG runs as `oricli-searxng` Docker container.
 
-1. **SearXNG `SearchWithURLs()`** (primary) — returns structured `[]WebSearchResult` with real article URLs, titles, and snippets. Intent-aware categories + time_range applied. Source-hinted results (e.g. `wikipedia.org` for DEFINITION) are front-promoted.
-2. **VDI Deep-Forage** (parallel, primary tier 2) — takes top-2 URLs from SearXNG, fires `VDI.NavigateAndExtract()` in parallel goroutines (5-second timeout each). Navigates actual article pages, applies semantic content selector fallback chain (`article` → `main` → `[role=main]` → `.content` → `body`), strips nav/cookie/ad boilerplate, merges text up to 5000 chars. Yields far richer factual text than snippets alone.
-3. **SearXNG `SearchWithIntent()`** (snippet fallback) — used if VDI is unavailable or returns empty. Colly page-fetcher follows top URLs for body text.
-4. **CollySearcher DDG** (last resort) — Colly directly scrapes DDG Lite. Prone to bot-detection on VPS.
-
-**Supporting service:** `SearXNGSearcher` (`pkg/service/searxng_searcher.go`). `IsAvailable()` health-checks `127.0.0.1:8080/healthz` before each forage with a 30-second cache TTL (no ping-per-inference). SearXNG runs as `oricli-searxng` Docker container, managed by `oricli-searxng.service`.
-
-**Forage outcome:** Extracted text is distilled into 3–5 facts by the generation service and written back to the WorkingMemoryGraph node.
-
-**WebSocket events:** `curiosity_sync { target_entity, action, findings, intent }`
+**WebSocket events:** `curiosity_sync { target_entity, action, findings, intent }`, `session_start`, `session_complete`
 
 ---
 
 ## 5.1 Inline Search — ConfidenceDetector
 **"The Reflexive Lookup"** | `pkg/cognition/confidence.go` → `DetectUncertainty()`
 
-Unlike the CuriosityDaemon (which forages proactively on a 15-minute timer), the ConfidenceDetector fires **synchronously during live chat inference** — before Ollama is ever called.
+Unlike the CuriosityDaemon (which forages during idle periods), the ConfidenceDetector fires **synchronously during live chat inference** — before Ollama is ever called.
 
 - **Trigger**: A user prompt that contains knowledge-seeking signals ("what is", "what does", "who is", "when did", "how to", "explain", "define", etc.) with an extractable topic.
 - **Speed**: Pure regex/keyword — zero LLM calls, <1ms. Never slows inference.

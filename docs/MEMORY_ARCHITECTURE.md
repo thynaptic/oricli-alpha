@@ -8,15 +8,16 @@
 
 ## 1. Overview
 
-Oricli-Alpha uses a three-tier memory architecture. Each tier is optimized for a different access pattern and data lifetime:
+Oricli-Alpha uses a **four-tier memory architecture**. Each tier is optimized for a different access pattern and data lifetime:
 
 | Tier | Technology | Speed | Persistence | Purpose |
 |---|---|---|---|---|
-| **Memory Bridge** | LMDB (PowerDNS/lmdb-go) | μs reads | Durable on-disk | Fast KV store for all memory categories + in-process vector search |
 | **Working Memory Graph** | chromem-go (in-process) | ns reads | Ephemeral (session) | Live graph of active conversation nodes, gap detection |
+| **Memory Bridge** | LMDB (PowerDNS/lmdb-go) | μs reads | Durable on-disk | Fast KV store for all memory categories + in-process vector search |
 | **Knowledge Graph** | Neo4j (bolt://) | ms reads | Durable relational | Long-horizon relationships, entity context, temporal events |
+| **Long-Term Memory Bank** | PocketBase (external VPS) | ~2ms reads | Durable, 200GB | Cross-session recall, curiosity findings, spend ledger, RAG injection |
 
-Data flows upward: episodic events land in LMDB, the Knowledge Graph holds durable relationships, and the Working Memory Graph provides real-time context during inference.
+Data flows upward: episodic events land in LMDB, the Knowledge Graph holds durable relationships, the Working Memory Graph provides real-time context during inference, and PocketBase serves as the cold durable layer for long-horizon recall — surviving process restarts and redeployments.
 
 ---
 
@@ -122,3 +123,87 @@ The pipeline coordinates all three tiers during inference:
 **Implementation:** `pkg/service/code_memory.go` → `CodeMemoryService`
 
 A specialized memory layer for the codebase itself. Indexes Go source files into LMDB with embeddings, enabling semantic code search (used by the ReformDaemon and CodeEngine module). Stored under `.memory/code/`.
+
+---
+
+## 7. Long-Term Memory Bank (PocketBase)
+
+**Implementation:** `pkg/service/memory_bank.go` → `MemoryBank`  
+**Connector:** `pkg/connectors/pocketbase/` → `client.go`, `setup.go`  
+**Backend:** PocketBase v0.23+ on `https://pocketbase.thynaptic.com` (dedicated VPS, 200GB storage, ~2ms latency from primary VPS — same datacenter)
+
+The PocketBase tier is the **cold durable layer** — it outlives every process restart, redeployment, and session boundary. It provides cross-session recall for RAG, persistent curiosity findings, durable spend tracking, and compressed conversation history.
+
+### 7.1 Memory Access Pattern
+
+```
+Hot   →  chromem-go (WorkingMemoryGraph)   ns reads, session-scoped
+Warm  →  LMDB (Memory Bridge)              μs reads, process-durable
+Cold  →  PocketBase                        ~2ms reads, survives reboots
+```
+
+### 7.2 Collections
+
+| Collection | Owner | Purpose |
+|---|---|---|
+| `memories` | admin / oricli | Conversation fragments + curiosity snippets with topic/importance metadata |
+| `knowledge_fragments` | oricli (analyst) | CuriosityDaemon research findings — one entry per forged topic |
+| `spend_ledger` | admin | RunPod monthly spend per service — restored on daemon startup |
+| `conversation_summaries` | admin | Compressed session summaries for long-horizon RAG |
+
+### 7.3 Oricli's Identity
+
+Oricli has her own PocketBase user account (`oricli@thynaptic.com`, role: `analyst`). All curiosity findings and internal epistemic discoveries are written under her user token — not as system/admin records. This means:
+
+- In the PocketBase admin UI, her records are visibly hers
+- `author = "oricli"` → curiosity findings, knowledge fragments
+- `author = "user"` → conversation fragments, summaries
+
+The account is auto-created by `Bootstrap()` on first startup if it doesn't already exist.
+
+### 7.4 RAG Injection
+
+Before every chat response, `MemoryBank.QuerySimilar(lastUserMsg, 5)` fires a keyword/topic match query against the `memories` collection. If relevant results are found, they are prepended to the system prompt as a `## Relevant Memory Context` block (capped at 1200 chars):
+
+```
+## Relevant Memory Context
+- [golang] Oricli researched goroutine scheduler internals on 2026-03-10
+- [runpod] Inference pod idle timeout is 15 minutes by default
+---
+<sovereign trace>
+```
+
+This gives every response long-horizon grounding without embedding infrastructure.
+
+### 7.5 Memory Recycling
+
+When record count in `memories` exceeds `PB_MEMORY_MAX_RECORDS` (default: 500,000), the bottom 10% by retention score is pruned:
+
+```
+retention_score = importance × log(1 + access_count) × e^(-age_days / 180)
+```
+
+Frequently accessed, high-importance memories survive indefinitely. Old, never-accessed memories decay out naturally.
+
+### 7.6 Spend Ledger
+
+`MemoryBank.LoadSpend(ctx, "inference", month)` is called on backbone startup to restore the current month's RunPod spend. `PersistSpend()` is called every minute during active pod sessions. This means the monthly cap guard works correctly even across daemon restarts.
+
+### 7.7 Bootstrap
+
+`MemoryBank.Bootstrap(ctx)` is called as a non-blocking goroutine during `NewServerV2()`. It:
+
+1. Creates all 4 collections if they don't exist (idempotent)
+2. Creates Oricli's analyst user account if it doesn't exist
+3. Logs each action — silent on repeat boots
+
+### 7.8 Environment Variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PB_BASE_URL` | — | PocketBase instance URL (required) |
+| `PB_ADMIN_EMAIL` | — | Admin auth email (required) |
+| `PB_ADMIN_PASSWORD` | — | Admin auth password (required) |
+| `PB_ORICLI_EMAIL` | `oricli@thynaptic.com` | Oricli's analyst account email |
+| `PB_ORICLI_PASSWORD` | `OricliSovereign2026!` | Oricli's analyst account password |
+| `PB_MEMORY_MAX_RECORDS` | `500000` | Recycle threshold for `memories` collection |
