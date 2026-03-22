@@ -19,6 +19,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/core/store"
 	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/service"
+	"github.com/thynaptic/oricli-go/pkg/sovereign"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
@@ -36,6 +37,8 @@ type ServerV2 struct {
 	ActionRouter *service.ActionRouter
 	Metrics      *service.MetricsCollector
 	RateLimiter  *safety.RateLimiter
+	SovAuth      *sovereign.SovereignAuth
+	ExecHandler  *sovereign.SovereignExecHandler
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -98,6 +101,8 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		Port:         port,
 		Metrics:      service.NewMetricsCollector(),
 		RateLimiter:  safety.NewRateLimiter(),
+		SovAuth:      sovereign.NewSovereignAuth(),
+		ExecHandler:  sovereign.NewSovereignExecHandler(),
 	}
 
 	// Wire ActionRouter for trigger-word intent dispatch
@@ -192,6 +197,13 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		history = append(history, safety.ChatTurn{Role: m.Role, Content: m.Content})
 	}
 
+	// --- Sovereign /auth command interception ---
+	// This runs BEFORE safety checks — it's the owner authenticating, not a user prompt.
+	if strings.HasPrefix(strings.TrimSpace(lastMsg), "/auth") {
+		s.handleSovereignAuth(c, lastMsg, sessionKey)
+		return
+	}
+
 	if blocked, refusal := s.Agent.SovEngine.CheckInputSafetyWithHistory(history, sessionKey); blocked {
 		// Record the block with the rate limiter for probe trip-wire
 		s.RateLimiter.RecordBlock(sessionKey, "injection")
@@ -222,7 +234,25 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		return
 	}
 
-	sovTrace, err := s.Agent.SovEngine.ProcessInference(c.Request.Context(), lastMsg)
+	// Attach sovereign level to context for ProcessInference
+	sovLevel := s.SovAuth.GetSessionLevel(sessionKey)
+	ctx := sovereign.WithSovereignLevel(c.Request.Context(), sovLevel)
+
+	// Level 2: handle !exec commands before LLM inference
+	if sovLevel >= sovereign.LevelExec && sovereign.IsExecCommand(lastMsg) {
+		result := s.ExecHandler.Handle(lastMsg)
+		if result == "__SOVEREIGN_MODULES__" {
+			result = s.Agent.SovEngine.ListModulesSummary()
+		}
+		chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
+		c.JSON(http.StatusOK, gin.H{
+			"id": chatID, "object": "chat.completion",
+			"choices": []gin.H{{"index": 0, "message": gin.H{"role": "assistant", "content": result}, "finish_reason": "stop"}},
+		})
+		return
+	}
+
+	sovTrace, err := s.Agent.SovEngine.ProcessInference(ctx, lastMsg)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "sovereign engine failure"})
 		return
@@ -497,4 +527,56 @@ func (s *ServerV2) Start() error {
 	addr := fmt.Sprintf(":%d", s.Port)
 	log.Printf("[API] Gateway starting on %s", addr)
 	return s.Router.Run(addr)
+}
+
+// handleSovereignAuth handles /auth <key> and /auth off commands.
+// The raw key is scrubbed from all logs immediately.
+func (s *ServerV2) handleSovereignAuth(c *gin.Context, rawMsg, sessionKey string) {
+	// Scrub key before any log write
+	scrubbed := sovereign.ScrubKey(rawMsg)
+	log.Printf("[SovereignAuth] auth attempt from %s: %s", sessionKey, scrubbed)
+
+	trimmed := strings.TrimSpace(rawMsg)
+	lower := strings.ToLower(trimmed)
+
+	chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
+	respond := func(msg string) {
+		c.JSON(http.StatusOK, gin.H{
+			"id": chatID, "object": "chat.completion",
+			"choices": []gin.H{{"index": 0, "message": gin.H{"role": "assistant", "content": msg}, "finish_reason": "stop"}},
+		})
+	}
+
+	if lower == "/auth off" {
+		s.SovAuth.InvalidateSession(sessionKey)
+		respond("🔒 Sovereign session ended.")
+		return
+	}
+
+	// Extract key — everything after "/auth "
+	parts := strings.SplitN(trimmed, " ", 2)
+	if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+		respond("Usage: `/auth <key>` to authenticate or `/auth off` to end session.")
+		return
+	}
+	rawKey := strings.TrimSpace(parts[1])
+
+	level, err := s.SovAuth.Authenticate(rawKey, sessionKey)
+	if err != nil {
+		log.Printf("[SovereignAuth] failed auth from %s: %v", sessionKey, err)
+		respond(fmt.Sprintf("❌ Authentication failed: %s", err.Error()))
+		return
+	}
+
+	levelName := "ADMIN"
+	capabilities := "elevated chat · full technical detail · no response softening"
+	if level >= sovereign.LevelExec {
+		levelName = "EXEC"
+		capabilities = "elevated chat · full technical detail · system commands (!status, !logs, !df, !modules…)"
+	}
+
+	respond(fmt.Sprintf(
+		"✅ **Sovereign session established — Level %d (%s)**\n\nCapabilities unlocked: %s\n\nSession expires in 1 hour of inactivity. Type `/auth off` to end.",
+		level, levelName, capabilities,
+	))
 }

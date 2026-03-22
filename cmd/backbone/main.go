@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -20,6 +22,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/kernel"
 	"github.com/thynaptic/oricli-go/pkg/node"
 	"github.com/thynaptic/oricli-go/pkg/service"
+	"github.com/thynaptic/oricli-go/pkg/sovereign"
 )
 
 func bootstrapAPIKey(st *memory.MemoryStore) string {
@@ -48,7 +51,51 @@ func bootstrapAPIKey(st *memory.MemoryStore) string {
 	return raw
 }
 
+// runGenKeys generates a sovereign key pair, prints the raw keys once, and writes
+// the bcrypt hashes to .oricli/sovereign_keys.env ready to paste into .env.
+func runGenKeys() {
+	adminKey, execKey, adminHash, execHash, err := sovereign.GenerateKeyPair()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "keygen failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	dir := "/home/mike/Mavaia/.oricli"
+	os.MkdirAll(dir, 0700)
+	outFile := filepath.Join(dir, "sovereign_keys.env")
+
+	content := fmt.Sprintf(
+		"# Sovereign key hashes — add these to your .env file\n"+
+			"# The raw keys below are printed ONCE. Store them securely.\n\n"+
+			"SOVEREIGN_ADMIN_KEY_HASH=%s\n"+
+			"SOVEREIGN_EXEC_KEY_HASH=%s\n",
+		adminHash, execHash,
+	)
+	if err := os.WriteFile(outFile, []byte(content), 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "could not write %s: %v\n", outFile, err)
+		os.Exit(1)
+	}
+
+	fmt.Println("=== SOVEREIGN KEY PAIR GENERATED ===")
+	fmt.Println()
+	fmt.Printf("  ADMIN KEY  (Level 1 — elevated chat):  %s\n", adminKey)
+	fmt.Printf("  EXEC  KEY  (Level 2 — system commands): %s\n", execKey)
+	fmt.Println()
+	fmt.Printf("Hashes written to: %s\n", outFile)
+	fmt.Println("Add those two SOVEREIGN_*_KEY_HASH lines to your .env, then restart the backbone.")
+	fmt.Println()
+	fmt.Println("⚠  These raw keys will NOT be shown again. Store them in your password manager NOW.")
+}
+
 func main() {
+	// --gen-keys: print sovereign key pair and exit (no server startup)
+	for _, arg := range os.Args[1:] {
+		if arg == "--gen-keys" {
+			runGenKeys()
+			return
+		}
+	}
+
 	log.Println("--- BOOTING ORICLI-ALPHA HIVE OS (RING 0 MERGE) ---")
 
 	// 1. Load Environment & Safety Caps

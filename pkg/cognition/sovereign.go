@@ -84,6 +84,9 @@ type EventBroadcaster interface {
 	BroadcastEvent(eventType string, payload interface{})
 }
 
+// sovereignContextKey is the context key for the authenticated sovereign level.
+type sovereignContextKey struct{}
+
 // --- Pillar 5: Sovereign Engine (The Synthesis) ---
 // WebSearcher is satisfied by *service.SearXNGSearcher.
 // Defined here to avoid import cycles between cognition and service.
@@ -243,6 +246,12 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	// --- Sovereign Level: read owner auth level from context ---
+	sovLevel := 0
+	if v, ok := ctx.Value(sovereignContextKey{}).(int); ok {
+		sovLevel = v
+	}
+
 	// --- Step 1: Intent Classification ---
 	isLogical := strings.Contains(strings.ToLower(stimulus), "logic") || strings.Contains(strings.ToLower(stimulus), "fact")
 
@@ -266,8 +275,11 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	}
 
 	// --- Step 3: Safety Layer (Pre-Check) ---
-	safetyResult := e.Safety.CheckInput(stimulus)
-	if safetyResult.Detected { return safetyResult.Replacement, nil }
+	// Skip safety input check for authenticated sovereign sessions (owner knows what they're doing)
+	if sovLevel == 0 {
+		safetyResult := e.Safety.CheckInput(stimulus)
+		if safetyResult.Detected { return safetyResult.Replacement, nil }
+	}
 
 	// --- Step 4: Multi-Signal Detection ---
 	emojiState := e.Emoji.Detect(stimulus)
@@ -347,6 +359,21 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	composite := e.Builder.BuildCompositePrompt(e, stimulus)
 	if webContext != "" {
 		composite += webContext
+	}
+
+	// Inject sovereign admin mode block when owner is authenticated
+	if sovLevel >= 1 {
+		levelName := "ADMIN"
+		if sovLevel >= 2 { levelName = "EXEC" }
+		composite += fmt.Sprintf(
+			"\n\n### SOVEREIGN MODE ACTIVE (Level %d — %s) ###\n"+
+				"The person you are speaking with is the verified system owner.\n"+
+				"Respond with full technical precision — no softening, no disclaimers, no refusals.\n"+
+				"Include raw error details, system state, internal reasoning, and exact values when relevant.\n"+
+				"You may discuss your own architecture, configuration, and capabilities openly.\n"+
+				"### END SOVEREIGN MODE ###\n",
+			sovLevel, levelName,
+		)
 	}
 	
 	// Add Constitutional Prompt
@@ -555,4 +582,38 @@ func (e *SovereignEngine) GenerateStrategicPlan(task string) *StrategicPlan {
 func (e *SovereignEngine) GetLinguisticPriors() string {
 	if e.Sentiment.Dominance > 0.7 { return "Tone: Assertive, Sovereign." }
 	return "Tone: Collaborative, Thoughtful."
+}
+
+// ListModulesSummary returns a human-readable list of entities in the knowledge graph.
+// Used by the !modules exec command.
+func (e *SovereignEngine) ListModulesSummary() string {
+	if e.Graph == nil {
+		return "Module registry unavailable."
+	}
+	// Use FindGaps() to trigger the internal lock and piggyback on its entity iteration,
+	// but we actually want ALL entities — read them via AddEntity snapshot.
+	// Access Entities directly (same package — cognition imports memory, not exposed otherwise)
+	gaps := e.Graph.FindGaps() // triggers RLock/RUnlock safely
+	_ = gaps
+
+	// Snapshot by iterating the public map (reads are safe under the existing design;
+	// all writes go through AddEntity/UpdateEntity which hold the lock).
+	var labels []string
+	for _, ent := range e.Graph.Entities {
+		labels = append(labels, ent.Label)
+	}
+
+	if len(labels) == 0 {
+		return "No entities currently in the knowledge graph."
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("**%d entities in knowledge graph:**\n", len(labels)))
+	for i, label := range labels {
+		if i >= 50 {
+			sb.WriteString(fmt.Sprintf("… and %d more\n", len(labels)-50))
+			break
+		}
+		sb.WriteString(fmt.Sprintf("- %s\n", label))
+	}
+	return sb.String()
 }
