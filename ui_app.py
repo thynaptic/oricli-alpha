@@ -2565,13 +2565,18 @@ def _fetch_todoist(creds: dict, opts: dict) -> list[dict]:
     params: dict = {}
     if opts.get("query"):
         params["filter"] = opts["query"]
-    r = _hx.get("https://api.todoist.com/rest/v2/tasks",
+    # Todoist REST API v2 (/rest/v2/tasks) was removed (410 Gone).
+    # New endpoint is /api/v1/tasks.
+    r = _hx.get("https://api.todoist.com/api/v1/tasks",
                 headers={"Authorization": f"Bearer {token}"}, params=params, timeout=15)
     r.raise_for_status()
     docs = []
     for task in r.json()[:max_r]:
-        docs.append({"title": task["content"], "content": task.get("description") or "",
-                     "source": f"todoist:{task['id']}", "metadata": {"priority": str(task.get("priority", 1)), "due": task.get("due", {}).get("string", "") if task.get("due") else ""}})
+        due_str = ""
+        due = task.get("due") or {}
+        due_str = due.get("string") or due.get("date") or ""
+        docs.append({"title": task.get("content", ""), "content": task.get("description") or "",
+                     "source": f"todoist:{task['id']}", "metadata": {"priority": str(task.get("priority", 1)), "due": due_str}})
     return docs
 
 
