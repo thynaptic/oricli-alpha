@@ -206,6 +206,10 @@ func (s *ServerV2) setupRoutes() {
 		protected.GET("/documents", s.handleListDocuments)
 
 		protected.POST("/feedback", s.handleReactionFeedback)
+
+		// Sovereign Identity — active .ori profile editor
+		protected.GET("/sovereign/identity", s.handleGetSovereignIdentity)
+		protected.PUT("/sovereign/identity", s.handlePutSovereignIdentity)
 	}
 }
 
@@ -1111,6 +1115,93 @@ c.JSON(http.StatusOK, gin.H{
 "importance":  importance,
 "keywords":    keywords,
 })
+}
+
+// handleGetSovereignIdentity returns the active sovereign .ori profile as JSON.
+func (s *ServerV2) handleGetSovereignIdentity(c *gin.Context) {
+	p := s.Agent.SovEngine.ActiveProfile
+	if p == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"name": "oricli", "description": "", "archetype": "friend",
+			"sass_factor": 0.65, "energy": "moderate",
+			"instructions": []string{}, "rules": []string{},
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"name":         p.Name,
+		"description":  p.Description,
+		"archetype":    p.Archetype,
+		"sass_factor":  p.SassFactor,
+		"energy":       p.Energy,
+		"instructions": p.Instructions,
+		"rules":        p.Rules,
+	})
+}
+
+// handlePutSovereignIdentity writes an updated .ori profile to disk,
+// reloads the registry, and hot-swaps the active profile without a restart.
+func (s *ServerV2) handlePutSovereignIdentity(c *gin.Context) {
+	var req struct {
+		Name         string   `json:"name"`
+		Description  string   `json:"description"`
+		Archetype    string   `json:"archetype"`
+		SassFactor   float64  `json:"sass_factor"`
+		Energy       string   `json:"energy"`
+		Instructions []string `json:"instructions"`
+		Rules        []string `json:"rules"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Name == "" {
+		req.Name = "oricli"
+	}
+
+	// Build .ori file content
+	var b strings.Builder
+	b.WriteString("# Sovereign Identity Profile — auto-saved from UI\n\n")
+	b.WriteString("@profile_name: " + req.Name + "\n")
+	b.WriteString("@description: " + req.Description + "\n")
+	b.WriteString("@archetype: " + req.Archetype + "\n")
+	b.WriteString(fmt.Sprintf("@sass_factor: %.2f\n", req.SassFactor))
+	b.WriteString("@energy: " + req.Energy + "\n\n")
+
+	if len(req.Instructions) > 0 {
+		b.WriteString("<instructions>\n")
+		for _, line := range req.Instructions {
+			if strings.TrimSpace(line) != "" {
+				b.WriteString("- " + strings.TrimSpace(line) + "\n")
+			}
+		}
+		b.WriteString("</instructions>\n\n")
+	}
+
+	if len(req.Rules) > 0 {
+		b.WriteString("<rules>\n")
+		for _, line := range req.Rules {
+			if strings.TrimSpace(line) != "" {
+				b.WriteString("- " + strings.TrimSpace(line) + "\n")
+			}
+		}
+		b.WriteString("</rules>\n")
+	}
+
+	oriPath := filepath.Join(s.Agent.SovEngine.Profiles.Dir, req.Name+".ori")
+	if err := os.WriteFile(oriPath, []byte(b.String()), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to write profile: " + err.Error()})
+		return
+	}
+
+	// Hot-reload registry and swap active profile — no restart needed
+	s.Agent.SovEngine.Profiles.Reload()
+	if p, ok := s.Agent.SovEngine.Profiles.GetProfile(req.Name); ok {
+		s.Agent.SovEngine.ActiveProfile = p
+		log.Printf("[API] Sovereign identity updated and hot-swapped: %s", req.Name)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "saved": req.Name + ".ori"})
 }
 
 // extractFeedbackKeywords pulls the top-5 meaningful words from a message preview.
