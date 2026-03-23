@@ -126,7 +126,7 @@ func DefaultRemoteIndexOptions() RemoteIndexOptions {
 		CrawlDepth:          defaultCrawlDepth,
 		MaxPages:            defaultMaxPages,
 		RateLimitPerSec:     defaultRateLimitPerSec,
-		UserAgent:           "talos/1.0 (+https://thynaptic.com)",
+		UserAgent:           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 		HFAPIBaseURL:        defaultHFDatasetAPIBase,
 		KaggleAPIBaseURL:    defaultKaggleAPIBase,
 		URLSafetyEnabled:    true,
@@ -617,7 +617,7 @@ func normalizeRemoteOptions(opts RemoteIndexOptions) RemoteIndexOptions {
 		opts.RateLimitPerSec = defaultRateLimitPerSec
 	}
 	if strings.TrimSpace(opts.UserAgent) == "" {
-		opts.UserAgent = "talos/1.0 (+https://thynaptic.com)"
+		opts.UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 	}
 	if opts.URLSafetyTimeout <= 0 {
 		opts.URLSafetyTimeout = 45 * time.Second
