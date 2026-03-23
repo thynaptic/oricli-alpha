@@ -324,9 +324,34 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		return
 	}
 
+	// Commit to SSE NOW — before any blocking I/O (ProcessInference, Ollama warm-up).
+	// Cloudflare's idle timeout clock starts from the TCP handshake. Without this,
+	// ProcessInference (~3s) + Ollama model-load (up to 60s) + first-token latency
+	// can easily exceed 100s before a single byte is written, triggering a 524.
+	chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("X-Accel-Buffering", "no")
+	c.Writer.WriteString(": keep-alive\n\n")
+	c.Writer.Flush()
+
+	// Helper to emit an SSE error event (can't use c.JSON once SSE headers are sent)
+	sseError := func(msg string) {
+		errChunk := map[string]interface{}{
+			"id":     chatID,
+			"object": "chat.completion.chunk",
+			"choices": []map[string]interface{}{
+				{"index": 0, "delta": map[string]interface{}{"role": "assistant", "content": "\n\n[Error: " + msg + "]"}, "finish_reason": "stop"},
+			},
+		}
+		data, _ := json.Marshal(errChunk)
+		c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+		c.Writer.Flush()
+	}
+
 	sovTrace, err := s.Agent.SovEngine.ProcessInference(ctx, lastMsg)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "sovereign engine failure"})
+		sseError("sovereign engine failure")
 		return
 	}
 
@@ -383,8 +408,6 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		msgs[i+1] = map[string]string{"role": role, "content": m.Content}
 	}
 
-	chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
-
 	// Detect trigger-word action intent and dispatch async agent task
 	type dispatchMeta struct {
 		jobID   string
@@ -434,18 +457,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 	tokenCh, err := s.Agent.GenService.ChatStream(c.Request.Context(), msgs, streamOpts)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		sseError(err.Error())
 		return
 	}
-
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("X-Accel-Buffering", "no")
-
-	// Flush a keep-alive comment immediately so Cloudflare (100s timeout) knows
-	// the connection is alive while the sovereign engine + Ollama warm up.
-	c.Writer.WriteString(": keep-alive\n\n")
-	c.Writer.Flush()
 
 	// Emit agent_dispatch SSE event before the first token so the UI renders
 	// the dispatch card immediately
@@ -470,33 +484,46 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 
 	var responseBuilder strings.Builder
-	c.Stream(func(w io.Writer) bool {
-		token, ok := <-tokenCh
-		if !ok {
-			// Stream complete — send finish chunk
-			doneChunk := map[string]interface{}{
-				"id":     chatID,
-				"object": "chat.completion.chunk",
-				"choices": []map[string]interface{}{
-					{"index": 0, "delta": map[string]interface{}{}, "finish_reason": "stop"},
-				},
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	streamDone := false
+	for !streamDone {
+		select {
+		case token, ok := <-tokenCh:
+			if !ok {
+				streamDone = true
+				doneChunk := map[string]interface{}{
+					"id":     chatID,
+					"object": "chat.completion.chunk",
+					"choices": []map[string]interface{}{
+						{"index": 0, "delta": map[string]interface{}{}, "finish_reason": "stop"},
+					},
+				}
+				data, _ := json.Marshal(doneChunk)
+				c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+				c.Writer.Flush()
+			} else {
+				ticker.Reset(15 * time.Second)
+				responseBuilder.WriteString(token)
+				chunk := map[string]interface{}{
+					"id":     chatID,
+					"object": "chat.completion.chunk",
+					"choices": []map[string]interface{}{
+						{"index": 0, "delta": map[string]interface{}{"role": "assistant", "content": token}, "finish_reason": nil},
+					},
+				}
+				data, _ := json.Marshal(chunk)
+				c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+				c.Writer.Flush()
 			}
-			data, _ := json.Marshal(doneChunk)
-			fmt.Fprintf(w, "data: %s\n\n", string(data))
-			return false
+		case <-ticker.C:
+			// No token in 15s — punch through Cloudflare's idle timer
+			c.Writer.WriteString(": keep-alive\n\n")
+			c.Writer.Flush()
+		case <-c.Request.Context().Done():
+			streamDone = true
 		}
-		responseBuilder.WriteString(token)
-		chunk := map[string]interface{}{
-			"id":     chatID,
-			"object": "chat.completion.chunk",
-			"choices": []map[string]interface{}{
-				{"index": 0, "delta": map[string]interface{}{"role": "assistant", "content": token}, "finish_reason": nil},
-			},
-		}
-		data, _ := json.Marshal(chunk)
-		fmt.Fprintf(w, "data: %s\n\n", string(data))
-		return true
-	})
+	}
 
 	// Post-stream: async jobs on the full assembled response
 	responseText := responseBuilder.String()
