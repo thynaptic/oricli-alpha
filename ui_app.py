@@ -2416,6 +2416,7 @@ def _fetch_discord(creds: dict, opts: dict) -> list[dict]:
 
 def _fetch_telegram(creds: dict, opts: dict) -> list[dict]:
     import httpx as _hx
+    import time as _time
     token = creds.get("bot_token", "")
     if not token:
         raise ValueError("Telegram bot token required")
@@ -2423,7 +2424,7 @@ def _fetch_telegram(creds: dict, opts: dict) -> list[dict]:
     base = f"https://api.telegram.org/bot{token}"
 
     # Telegram disallows getUpdates while a webhook is active (409 Conflict).
-    # Temporarily delete the webhook, poll, then restore it.
+    # Delete webhook, wait for Telegram to drain, poll, then restore.
     webhook_url = ""
     try:
         wh = _hx.get(f"{base}/getWebhookInfo", timeout=10).json()
@@ -2431,16 +2432,22 @@ def _fetch_telegram(creds: dict, opts: dict) -> list[dict]:
     except Exception:
         pass
 
+    docs = []
     if webhook_url:
+        # Delete webhook and give Telegram ~2s to release the slot
         try:
-            _hx.post(f"{base}/deleteWebhook", timeout=10)
+            _hx.post(f"{base}/deleteWebhook", json={"drop_pending_updates": False}, timeout=10)
+            _time.sleep(2)
         except Exception:
             pass
 
     try:
         r = _hx.get(f"{base}/getUpdates", params={"limit": int(opts.get("max_results", 50))}, timeout=15)
+        if r.status_code == 409:
+            # Another long-poll is still in flight — skip gracefully
+            log.warning("[Telegram] 409 on getUpdates — another session is active, skipping index")
+            return []
         r.raise_for_status()
-        docs = []
         for upd in r.json().get("result", []):
             msg = upd.get("message") or upd.get("channel_post") or {}
             text = msg.get("text", "")
