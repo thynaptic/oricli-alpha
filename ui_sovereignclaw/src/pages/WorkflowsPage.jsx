@@ -242,6 +242,151 @@ function ConnectionPicker({ value, query, onChangeConn, onChangeQuery }) {
 
 
 // ─── DocUploadModal ───────────────────────────────────────────────────────────
+// ─── Template presets ────────────────────────────────────────────────────────
+const TEMPLATE_PRESETS = [
+  {
+    label: 'Research Report',
+    body: `## Research Report — {{date}}
+
+### Summary
+{{step_0_output}}
+
+### Key Findings
+{{output}}
+
+### Sources
+- 
+
+### Conclusion
+`,
+  },
+  {
+    label: 'Executive Brief',
+    body: `**TL;DR:** {{output}}
+
+**Key Points:**
+- 
+- 
+- 
+
+**Recommended Action:**
+`,
+  },
+  {
+    label: 'Meeting Notes',
+    body: `# Meeting Notes — {{date}}
+
+**Attendees:** 
+
+**Agenda:**
+{{step_0_output}}
+
+**Discussion & Decisions:**
+{{output}}
+
+**Action Items:**
+- [ ] 
+- [ ] 
+
+**Next Meeting:**
+`,
+  },
+  {
+    label: 'Content Draft',
+    body: `# {{workflow_name}}
+
+## Introduction
+{{step_0_output}}
+
+## {{output}}
+
+---
+*Call to action:*
+`,
+  },
+  {
+    label: 'Comparison Table',
+    body: `## Comparison — {{date}}
+
+| Feature | Option A | Option B |
+|---------|----------|----------|
+|         |          |          |
+|         |          |          |
+
+**Summary:**
+{{output}}
+`,
+  },
+  {
+    label: 'Email',
+    body: `**Subject:** 
+
+Hi [Name],
+
+{{output}}
+
+Let me know if you have any questions.
+
+Best,
+[Your name]
+`,
+  },
+  {
+    label: 'Bug Report',
+    body: `## Bug Report — {{date}}
+
+**Summary:** {{step_0_output}}
+
+**Steps to Reproduce:**
+1. 
+2. 
+3. 
+
+**Expected Behaviour:**
+
+**Actual Behaviour:**
+{{output}}
+
+**Severity:** [ ] Critical  [ ] High  [ ] Medium  [ ] Low
+
+**Environment:**
+`,
+  },
+  {
+    label: 'Social Post',
+    body: `{{output}}
+
+#️⃣ 
+`,
+  },
+];
+
+function TemplatePresets({ onSelect }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: 'relative', marginBottom: 6 }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(124,106,247,0.25)', background: 'rgba(124,106,247,0.07)', color: '#a89cf7', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-grotesk)', fontWeight: 600 }}>
+        <FileText size={11} /> Presets <ChevronDown size={10} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 60, background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', padding: 4, minWidth: 180 }}>
+          {TEMPLATE_PRESETS.map(p => (
+            <button key={p.label} type="button"
+              onClick={() => { onSelect(p.body); setOpen(false); }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: 'transparent', color: 'var(--color-sc-text)', textAlign: 'left', fontSize: 12, fontFamily: 'var(--font-grotesk)', fontWeight: 500 }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,106,247,0.1)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <FileText size={12} style={{ color: '#a89cf7', flexShrink: 0 }} />
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Template variable reference ─────────────────────────────────────────────
 const BUILTIN_VARS = [
   { key: 'output',         desc: 'Output of the previous step' },
@@ -585,13 +730,18 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId, compac
             </div>
           </div>
         ) : (
-          <textarea
-            value={step.value || ''}
-            onChange={e => onChange({ ...step, value: e.target.value })}
-            placeholder={def.placeholder}
-            rows={step.type === 'code' || step.type === 'template' ? 5 : 2}
-            style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.55, fontFamily: step.type === 'code' ? 'var(--font-mono)' : 'var(--font-inter)', fontSize: step.type === 'code' ? 12 : 13 }}
-          />
+          <>
+            {step.type === 'template' && (
+              <TemplatePresets onSelect={tpl => onChange({ ...step, value: tpl })} />
+            )}
+            <textarea
+              value={step.value || ''}
+              onChange={e => onChange({ ...step, value: e.target.value })}
+              placeholder={def.placeholder}
+              rows={step.type === 'code' || step.type === 'template' ? 5 : 2}
+              style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.55, fontFamily: step.type === 'code' ? 'var(--font-mono)' : 'var(--font-inter)', fontSize: step.type === 'code' ? 12 : 13 }}
+            />
+          </>
         )}
         {index > 0 && step.type !== 'sub_workflow' && (
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-sc-text-dim)' }}>
