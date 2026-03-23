@@ -224,6 +224,10 @@ func main() {
 	}
 	apiServer.DocumentIngestor = docIngestor
 	log.Println("[Boot] Document Ingestor wired.")
+
+	// Seed Oricli's self-knowledge (idempotent — skips if already present).
+	go service.SeedIdentity(apiServer.MemoryBank)
+	log.Println("[Boot] Identity seed queued.")
 	
 	go apiServer.Start()
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)
