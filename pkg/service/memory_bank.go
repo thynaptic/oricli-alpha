@@ -285,20 +285,57 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 		return nil, nil
 	}
 
-	// Sanitize for PocketBase filter syntax
-	safe := strings.ReplaceAll(query, `"`, `'`)
-	safe = strings.ReplaceAll(safe, `\`, ``)
-	if len(safe) > 100 {
-		safe = safe[:100]
+	// ── Build keyword filter ──────────────────────────────────────────────────
+	// Split query into individual meaningful keywords and build OR conditions.
+	// This prevents the "what is SCAI?" bug where the full phrase never matches.
+	keywords := extractQueryKeywords(query, 6)
+	var filterParts []string
+	for _, kw := range keywords {
+		kw = strings.ReplaceAll(kw, `"`, `'`)
+		kw = strings.ReplaceAll(kw, `\`, ``)
+		filterParts = append(filterParts, fmt.Sprintf(`topic ~ "%s"`, kw), fmt.Sprintf(`content ~ "%s"`, kw))
 	}
 
-	// Fetch up to 50 keyword candidates — more candidates = better cosine ranking
-	filter := fmt.Sprintf(`topic ~ "%s" || content ~ "%s"`, safe, safe)
-	result, err := m.adminClient.QueryRecords(ctx, "memories", filter, "-importance,-created", 50)
-	if err != nil {
-		return nil, err
+	var result *pb.ListRecordsResponse
+	var err error
+
+	if len(filterParts) > 0 {
+		filter := strings.Join(filterParts, " || ")
+		result, err = m.adminClient.QueryRecords(ctx, "memories", filter, "-importance,-created", 50)
+		if err != nil {
+			return nil, err
+		}
 	}
-	if len(result.Items) == 0 {
+
+	// ── High-importance fallback ──────────────────────────────────────────────
+	// Always include top-importance records (identity seed, user-stated facts)
+	// so they can compete in cosine re-ranking even if no keyword matched.
+	hiResult, hiErr := m.adminClient.QueryRecords(ctx, "memories", "importance>=0.9", "-importance,-created", 20)
+	if hiErr == nil && hiResult != nil {
+		seen := map[string]bool{}
+		var merged []map[string]any
+		if result != nil {
+			merged = append(merged, result.Items...)
+			for _, it := range result.Items {
+				if id, ok := it["id"].(string); ok {
+					seen[id] = true
+				}
+			}
+		}
+		for _, it := range hiResult.Items {
+			id, _ := it["id"].(string)
+			if !seen[id] {
+				merged = append(merged, it)
+				seen[id] = true
+			}
+		}
+		if result == nil {
+			result = hiResult
+		}
+		result.Items = merged
+	}
+
+	if result == nil || len(result.Items) == 0 {
 		return nil, nil
 	}
 
@@ -387,6 +424,38 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 		}()
 	}
 	return frags, nil
+}
+
+// extractQueryKeywords splits a query into meaningful keywords for PocketBase
+// filter construction. Strips stopwords and short tokens so "what is SCAI?"
+// becomes ["SCAI"] rather than trying to match the full phrase.
+func extractQueryKeywords(query string, max int) []string {
+	stopWords := map[string]bool{
+		"what": true, "is": true, "are": true, "the": true, "a": true, "an": true,
+		"how": true, "does": true, "do": true, "can": true, "you": true, "me": true,
+		"tell": true, "explain": true, "describe": true, "about": true, "with": true,
+		"for": true, "your": true, "my": true, "its": true, "it": true, "this": true,
+		"that": true, "was": true, "were": true, "and": true, "or": true, "of": true,
+		"in": true, "on": true, "at": true, "to": true, "from": true, "by": true,
+		"have": true, "has": true, "had": true, "be": true, "been": true, "being": true,
+		"please": true, "could": true, "would": true, "should": true, "will": true,
+	}
+	words := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
+		return r == ' ' || r == '?' || r == '.' || r == '!' || r == ',' || r == '"' || r == '\''
+	})
+	seen := map[string]bool{}
+	out := make([]string, 0, max)
+	for _, w := range words {
+		if len(w) < 3 || stopWords[w] || seen[w] {
+			continue
+		}
+		seen[w] = true
+		out = append(out, w)
+		if len(out) >= max {
+			break
+		}
+	}
+	return out
 }
 
 // QueryKnowledgeFragments returns known topics from previous curiosity bursts.
