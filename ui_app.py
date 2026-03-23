@@ -2351,21 +2351,54 @@ def _fetch_salesforce(creds: dict, opts: dict) -> list[dict]:
 def _fetch_arxiv(creds: dict, opts: dict) -> list[dict]:
     import httpx as _hx
     import xml.etree.ElementTree as ET
-    query = opts.get("query") or creds.get("default_categories", "cs.AI")
-    max_r = int(opts.get("max_results") or creds.get("max_results") or 10)
-    r = _hx.get("https://export.arxiv.org/api/query",
-                params={"search_query": f"all:{query}", "max_results": max_r, "sortBy": "relevance"}, timeout=20)
+
+    # Parse comma-separated categories into proper arXiv cat: query
+    # e.g. "cs.AI, cs.LG, stat.ML" → "cat:cs.AI OR cat:cs.LG OR cat:stat.ML"
+    raw_cats = opts.get("query") or creds.get("default_categories", "cs.AI")
+    cats = [c.strip() for c in raw_cats.replace(";", ",").split(",") if c.strip()]
+    if not cats:
+        cats = ["cs.AI"]
+
+    # Build category filter — arXiv API uses cat: prefix for subject classification
+    cat_query = " OR ".join(f"cat:{c}" for c in cats)
+
+    # Optional date filter: only fetch papers submitted in the last N days
+    days_back = int(creds.get("days_back") or 7)
+    max_r = int(opts.get("max_results") or creds.get("max_results") or 50)
+
+    if days_back > 0:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y%m%d")
+        search_query = f"({cat_query}) AND submittedDate:[{cutoff}0000 TO *]"
+    else:
+        search_query = cat_query
+
+    r = _hx.get("https://export.arxiv.org/api/query", params={
+        "search_query": search_query,
+        "max_results":  max_r,
+        "sortBy":       "submittedDate",
+        "sortOrder":    "descending",
+    }, timeout=30)
     r.raise_for_status()
+
     ns = "http://www.w3.org/2005/Atom"
     root = ET.fromstring(r.text)
     docs = []
     for entry in root.findall(f"{{{ns}}}entry"):
-        title = (entry.find(f"{{{ns}}}title") or entry).text or ""
+        title   = (entry.find(f"{{{ns}}}title")   or entry).text or ""
         summary = (entry.find(f"{{{ns}}}summary") or entry).text or ""
-        link = next((l.get("href", "") for l in entry.findall(f"{{{ns}}}link") if l.get("title") == "pdf"), "")
+        link    = next((l.get("href", "") for l in entry.findall(f"{{{ns}}}link") if l.get("title") == "pdf"), "")
         arxiv_id = (entry.find(f"{{{ns}}}id") or entry).text or ""
-        docs.append({"title": title.strip(), "content": summary.strip(),
-                     "source": f"arxiv:{arxiv_id.split('/')[-1]}", "metadata": {"url": link or arxiv_id}})
+        # Capture paper categories for metadata
+        paper_cats = [c.get("term", "") for c in entry.findall(f"{{{ns}}}category")]
+        published  = (entry.find(f"{{{ns}}}published") or entry).text or ""
+        authors    = [a.find(f"{{{ns}}}name").text for a in entry.findall(f"{{{ns}}}author") if a.find(f"{{{ns}}}name") is not None]
+        content = f"Authors: {', '.join(authors[:5])}\nPublished: {published[:10]}\nCategories: {', '.join(paper_cats)}\n\n{summary.strip()}"
+        docs.append({
+            "title":    title.strip(),
+            "content":  content[:3000],
+            "source":   f"arxiv:{arxiv_id.split('/')[-1]}",
+            "metadata": {"url": link or arxiv_id, "categories": paper_cats, "published": published[:10]},
+        })
     return docs
 
 

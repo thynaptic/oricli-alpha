@@ -178,11 +178,12 @@ const CATALOG = [
   {
     id: 'arxiv', name: 'arXiv', category: 'Research',
     emoji: '📐', color: '#B31B1B',
-    description: 'Search preprints across physics, math, CS, biology, and more. No key needed.',
+    description: 'Auto-index latest preprints by category. No API key needed.',
     docs: 'https://info.arxiv.org/help/api/index.html',
     fields: [
-      { key: 'default_categories', label: 'Default Categories', type: 'text', placeholder: 'cs.AI, cs.LG (comma-separated)' },
-      { key: 'max_results', label: 'Max results per query', type: 'text', placeholder: '10' },
+      { key: 'default_categories', label: 'Categories', type: 'text', placeholder: 'cs.AI, cs.LG, cs.IT, stat.ML', required: true },
+      { key: 'days_back', label: 'Fetch papers from last N days', type: 'text', placeholder: '7' },
+      { key: 'max_results', label: 'Max papers per index run', type: 'text', placeholder: '50' },
     ],
   },
   {
