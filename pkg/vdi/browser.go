@@ -1,7 +1,13 @@
 package vdi
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -191,4 +197,93 @@ func (m *Manager) ClickAt(x, y float64) (string, error) {
 	}
 
 	return fmt.Sprintf("Clicked at coordinates: (%.2f, %.2f)", x, y), nil
+}
+
+// NavigateAndSee is Oricli's visual comprehension path.
+// It navigates to a URL, captures a screenshot, and sends it to a vision model
+// for a natural-language description of what the page looks like visually.
+// Falls back to DOM text extraction if the vision model is unavailable.
+//
+// The vision model is controlled by OLLAMA_VISION_MODEL (default: moondream).
+// The Ollama base URL defaults to http://127.0.0.1:11434.
+func (m *Manager) NavigateAndSee(rawURL string) (string, error) {
+	ctx, cancel := m.GetBrowserContext(20 * time.Second)
+	if ctx == nil {
+		return "", fmt.Errorf("VDI browser not initialised")
+	}
+	defer cancel()
+
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(rawURL),
+		chromedp.WaitVisible("body", chromedp.ByQuery),
+		chromedp.Sleep(800*time.Millisecond), // let lazy-loaded content settle
+	); err != nil {
+		return "", fmt.Errorf("NavigateAndSee navigation failed: %v", err)
+	}
+
+	var buf []byte
+	if err := chromedp.Run(ctx, chromedp.CaptureScreenshot(&buf)); err != nil {
+		return "", fmt.Errorf("screenshot capture failed: %v", err)
+	}
+
+	b64img := base64.StdEncoding.EncodeToString(buf)
+	return askVisionModel(rawURL, b64img)
+}
+
+// askVisionModel sends a base64 PNG to the configured Ollama vision model
+// and returns its natural-language description of the page.
+func askVisionModel(pageURL, b64img string) (string, error) {
+	ollamaURL := os.Getenv("OLLAMA_GEN_URL")
+	if ollamaURL == "" {
+		ollamaURL = "http://127.0.0.1:11434"
+	}
+	model := os.Getenv("OLLAMA_VISION_MODEL")
+	if model == "" {
+		model = "moondream"
+	}
+
+	prompt := fmt.Sprintf(
+		"You are analyzing a web page screenshot. URL: %s\n"+
+			"Describe: 1) The page topic/purpose. 2) Key information visible. "+
+			"3) Any data tables, charts, or images. Be concise and factual.",
+		pageURL,
+	)
+
+	payload := map[string]interface{}{
+		"model":  model,
+		"stream": false,
+		"messages": []map[string]interface{}{
+			{
+				"role":    "user",
+				"content": prompt,
+				"images":  []string{b64img},
+			},
+		},
+		"options": map[string]interface{}{
+			"num_predict": 400,
+			"num_thread":  6,
+		},
+	}
+
+	body, _ := json.Marshal(payload)
+	resp, err := (&http.Client{Timeout: 120 * time.Second}).Post(
+		ollamaURL+"/api/chat",
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return "", fmt.Errorf("vision model request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(resp.Body)
+	var result struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil || result.Message.Content == "" {
+		return "", fmt.Errorf("vision model returned empty response")
+	}
+	return result.Message.Content, nil
 }

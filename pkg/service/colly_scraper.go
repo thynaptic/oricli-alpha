@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly/v2"
 )
 
@@ -246,29 +247,13 @@ func (cs *CollySearcher) FetchResultPages(results []*searchResult) {
 		byURL[r.URL] = r
 	}
 
-	c.OnHTML("body", func(e *colly.HTMLElement) {
-		// Remove boilerplate elements before extracting text.
-		e.DOM.Find("script, style, nav, header, footer, aside, form, iframe, noscript").Remove()
-
-		// Prefer article/main content if present.
-		text := ""
-		for _, sel := range []string{"article", "main", "[role=main]", ".content", "#content", "body"} {
-			t := strings.TrimSpace(e.DOM.Find(sel).First().Text())
-			if len(t) > len(text) {
-				text = t
-			}
+	c.OnHTML("html", func(e *colly.HTMLElement) {
+		rawURL := e.Request.URL.String()
+		res, ok := byURL[rawURL]
+		if !ok {
+			return
 		}
-
-		// Normalise whitespace.
-		fields := strings.Fields(text)
-		clean := strings.Join(fields, " ")
-		if len(clean) > 3000 {
-			clean = clean[:3000]
-		}
-
-		if r, ok := byURL[e.Request.URL.String()]; ok {
-			r.Body = clean
-		}
+		res.Body = extractStructuredDOM(e)
 	})
 
 	// On 403/429/blocked: escalate through Jina → Archive fallback chain.
@@ -301,4 +286,84 @@ func (cs *CollySearcher) FetchResultPages(results []*searchResult) {
 			}
 		}
 	}
+}
+
+// extractStructuredDOM converts a colly HTMLElement into a structured markdown
+// context string — preserving heading hierarchy, main content, and key links.
+// This gives Oricli semantic page awareness instead of flat noise.
+func extractStructuredDOM(e *colly.HTMLElement) string {
+	dom := e.DOM
+
+	// Strip noise
+	dom.Find("script, style, nav, header, footer, aside, form, iframe, noscript, .cookie-banner, .ad, .ads, #cookie-notice, [role=banner], [role=navigation]").Remove()
+
+	var sb strings.Builder
+
+	// Title
+	title := strings.TrimSpace(dom.Find("title").First().Text())
+	if title != "" {
+		sb.WriteString("TITLE: " + title + "\n")
+	}
+
+	// Meta description
+	meta, _ := dom.Find(`meta[name="description"]`).Attr("content")
+	if meta = strings.TrimSpace(meta); meta != "" {
+		sb.WriteString("DESCRIPTION: " + meta + "\n")
+	}
+
+	// Heading hierarchy
+	dom.Find("h1").Each(func(_ int, s *goquery.Selection) {
+		if t := strings.TrimSpace(s.Text()); t != "" {
+			sb.WriteString("# " + t + "\n")
+		}
+	})
+	dom.Find("h2").Each(func(_ int, s *goquery.Selection) {
+		if t := strings.TrimSpace(s.Text()); t != "" {
+			sb.WriteString("## " + t + "\n")
+		}
+	})
+	dom.Find("h3").Each(func(_ int, s *goquery.Selection) {
+		if t := strings.TrimSpace(s.Text()); t != "" {
+			sb.WriteString("### " + t + "\n")
+		}
+	})
+
+	// Main content — prefer semantic containers
+	mainText := ""
+	for _, sel := range []string{"article", "main", "[role=main]", ".content", "#content", ".post-content", ".entry-content", "body"} {
+		t := strings.TrimSpace(dom.Find(sel).First().Text())
+		if len(t) > len(mainText) {
+			mainText = t
+		}
+	}
+	if mainText != "" {
+		fields := strings.Fields(mainText)
+		clean := strings.Join(fields, " ")
+		if len(clean) > 2500 {
+			clean = clean[:2500] + "… [truncated]"
+		}
+		sb.WriteString("\nCONTENT:\n" + clean + "\n")
+	}
+
+	// Key links
+	var links []string
+	dom.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
+		if len(links) >= 8 {
+			return
+		}
+		href, _ := s.Attr("href")
+		text := strings.TrimSpace(s.Text())
+		if text != "" && strings.HasPrefix(href, "http") {
+			links = append(links, fmt.Sprintf("- [%s](%s)", text, href))
+		}
+	})
+	if len(links) > 0 {
+		sb.WriteString("\nKEY LINKS:\n" + strings.Join(links, "\n") + "\n")
+	}
+
+	result := strings.TrimSpace(sb.String())
+	if result == "" {
+		return mainText
+	}
+	return result
 }

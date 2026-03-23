@@ -303,12 +303,13 @@ func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string, depth i
 			for _, r := range topN {
 				url := r.URL
 				go func() {
-					text, err := d.VDI.NavigateAndExtract(url, 2500)
-					if err != nil || strings.TrimSpace(text) == "" {
+					// Prefer structured DOM extraction; falls back gracefully on error.
+					pc, err := d.VDI.NavigateAndExtractDOM(url, 2500)
+					if err != nil || pc == nil {
 						forageCh <- forage{}
 						return
 					}
-					forageCh <- forage{text: text}
+					forageCh <- forage{text: pc.FormatAsContext(2500)}
 				}()
 			}
 			timer := time.NewTimer(5 * time.Second * time.Duration(len(topN)))
