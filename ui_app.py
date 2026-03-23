@@ -1204,10 +1204,14 @@ def save_connection(conn_id: str) -> Response:
     if cfg.get("auto_index") and cfg.get("enabled", True):
         interval_hours = int(cfg.get("index_interval_hours") or 24)
         _schedule_auto_index(conn_id, interval_hours)
+        # For Telegram: register webhook instead of scheduling a polling job
+        if conn_id == "telegram":
+            token = (cfg.get("credentials") or {}).get("bot_token", "")
+            if token:
+                ok, msg = _telegram_register_webhook(token)
+                log.info("[Telegram] Webhook registration: %s — %s", ok, msg)
         # Kick off an immediate first run if never indexed
-        with _INDEX_LOCK:
-            status = _load_index_status()
-        if conn_id not in status and conn_id in _FETCHERS:
+        elif conn_id not in (_load_index_status()) and conn_id in _FETCHERS:
             creds = cfg.get("credentials", {})
             if creds:
                 t = threading.Thread(target=_run_index_job, args=(conn_id, creds, {}), daemon=True)
@@ -2415,55 +2419,32 @@ def _fetch_discord(creds: dict, opts: dict) -> list[dict]:
 
 
 def _fetch_telegram(creds: dict, opts: dict) -> list[dict]:
+    """Telegram uses push-based webhook ingestion. Return what's already in the local RAG store."""
+    # Messages arrive via POST /connections/telegram/webhook and are stored locally.
+    # No polling needed — just surface what we've already accumulated.
+    hits = _rag_search("", limit=200, source_type="telegram")
+    return [{"title": h["title"], "content": h["snippet"], "source": h["source"], "metadata": h["metadata"]} for h in hits]
+
+
+def _telegram_register_webhook(token: str) -> tuple[bool, str]:
+    """Register our Flask endpoint as the Telegram webhook for this bot."""
     import httpx as _hx
-    import time as _time
-    token = creds.get("bot_token", "")
-    if not token:
-        raise ValueError("Telegram bot token required")
-
-    base = f"https://api.telegram.org/bot{token}"
-
-    # Telegram disallows getUpdates while a webhook is active (409 Conflict).
-    # Delete webhook, wait for Telegram to drain, poll, then restore.
-    webhook_url = ""
+    import hashlib
+    # Derive a stable secret from the token (Telegram passes it back in X-Telegram-Bot-Api-Secret-Token)
+    secret = hashlib.sha256(token.encode()).hexdigest()[:32]
+    webhook_url = f"https://sovereignclaw.thynaptic.com/connections/telegram/webhook"
     try:
-        wh = _hx.get(f"{base}/getWebhookInfo", timeout=10).json()
-        webhook_url = (wh.get("result") or {}).get("url", "")
-    except Exception:
-        pass
-
-    docs = []
-    if webhook_url:
-        # Delete webhook and give Telegram ~2s to release the slot
-        try:
-            _hx.post(f"{base}/deleteWebhook", json={"drop_pending_updates": False}, timeout=10)
-            _time.sleep(2)
-        except Exception:
-            pass
-
-    try:
-        r = _hx.get(f"{base}/getUpdates", params={"limit": int(opts.get("max_results", 50))}, timeout=15)
-        if r.status_code == 409:
-            # Another long-poll is still in flight — skip gracefully
-            log.warning("[Telegram] 409 on getUpdates — another session is active, skipping index")
-            return []
-        r.raise_for_status()
-        for upd in r.json().get("result", []):
-            msg = upd.get("message") or upd.get("channel_post") or {}
-            text = msg.get("text", "")
-            if text:
-                chat = msg.get("chat", {})
-                docs.append({"title": f"Telegram: {chat.get('title', chat.get('first_name', 'chat'))}",
-                             "content": text, "source": f"telegram:{msg.get('message_id', upd['update_id'])}", "metadata": {"chat_id": str(chat.get("id", ""))}})
-    finally:
-        # Always restore the webhook
-        if webhook_url:
-            try:
-                _hx.post(f"{base}/setWebhook", json={"url": webhook_url}, timeout=10)
-            except Exception:
-                pass
-
-    return docs
+        r = _hx.post(
+            f"https://api.telegram.org/bot{token}/setWebhook",
+            json={"url": webhook_url, "secret_token": secret, "allowed_updates": ["message", "channel_post"]},
+            timeout=10,
+        )
+        data = r.json()
+        if data.get("ok"):
+            return True, f"Webhook registered → {webhook_url}"
+        return False, data.get("description", "Unknown error")
+    except Exception as exc:
+        return False, str(exc)
 
 
 def _fetch_slack(creds: dict, opts: dict) -> list[dict]:
@@ -3036,6 +3017,41 @@ def index_connection(conn_id: str) -> Response:
     return jsonify({"ok": True, "status": "indexing", "message": f"Indexing {conn_id} in background…"})
 
 
+
+@app.route("/connections/telegram/webhook", methods=["POST"])
+def telegram_webhook() -> Response:
+    """Receive incoming Telegram updates via webhook and ingest into local RAG store."""
+    import hashlib
+    # Verify secret token (set during webhook registration)
+    with _CONN_LOCK:
+        conns = _load_connections()
+    tg_cfg = conns.get("telegram", {})
+    token = (tg_cfg.get("credentials") or {}).get("bot_token", "")
+
+    if token:
+        expected_secret = hashlib.sha256(token.encode()).hexdigest()[:32]
+        incoming_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if incoming_secret != expected_secret:
+            return jsonify({"ok": False}), 403
+
+    update = request.get_json(silent=True) or {}
+    msg = update.get("message") or update.get("channel_post") or {}
+    text = msg.get("text", "")
+    if text:
+        chat = msg.get("chat", {})
+        doc = {
+            "title":    f"Telegram: {chat.get('title', chat.get('first_name', 'DM'))}",
+            "content":  text,
+            "source":   f"telegram:{msg.get('message_id', update.get('update_id', 'unknown'))}",
+            "metadata": {
+                "chat_id":  str(chat.get("id", "")),
+                "chat_name": chat.get("title") or chat.get("first_name", ""),
+                "date":     str(msg.get("date", "")),
+            },
+        }
+        threading.Thread(target=_rag_ingest, args=([doc], "telegram"), daemon=True).start()
+
+    return jsonify({"ok": True})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
