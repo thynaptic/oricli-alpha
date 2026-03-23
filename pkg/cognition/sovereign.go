@@ -418,7 +418,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	finalTrace := fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s", 
 		composite, e.CurrentHealth.GetDirectives(), slangDirectives, refinementGuidance, aside, whisper)
 	
-	return fmt.Sprintf("%s\n\nSOVEREIGN_THOUGHT_V2.10.0:%s", finalTrace, stimulus), nil
+	return fmt.Sprintf("%s\n\n%s", finalTrace, stimulus), nil
 }
 
 // SelfAlign implements the SCAI Critique-Revision-Preference loop.
