@@ -5,7 +5,7 @@ import {
   FileText, X, Clock, Calendar, RotateCcw, CheckCircle, AlertCircle,
   Loader, Bot, ChevronDown, ListTodo, ChevronRight, ChevronUp,
   Database, Bell, Filter, Edit3, Save, History, Sparkles,
-  Layers, ChevronsDown, ChevronsUp, StopCircle, GitBranch
+  Layers, ChevronsDown, ChevronsUp, StopCircle, GitBranch, Link2
 } from 'lucide-react';
 
 // ─── Step type catalog ───────────────────────────────────────────────────────
@@ -20,6 +20,7 @@ const STEP_TYPES = [
   { id: 'code',         label: 'Run Code',       Icon: Code2,      desc: 'Execute Python (input_text = previous output)', placeholder: 'result = input_text.upper()' },
   { id: 'condition',    label: 'Condition',      Icon: Filter,     desc: 'Evaluate a condition on previous output', placeholder: 'Does the output mention pricing?' },
   { id: 'notify',       label: 'Notify',         Icon: Bell,       desc: 'Send notification via a connection', placeholder: 'discord: {{output}}' },
+  { id: 'fetch_connection', label: 'Use Connection', Icon: Link2, desc: 'Pull live data from a connected service', placeholder: '' },
   { id: 'template',     label: 'Template',       Icon: FileText,   desc: 'Fill a text template with prior outputs', placeholder: 'Report:\n\nSummary: {{step_0_output}}\n\nDetails: {{output}}' },
   { id: 'ingest_doc',   label: 'Read Document', Icon: FileText,   desc: 'Load a PDF, TXT, or CSV into the workflow', placeholder: '' },
   { id: 'sub_workflow', label: 'Run Workflow',   Icon: GitBranch,  desc: 'Trigger another workflow and chain its output', placeholder: '' },
@@ -190,6 +191,49 @@ function RagSourcePicker({ value, onChange }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ─── ConnectionPicker ─────────────────────────────────────────────────────────
+const FETCHABLE_CONN_TYPES = new Set([
+  'discord','telegram','slack','notion','todoist','trello','airtable','linear',
+  'asana','jira','salesforce','hubspot','supabase','arxiv','pubmed',
+  'semantic_scholar','newsapi','reddit','wikipedia','youtube','github_api',
+  'gitlab','google_workspace',
+]);
+
+function ConnectionPicker({ value, query, onChangeConn, onChangeQuery }) {
+  const [connections, setConnections] = useState([]);
+  useEffect(() => {
+    fetch('/connections').then(r => r.json()).then(d => {
+      const fetchable = (d.connections || []).filter(c =>
+        c.enabled !== false && FETCHABLE_CONN_TYPES.has(c.id)
+      );
+      setConnections(fetchable);
+    }).catch(() => {});
+  }, []);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+      <select
+        value={value || ''}
+        onChange={e => onChangeConn(e.target.value)}
+        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--color-sc-border)', background: 'var(--color-sc-bg)', color: 'var(--color-sc-text)', fontSize: 13, fontFamily: 'var(--font-inter)' }}
+      >
+        <option value="">— pick a connection —</option>
+        {connections.map(c => (
+          <option key={c.id} value={c.id}>{c.label || c.id}</option>
+        ))}
+        {connections.length === 0 && <option disabled>No connections configured</option>}
+      </select>
+      <input
+        value={query || ''}
+        onChange={e => onChangeQuery(e.target.value)}
+        placeholder="Optional: filter / search query (e.g. 'unread emails today')"
+        style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: 8, border: '1px solid var(--color-sc-border)', background: 'var(--color-sc-bg)', color: 'var(--color-sc-text)', fontSize: 12, fontFamily: 'var(--font-inter)' }}
+      />
     </div>
   );
 }
@@ -382,6 +426,20 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId }) {
               rows={2}
               style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.55, fontFamily: 'var(--font-inter)', fontSize: 13 }}
             />
+          </div>
+        ) : step.type === 'fetch_connection' ? (
+          <div>
+            <ConnectionPicker
+              value={step.connectionId || ''}
+              query={step.query || ''}
+              onChangeConn={id => onChange({ ...step, connectionId: id, value: id })}
+              onChangeQuery={q => onChange({ ...step, query: q })}
+            />
+            <div style={{ fontSize: 11, color: 'var(--color-sc-text-dim)', marginTop: 2 }}>
+              Fetches live data from the selected connection. Its content becomes{' '}
+              <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code>{' '}
+              for the next step.
+            </div>
           </div>
         ) : (
           <textarea

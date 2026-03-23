@@ -1813,6 +1813,46 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
             child_output = _execute_sub_workflow(target_wf_id, context, _depth=_sub_depth)
             result["output"] = child_output
 
+        elif step_type == "fetch_connection":
+            # Pull live data from a configured connection and emit as output
+            conn_id = (step.get("connectionId") or step_input).strip()
+            query_hint = step.get("query", "").strip()
+            if not conn_id:
+                raise ValueError("fetch_connection step requires a connection ID")
+            fetcher = _FETCHERS.get(conn_id)
+            if fetcher is None:
+                raise ValueError(f"Connection '{conn_id}' is not fetchable")
+            with _CONN_LOCK:
+                conns = _load_connections()
+            cfg = conns.get(conn_id, {})
+            creds = cfg.get("credentials", cfg)
+            opts: dict = {k: v for k, v in cfg.items() if k != "credentials"}
+            # For telegram, pass a query so the fetcher reads from local RAG
+            if query_hint:
+                opts["query"] = query_hint
+            docs = fetcher(creds, opts)
+            if not docs:
+                result["output"] = f"No data returned from connection '{conn_id}'"
+            else:
+                # Optional keyword filter on top of fetched docs
+                if query_hint:
+                    q_toks = set(query_hint.lower().split())
+                    scored = []
+                    for d in docs:
+                        text = f"{d.get('title','')} {d.get('content','')}".lower()
+                        score = sum(1 for t in q_toks if t in text)
+                        if score:
+                            scored.append((score, d))
+                    if scored:
+                        scored.sort(key=lambda x: x[0], reverse=True)
+                        docs = [d for _, d in scored[:20]]
+                lines = []
+                for d in docs[:25]:
+                    title = d.get("title") or d.get("subject") or "(untitled)"
+                    content = (d.get("content") or "").strip()[:500]
+                    lines.append(f"### {title}\n{content}")
+                result["output"] = "\n\n---\n\n".join(lines)
+
         else:
             result["output"] = f"Unknown step type: {step_type}"
 
