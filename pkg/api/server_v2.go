@@ -415,10 +415,13 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		streamOpts["use_code_model"] = true
 	}
 	if isCanvasMode {
-		// Unlock full context window for large-output canvas requests
+		// Unlock full context window for canvas requests but cap output tokens.
+		// num_predict: -1 means unlimited — at ~1 tok/s on CPU that starves Cloudflare's
+		// 100s timeout before the first real token arrives. 2048 covers any realistic
+		// component, page, or document without blowing the deadline.
 		streamOpts["options"] = map[string]interface{}{
-			"num_predict": -1,
-			"num_ctx":     32768,
+			"num_predict": 2048,
+			"num_ctx":     16384,
 		}
 	}
 
@@ -439,6 +442,11 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("X-Accel-Buffering", "no")
+
+	// Flush a keep-alive comment immediately so Cloudflare (100s timeout) knows
+	// the connection is alive while the sovereign engine + Ollama warm up.
+	c.Writer.WriteString(": keep-alive\n\n")
+	c.Writer.Flush()
 
 	// Emit agent_dispatch SSE event before the first token so the UI renders
 	// the dispatch card immediately
