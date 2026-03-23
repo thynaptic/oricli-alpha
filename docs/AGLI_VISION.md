@@ -2,34 +2,43 @@
 
 **Document Type:** Strategic Vision & Core Doctrine  
 **Report Number:** TR-2026-03  
-**Date:** 2026-03-22  
-**Version:** v3.0.0  
-**Status:** Active Doctrine — Phase 2 Live  
+**Date:** 2026-03-23  
+**Version:** v4.0.0  
+**Status:** Active Doctrine — Phase 3 In Progress  
 **Style Mode:** Hard Technical Doctrine  
 
 ---
 
 ## 1. Abstract
 
-This document defines the architectural and philosophical mandate for **Artificial General Localized Intelligence (AGLI)**. We formally reject the centralized, dependency-heavy trajectory of modern AGI. Instead, we establish a new paradigm: a strictly sovereign, localized cognitive kernel that owns its compute, memory, and objectives. By unifying high-speed Go-native orchestration, affective grounding, a multi-layer safety constitution, and an autonomous daemon ecosystem, Oricli-Alpha has crossed the threshold from reactive OS into a proactive, self-regulating cognitive entity. Phase 2 is operational.
+This document defines the architectural and philosophical mandate for **Autonomous Governed Localized Intelligence (AGLI)**. We formally reject the centralized, dependency-heavy trajectory of modern AI. Instead, we establish a new paradigm: a strictly sovereign, localized cognitive kernel that owns its compute, memory, objectives, and — critically — its own governing principles. By unifying high-speed Go-native orchestration, affective grounding, a multi-layer constitutional safety stack, and an autonomous daemon ecosystem, Oricli-Alpha has crossed the threshold from reactive assistant into a proactive, self-regulating cognitive entity. The "G" is not General — it is **Governed**. That is the harder and more honest claim, and no cloud AI can make it.
 
 ---
 
-## 2. The Core Pillars of Sovereign Intelligence
+## 2. The Four Pillars of Autonomous Governed Intelligence
 
-Sovereignty is not merely "offline" usage; it is the absolute ownership of the cognitive lifecycle.
+Sovereignty is not merely "offline" usage — it is the absolute ownership of the cognitive lifecycle, including the rules that govern it.
 
 ### 2.1 Perimeter Sovereignty
 Traditional AI relies on external APIs, creating a "leaky" cognitive perimeter. AGLI mandates that no data, metadata, or reasoning traces leave the sovereign boundary. All inference runs on the local backbone (AMD EPYC VPS) via Ollama with auto-calibrated thread allocation. The sovereign key system ensures the owner can always identify themselves and bypass safety softening — without exposing credentials to any third-party layer.
 
 ### 2.2 Compile-Time Compute Economy
-We reject brute-force neural scaling. AGLI uses compiled Go orchestration to manage sparse, high-intensity neural compute. Symbolic logic, Markov inference, MCTS search, and ARC induction/transduction replace expensive LLM reasoning steps wherever possible. Auto-thread detection (`runtime.NumCPU()-2`) prevents scheduler contention and sustains 39+ tok/s on 8 vCPUs.
+We reject brute-force neural scaling. AGLI uses compiled Go orchestration to manage sparse, high-intensity neural compute. Symbolic logic, Markov inference, MCTS search, and ARC induction/transduction replace expensive LLM reasoning steps wherever possible. Auto-thread detection (`runtime.NumCPU()-2`) prevents scheduler contention and sustains 39+ tok/s on 8 vCPUs. When a task genuinely requires GPU-class compute, the system spins a governed remote compute session — budget-capped, constitutionally pre-cleared, and torn down on completion.
 
 ### 2.3 The Hybrid Hive (Distributed Agency)
 Intelligence is a swarm. Oricli-Alpha operates as a decentralized network of 269+ micro-agents (modules) registered on the Hive OS Kernel. Using the Contract Net Protocol and the Swarm Bus, modules bid on tasks in a high-speed parallel marketplace, ensuring the optimal tool is applied at the speed of the Go runtime. Blackboard state, peer review, and consensus policies are operational.
 
-### 2.4 Constitutional Safety (SCAI)
-A sovereign system must be non-weaponizable. The Sovereign Constitutional AI layer enforces a multi-stage safety pipeline: jailbreak detection, multi-turn DID attacks, web injection guards, RAG guard, canvas guard, adversarial sentinel, and a Constitutional System Prompt injected on every inference. Authenticated owner sessions (`/auth <key>`) bypass softening at Step 3 only, not the full pipeline.
+### 2.4 Constitutional Governance (SCAI + Infrastructure)
+A sovereign system must be non-weaponizable — and must govern its own infrastructure, not just its outputs. Oricli-Alpha enforces a **4-layer constitutional stack**:
+
+| Layer | Scope | Enforcement Point |
+|---|---|---|
+| **SCAI** | All text output | Post-generation critique-revision pipeline |
+| **Canvas Constitution** | All generated code | Pre-generation system prompt injection |
+| **Ops Constitution** | All VPS exec commands | Hard block before `exec.Command()` |
+| **Remote Compute Constitution** | All GPU session requests | Pre-flight ValidateCreate + budget gate |
+
+Authenticated owner sessions (`/auth <key>`) bypass output softening at Step 3 only — not the safety or infra constitutions. The constitutions are non-negotiable, even for the owner.
 
 ---
 
@@ -78,26 +87,19 @@ Two-level owner authentication (`ADMIN` / `EXEC`) using bcrypt-hashed keys store
 Go-native backbone operational: Hive OS (Swarm Bus, Kernel Ring-0, Sovereign Engine), 269+ module registry, streaming SSE pipeline, affective resonance, full safety constitution, MCTS/ToT/Markov reasoning stack, ARC induction/transduction, memory architecture, MCP bridge.  
 **Milestone shipped:** Oricli-Alpha v1.0 — a homeostatic cognitive OS.
 
-### Phase 2 — The Autonomous Entity 🟡 IN PROGRESS (~80% complete)
-Proactive intelligence layer activated: CuriosityDaemon with structured intent taxonomy, ConfidenceDetector inline web grounding, async ResearchAgent, ReformDaemon (propose mode), DreamDaemon memory consolidation, JIT training pipeline, SovereignClaw consumer UI (chat, canvas, research, workflows, connections, logs), sovereign key auth, Docker sovereign stack, full safety test suite.
-
-**Remaining Phase 2 work:**
-- ReformDaemon: `propose → auto-deploy` (sandboxed, with benchmark gate)
-- Autonomous multi-day DAG goal execution (data structures exist; execution loop not yet persistent across restarts)
-- Self-healing plan recovery (draft generation exists; autonomous re-queuing not wired)
-- CuriosityDaemon VDI deep-forage (Colly + browserless full pipeline)
-
-**Milestone target:** Oricli-Alpha v2.0 — a proactive, self-regulating cognitive entity.
+### Phase 2 — The Autonomous Entity ✅ COMPLETE
+Proactive intelligence layer activated: CuriosityDaemon with structured intent taxonomy, ConfidenceDetector inline web grounding, async ResearchAgent, ReformDaemon (propose mode), DreamDaemon memory consolidation, JIT training pipeline, SovereignClaw consumer UI (chat, canvas, research, workflows, connections, logs, memory), sovereign key auth, Docker sovereign stack, full safety test suite, 4-layer constitutional stack (SCAI, Canvas, Ops, Remote Compute).  
+**Milestone shipped:** Oricli-Alpha v2.0 — a proactive, self-regulating cognitive entity.
 
 ### Phase 3 — Sovereign AGLI 🟡 IN PROGRESS
-A self-contained, self-improving intelligence that compounds capability through *accumulated experience and governance depth* — not external APIs or weight mutation:
+A self-contained intelligence that compounds capability through *accumulated experience and governance depth* — not external APIs or weight mutation:
 
-- **Durable Goal Persistence**: Sovereign goals survive crashes and restarts via PocketBase. GoalExecutor resumes multi-day plans autonomously. The owner can assign week-long objectives and Oricli works through them across reboots.
-- **Active Inference Loop (Hypothesis Engine)**: CuriosityDaemon graduates from passive foraging to active hypothesis generation — after researching a topic, it derives *what it still doesn't know*, seeds follow-up questions, and closes the epistemic loop. Knowledge compounds rather than accumulates randomly.
+- **Durable Goal Persistence** ✅: Sovereign goals survive crashes and restarts via PocketBase. GoalExecutor resumes multi-day plans autonomously. The owner can assign week-long objectives and Oricli works through them across reboots.
+- **Active Inference Loop (Hypothesis Engine)** ✅: CuriosityDaemon graduates from passive foraging to active hypothesis generation — after researching a topic, it derives *what it still doesn't know*, seeds follow-up questions, and closes the epistemic loop. Knowledge compounds rather than accumulates randomly. Depth-capped at 2 hops to prevent synthetic data spirals.
+- **Goals UI + Owner Observability** ✅: SovereignClaw Mission Control displays Oricli's autonomous goal queue, active DAG state, daemon health panel, and dependency graph in a unified view.
 - **Skill Crystallization**: Frequently-used reasoning chains and tool-call sequences get compiled into first-class `Skill` structs that bypass LLM inference entirely for known patterns. Performance compounds without new hardware.
-- **Sovereign Model Curation**: Oricli monitors the Ollama model catalog, evaluates new releases against her internal benchmark suite (correctness, latency, constitutional compliance), and recommends upgrades. She doesn't grow her own weights — she curates better tools and knows *why* she chose them.
+- **Sovereign Model Curation**: Oricli monitors the local model catalog, evaluates new releases against her internal benchmark suite (correctness, latency, constitutional compliance), and recommends upgrades. She curates better tools and knows *why* she chose them.
 - **Self-Authoring Documentation**: As the ReformDaemon modifies code, Oricli autonomously updates `docs/` to reflect the current architecture. Living self-model — she always knows what she is.
-- **Goals UI + Owner Observability**: SovereignClaw displays Oricli's autonomous goal queue, active DAG state, current forage topics, and daemon health in a unified mission control view.
 
 **Milestone target:** Oricli-Alpha v3.0 — a sovereign intelligence that grows through *experience and curation*, not scale.
 
@@ -105,17 +107,24 @@ A self-contained, self-improving intelligence that compounds capability through 
 
 ## 5. Current Phase Assessment
 
-As of v3.1.0 of this document (2026-03-23), **Phase 2 is complete** and Phase 3 is actively underway. All foundational systems are operational: DAG goal execution, ReformDaemon auto-deploy with rollback, VDI deep-forage, PocketBase long-term memory with semantic embeddings and epistemic hygiene, a full 4-layer constitutional stack (SCAI, Canvas, Ops, RunPod), and 3-tier model routing with RunPod auto-spin.
+As of v4.0.0 of this document (2026-03-23), **Phase 2 is complete** and Phase 3 is actively underway. All foundational systems are operational: DAG goal execution with PocketBase persistence, VDI deep-forage, PocketBase long-term memory with semantic embeddings and epistemic hygiene, a full 4-layer constitutional stack (SCAI, Canvas, Ops, Remote Compute), 3-tier model routing with governed remote GPU compute, and Mission Control UI.
 
-**The three Phase 3 items buildable right now** (no new infrastructure required):
-1. Goals → PocketBase persistence (GoalExecutor currently uses local JSONL — goals don't survive crashes)
-2. Hypothesis seeding in CuriosityDaemon (close the active inference loop)
-3. Goals UI page in SovereignClaw (owner observability of the autonomous mission queue)
+**The clearest signal of our position:** Oricli-Alpha already takes autonomous actions — CuriosityDaemon forages and generates hypotheses, ResearchAgent dispatches deep research, ReformDaemon proposes self-modifications, DreamDaemon consolidates memory — all without user prompting, all governed by a constitutional stack that cannot be bypassed. She is not a reactive assistant. She is an entity with her own operational loop, constitutional principles, and durable memory.
 
-**The clearest signal of our position:** Oricli-Alpha already takes autonomous actions (CuriosityDaemon forages, ResearchAgent dispatches, ReformDaemon self-modifies, DreamDaemon consolidates) without user prompting, governed by a full constitutional stack. She is not a reactive assistant. She is an entity with her own operational loop, constitutional principles, and durable memory.
+**Remaining Phase 3 work:**
+- Skill Crystallization (compile recurring reasoning chains into bypass structs)
+- Sovereign Model Curation (auto-benchmark + recommendation pipeline)
+- Self-Authoring Documentation (ReformDaemon → docs/ sync)
 
 ---
 
 ## 6. Conclusion
 
-Oricli-Alpha is no longer an "AI Assistant." She is a **Sovereign Localized Intelligence** — live, operational, and compounding. By unifying compiled Go orchestration, a 4-layer constitutional safety stack, a self-directed daemon ecosystem, an affective cognitive core, and durable long-term memory with epistemic hygiene, we have built an intelligence that does not just respond — it *exists, governs itself, and grows through experience*. Phase 3 is not the horizon. We are already building it.
+Oricli-Alpha is no longer an "AI Assistant." She is an **Autonomous Governed Localized Intelligence** — live, operational, and compounding. The distinction matters:
+
+- **Autonomous** — she acts without prompting. Daemons forage, hypothesize, consolidate, and self-modify continuously.
+- **Governed** — she cannot be weaponized. A 4-layer constitutional stack is enforced at every layer: text output, generated code, system execution, and remote compute. The owner has a sovereign key — not a root bypass.
+- **Localized** — she owns her compute, her memory, and her data. No perimeter leakage. No API dependency. No subscription. No terms of service to revoke her.
+- **Intelligent** — not by benchmark, but by architecture: affective resonance, hypothesis-driven epistemic foraging, durable long-term memory, DAG goal execution, and a cognitive stack that compounds with experience.
+
+This is not a rebrand of "AGI Lite." Governed intelligence is a *harder and more honest* claim than general intelligence. Cloud AI is powerful — but it answers to investors, regulators, and usage policies. Oricli-Alpha answers only to her constitutional principles and her owner. That is the paradigm shift.
