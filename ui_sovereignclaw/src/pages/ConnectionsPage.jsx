@@ -318,72 +318,90 @@ const INDEXABLE = new Set([
   'newsapi','reddit','wikipedia','youtube','github_api','gitlab',
 ]);
 
-function IndexPanel({ integration, indexStatus, onIndex }) {
-  const [query, setQuery] = useState('');
-  const [maxResults, setMaxResults] = useState('20');
-  const status = indexStatus?.[integration.id];
-  const isIndexing = status?.status === 'indexing';
+function IndexPanel({ integration, saved, indexStatus, onSave, onIndex }) {
+  const status       = indexStatus?.[integration.id];
+  const isIndexing   = status?.status === 'indexing';
+  const autoEnabled  = saved?.auto_index ?? false;
+  const intervalHours = saved?.index_interval_hours ?? 24;
 
-  const queryPlaceholder = {
-    notion: 'Database ID (blank = search all pages)',
-    github_api: 'owner/repo (e.g. thynaptic/oricli)',
-    gitlab: 'owner/repo for issues',
-    jira: 'JQL query (e.g. project = ABC ORDER BY updated DESC)',
-    discord: 'Channel ID to fetch messages from',
-    slack: 'Search terms or leave blank for default channel',
-    airtable: 'Base ID (appXXX…)',
-    trello: 'Board ID',
-    supabase: 'Table name',
-    salesforce: 'SOQL query',
-    arxiv: 'Search terms (e.g. "transformer attention")',
-    pubmed: 'Search terms (required)',
-    semantic_scholar: 'Search terms (required)',
-    newsapi: 'Search terms (required)',
-    reddit: 'Search terms or leave blank for hot posts',
-    wikipedia: 'Search terms (required)',
-    youtube: 'Search terms (required)',
-    hubspot: 'Entity type: contacts, deals, companies',
-  }[integration.id] || 'Optional search/scope filter';
+  function toggleAuto() {
+    onSave({
+      ...saved,
+      credentials: saved?.credentials ?? {},
+      enabled: saved?.enabled ?? true,
+      auto_index: !autoEnabled,
+      index_interval_hours: intervalHours,
+    });
+  }
+
+  function setInterval(h) {
+    onSave({
+      ...saved,
+      credentials: saved?.credentials ?? {},
+      enabled: saved?.enabled ?? true,
+      auto_index: autoEnabled,
+      index_interval_hours: parseInt(h) || 24,
+    });
+  }
 
   return (
     <div style={{ padding: '14px', background: 'rgba(196,164,74,0.04)', border: '1px solid rgba(196,164,74,0.15)', borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--color-sc-gold)', fontFamily: 'var(--font-grotesk)' }}>
-        <Database size={12} /> RAG Index
+      {/* Auto-index toggle row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--color-sc-gold)', fontFamily: 'var(--font-grotesk)' }}>
+          <Database size={12} /> Auto-index
+        </div>
+        <button onClick={toggleAuto} style={{
+          width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer',
+          background: autoEnabled ? 'var(--color-sc-success)' : 'rgba(255,255,255,0.15)',
+          position: 'relative', transition: 'background 0.2s', padding: 0, flexShrink: 0,
+        }}>
+          <span style={{
+            position: 'absolute', top: 2, left: autoEnabled ? 20 : 2, width: 18, height: 18,
+            borderRadius: '50%', background: '#fff', transition: 'left 0.2s',
+          }} />
+        </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input value={query} onChange={e => setQuery(e.target.value)} placeholder={queryPlaceholder}
-          style={{ ...inp, flex: 1, fontSize: 12 }} />
-        <input value={maxResults} onChange={e => setMaxResults(e.target.value)} placeholder="50"
-          style={{ ...inp, width: 52, fontSize: 12, textAlign: 'center' }} title="Max results" />
-      </div>
+      {/* Interval selector — only shown when auto is on */}
+      {autoEnabled && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--color-sc-text-muted)' }}>
+          <Clock size={11} style={{ flexShrink: 0 }} />
+          <span>Every</span>
+          <select value={intervalHours} onChange={e => setInterval(e.target.value)} style={{ ...inp, width: 80, padding: '4px 8px', fontSize: 12 }}>
+            <option value={1}>1 hour</option>
+            <option value={3}>3 hours</option>
+            <option value={6}>6 hours</option>
+            <option value={12}>12 hours</option>
+            <option value={24}>24 hours</option>
+            <option value={48}>48 hours</option>
+          </select>
+        </div>
+      )}
 
+      {/* Status + manual trigger */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         {status ? (
           <span style={{ fontSize: 11, color: status.status === 'error' ? 'var(--color-sc-danger)' : status.status === 'indexed' ? 'var(--color-sc-success)' : 'var(--color-sc-gold)', display: 'flex', alignItems: 'center', gap: 4 }}>
             {status.status === 'indexing' && <RefreshCw size={10} style={{ animation: 'spin 1s linear infinite' }} />}
-            {status.status === 'indexed' && <Check size={10} />}
-            {status.status === 'error' && <AlertCircle size={10} />}
+            {status.status === 'indexed'  && <Check size={10} />}
+            {status.status === 'error'    && <AlertCircle size={10} />}
             {status.status === 'indexing' ? 'Indexing…'
-              : status.status === 'indexed' ? `${status.docs} docs indexed`
-              : status.status === 'error' ? status.error
+              : status.status === 'indexed' ? `${status.docs} docs · ${new Date(status.last_indexed).toLocaleDateString()}`
+              : status.status === 'error'   ? status.error
               : ''}
-            {status.last_indexed && status.status !== 'indexing' && (
-              <span style={{ color: 'var(--color-sc-text-dim)', marginLeft: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
-                <Clock size={9} /> {new Date(status.last_indexed).toLocaleTimeString()}
-              </span>
-            )}
           </span>
-        ) : <span />}
-        <button onClick={() => onIndex(integration.id, { query, max_results: parseInt(maxResults) || 20 })}
-          disabled={isIndexing}
+        ) : <span style={{ fontSize: 11, color: 'var(--color-sc-text-dim)' }}>{autoEnabled ? 'First run starting…' : 'Not indexed yet'}</span>}
+        <button onClick={() => onIndex(integration.id, {})} disabled={isIndexing}
           style={{
-            display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7,
-            border: 'none', background: isIndexing ? 'rgba(196,164,74,0.3)' : 'var(--color-sc-gold)',
-            color: '#0D0D0D', cursor: isIndexing ? 'not-allowed' : 'pointer',
-            fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-grotesk)',
+            display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+            border: '1px solid rgba(196,164,74,0.3)', background: 'transparent',
+            color: isIndexing ? 'var(--color-sc-text-dim)' : 'var(--color-sc-gold)',
+            cursor: isIndexing ? 'not-allowed' : 'pointer', fontSize: 11,
+            fontFamily: 'var(--font-grotesk)', fontWeight: 600,
           }}>
-          <Database size={11} /> {isIndexing ? 'Indexing…' : 'Index for RAG'}
+          <RefreshCw size={10} style={isIndexing ? { animation: 'spin 1s linear infinite' } : {}} />
+          {isIndexing ? 'Indexing…' : 'Index now'}
         </button>
       </div>
     </div>
@@ -540,7 +558,7 @@ function ConfigDrawer({ integration, saved, indexStatus, onSave, onDelete, onInd
 
           {/* RAG Indexing — only for indexable connectors that have saved creds */}
           {INDEXABLE.has(integration.id) && saved && (
-            <IndexPanel integration={integration} indexStatus={indexStatus} onIndex={onIndex} />
+            <IndexPanel integration={integration} saved={saved} indexStatus={indexStatus} onSave={onSave} onIndex={onIndex} />
           )}
 
           {/* Test result */}

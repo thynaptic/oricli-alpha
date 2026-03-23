@@ -15,6 +15,7 @@ Routes:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import signal as _signal
@@ -85,6 +86,8 @@ _OAUTH_STATES: dict[str, float] = {}  # state -> created_at timestamp (CSRF guar
 app = Flask(__name__, static_folder=str(STATIC_DIR))
 if CORS_AVAILABLE:
     CORS(app)  # Enable CORS for production use if available
+
+log = logging.getLogger(__name__)
 
 
 def _client() -> httpx.Client:
@@ -1109,6 +1112,64 @@ def _save_connections(data: dict) -> None:
     _CONNECTIONS_FILE.write_text(json.dumps(data, indent=2))
 
 
+def _schedule_auto_index(conn_id: str, interval_hours: int) -> None:
+    """Register or replace a recurring APScheduler job for a connection."""
+    if not _SCHEDULER_AVAILABLE:
+        return
+    job_id = f"auto_index_{conn_id}"
+    try:
+        _SCHEDULER.remove_job(job_id)
+    except Exception:
+        pass
+    _SCHEDULER.add_job(
+        _trigger_auto_index,
+        trigger="interval",
+        hours=interval_hours,
+        id=job_id,
+        args=[conn_id],
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    log.info("[AutoIndex] Scheduled %s every %dh", conn_id, interval_hours)
+
+
+def _cancel_auto_index(conn_id: str) -> None:
+    if not _SCHEDULER_AVAILABLE:
+        return
+    try:
+        _SCHEDULER.remove_job(f"auto_index_{conn_id}")
+        log.info("[AutoIndex] Cancelled schedule for %s", conn_id)
+    except Exception:
+        pass
+
+
+def _trigger_auto_index(conn_id: str) -> None:
+    """Called by the scheduler — load fresh creds and kick off the index job."""
+    with _CONN_LOCK:
+        data = _load_connections()
+    cfg = data.get(conn_id, {})
+    if not cfg.get("auto_index") or not cfg.get("enabled", True):
+        return
+    creds = cfg.get("credentials", {})
+    if not creds or conn_id not in _FETCHERS:
+        return
+    log.info("[AutoIndex] Running scheduled index for %s", conn_id)
+    t = threading.Thread(target=_run_index_job, args=(conn_id, creds, {}), daemon=True)
+    t.start()
+
+
+def _boot_auto_index_schedules() -> None:
+    """On startup, re-register all connections that have auto_index enabled."""
+    if not _SCHEDULER_AVAILABLE:
+        return
+    with _CONN_LOCK:
+        data = _load_connections()
+    for conn_id, cfg in data.items():
+        if cfg.get("auto_index") and cfg.get("enabled", True) and conn_id in _FETCHERS:
+            interval_hours = int(cfg.get("index_interval_hours") or 24)
+            _schedule_auto_index(conn_id, interval_hours)
+
+
 @app.route("/connections", methods=["GET"])
 def list_connections() -> Response:
     with _CONN_LOCK:
@@ -1124,7 +1185,22 @@ def save_connection(conn_id: str) -> Response:
         existing = data.get(conn_id, {})
         data[conn_id] = {**existing, **payload, "id": conn_id, "updatedAt": datetime.now(timezone.utc).isoformat()}
         _save_connections(data)
-    return jsonify({"connection": data[conn_id]})
+    cfg = data[conn_id]
+    # Dynamically register or cancel the auto-index schedule
+    if cfg.get("auto_index") and cfg.get("enabled", True):
+        interval_hours = int(cfg.get("index_interval_hours") or 24)
+        _schedule_auto_index(conn_id, interval_hours)
+        # Kick off an immediate first run if never indexed
+        with _INDEX_LOCK:
+            status = _load_index_status()
+        if conn_id not in status and conn_id in _FETCHERS:
+            creds = cfg.get("credentials", {})
+            if creds:
+                t = threading.Thread(target=_run_index_job, args=(conn_id, creds, {}), daemon=True)
+                t.start()
+    else:
+        _cancel_auto_index(conn_id)
+    return jsonify({"connection": cfg})
 
 
 @app.route("/connections/<conn_id>", methods=["DELETE"])
@@ -3060,7 +3136,10 @@ def main() -> None:
     print(f"  Static files: {STATIC_DIR}", flush=True)
     print(f"\nOpen http://localhost:{port} in your browser", flush=True)
     print("Press CTRL+C to stop\n", flush=True)
-    
+
+    # Re-register any auto-index schedules from saved connection config
+    _boot_auto_index_schedules()
+
     try:
         # Flask development server - use threaded mode
         # Note: This is the development server, not production-ready
