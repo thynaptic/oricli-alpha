@@ -30,7 +30,7 @@ func NewEmbedder() *Embedder {
 	}
 	model := os.Getenv("OLLAMA_EMBED_MODEL")
 	if model == "" {
-		model = "nomic-embed-text"
+		model = "all-minilm"
 	}
 	e := &Embedder{
 		baseURL: base,
