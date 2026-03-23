@@ -79,7 +79,6 @@ GOOGLE_SCOPES = " ".join([
     "https://www.googleapis.com/auth/tasks.readonly",
     "https://www.googleapis.com/auth/forms.body.readonly",
     "https://www.googleapis.com/auth/spreadsheets.readonly",
-    "https://www.googleapis.com/auth/keep.readonly",
 ])
 _OAUTH_STATES: dict[str, float] = {}  # state -> created_at timestamp (CSRF guard)
 
@@ -2790,7 +2789,7 @@ def _fetch_github_api(creds: dict, opts: dict) -> list[dict]:
 
 
 def _fetch_google_workspace(creds: dict, opts: dict) -> list[dict]:
-    """Fetch content from Gmail, Drive, Docs, Calendar, Tasks, Sheets, Forms, Keep."""
+    """Fetch content from Gmail, Drive, Docs, Calendar, Tasks, Sheets, Forms."""
     creds = _refresh_google_token(creds)
     at = creds["access_token"]
     hdrs = {"Authorization": f"Bearer {at}"}
@@ -2903,22 +2902,6 @@ def _fetch_google_workspace(creds: dict, opts: dict) -> list[dict]:
                         })
     except Exception as exc:
         print(f"[Google/Tasks] {exc}")
-
-    # ── Keep Notes ────────────────────────────────────────────────────────────
-    try:
-        r = httpx.get("https://keep.googleapis.com/v1/notes",
-                      params={"pageSize": 50}, headers=hdrs, timeout=15)
-        if r.status_code == 200:
-            for note in r.json().get("notes", []):
-                body_text = note.get("body", {}).get("text", {}).get("text", "")
-                docs.append({
-                    "title":    f"Keep: {note.get('title','(no title)')}",
-                    "content":  str(body_text)[:2000],
-                    "source":   "https://keep.google.com/",
-                    "metadata": {"service": "keep", "type": "note"},
-                })
-    except Exception as exc:
-        print(f"[Google/Keep] {exc}")
 
     return docs
 
