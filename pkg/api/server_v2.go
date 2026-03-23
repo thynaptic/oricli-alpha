@@ -129,6 +129,9 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	curiosity.MemoryBank = mb
 	s.ActionRouter = service.NewActionRouter(research, curiosity, hub)
 
+	// Wire MemoryBank to ExecHandler for PB audit trail on every !command
+	s.ExecHandler.MemoryBank = mb
+
 	// Restore this month's RunPod spend from PocketBase
 	if rp := agent.GenService.RunPodMgr; rp != nil {
 		rp.MemoryBank = mb

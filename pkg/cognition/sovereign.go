@@ -13,6 +13,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/bus"
 	"github.com/thynaptic/oricli-go/pkg/kernel"
 	"github.com/thynaptic/oricli-go/pkg/memory"
+	"github.com/thynaptic/oricli-go/pkg/reform"
 	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/state"
 	"github.com/thynaptic/oricli-go/pkg/tools"
@@ -393,8 +394,10 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		)
 	}
 
-	// Add Constitutional Prompt
+	// Add Constitutional Prompt — SCAI principles + infrastructure boundaries
 	composite += "\n\n" + e.SCAI.Constitution.GetSystemPrompt()
+	composite += "\n\n" + reform.NewOpsConstitution().GetSystemPrompt()
+	composite += "\n\n" + reform.NewRunPodConstitution().GetSystemPrompt()
 	
 	// --- Step 10: Introspective Audit & Trace Generation ---
 	fmt.Printf("[SovereignEngine] Pipeline v2.9.1 Complete. Router: %s, Health: %s\n", reasoningMethod, e.CurrentHealth.GetSummary())

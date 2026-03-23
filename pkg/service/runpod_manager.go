@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/thynaptic/oricli-go/pkg/connectors/runpod"
+	"github.com/thynaptic/oricli-go/pkg/reform"
 )
 
 // RunPodState is the lifecycle state of the inference pod.
@@ -109,9 +110,27 @@ func (m *RunPodManager) Ensure(ctx context.Context, tier string) (string, error)
 	// Budget guard
 	m.spendMu.Lock()
 	over := m.monthSpend >= m.monthlyCap
+	spend := m.monthSpend
 	m.spendMu.Unlock()
 	if over {
 		return "", fmt.Errorf("RunPod monthly cap $%.2f reached — routing to local Ollama", m.monthlyCap)
+	}
+
+	// RunPod Constitution pre-flight check.
+	// Validates Single Pod Principle, Task-Justified Activation, and Tier Justification
+	// before any pod creation attempt. Existing warm/warming states return early above.
+	if m.state == StateOff {
+		rpConstitution := reform.NewRunPodConstitution()
+		if err := rpConstitution.ValidateCreate(reform.RunPodCreateRequest{
+			Tier:           tier,
+			MonthlySpend:   spend,
+			MonthlyCap:     m.monthlyCap,
+			HasActivePod:   m.state == StateWarm || m.state == StateWarming,
+			HasActiveTasks: true, // Ensure() is only called from user-request paths
+		}); err != nil {
+			log.Printf("[RunPodConstitution] BLOCKED: %v", err)
+			return "", err
+		}
 	}
 
 	if m.state == StateWarm && m.pod != nil {
@@ -147,6 +166,12 @@ func (m *RunPodManager) spinUp(ctx context.Context, tier string) (string, error)
 		return "", fmt.Errorf("GPU selection failed: %w", err)
 	}
 	log.Printf("[RunPodMgr] selected GPU: %s (%dGB, $%.3f/hr)", gpu.DisplayName, gpu.MemoryInGb, gpu.SecurePrice)
+
+	// Constitution: validate hourly rate against cap before pod creation.
+	if err := reform.NewRunPodConstitution().ValidateBudget(gpu.SecurePrice, m.maxHourly); err != nil {
+		log.Printf("[RunPodConstitution] BLOCKED: %v", err)
+		return "", err
+	}
 
 	// Auto-select model from catalog based on GPU VRAM; env override takes precedence
 	var override string
