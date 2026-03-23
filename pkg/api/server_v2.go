@@ -48,6 +48,7 @@ type ServerV2 struct {
 	ImageGen         *service.ImageGenManager
 	MemoryBank       *service.MemoryBank
 	DocumentIngestor *service.DocumentIngestor
+	Skills           *service.SkillManager
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -147,6 +148,10 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 
 	// Inject SearXNG searcher into SovereignEngine (avoids import cycle)
 	agent.SovEngine.SearXNG = service.NewSearXNGSearcher()
+
+	// Load skills from oricli_core/skills/
+	s.Skills = service.NewSkillManager("oricli_core/skills")
+	log.Printf("[ServerV2] Loaded %d skills", len(s.Skills.ListSkills()))
 
 	s.setupRoutes()
 	return s
@@ -345,6 +350,23 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			if ragCtx != "" {
 				systemContent = ragCtx + "\n\n---\n\n" + systemContent
 			}
+		}
+	}
+
+	// Inject matched skill context — trigger-based, zero overhead when no match
+	if s.Skills != nil && lastMsg != "" {
+		if matched := s.Skills.MatchSkills(lastMsg); len(matched) > 0 {
+			skill := matched[0] // take highest-priority match
+			var sb strings.Builder
+			sb.WriteString("### ACTIVE SKILL: " + skill.Name + "\n")
+			if skill.Mindset != "" {
+				sb.WriteString("\n#### Mindset:\n" + skill.Mindset + "\n")
+			}
+			if skill.Instructions != "" {
+				sb.WriteString("\n#### Instructions:\n" + skill.Instructions + "\n")
+			}
+			systemContent = systemContent + "\n\n---\n\n" + sb.String()
+			log.Printf("[Skills] Injected skill: %s", skill.Name)
 		}
 	}
 
