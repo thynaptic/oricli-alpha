@@ -508,7 +508,55 @@ var (
 	reQuestion    = regexp.MustCompile(`(?i)(what|who|how|why|when|where|which|explain|tell me about|what is|what are)\s+([a-z][a-z0-9\s\-]{3,60})\??`)
 	reNamedEntity = regexp.MustCompile(`\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b`)
 	reTechTerm    = regexp.MustCompile(`\b([A-Z][a-zA-Z0-9]{2,}(?:\.[a-zA-Z]{2,})?)\b`) // CamelCase / acronyms
+	reNumeric     = regexp.MustCompile(`^\d+(\.\d+)?$`)
 )
+
+// topicStopWords are common English words that carry no epistemic value as
+// research topics. Any candidate topic that, when lowercased, matches one of
+// these is silently dropped before it reaches the seed queue.
+var topicStopWords = map[string]bool{
+	// articles / determiners
+	"the": true, "a": true, "an": true, "this": true, "that": true, "these": true, "those": true,
+	// pronouns
+	"i": true, "me": true, "my": true, "we": true, "us": true, "our": true,
+	"you": true, "your": true, "he": true, "she": true, "it": true, "they": true, "them": true, "their": true,
+	// common verbs
+	"is": true, "are": true, "was": true, "were": true, "be": true, "been": true, "being": true,
+	"have": true, "has": true, "had": true, "do": true, "does": true, "did": true,
+	"will": true, "would": true, "could": true, "should": true, "may": true, "might": true, "can": true,
+	"make": true, "made": true, "making": true, "want": true, "need": true, "get": true, "got": true,
+	"go": true, "going": true, "come": true, "know": true, "think": true, "said": true, "say": true,
+	"use": true, "used": true, "using": true, "look": true, "take": true, "see": true,
+	// common adjectives / adverbs
+	"full": true, "good": true, "great": true, "best": true, "new": true, "old": true, "big": true,
+	"little": true, "small": true, "large": true, "long": true, "high": true, "low": true,
+	"more": true, "most": true, "much": true, "many": true, "some": true, "any": true, "all": true,
+	"also": true, "just": true, "only": true, "very": true, "well": true, "even": true, "back": true,
+	"still": true, "same": true, "other": true, "such": true, "then": true, "than": true, "now": true,
+	// prepositions / conjunctions
+	"in": true, "on": true, "at": true, "to": true, "of": true, "for": true, "with": true,
+	"from": true, "by": true, "as": true, "about": true, "into": true, "out": true,
+	"up": true, "down": true, "over": true, "after": true, "before": true, "between": true,
+	"and": true, "but": true, "or": true, "not": true, "no": true, "nor": true, "so": true,
+	"if": true, "when": true, "where": true, "while": true, "because": true, "though": true,
+	// generic UI / meta words that bleed in from chat context
+	"page": true, "text": true, "here": true, "there": true, "what": true, "how": true,
+	"which": true, "who": true, "help": true, "please": true, "thanks": true, "okay": true,
+	"chat": true, "code": true, "file": true, "data": true, "type": true, "user": true,
+}
+
+// isWorthyTopic returns true only if a candidate topic is substantive enough
+// to warrant autonomous research — not a stopword, not too short, not a bare number.
+func isWorthyTopic(t string) bool {
+	if len(t) < 6 || len(t) > 80 {
+		return false
+	}
+	// Pure numbers / single-token numerics are not research topics
+	if reNumeric.MatchString(t) {
+		return false
+	}
+	return !topicStopWords[strings.ToLower(strings.TrimSpace(t))]
+}
 
 // extractTopics pulls candidate research topics from a user message.
 // Deliberately lightweight — no inference, just pattern matching.
@@ -518,7 +566,7 @@ func extractTopics(msg string) []string {
 
 	add := func(t string) {
 		t = strings.TrimSpace(t)
-		if len(t) < 4 || len(t) > 80 {
+		if !isWorthyTopic(t) {
 			return
 		}
 		key := strings.ToLower(t)
@@ -540,12 +588,9 @@ func extractTopics(msg string) []string {
 		add(m)
 	}
 
-	// CamelCase / tech acronyms (skip common words)
-	skip := map[string]bool{"I": true, "The": true, "A": true, "Is": true, "It": true, "We": true, "You": true, "He": true, "She": true}
+	// CamelCase / tech acronyms
 	for _, m := range reTechTerm.FindAllString(msg, 5) {
-		if !skip[m] {
-			add(m)
-		}
+		add(m)
 	}
 
 	return topics

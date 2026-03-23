@@ -115,10 +115,28 @@ func (e *ExtractorEngine) HydrateGraph(text string, g *WorkingMemoryGraph, valen
 }
 
 func isCommonWord(word string) bool {
-	common := map[string]bool{
-		"the": true, "a": true, "an": true, "and": true, "but": true, "or": true,
-		"in": true, "on": true, "at": true, "to": true, "for": true, "of": true,
-		"with": true, "by": true, "from": true, "is": true, "was": true, "are": true,
+	switch strings.ToLower(word) {
+	case "the", "a", "an", "and", "but", "or", "nor", "so",
+		"in", "on", "at", "to", "for", "of", "with", "by", "from",
+		"is", "was", "are", "were", "be", "been", "being",
+		"have", "has", "had", "do", "does", "did",
+		"will", "would", "could", "should", "may", "might", "can",
+		"this", "that", "these", "those", "it", "its",
+		"i", "me", "my", "we", "us", "our", "you", "your",
+		"he", "she", "they", "them", "their",
+		"make", "made", "want", "need", "get", "got", "go", "going",
+		"come", "know", "think", "said", "say", "use", "used", "look",
+		"take", "see", "full", "good", "great", "best", "new", "old",
+		"big", "little", "small", "large", "long", "high", "low",
+		"more", "most", "much", "many", "some", "any", "all",
+		"also", "just", "only", "very", "well", "even", "back",
+		"still", "same", "other", "such", "then", "than", "now",
+		"not", "no", "if", "when", "where", "while", "as", "about",
+		"into", "out", "up", "down", "over", "after", "before", "between",
+		"page", "text", "here", "there", "what", "how", "which", "who",
+		"help", "please", "thanks", "okay", "chat", "code",
+		"file", "data", "type", "user":
+		return true
 	}
-	return common[strings.ToLower(word)]
+	return false
 }

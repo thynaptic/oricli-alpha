@@ -2,6 +2,7 @@ package memory
 
 import (
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -78,12 +79,24 @@ func NewWorkingMemoryGraph() *WorkingMemoryGraph {
 }
 
 // FindGaps identifies entities that require autonomous epistemic foraging.
+// Only returns entities whose labels are substantive research topics — not
+// common words, not short strings, not bare numbers.
 func (g *WorkingMemoryGraph) FindGaps() []*Entity {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
 	var gaps []*Entity
 	for _, e := range g.Entities {
+		// Skip trivially short or stopword labels — these are noise, not gaps
+		label := strings.TrimSpace(e.Label)
+		if len(label) < 6 {
+			continue
+		}
+		lower := strings.ToLower(label)
+		if isCommonWord(lower) {
+			continue
+		}
+
 		// Degree: Number of relationships this entity has
 		degree := 0
 		for _, r := range g.Relationships {
@@ -92,7 +105,7 @@ func (g *WorkingMemoryGraph) FindGaps() []*Entity {
 			}
 		}
 
-		// Heuristic: If Uncertainty is high or Degree is low, it's a gap
+		// Heuristic: high uncertainty, poorly connected, or thin description
 		if e.Uncertainty > 0.7 || degree < 2 || len(e.Description) < 20 {
 			gaps = append(gaps, e)
 		}
