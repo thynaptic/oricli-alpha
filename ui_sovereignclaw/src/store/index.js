@@ -433,26 +433,28 @@ export function connectHiveWS() {
       const msg = JSON.parse(event.data);
       const s = useSCStore.getState();
       if (msg.type === 'resonance_sync') {
-        // Payload IS the ResonanceState struct
+        // Payload IS the ResonanceState struct — unwrap from WS envelope
+        const p = msg.payload ?? msg;
         s.setEriState({
-          eri:        msg.ERI        ?? msg.eri        ?? 0.5,
-          ers:        msg.ERS        ?? msg.ers        ?? 0.5,
-          pacing:     msg.Pacing     ?? msg.pacing     ?? 1.0,
-          volatility: msg.Volatility ?? msg.volatility ?? 0.0,
-          coherence:  msg.Coherence  ?? msg.coherence  ?? 1.0,
-          musicalKey: msg.MusicalKey ?? msg.musical_key ?? 'C Major',
-          bpm:        msg.BPM        ?? msg.bpm        ?? 120.0,
+          eri:        p.ERI        ?? p.eri        ?? 0.5,
+          ers:        p.ERS        ?? p.ers        ?? 0.5,
+          pacing:     p.Pacing     ?? p.pacing     ?? 1.0,
+          volatility: p.Volatility ?? p.volatility ?? 0.0,
+          coherence:  p.Coherence  ?? p.coherence  ?? 1.0,
+          musicalKey: p.MusicalKey ?? p.musical_key ?? 'C Major',
+          bpm:        p.BPM        ?? p.bpm        ?? 120.0,
         });
-        if (msg.active_modules) s.setHiveActive(msg.active_modules);
-        if (msg.edges) s.setHiveEdges(msg.edges);
-        if (msg.consensus != null) s.setConsensusScore(msg.consensus);
+        if (p.active_modules) s.setHiveActive(p.active_modules);
+        if (p.edges) s.setHiveEdges(p.edges);
+        if (p.consensus != null) s.setConsensusScore(p.consensus);
       } else if (msg.type === 'sensory_sync') {
+        const p = msg.payload ?? msg;
         s.setSensoryState({
-          active_tone:     msg.active_tone     ?? 'Deep Focus',
-          primary_color:   msg.primary_color   ?? '#3399FF',
-          secondary_color: msg.secondary_color ?? '#994CFF',
-          opacity:         msg.opacity         ?? 0.85,
-          pulse_rate:      msg.pulse_rate      ?? 1.0,
+          active_tone:     p.active_tone     ?? 'Deep Focus',
+          primary_color:   p.primary_color   ?? '#3399FF',
+          secondary_color: p.secondary_color ?? '#994CFF',
+          opacity:         p.opacity         ?? 0.85,
+          pulse_rate:      p.pulse_rate      ?? 1.0,
         });
       } else if (msg.type === 'agent_action') {
         // Update dispatch card in whatever session it lives in
@@ -472,8 +474,9 @@ export function connectHiveWS() {
         // SCAI Critique-Revision fired post-stream and found a constitutional violation.
         // Patch the last assistant message in the matching session with the corrected text,
         // and mark it so the UI can show a correction badge.
-        const sid = msg.session_id;
-        const corrected = msg.corrected;
+        const payload = msg.payload ?? msg;
+        const sid = payload.session_id;
+        const corrected = payload.corrected;
         if (!corrected) return;
         const allSessions = useSCStore.getState().sessions;
         useSCStore.setState({
