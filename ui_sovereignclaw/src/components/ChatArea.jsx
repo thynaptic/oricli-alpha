@@ -191,7 +191,7 @@ const markdownComponents = {
   table({ children }) { return <div style={{ overflowX: 'auto', margin: '12px 0' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>{children}</table></div>; },
   th({ children }) { return <th style={{ border: '1px solid var(--color-sc-border)', padding: '6px 10px', background: 'var(--color-sc-surface)', color: 'var(--color-sc-text-muted)', textAlign: 'left', fontWeight: 600, fontSize: 12 }}>{children}</th>; },
   td({ children }) { return <td style={{ border: '1px solid var(--color-sc-border)', padding: '6px 10px', color: 'var(--color-sc-text)' }}>{children}</td>; },
-  strong({ children }) { return <strong style={{ color: 'var(--color-sc-text)', fontWeight: 600 }}>{children}</strong>; },
+  strong({ children }) { return <strong style={{ color: '#fff', fontWeight: 700 }}>{children}</strong>; },
 };
 
 // ── Reaction Bar ──────────────────────────────────────────────────────────────

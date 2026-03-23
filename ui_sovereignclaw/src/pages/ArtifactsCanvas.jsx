@@ -159,6 +159,9 @@ function MarkdownRenderer({ content }) {
           table: ({ children }) => <div style={{ overflowX: 'auto', marginBottom: 14 }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>{children}</table></div>,
           th: ({ children }) => <th style={{ padding: '7px 12px', borderBottom: '1px solid var(--color-sc-border)', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--color-sc-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{children}</th>,
           td: ({ children }) => <td style={{ padding: '7px 12px', borderBottom: '1px solid var(--color-sc-border)', color: 'var(--color-sc-text-muted)', fontSize: 13 }}>{children}</td>,
+          strong: ({ children }) => <strong style={{ color: 'var(--color-sc-text)', fontWeight: 700 }}>{children}</strong>,
+          em: ({ children }) => <em style={{ color: 'var(--color-sc-text)', fontStyle: 'italic' }}>{children}</em>,
+          li: ({ children }) => <li style={{ marginBottom: 4, color: 'var(--color-sc-text-muted)' }}>{children}</li>,
         }}
       >
         {content}
