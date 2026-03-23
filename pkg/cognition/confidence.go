@@ -36,11 +36,61 @@ func DetectUncertainty(prompt string) (needsSearch bool, query searchintent.Sear
 		return false, searchintent.SearchQuery{}
 	}
 
+	// ── Sovereign knowledge gate ──────────────────────────────────────────────
+	// If the topic is a proprietary Thynaptic/Oricli term, NEVER web-search it.
+	// These are defined in the identity seed — let RAG answer from memory.
+	if isSovereignTopic(topic) {
+		return false, searchintent.SearchQuery{}
+	}
+
 	// Classify intent from the ORIGINAL prompt (richer signals than extracted topic)
 	// e.g. "how to deploy nginx?" → IntentProcedural even though topic is "deploy nginx"
 	intent := searchintent.ClassifySearchIntent(t)
 	q := searchintent.BuildSearchQuery(topic, intent)
 	return true, q
+}
+
+// ---------------------------------------------------------------------------
+// Sovereign knowledge gate
+// ---------------------------------------------------------------------------
+
+// sovereignTerms are proprietary Thynaptic/Oricli concepts defined in the
+// identity seed. Web search should never override them — RAG answers instead.
+var sovereignTerms = map[string]bool{
+	"scai":              true,
+	"agli":              true,
+	"oricli":            true,
+	"oricli-alpha":      true,
+	"oricli alpha":      true,
+	"sovereignclaw":     true,
+	"sovereign claw":    true,
+	"thynaptic":         true,
+	"eri":               true,
+	"emotional resonance index": true,
+	"sovereign constitution": true,
+	"hive os":           true,
+	"curiosity daemon":  true,
+	"dream daemon":      true,
+	"memory bank":       true,
+	"identity seed":     true,
+	"reaction memory":   true,
+	"rfal":              true,
+	"sovereign engine":  true,
+	"swarm bus":         true,
+}
+
+func isSovereignTopic(topic string) bool {
+	lower := strings.ToLower(strings.TrimSpace(topic))
+	if sovereignTerms[lower] {
+		return true
+	}
+	// Also catch partial matches: "what is SCAI auditor?" → topic = "SCAI auditor"
+	for term := range sovereignTerms {
+		if strings.Contains(lower, term) {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------------------------------------------------------------------------
