@@ -217,6 +217,13 @@ func main() {
 	apiServer.GoalExecutor = goalExecutor
 	go goalExecutor.Start(context.Background())
 	log.Println("[Boot] DAG GoalExecutor autonomous execution loop started.")
+
+	docIngestor := &service.DocumentIngestor{
+		MemoryBank:      apiServer.MemoryBank,
+		CuriosityDaemon: curiosity,
+	}
+	apiServer.DocumentIngestor = docIngestor
+	log.Println("[Boot] Document Ingestor wired.")
 	
 	go apiServer.Start()
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)

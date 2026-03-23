@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Brain, Search, RefreshCw, MessageSquare, BookOpen,
-  Clock, Star, User, ChevronDown, ChevronRight, X,
+  Clock, Star, User, ChevronDown, ChevronRight, X, FileText, FileCode2, Table2,
 } from 'lucide-react';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -213,12 +213,94 @@ function TabPanel({ label, type, searchTopic }) {
   );
 }
 
+// ─── Documents Panel ──────────────────────────────────────────────────────────
+
+const EXT_ICON = { pdf: FileText, md: FileCode2, csv: Table2, txt: FileText };
+const EXT_COLOR = { pdf: 'rgba(255,100,100,0.7)', md: 'rgba(130,180,255,0.7)', csv: 'rgba(80,200,120,0.7)', txt: 'rgba(196,164,74,0.7)' };
+
+function DocumentsPanel() {
+  const [docs, setDocs]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/v1/documents');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      setDocs(d.documents ?? []);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <div style={{ color: 'var(--color-sc-text-muted)', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>Loading documents…</div>;
+  if (error)   return <div style={{ color: '#FF4D6D', fontSize: 12, padding: 16 }}>Error: {error}</div>;
+
+  if (docs.length === 0) return (
+    <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+      <FileText size={32} color="rgba(255,255,255,0.1)" style={{ marginBottom: 12 }} />
+      <p style={{ color: 'var(--color-sc-text-muted)', fontSize: 13, margin: 0 }}>No documents ingested yet.</p>
+      <p style={{ color: 'var(--color-sc-text-dim)', fontSize: 11, marginTop: 6 }}>
+        Use the 📎 button in chat to upload txt, md, csv, or pdf files.
+      </p>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: 12, color: 'var(--color-sc-text-dim)', marginBottom: 4 }}>
+        {docs.length} document{docs.length !== 1 ? 's' : ''} in knowledge base
+      </div>
+      {docs.map(doc => {
+        const ext = doc.filename?.split('.').pop()?.toLowerCase() ?? 'txt';
+        const Icon = EXT_ICON[ext] ?? FileText;
+        const color = EXT_COLOR[ext] ?? 'rgba(196,164,74,0.7)';
+        return (
+          <div key={doc.id} style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '12px 16px', borderRadius: 10,
+            background: 'rgba(255,255,255,0.025)',
+            border: '1px solid rgba(255,255,255,0.07)',
+          }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+              background: color.replace('0.7)', '0.1)'),
+              border: `1px solid ${color.replace('0.7)', '0.2)')}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Icon size={16} color={color} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-sc-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {doc.filename}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--color-sc-text-muted)', marginTop: 2 }}>
+                {doc.chunk_count} chunk{doc.chunk_count !== 1 ? 's' : ''} · {(doc.size_bytes / 1024).toFixed(1)} KB
+                {doc.ingested_at && ` · ${new Date(doc.ingested_at).toLocaleString()}`}
+              </div>
+            </div>
+            <span style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+              color, background: color.replace('0.7)', '0.1)'),
+              padding: '3px 8px', borderRadius: 5,
+            }}>{ext}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
   { id: 'conversation', label: 'Conversations', Icon: MessageSquare },
   { id: 'curiosity',    label: 'Curiosity',     Icon: Star },
   { id: 'knowledge',    label: 'Knowledge',     Icon: BookOpen },
+  { id: 'documents',    label: 'Documents',     Icon: FileText },
 ];
 
 export function MemoryBrowser() {
@@ -320,12 +402,16 @@ export function MemoryBrowser() {
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
-        <TabPanel
-          key={`${activeTab}-${searchTopic}-${refreshKey}`}
-          label={TABS.find(t => t.id === activeTab)?.label ?? ''}
-          type={activeTab}
-          searchTopic={searchTopic}
-        />
+        {activeTab === 'documents' ? (
+          <DocumentsPanel key={refreshKey} />
+        ) : (
+          <TabPanel
+            key={`${activeTab}-${searchTopic}-${refreshKey}`}
+            label={TABS.find(t => t.id === activeTab)?.label ?? ''}
+            type={activeTab}
+            searchTopic={searchTopic}
+          />
+        )}
       </div>
     </div>
   );

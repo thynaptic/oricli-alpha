@@ -2539,6 +2539,56 @@ def proxy_daemons() -> Response:
         return jsonify({"error": str(exc), "daemons": []}), 502
 
 
+@app.route("/api/v1/documents/upload", methods=["POST"])
+def proxy_document_upload() -> Response:
+    """Proxy POST /api/v1/documents/upload → backbone /v1/documents/upload."""
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "missing 'file' field"}), 400
+        f = request.files["file"]
+        with _client() as client:
+            r = client.post(
+                f"{_BACKBONE_URL}/v1/documents/upload",
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                files={"file": (f.filename, f.stream, f.content_type or "application/octet-stream")},
+                timeout=60,
+            )
+            return jsonify(r.json()), r.status_code
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/api/v1/documents", methods=["GET"])
+def proxy_documents_list() -> Response:
+    """Proxy GET /api/v1/documents → backbone /v1/documents."""
+    try:
+        with _client() as client:
+            r = client.get(
+                f"{_BACKBONE_URL}/v1/documents",
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                timeout=10,
+            )
+            return jsonify(r.json())
+    except Exception as exc:
+        return jsonify({"error": str(exc), "documents": []}), 502
+
+
+@app.route("/api/v1/feedback", methods=["POST"])
+def proxy_reaction_feedback() -> Response:
+    """Proxy POST /api/v1/feedback → backbone /v1/feedback."""
+    try:
+        with _client() as client:
+            r = client.post(
+                f"{_BACKBONE_URL}/v1/feedback",
+                json=request.get_json(force=True),
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                timeout=10,
+            )
+            return jsonify(r.json()), r.status_code
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
 @app.route("/logs/traces")
 def logs_traces() -> Response:
     limit = request.args.get("limit", "50")

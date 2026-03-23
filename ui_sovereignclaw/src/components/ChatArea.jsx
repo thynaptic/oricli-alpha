@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSCStore, streamChat, selectActiveSession } from '../store';
-import { Send, Square, Copy, Check, ChevronDown, X, Bot, Search, BookOpen, ListTodo, Workflow, FileText, BarChart2, Loader2, CheckCircle2, AlertCircle, FileCode2, ExternalLink } from 'lucide-react';
+import { Send, Square, Copy, Check, ChevronDown, X, Bot, Search, BookOpen, ListTodo, Workflow, FileText, BarChart2, Loader2, CheckCircle2, AlertCircle, FileCode2, ExternalLink, Paperclip } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -194,9 +194,87 @@ const markdownComponents = {
   strong({ children }) { return <strong style={{ color: 'var(--color-sc-text)', fontWeight: 600 }}>{children}</strong>; },
 };
 
+// ── Reaction Bar ──────────────────────────────────────────────────────────────
+
+const REACTIONS = [
+  { key: 'thumbs_up',   emoji: '👍', label: 'Helpful',     positive: true  },
+  { key: 'heart',       emoji: '❤️', label: 'Love',        positive: true  },
+  { key: 'fire',        emoji: '🔥', label: 'Amazing',     positive: true  },
+  { key: 'star',        emoji: '⭐', label: 'Insightful',  positive: true  },
+  { key: 'lightbulb',   emoji: '💡', label: 'Good idea',   positive: true  },
+  { key: 'checkmark',   emoji: '✅', label: 'Correct',     positive: true  },
+  { key: 'party',       emoji: '🎉', label: 'Celebrate',   positive: true  },
+  { key: 'thumbs_down', emoji: '👎', label: 'Unhelpful',   positive: false },
+  { key: 'xmark',       emoji: '❌', label: 'Incorrect',   positive: false },
+  { key: 'sad',         emoji: '😞', label: 'Disappointed',positive: false },
+];
+
+function ReactionBar({ msg }) {
+  const [selected, setSelected] = useState(null);
+  const [hover, setHover] = useState(null);
+
+  const sendReaction = async (r) => {
+    if (selected === r.key) return; // already reacted
+    setSelected(r.key);
+    try {
+      await fetch('/api/v1/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message_id:      String(msg.id ?? Date.now()),
+          reaction:        r.key,
+          is_positive:     r.positive,
+          message_preview: (msg.content ?? '').slice(0, 200),
+          session_id:      msg.sessionId ?? '',
+        }),
+      });
+    } catch { /* non-critical */ }
+  };
+
+  return (
+    <div style={{
+      display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap',
+      opacity: 1, transition: 'opacity 0.2s',
+    }}>
+      {REACTIONS.map((r) => {
+        const isSelected = selected === r.key;
+        const isHovered  = hover === r.key;
+        return (
+          <button
+            key={r.key}
+            title={r.label}
+            onClick={() => sendReaction(r)}
+            onMouseEnter={() => setHover(r.key)}
+            onMouseLeave={() => setHover(null)}
+            style={{
+              background: isSelected
+                ? 'rgba(196,164,74,0.18)'
+                : isHovered ? 'rgba(255,255,255,0.07)' : 'transparent',
+              border: isSelected
+                ? '1px solid rgba(196,164,74,0.45)'
+                : '1px solid transparent',
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontSize: 16,
+              lineHeight: 1,
+              padding: '3px 5px',
+              transition: 'all 0.15s',
+              transform: isHovered && !isSelected ? 'scale(1.2)' : 'scale(1)',
+              opacity: selected && !isSelected ? 0.35 : 1,
+            }}
+          >
+            {r.emoji}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Message ───────────────────────────────────────────────────────────────────
 
 function Message({ msg }) {
+  const [showReactions, setShowReactions] = useState(false);
   const isUser = msg.role === 'user';
 
   if (msg.role === 'dispatch') return <DispatchCard msg={msg} />;
@@ -216,7 +294,12 @@ function Message({ msg }) {
   }
 
   return (
-    <div className="animate-fade-slide" style={{ display: 'flex', gap: 14, marginBottom: 24, alignItems: 'flex-start' }}>
+    <div
+      className="animate-fade-slide"
+      style={{ display: 'flex', gap: 14, marginBottom: 24, alignItems: 'flex-start' }}
+      onMouseEnter={() => setShowReactions(true)}
+      onMouseLeave={() => setShowReactions(false)}
+    >
       {/* Avatar */}
       <div style={{
         width: 30, height: 30, flexShrink: 0, borderRadius: '50%', marginTop: 2,
@@ -249,6 +332,9 @@ function Message({ msg }) {
             </svg>
             SCAI corrected
           </div>
+        )}
+        {!msg.streaming && showReactions && (
+          <ReactionBar msg={msg} />
         )}
       </div>
     </div>
@@ -301,7 +387,10 @@ function WelcomeScreen({ onSuggest }) {
 // ── Chat input ────────────────────────────────────────────────────────────────
 
 function ChatInput({ value, onChange, onSend, onAbort, isStreaming, disabled }) {
-  const [focused, setFocused] = useState(false);
+  const [focused, setFocused]     = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState(null); // { text, ok }
+  const fileRef = useRef(null);
 
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); }
@@ -313,45 +402,122 @@ function ChatInput({ value, onChange, onSend, onAbort, isStreaming, disabled }) 
     e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
   }
 
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const allowed = ['.txt', '.md', '.csv', '.pdf'];
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+      setUploadMsg({ text: `Unsupported type. Use: ${allowed.join(', ')}`, ok: false });
+      setTimeout(() => setUploadMsg(null), 4000);
+      return;
+    }
+
+    setUploading(true);
+    setUploadMsg(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const r = await fetch('/api/v1/documents/upload', { method: 'POST', body: form });
+      const d = await r.json();
+      if (r.ok) {
+        setUploadMsg({ text: `✓ "${file.name}" ingested — ${d.chunks} chunks`, ok: true });
+      } else {
+        setUploadMsg({ text: d.error ?? 'Upload failed', ok: false });
+      }
+    } catch (err) {
+      setUploadMsg({ text: 'Upload error: ' + err.message, ok: false });
+    } finally {
+      setUploading(false);
+      setTimeout(() => setUploadMsg(null), 5000);
+    }
+  }
+
   return (
-    <div style={{
-      position: 'relative',
-      border: `1px solid ${focused ? 'rgba(196,164,74,0.5)' : 'var(--color-sc-border2)'}`,
-      borderRadius: 14, background: 'var(--color-sc-surface)',
-      boxShadow: focused ? '0 0 0 3px rgba(196,164,74,0.08)' : 'none',
-      transition: 'border-color 0.2s, box-shadow 0.2s',
-    }}>
-      <textarea
-        value={value}
-        onChange={handleInput}
-        onKeyDown={handleKeyDown}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        placeholder="Message SovereignClaw…"
-        rows={1}
-        style={{
-          display: 'block', width: '100%', background: 'transparent',
-          border: 'none', outline: 'none', resize: 'none', padding: '14px 52px 14px 16px',
-          color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', fontSize: 14,
-          lineHeight: 1.55, minHeight: 52, overflow: 'hidden',
-        }}
-      />
-      <div style={{ position: 'absolute', right: 10, bottom: 10 }}>
-        <button
-          onClick={isStreaming ? onAbort : onSend}
-          disabled={!isStreaming && !value.trim()}
+    <div style={{ position: 'relative' }}>
+      {/* Upload status toast */}
+      {uploadMsg && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0,
+          background: uploadMsg.ok ? 'rgba(80,200,120,0.12)' : 'rgba(220,80,80,0.12)',
+          border: `1px solid ${uploadMsg.ok ? 'rgba(80,200,120,0.3)' : 'rgba(220,80,80,0.3)'}`,
+          borderRadius: 8, padding: '8px 14px', fontSize: 12,
+          color: uploadMsg.ok ? 'rgba(80,220,120,0.95)' : 'rgba(255,100,100,0.95)',
+          fontFamily: 'var(--font-mono)',
+        }}>
+          {uploadMsg.text}
+        </div>
+      )}
+
+      <div style={{
+        border: `1px solid ${focused ? 'rgba(196,164,74,0.5)' : 'var(--color-sc-border2)'}`,
+        borderRadius: 14, background: 'var(--color-sc-surface)',
+        boxShadow: focused ? '0 0 0 3px rgba(196,164,74,0.08)' : 'none',
+        transition: 'border-color 0.2s, box-shadow 0.2s',
+      }}>
+        {/* Hidden file input */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".txt,.md,.csv,.pdf"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
+        <textarea
+          value={value}
+          onChange={handleInput}
+          onKeyDown={handleKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder="Message SovereignClaw…"
+          rows={1}
           style={{
-            width: 34, height: 34, borderRadius: 9, border: 'none', cursor: (!isStreaming && !value.trim()) ? 'not-allowed' : 'pointer',
-            background: isStreaming
-              ? 'rgba(255,77,109,0.2)'
-              : value.trim() ? 'var(--color-sc-gold)' : 'rgba(255,255,255,0.06)',
-            color: isStreaming ? 'var(--color-sc-danger)' : value.trim() ? '#0D0D0D' : 'var(--color-sc-text-dim)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background 0.15s, color 0.15s',
+            display: 'block', width: '100%', background: 'transparent',
+            border: 'none', outline: 'none', resize: 'none', padding: '14px 90px 14px 16px',
+            color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', fontSize: 14,
+            lineHeight: 1.55, minHeight: 52, overflow: 'hidden',
           }}
-        >
-          {isStreaming ? <Square size={13} fill="currentColor" /> : <Send size={14} />}
-        </button>
+        />
+        <div style={{ position: 'absolute', right: 10, bottom: 10, display: 'flex', gap: 6 }}>
+          {/* Attach button */}
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            title="Upload file (txt / md / csv / pdf)"
+            style={{
+              width: 34, height: 34, borderRadius: 9, border: 'none',
+              cursor: uploading ? 'not-allowed' : 'pointer',
+              background: 'rgba(255,255,255,0.05)',
+              color: uploading ? 'var(--color-sc-gold)' : 'var(--color-sc-text-dim)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+            onMouseEnter={e => { if (!uploading) e.currentTarget.style.background = 'rgba(196,164,74,0.1)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+          >
+            {uploading
+              ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+              : <Paperclip size={14} />}
+          </button>
+          {/* Send / abort */}
+          <button
+            onClick={isStreaming ? onAbort : onSend}
+            disabled={!isStreaming && !value.trim()}
+            style={{
+              width: 34, height: 34, borderRadius: 9, border: 'none', cursor: (!isStreaming && !value.trim()) ? 'not-allowed' : 'pointer',
+              background: isStreaming
+                ? 'rgba(255,77,109,0.2)'
+                : value.trim() ? 'var(--color-sc-gold)' : 'rgba(255,255,255,0.06)',
+              color: isStreaming ? 'var(--color-sc-danger)' : value.trim() ? '#0D0D0D' : 'var(--color-sc-text-dim)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            {isStreaming ? <Square size={13} fill="currentColor" /> : <Send size={14} />}
+          </button>
+        </div>
       </div>
     </div>
   );

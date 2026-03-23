@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -43,8 +45,9 @@ type ServerV2 struct {
 	RateLimiter  *safety.RateLimiter
 	SovAuth      *sovereign.SovereignAuth
 	ExecHandler  *sovereign.SovereignExecHandler
-	ImageGen     *service.ImageGenManager
-	MemoryBank   *service.MemoryBank
+	ImageGen         *service.ImageGenManager
+	MemoryBank       *service.MemoryBank
+	DocumentIngestor *service.DocumentIngestor
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -198,6 +201,11 @@ func (s *ServerV2) setupRoutes() {
 
 		protected.GET("/memories", s.handleListMemories)
 		protected.GET("/memories/knowledge", s.handleListKnowledge)
+
+		protected.POST("/documents/upload", s.handleDocumentUpload)
+		protected.GET("/documents", s.handleListDocuments)
+
+		protected.POST("/feedback", s.handleReactionFeedback)
 	}
 }
 
@@ -975,4 +983,169 @@ daemons = append(daemons, DaemonStatus{Name: "ReformDaemon", Status: "running", 
 daemons = append(daemons, DaemonStatus{Name: "DreamDaemon", Status: "running", Detail: "memory consolidation loop"})
 
 c.JSON(http.StatusOK, gin.H{"daemons": daemons})
+}
+
+// handleDocumentUpload accepts a multipart file upload and ingests it into MemoryBank.
+func (s *ServerV2) handleDocumentUpload(c *gin.Context) {
+	if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse form: " + err.Error()})
+		return
+	}
+
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing 'file' field"})
+		return
+	}
+	defer file.Close()
+
+	filename := header.Filename
+	ext := strings.ToLower(filepath.Ext(filename))
+	allowed := map[string]string{
+		".txt": "text/plain",
+		".md":  "text/markdown",
+		".csv": "text/csv",
+		".pdf": "application/pdf",
+	}
+	mimeType, ok := allowed[ext]
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported file type: " + ext})
+		return
+	}
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read file"})
+		return
+	}
+
+	if s.DocumentIngestor == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "document ingestor not available"})
+		return
+	}
+
+	n, err := s.DocumentIngestor.Ingest(c.Request.Context(), filename, data, mimeType)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	docs := s.DocumentIngestor.ListDocs()
+	var id string
+	for _, d := range docs {
+		if d.Filename == filename {
+			id = d.ID
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"filename": filename,
+		"chunks":   n,
+		"id":       id,
+	})
+}
+
+// handleListDocuments returns all previously ingested documents.
+func (s *ServerV2) handleListDocuments(c *gin.Context) {
+	if s.DocumentIngestor == nil {
+		c.JSON(http.StatusOK, gin.H{"documents": []interface{}{}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"documents": s.DocumentIngestor.ListDocs()})
+}
+
+// ─── Reaction Feedback ────────────────────────────────────────────────────────
+
+// handleReactionFeedback stores a user's emoji reaction to an assistant message
+// as a MemoryFragment so it influences future RAG recall and sentiment weighting.
+func (s *ServerV2) handleReactionFeedback(c *gin.Context) {
+var req struct {
+MessageID   string  `json:"message_id"`
+Reaction    string  `json:"reaction"`    // e.g. "thumbs_up", "heart", "fire"
+IsPositive  bool    `json:"is_positive"`
+MsgPreview  string  `json:"message_preview"` // first 200 chars of assistant message
+SessionID   string  `json:"session_id"`
+}
+if err := c.ShouldBindJSON(&req); err != nil || req.Reaction == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "reaction and message_id required"})
+return
+}
+
+feedbackType := "positive"
+importance := 0.8
+if !req.IsPositive {
+feedbackType = "negative"
+importance = 0.9 // negative feedback is a sharper learning signal
+}
+
+content := fmt.Sprintf(
+"User reacted with %s (%s) to message: %q",
+req.Reaction, feedbackType, req.MsgPreview,
+)
+
+keywords := extractFeedbackKeywords(req.MsgPreview)
+topic := "feedback:" + feedbackType
+if len(keywords) > 0 {
+topic = "feedback:" + keywords[0]
+}
+
+frag := service.MemoryFragment{
+ID:         "fb-" + req.MessageID,
+Content:    content,
+Source:     "feedback",
+Topic:      topic,
+SessionID:  req.SessionID,
+Importance: importance,
+Provenance: service.ProvenanceUserStated, // user explicitly rated — highest trust
+Volatility: service.VolatilityStable,
+}
+
+if s.MemoryBank != nil {
+s.MemoryBank.Write(frag)
+}
+
+c.JSON(http.StatusOK, gin.H{
+"ok":          true,
+"feedback":    feedbackType,
+"reaction":    req.Reaction,
+"importance":  importance,
+"keywords":    keywords,
+})
+}
+
+// extractFeedbackKeywords pulls the top-5 meaningful words from a message preview.
+func extractFeedbackKeywords(text string) []string {
+stopWords := map[string]bool{
+"this": true, "that": true, "with": true, "from": true, "have": true,
+"about": true, "there": true, "their": true, "which": true, "while": true,
+"where": true, "what": true, "when": true, "your": true, "into": true,
+"over": true, "under": true, "through": true, "many": true, "some": true,
+"really": true, "just": true, "like": true, "them": true, "they": true,
+"you": true, "here": true, "the": true, "and": true, "for": true,
+"are": true, "was": true, "were": true, "been": true, "being": true,
+}
+
+words := strings.Fields(strings.ToLower(text))
+counts := map[string]int{}
+for _, w := range words {
+// strip punctuation
+clean := strings.Trim(w, `.,!?;:"'()[]`)
+if len(clean) > 3 && !stopWords[clean] {
+counts[clean]++
+}
+}
+
+type wc struct{ w string; c int }
+var ranked []wc
+for w, c := range counts {
+ranked = append(ranked, wc{w, c})
+}
+sort.Slice(ranked, func(i, j int) bool { return ranked[i].c > ranked[j].c })
+
+out := make([]string, 0, 5)
+for i, r := range ranked {
+if i >= 5 { break }
+out = append(out, r.w)
+}
+return out
 }
