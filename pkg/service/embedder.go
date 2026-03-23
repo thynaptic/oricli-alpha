@@ -32,11 +32,21 @@ func NewEmbedder() *Embedder {
 	if model == "" {
 		model = "nomic-embed-text"
 	}
-	return &Embedder{
+	e := &Embedder{
 		baseURL: base,
 		model:   model,
-		client:  &http.Client{Timeout: 10 * time.Second},
+		// CPU-only cold load can take 60-90s; use 120s to be safe.
+		client: &http.Client{Timeout: 120 * time.Second},
 	}
+	// Pre-warm: fire a silent background embed so the model is hot for
+	// the first real request.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 130*time.Second)
+		defer cancel()
+		e.Embed(ctx, "warm")
+		log.Printf("[embedder] model %q pre-warmed", model)
+	}()
+	return e
 }
 
 type ollamaEmbedRequest struct {
