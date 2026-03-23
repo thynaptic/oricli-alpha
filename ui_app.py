@@ -23,7 +23,9 @@ import sys
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+import secrets
+import urllib.parse
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
@@ -62,6 +64,23 @@ API_KEY = os.getenv("MAVAIA_API_KEY")
 ATTACHMENT_LIMIT_MB = float(os.getenv("MAVAIA_UI_ATTACHMENT_MB", "5"))
 MAX_ATTACHMENT_BYTES = int(ATTACHMENT_LIMIT_MB * 1024 * 1024)
 RETRY_COUNT = 3
+
+# Google OAuth2
+GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "357323906391-2b5pfagemqmfglk1j5u7uln8jqtpmfvh.apps.googleusercontent.com")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "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")
+GOOGLE_REDIRECT_URI  = "https://sovereignclaw.thynaptic.com/connections/oauth/callback/google"
+GOOGLE_SCOPES = " ".join([
+    "openid", "email", "profile",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/documents.readonly",
+    "https://www.googleapis.com/auth/tasks.readonly",
+    "https://www.googleapis.com/auth/forms.body.readonly",
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    "https://www.googleapis.com/auth/keep.readonly",
+])
+_OAUTH_STATES: dict[str, float] = {}  # state -> created_at timestamp (CSRF guard)
 
 app = Flask(__name__, static_folder=str(STATIC_DIR))
 if CORS_AVAILABLE:
@@ -1132,6 +1151,128 @@ def test_connection(conn_id: str) -> Response:
         return jsonify({"ok": False, "message": str(exc)})
 
 
+@app.route("/connections/oauth/authorize/google")
+def google_oauth_authorize():
+    """Redirect user to Google OAuth consent screen."""
+    state = secrets.token_urlsafe(16)
+    _OAUTH_STATES[state] = time.time()
+    cutoff = time.time() - 600
+    for s in list(_OAUTH_STATES):
+        if _OAUTH_STATES[s] < cutoff:
+            del _OAUTH_STATES[s]
+    params = urllib.parse.urlencode({
+        "client_id":     GOOGLE_CLIENT_ID,
+        "redirect_uri":  GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope":         GOOGLE_SCOPES,
+        "access_type":   "offline",
+        "prompt":        "consent",
+        "state":         state,
+    })
+    from flask import redirect as _redirect
+    return _redirect(f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
+
+
+@app.route("/connections/oauth/callback/google")
+def google_oauth_callback():
+    """Handle Google OAuth callback — exchange code for tokens."""
+    from flask import redirect as _redirect
+    error = request.args.get("error", "")
+    if error:
+        return _redirect("/?error=google_auth_denied#/connections")
+
+    state = request.args.get("state", "")
+    if state not in _OAUTH_STATES:
+        return "Invalid or expired state. Please try again.", 400
+    _OAUTH_STATES.pop(state, None)
+
+    code = request.args.get("code", "")
+    try:
+        r = httpx.post("https://oauth2.googleapis.com/token", data={
+            "code":          code,
+            "client_id":     GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri":  GOOGLE_REDIRECT_URI,
+            "grant_type":    "authorization_code",
+        }, timeout=15)
+        r.raise_for_status()
+        tokens = r.json()
+    except Exception as exc:
+        return f"Token exchange failed: {exc}", 500
+
+    user_email, user_name = "", ""
+    try:
+        ur = httpx.get("https://www.googleapis.com/oauth2/v2/userinfo",
+                       headers={"Authorization": f"Bearer {tokens['access_token']}"}, timeout=10)
+        if ur.status_code == 200:
+            ui = ur.json()
+            user_email = ui.get("email", "")
+            user_name  = ui.get("name", "")
+    except Exception:
+        pass
+
+    expiry = (datetime.now(timezone.utc) + timedelta(seconds=tokens.get("expires_in", 3600))).isoformat()
+    creds = {
+        "access_token":  tokens["access_token"],
+        "refresh_token": tokens.get("refresh_token", ""),
+        "token_expiry":  expiry,
+        "user_email":    user_email,
+        "user_name":     user_name,
+    }
+    with _CONN_LOCK:
+        conns = _load_connections()
+        conns["google_workspace"] = {
+            "id":          "google_workspace",
+            "credentials": creds,
+            "enabled":     True,
+            "updatedAt":   datetime.now(timezone.utc).isoformat(),
+        }
+        _save_connections(conns)
+
+    return _redirect("/?connected=google#/connections")
+
+
+def _refresh_google_token(creds: dict) -> dict:
+    """Refresh Google access token if within 5 min of expiry. Returns (possibly updated) creds."""
+    expiry_str = creds.get("token_expiry", "")
+    if expiry_str:
+        try:
+            expiry = datetime.fromisoformat(expiry_str)
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) < expiry - timedelta(minutes=5):
+                return creds  # still fresh
+        except Exception:
+            pass
+
+    refresh_token = creds.get("refresh_token", "")
+    if not refresh_token:
+        raise ValueError("No refresh token — user must re-authorize via Connections page")
+
+    r = httpx.post("https://oauth2.googleapis.com/token", data={
+        "client_id":     GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "refresh_token": refresh_token,
+        "grant_type":    "refresh_token",
+    }, timeout=15)
+    r.raise_for_status()
+    tokens = r.json()
+
+    new_creds = dict(creds)
+    new_creds["access_token"] = tokens["access_token"]
+    new_creds["token_expiry"] = (
+        datetime.now(timezone.utc) + timedelta(seconds=tokens.get("expires_in", 3600))
+    ).isoformat()
+
+    with _CONN_LOCK:
+        conns = _load_connections()
+        if "google_workspace" in conns:
+            conns["google_workspace"]["credentials"] = new_creds
+            _save_connections(conns)
+
+    return new_creds
+
+
 def _test_conn(conn_id: str, creds: dict) -> tuple[bool, str]:
     """Returns (success, message) for a connection test."""
     import httpx as _hx
@@ -1212,9 +1353,20 @@ def _test_conn(conn_id: str, creds: dict) -> tuple[bool, str]:
 
     # ── Enterprise ────────────────────────────────────────────────────────────
     if conn_id == "google_workspace":
-        if not creds.get("service_account_json") and not creds.get("api_key"):
-            return False, "Service account JSON or API key required"
-        return True, "Credentials saved (OAuth/service-account flow required)"
+        at = creds.get("access_token")
+        if not at:
+            return False, "Not connected — use Authorize with Google"
+        try:
+            refreshed = _refresh_google_token(creds)
+            at = refreshed["access_token"]
+        except Exception as exc:
+            return False, f"Token refresh failed — please re-authorize ({exc})"
+        r = _get("https://www.googleapis.com/oauth2/v2/userinfo",
+                 headers={"Authorization": f"Bearer {at}"})
+        if r and r.status_code == 200:
+            email = r.json().get("email", "unknown")
+            return True, f"Connected as {email}"
+        return False, "Token invalid — please re-authorize via the Connections page"
 
     if conn_id == "microsoft_365":
         if not creds.get("client_id") or not creds.get("tenant_id"):
@@ -2380,6 +2532,140 @@ def _fetch_github_api(creds: dict, opts: dict) -> list[dict]:
     return _fetch_github(creds, opts)
 
 
+def _fetch_google_workspace(creds: dict, opts: dict) -> list[dict]:
+    """Fetch content from Gmail, Drive, Docs, Calendar, Tasks, Sheets, Forms, Keep."""
+    creds = _refresh_google_token(creds)
+    at = creds["access_token"]
+    hdrs = {"Authorization": f"Bearer {at}"}
+    docs: list[dict] = []
+
+    # ── Gmail: recent important/unread messages ───────────────────────────────
+    try:
+        r = httpx.get("https://gmail.googleapis.com/gmail/v1/users/me/messages",
+                      params={"maxResults": 30, "q": "is:unread OR is:starred"},
+                      headers=hdrs, timeout=20)
+        if r.status_code == 200:
+            for msg in r.json().get("messages", [])[:20]:
+                mr = httpx.get(
+                    f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg['id']}",
+                    params={"format": "metadata", "metadataHeaders": ["Subject", "From", "Date"]},
+                    headers=hdrs, timeout=10)
+                if mr.status_code == 200:
+                    meta = {h["name"]: h["value"] for h in mr.json().get("payload", {}).get("headers", [])}
+                    docs.append({
+                        "title":    f"Gmail: {meta.get('Subject', '(no subject)')}",
+                        "content":  f"From: {meta.get('From','')}\nDate: {meta.get('Date','')}\n\n{mr.json().get('snippet','')}",
+                        "source":   f"https://mail.google.com/mail/u/0/#inbox/{msg['id']}",
+                        "metadata": {"service": "gmail", "type": "email"},
+                    })
+    except Exception as exc:
+        print(f"[Google/Gmail] {exc}")
+
+    # ── Drive + Docs + Sheets ─────────────────────────────────────────────────
+    try:
+        r = httpx.get("https://www.googleapis.com/drive/v3/files",
+                      params={"pageSize": 50, "orderBy": "modifiedTime desc",
+                              "fields": "files(id,name,mimeType,modifiedTime,webViewLink)",
+                              "q": "trashed=false"},
+                      headers=hdrs, timeout=20)
+        if r.status_code == 200:
+            for f in r.json().get("files", []):
+                mime = f.get("mimeType", "")
+                name = f.get("name", "")
+                content = f"Modified: {f.get('modifiedTime','')}"
+
+                if mime == "application/vnd.google-apps.document":
+                    dr = httpx.get(f"https://docs.googleapis.com/v1/documents/{f['id']}",
+                                   headers=hdrs, timeout=10)
+                    if dr.status_code == 200:
+                        parts = []
+                        for el in dr.json().get("body", {}).get("content", []):
+                            for pe in el.get("paragraph", {}).get("elements", []):
+                                parts.append(pe.get("textRun", {}).get("content", ""))
+                        content = "".join(parts)[:3000]
+
+                elif mime == "application/vnd.google-apps.spreadsheet":
+                    sr = httpx.get(f"https://sheets.googleapis.com/v4/spreadsheets/{f['id']}/values/A1:Z50",
+                                   headers=hdrs, timeout=10)
+                    if sr.status_code == 200:
+                        rows = sr.json().get("values", [])
+                        content = "\n".join("\t".join(str(c) for c in row) for row in rows[:30])
+
+                elif mime == "application/vnd.google-apps.form":
+                    fr = httpx.get(f"https://forms.googleapis.com/v1/forms/{f['id']}",
+                                   headers=hdrs, timeout=10)
+                    if fr.status_code == 200:
+                        fd = fr.json()
+                        questions = [q.get("title", "") for q in fd.get("items", [])]
+                        content = f"Form: {fd.get('info', {}).get('title', name)}\nQuestions: {', '.join(questions[:20])}"
+
+                docs.append({
+                    "title":    f"Drive: {name}",
+                    "content":  content[:3000],
+                    "source":   f.get("webViewLink", f"https://drive.google.com/file/d/{f['id']}"),
+                    "metadata": {"service": "drive", "mime": mime},
+                })
+    except Exception as exc:
+        print(f"[Google/Drive] {exc}")
+
+    # ── Calendar: upcoming events ─────────────────────────────────────────────
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        r = httpx.get("https://www.googleapis.com/calendar/v3/calendars/primary/events",
+                      params={"maxResults": 20, "orderBy": "startTime",
+                              "singleEvents": "true", "timeMin": now_iso},
+                      headers=hdrs, timeout=15)
+        if r.status_code == 200:
+            for ev in r.json().get("items", []):
+                start = ev.get("start", {}).get("dateTime") or ev.get("start", {}).get("date", "")
+                docs.append({
+                    "title":    f"Calendar: {ev.get('summary', '(no title)')}",
+                    "content":  f"Start: {start}\nDescription: {ev.get('description','')}\nLocation: {ev.get('location','')}",
+                    "source":   ev.get("htmlLink", "https://calendar.google.com"),
+                    "metadata": {"service": "calendar", "type": "event"},
+                })
+    except Exception as exc:
+        print(f"[Google/Calendar] {exc}")
+
+    # ── Tasks ─────────────────────────────────────────────────────────────────
+    try:
+        r = httpx.get("https://tasks.googleapis.com/tasks/v1/users/@me/lists",
+                      headers=hdrs, timeout=10)
+        if r.status_code == 200:
+            for tl in r.json().get("items", []):
+                tr = httpx.get(f"https://tasks.googleapis.com/tasks/v1/lists/{tl['id']}/tasks",
+                               params={"showCompleted": "false", "maxResults": 50},
+                               headers=hdrs, timeout=10)
+                if tr.status_code == 200:
+                    for task in tr.json().get("items", []):
+                        docs.append({
+                            "title":    f"Task: {task.get('title','(no title)')}",
+                            "content":  f"List: {tl.get('title','')}\nDue: {task.get('due','No due date')}\nNotes: {task.get('notes','')}",
+                            "source":   "https://tasks.google.com/",
+                            "metadata": {"service": "tasks", "type": "task"},
+                        })
+    except Exception as exc:
+        print(f"[Google/Tasks] {exc}")
+
+    # ── Keep Notes ────────────────────────────────────────────────────────────
+    try:
+        r = httpx.get("https://keep.googleapis.com/v1/notes",
+                      params={"pageSize": 50}, headers=hdrs, timeout=15)
+        if r.status_code == 200:
+            for note in r.json().get("notes", []):
+                body_text = note.get("body", {}).get("text", {}).get("text", "")
+                docs.append({
+                    "title":    f"Keep: {note.get('title','(no title)')}",
+                    "content":  str(body_text)[:2000],
+                    "source":   "https://keep.google.com/",
+                    "metadata": {"service": "keep", "type": "note"},
+                })
+    except Exception as exc:
+        print(f"[Google/Keep] {exc}")
+
+    return docs
+
+
 # ── Master dispatcher ─────────────────────────────────────────────────────────
 
 _FETCHERS: dict = {
@@ -2405,6 +2691,7 @@ _FETCHERS: dict = {
     "youtube":          _fetch_youtube,
     "github_api":       _fetch_github_api,
     "gitlab":           _fetch_gitlab,
+    "google_workspace": _fetch_google_workspace,
 }
 
 
