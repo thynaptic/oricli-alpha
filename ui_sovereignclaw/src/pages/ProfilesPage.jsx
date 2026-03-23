@@ -2,11 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSCStore } from '../store';
 import { Plus, Trash2, Edit3, X, User, Cpu, ChevronDown, ChevronUp, Save, RefreshCw } from 'lucide-react';
 
-const API = (path) => `${import.meta.env.VITE_API_BASE ?? 'http://localhost:8089'}/v1${path}`;
-const authHeaders = () => {
-  const k = localStorage.getItem('sc_api_key');
-  return k ? { 'Content-Type': 'application/json', Authorization: `Bearer ${k}` } : { 'Content-Type': 'application/json' };
-};
+const API = (path) => `/api/v1${path}`;
+const authHeaders = () => ({ 'Content-Type': 'application/json' });
 
 const ARCHETYPES = ['friend', 'mentor', 'professional', 'creative', 'cheerleader'];
 const ENERGIES   = ['low', 'moderate', 'high'];

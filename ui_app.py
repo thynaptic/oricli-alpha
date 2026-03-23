@@ -2589,6 +2589,37 @@ def proxy_reaction_feedback() -> Response:
         return jsonify({"error": str(exc)}), 502
 
 
+@app.route("/api/v1/sovereign/identity", methods=["GET"])
+def proxy_sovereign_identity_get() -> Response:
+    """Proxy GET /api/v1/sovereign/identity → backbone /v1/sovereign/identity."""
+    try:
+        with _client() as client:
+            r = client.get(
+                f"{_BACKBONE_URL}/v1/sovereign/identity",
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                timeout=10,
+            )
+            return jsonify(r.json()), r.status_code
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/api/v1/sovereign/identity", methods=["PUT"])
+def proxy_sovereign_identity_put() -> Response:
+    """Proxy PUT /api/v1/sovereign/identity → backbone /v1/sovereign/identity."""
+    try:
+        with _client() as client:
+            r = client.put(
+                f"{_BACKBONE_URL}/v1/sovereign/identity",
+                json=request.get_json(force=True),
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                timeout=10,
+            )
+            return jsonify(r.json()), r.status_code
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
 @app.route("/logs/traces")
 def logs_traces() -> Response:
     limit = request.args.get("limit", "50")
