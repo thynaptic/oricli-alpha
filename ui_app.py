@@ -605,7 +605,12 @@ def _ddg_search(query: str, max_results: int = 6) -> list:
 
 
 def _llm_complete(messages: list, max_tokens: int = 2000, timeout: float = 120.0) -> str:
-    """Synchronous LLM call — strips sovereign artifact XML wrapper from response."""
+    """Synchronous LLM call — handles both plain-JSON and SSE responses.
+
+    The backbone returns SSE (text/event-stream) for some model tiers even
+    when stream=False is requested. We detect that case and accumulate all
+    content chunks into a single string.
+    """
     payload = {
         "model": "oricli-cognitive",
         "stream": False,
@@ -624,10 +629,20 @@ def _llm_complete(messages: list, max_tokens: int = 2000, timeout: float = 120.0
             raw = resp.text.strip()
             if not raw:
                 return "[error: empty response from backbone]"
+
+            # Detect SSE: starts with ": keep-alive" comment or "data:" lines
+            if raw.startswith(": keep-alive") or raw.startswith("data:"):
+                return _extract_text_from_sse(raw)
+
+            # Plain JSON response
             try:
-                data = resp.json()
+                data = json.loads(raw)
             except Exception:
+                # May still be partial SSE without the keep-alive prefix
+                if "\ndata:" in raw or raw.startswith("data:"):
+                    return _extract_text_from_sse(raw)
                 return f"[error: invalid JSON from backbone: {raw[:200]}]"
+
             content = (
                 data.get("choices", [{}])[0]
                 .get("message", {})
@@ -636,6 +651,36 @@ def _llm_complete(messages: list, max_tokens: int = 2000, timeout: float = 120.0
             return _strip_artifact_xml(content)
     except Exception as exc:  # noqa: BLE001
         return f"[error: {exc}]"
+
+
+def _extract_text_from_sse(raw: str) -> str:
+    """Parse SSE text and accumulate all content into a single string."""
+    parts: list[str] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or not line.startswith("data:"):
+            continue
+        payload_str = line[len("data:"):].strip()
+        if payload_str == "[DONE]":
+            break
+        try:
+            obj = json.loads(payload_str)
+        except Exception:
+            continue
+        # Format 1: {"type":"content","text":"..."}  (backbone research events)
+        if obj.get("type") == "content" and obj.get("text"):
+            parts.append(obj["text"])
+            continue
+        # Format 2: delta streaming {"choices":[{"delta":{"content":"..."}}]}
+        choices = obj.get("choices", [])
+        if choices:
+            delta = choices[0].get("delta", {})
+            msg   = choices[0].get("message", {})
+            chunk = delta.get("content") or msg.get("content") or ""
+            if chunk:
+                parts.append(chunk)
+    result = "".join(parts).strip()
+    return _strip_artifact_xml(result) if result else "[error: no content in SSE response]"
 
 
 def _sse_event(data: dict) -> str:
