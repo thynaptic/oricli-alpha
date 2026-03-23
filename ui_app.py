@@ -2420,16 +2420,43 @@ def _fetch_telegram(creds: dict, opts: dict) -> list[dict]:
     token = creds.get("bot_token", "")
     if not token:
         raise ValueError("Telegram bot token required")
-    r = _hx.get(f"https://api.telegram.org/bot{token}/getUpdates", params={"limit": int(opts.get("max_results", 50))}, timeout=15)
-    r.raise_for_status()
-    docs = []
-    for upd in r.json().get("result", []):
-        msg = upd.get("message") or upd.get("channel_post") or {}
-        text = msg.get("text", "")
-        if text:
-            chat = msg.get("chat", {})
-            docs.append({"title": f"Telegram: {chat.get('title', chat.get('first_name', 'chat'))}",
-                         "content": text, "source": f"telegram:{msg.get('message_id', upd['update_id'])}", "metadata": {"chat_id": str(chat.get("id", ""))}})
+
+    base = f"https://api.telegram.org/bot{token}"
+
+    # Telegram disallows getUpdates while a webhook is active (409 Conflict).
+    # Temporarily delete the webhook, poll, then restore it.
+    webhook_url = ""
+    try:
+        wh = _hx.get(f"{base}/getWebhookInfo", timeout=10).json()
+        webhook_url = (wh.get("result") or {}).get("url", "")
+    except Exception:
+        pass
+
+    if webhook_url:
+        try:
+            _hx.post(f"{base}/deleteWebhook", timeout=10)
+        except Exception:
+            pass
+
+    try:
+        r = _hx.get(f"{base}/getUpdates", params={"limit": int(opts.get("max_results", 50))}, timeout=15)
+        r.raise_for_status()
+        docs = []
+        for upd in r.json().get("result", []):
+            msg = upd.get("message") or upd.get("channel_post") or {}
+            text = msg.get("text", "")
+            if text:
+                chat = msg.get("chat", {})
+                docs.append({"title": f"Telegram: {chat.get('title', chat.get('first_name', 'chat'))}",
+                             "content": text, "source": f"telegram:{msg.get('message_id', upd['update_id'])}", "metadata": {"chat_id": str(chat.get("id", ""))}})
+    finally:
+        # Always restore the webhook
+        if webhook_url:
+            try:
+                _hx.post(f"{base}/setWebhook", json={"url": webhook_url}, timeout=10)
+            except Exception:
+                pass
+
     return docs
 
 
