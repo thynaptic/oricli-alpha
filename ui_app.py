@@ -2210,18 +2210,28 @@ def get_run_status(run_id: str) -> Response:
 
 @app.route("/workflows/runs/<run_id>/cancel", methods=["POST"])
 def cancel_run(run_id: str) -> Response:
-    _RUN_CONTROL[run_id] = "cancel"
-    # If already done/error, mark directly
     with _WFR_LOCK:
         runs = _load_runs()
-    run = runs.get(run_id, {})
-    if run.get("status") in ("done", "error", "cancelled"):
-        return jsonify({"status": run.get("status")})
+        run = runs.get(run_id, {})
+        if run.get("status") in ("done", "error", "cancelled"):
+            return jsonify({"status": run.get("status")})
+        # Persist cancelling immediately so the poller sees it and stops overwriting
+        run["status"] = "cancelling"
+        runs[run_id] = run
+        _save_runs(runs)
+    _RUN_CONTROL[run_id] = "cancel"
     return jsonify({"status": "cancelling"})
 
 
 @app.route("/workflows/runs/<run_id>/pause", methods=["POST"])
 def pause_run(run_id: str) -> Response:
+    with _WFR_LOCK:
+        runs = _load_runs()
+        run = runs.get(run_id, {})
+        if run:
+            run["status"] = "pausing"
+            runs[run_id] = run
+            _save_runs(runs)
     _RUN_CONTROL[run_id] = "pause"
     return jsonify({"status": "pausing"})
 

@@ -175,7 +175,14 @@ export const useSCStore = create(
     set(state => ({ bgRuns: { ...state.bgRuns, [runId]: { runId, wfId, startedAt: Date.now(), run: null, error: null, sendToCanvas: !!opts.sendToCanvas, wfName: opts.wfName || '' } } }));
   },
   updateBgRun(runId, run) {
-    set(state => state.bgRuns[runId] ? { bgRuns: { ...state.bgRuns, [runId]: { ...state.bgRuns[runId], run } } } : state);
+    // Don't let a stale poll overwrite an intent state the user just triggered
+    const INTENT = new Set(['cancelling', 'pausing', 'cancelled']);
+    set(state => {
+      if (!state.bgRuns[runId]) return state;
+      const cur = state.bgRuns[runId].run?.status;
+      if (INTENT.has(cur) && !INTENT.has(run?.status) && run?.status !== 'done' && run?.status !== 'error') return state;
+      return { bgRuns: { ...state.bgRuns, [runId]: { ...state.bgRuns[runId], run } } };
+    });
   },
   dismissBgRun(runId) {
     set(state => { const n = { ...state.bgRuns }; delete n[runId]; return { bgRuns: n }; });
@@ -549,6 +556,7 @@ export function connectHiveWS() {
 setInterval(() => {
   const { bgRuns, updateBgRun, addCanvasDoc, setActivePage } = useSCStore.getState();
   const TERMINAL = new Set(['done', 'error', 'cancelled']);
+  const NO_POLL  = new Set(['done', 'error', 'cancelled', 'cancelling', 'pausing']);
   Object.values(bgRuns).forEach(({ runId, run, sendToCanvas, wfName, _canvasPushed }) => {
     if (TERMINAL.has(run?.status)) {
       // Push final output to Canvas once when run completes
@@ -566,6 +574,7 @@ setInterval(() => {
       }
       return;
     }
+    if (NO_POLL.has(run?.status)) return;
     fetch(`/workflows/runs/${runId}`)
       .then(r => r.json())
       .then(data => updateBgRun(runId, data))
