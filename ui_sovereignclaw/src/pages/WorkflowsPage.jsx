@@ -5,7 +5,8 @@ import {
   FileText, X, Clock, Calendar, RotateCcw, CheckCircle, AlertCircle,
   Loader, Bot, ChevronDown, ListTodo, ChevronRight, ChevronUp,
   Database, Bell, Filter, Edit3, Save, History, Sparkles,
-  Layers, ChevronsDown, ChevronsUp, StopCircle, GitBranch, Link2, GitMerge, Plus as PlusSmall
+  Layers, ChevronsDown, ChevronsUp, StopCircle, GitBranch, Link2, GitMerge, Plus as PlusSmall,
+  Folder, FolderOpen, LayoutGrid, PlayCircle, Pencil, Check
 } from 'lucide-react';
 
 // ─── Step type catalog ───────────────────────────────────────────────────────
@@ -528,13 +529,15 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId, compac
 }
 
 // ─── WorkflowCreator ─────────────────────────────────────────────────────────
-function WorkflowCreator({ onSave, onCancel, initial }) {
+function WorkflowCreator({ onSave, onCancel, initial, defaultProjectId }) {
   const [name, setName]               = useState(initial?.name || '');
   const [desc, setDesc]               = useState(initial?.description || '');
   const [agent, setAgent]             = useState(initial ? { id: initial.agentId, name: initial.agentName, emoji: initial.agentEmoji } : null);
   const [steps, setSteps]             = useState(initial?.steps?.length ? initial.steps : [{ id: crypto.randomUUID(), type: 'prompt', label: '', value: '' }]);
   const [sendToCanvas, setSendToCanvas] = useState(!!initial?.sendToCanvas);
+  const [projectId, setProjectId]     = useState(initial?.project_id || defaultProjectId || null);
   const [saving, setSaving]           = useState(false);
+  const projects                      = useSCStore(s => s.projects);
 
   function addStep() {
     setSteps(s => [...s, { id: crypto.randomUUID(), type: 'prompt', label: '', value: '' }]);
@@ -549,7 +552,7 @@ function WorkflowCreator({ onSave, onCancel, initial }) {
       const payload = {
         name: name.trim(), description: desc.trim(),
         agentId: agent?.id || null, agentName: agent?.name || 'Default', agentEmoji: agent?.emoji || '✨',
-        steps, sendToCanvas,
+        steps, sendToCanvas, project_id: projectId || null,
       };
       const method = initial?.id ? 'PUT' : 'POST';
       const url = initial?.id ? `/workflows/${initial.id}` : '/workflows';
@@ -580,6 +583,17 @@ function WorkflowCreator({ onSave, onCancel, initial }) {
         <label style={labelStyle}>Description (optional)</label>
         <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="What does this workflow do?" style={inputStyle} />
       </div>
+
+      {projects.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle}>Project (optional)</label>
+          <select value={projectId || ''} onChange={e => setProjectId(e.target.value || null)}
+            style={{ ...inputStyle, appearance: 'none' }}>
+            <option value=''>— Ungrouped —</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      )}
 
       <label style={{ ...labelStyle, marginBottom: 12 }}>Steps</label>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 14 }}>
@@ -930,6 +944,201 @@ function WorkflowCard({ wf, onDelete, onRun, onEdit, onHistory, activeRun }) {
   );
 }
 
+// ─── Project Sidebar ─────────────────────────────────────────────────────────
+const PROJECT_COLORS = ['#7c6af7','#f76a6a','#6af7c4','#f7c46a','#6aaaf7','#f76ab8','#a8f76a'];
+
+function ProjectSidebar({ workflows, activeProjectId, onSelect, onCreateWorkflow }) {
+  const projects       = useSCStore(s => s.projects);
+  const fetchProjects  = useSCStore(s => s.fetchProjects);
+  const createProject  = useSCStore(s => s.createProject);
+  const updateProject  = useSCStore(s => s.updateProject);
+  const deleteProject  = useSCStore(s => s.deleteProject);
+  const [creating, setCreating]   = useState(false);
+  const [newName, setNewName]     = useState('');
+  const [newColor, setNewColor]   = useState(PROJECT_COLORS[0]);
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName]   = useState('');
+
+  useEffect(() => { fetchProjects(); }, []);
+
+  const countByProject = {};
+  workflows.forEach(w => { if (w.project_id) countByProject[w.project_id] = (countByProject[w.project_id] || 0) + 1; });
+  const ungroupedCount = workflows.filter(w => !w.project_id).length;
+
+  async function handleCreate() {
+    if (!newName.trim()) return;
+    const proj = await createProject(newName.trim(), newColor);
+    setCreating(false); setNewName(''); setNewColor(PROJECT_COLORS[0]);
+    onSelect(proj.id);
+  }
+
+  async function handleRename(id) {
+    if (!editName.trim()) return;
+    await updateProject(id, { name: editName.trim() });
+    setEditingId(null);
+  }
+
+  const sidebarItem = (isActive) => ({
+    display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+    borderRadius: 8, cursor: 'pointer', marginBottom: 2,
+    background: isActive ? 'rgba(124,106,247,0.12)' : 'transparent',
+    border: `1px solid ${isActive ? 'rgba(124,106,247,0.3)' : 'transparent'}`,
+    transition: 'all 0.12s',
+  });
+
+  return (
+    <div style={{ width: 210, flexShrink: 0, borderRight: '1px solid var(--color-sc-border)', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--color-sc-text-dim)', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>Projects</div>
+
+      {/* All workflows */}
+      <div onClick={() => onSelect(null)} style={sidebarItem(activeProjectId === null)}>
+        <LayoutGrid size={13} style={{ color: activeProjectId === null ? '#7c6af7' : 'var(--color-sc-text-dim)', flexShrink: 0 }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: activeProjectId === null ? 'var(--color-sc-text)' : 'var(--color-sc-text-muted)', flex: 1 }}>All workflows</span>
+        <span style={{ fontSize: 10, color: 'var(--color-sc-text-dim)' }}>{workflows.length}</span>
+      </div>
+
+      {/* Project folders */}
+      {projects.map(p => (
+        <div key={p.id} style={{ ...sidebarItem(activeProjectId === p.id), flexDirection: 'column', alignItems: 'stretch', gap: 0, padding: 0 }}>
+          {editingId === p.id ? (
+            <div style={{ display: 'flex', gap: 4, padding: '5px 8px' }}>
+              <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleRename(p.id); if (e.key === 'Escape') setEditingId(null); }}
+                style={{ flex: 1, background: 'var(--color-sc-bg)', border: '1px solid rgba(124,106,247,0.4)', borderRadius: 5, padding: '3px 6px', color: 'var(--color-sc-text)', fontSize: 12 }} />
+              <button onClick={() => handleRename(p.id)} style={{ background: 'none', border: 'none', color: '#7c6af7', cursor: 'pointer', padding: '2px 4px' }}><Check size={12} /></button>
+              <button onClick={() => setEditingId(null)} style={{ background: 'none', border: 'none', color: 'var(--color-sc-text-dim)', cursor: 'pointer', padding: '2px 4px' }}><X size={12} /></button>
+            </div>
+          ) : (
+            <div onClick={() => onSelect(p.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer', background: activeProjectId === p.id ? 'rgba(124,106,247,0.12)' : 'transparent', borderRadius: 8, border: `1px solid ${activeProjectId === p.id ? 'rgba(124,106,247,0.3)' : 'transparent'}` }}>
+              {activeProjectId === p.id
+                ? <FolderOpen size={13} style={{ color: p.color || '#7c6af7', flexShrink: 0 }} />
+                : <Folder size={13} style={{ color: p.color || '#7c6af7', flexShrink: 0 }} />}
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-sc-text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+              <span style={{ fontSize: 10, color: 'var(--color-sc-text-dim)', flexShrink: 0 }}>{countByProject[p.id] || 0}</span>
+              <button onClick={e => { e.stopPropagation(); setEditingId(p.id); setEditName(p.name); }} style={{ background: 'none', border: 'none', color: 'var(--color-sc-text-dim)', cursor: 'pointer', padding: '1px 3px', opacity: 0.5 }}><Pencil size={10} /></button>
+              <button onClick={e => { e.stopPropagation(); if (window.confirm(`Delete project "${p.name}"?`)) deleteProject(p.id).then(() => { if (activeProjectId === p.id) onSelect(null); }); }} style={{ background: 'none', border: 'none', color: 'var(--color-sc-danger)', cursor: 'pointer', padding: '1px 3px', opacity: 0.5 }}><Trash2 size={10} /></button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* Ungrouped */}
+      {ungroupedCount > 0 && (
+        <div onClick={() => onSelect('__ungrouped__')} style={sidebarItem(activeProjectId === '__ungrouped__')}>
+          <Folder size={13} style={{ color: 'var(--color-sc-text-dim)', flexShrink: 0 }} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: activeProjectId === '__ungrouped__' ? 'var(--color-sc-text)' : 'var(--color-sc-text-muted)', flex: 1 }}>Ungrouped</span>
+          <span style={{ fontSize: 10, color: 'var(--color-sc-text-dim)' }}>{ungroupedCount}</span>
+        </div>
+      )}
+
+      <div style={{ borderTop: '1px solid var(--color-sc-border)', marginTop: 10, paddingTop: 10 }}>
+        {creating ? (
+          <div>
+            <input autoFocus value={newName} onChange={e => setNewName(e.target.value)} placeholder="Project name"
+              onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setCreating(false); }}
+              style={{ width: '100%', background: 'var(--color-sc-bg)', border: '1px solid rgba(124,106,247,0.4)', borderRadius: 6, padding: '5px 8px', color: 'var(--color-sc-text)', fontSize: 12, boxSizing: 'border-box', marginBottom: 6 }} />
+            <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+              {PROJECT_COLORS.map(c => (
+                <div key={c} onClick={() => setNewColor(c)}
+                  style={{ width: 16, height: 16, borderRadius: '50%', background: c, cursor: 'pointer', border: newColor === c ? '2px solid white' : '2px solid transparent', boxSizing: 'border-box' }} />
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 5 }}>
+              <button onClick={handleCreate} style={{ flex: 1, padding: '5px', borderRadius: 6, border: 'none', background: '#7c6af7', color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>Create</button>
+              <button onClick={() => setCreating(false)} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--color-sc-border)', background: 'none', color: 'var(--color-sc-text-dim)', cursor: 'pointer', fontSize: 11 }}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setCreating(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderRadius: 7, border: '1px dashed rgba(124,106,247,0.3)', background: 'none', color: 'var(--color-sc-text-dim)', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+            <Plus size={11} /> New project
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Project Chain Graph ──────────────────────────────────────────────────────
+function ProjectChainGraph({ workflows, projectId, onRunProject, onOpenWorkflow }) {
+  const projWfs = workflows.filter(w => w.project_id === projectId);
+  if (projWfs.length === 0) return null;
+
+  // Build directed graph from sub_workflow steps
+  const edges = new Map(); // wfId → Set<targetId>
+  const inDegree = {};
+  projWfs.forEach(w => { edges.set(w.id, new Set()); inDegree[w.id] = 0; });
+
+  projWfs.forEach(wf => {
+    (wf.steps || []).forEach(step => {
+      if (step.type === 'sub_workflow') {
+        const tid = (step.params?.wf_id) || step.wf_id;
+        if (tid && edges.has(tid)) {
+          edges.get(wf.id).add(tid);
+          inDegree[tid] = (inDegree[tid] || 0) + 1;
+        }
+      }
+    });
+  });
+
+  // Topological BFS to build columns
+  const cols = [];
+  let queue = projWfs.filter(w => (inDegree[w.id] || 0) === 0).map(w => w.id);
+  const placed = new Set();
+  const tempDeg = { ...inDegree };
+
+  while (queue.length > 0) {
+    cols.push([...queue]);
+    queue.forEach(id => placed.add(id));
+    const next = [];
+    queue.forEach(id => {
+      edges.get(id)?.forEach(tid => {
+        tempDeg[tid]--;
+        if (tempDeg[tid] === 0 && !placed.has(tid)) next.push(tid);
+      });
+    });
+    queue = next;
+  }
+  // Catch any cycles
+  projWfs.forEach(w => { if (!placed.has(w.id)) cols.push([w.id]); });
+
+  const wfMap = Object.fromEntries(projWfs.map(w => [w.id, w]));
+
+  return (
+    <div style={{ padding: '16px 20px 0', borderBottom: '1px solid var(--color-sc-border)', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-sc-text-dim)' }}>Execution chain</span>
+        <button onClick={onRunProject} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 7, border: 'none', background: '#7c6af7', color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+          <PlayCircle size={12} /> Run project
+        </button>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, overflowX: 'auto', paddingBottom: 16 }}>
+        {cols.map((col, ci) => (
+          <div key={ci} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {col.map(wfId => {
+                const wf = wfMap[wfId];
+                if (!wf) return null;
+                return (
+                  <div key={wfId} onClick={() => onOpenWorkflow(wf)}
+                    style={{ padding: '8px 12px', borderRadius: 9, background: 'var(--color-sc-surface)', border: '1px solid rgba(124,106,247,0.25)', cursor: 'pointer', minWidth: 130, maxWidth: 160, transition: 'border-color 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(124,106,247,0.6)'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(124,106,247,0.25)'}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-sc-text)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wf.agentEmoji || '✨'} {wf.name}</div>
+                    <div style={{ fontSize: 10, color: 'var(--color-sc-text-dim)' }}>{(wf.steps || []).length} step{wf.steps?.length !== 1 ? 's' : ''}</div>
+                  </div>
+                );
+              })}
+            </div>
+            {ci < cols.length - 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', color: 'rgba(124,106,247,0.5)', fontSize: 18, flexShrink: 0 }}>→</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── WorkflowsTab ────────────────────────────────────────────────────────────
 function WorkflowsTab({ creating, setCreating }) {
   const [workflows, setWorkflows] = useState([]);
@@ -945,6 +1154,9 @@ function WorkflowsTab({ creating, setCreating }) {
   const cancelRun            = useSCStore(s => s.cancelRun);
   const pauseRun             = useSCStore(s => s.pauseRun);
   const resumeRun            = useSCStore(s => s.resumeRun);
+  const activeProjectId      = useSCStore(s => s.activeProjectId);
+  const setActiveProject     = useSCStore(s => s.setActiveProject);
+  const fetchProjects        = useSCStore(s => s.fetchProjects);
 
   async function refresh() {
     try {
@@ -953,10 +1165,9 @@ function WorkflowsTab({ creating, setCreating }) {
       setWorkflows(d.workflows || []);
     } catch {}
   }
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh(); fetchProjects(); }, []);
 
   async function handleRun(wf) {
-    // If workflow has an ingest_doc step, show upload modal first
     if (wf.steps?.some(s => s.type === 'ingest_doc')) {
       setPendingDocRun(wf);
       return;
@@ -965,9 +1176,19 @@ function WorkflowsTab({ creating, setCreating }) {
       const res  = await fetch(`/workflows/${wf.id}/run`, { method: 'POST' });
       const data = await res.json();
       startBgRun(data.run_id, wf.id, { sendToCanvas: !!wf.sendToCanvas, wfName: wf.name });
-    } catch (e) {
-      console.error('Failed to start workflow:', e);
-    }
+    } catch (e) { console.error('Failed to start workflow:', e); }
+  }
+
+  async function handleRunProject(projectId) {
+    try {
+      const res  = await fetch(`/projects/${projectId}/run`, { method: 'POST' });
+      const data = await res.json();
+      (data.run_ids || []).forEach((runId, i) => {
+        const wfId = data.entry_workflows?.[i];
+        const wf = workflows.find(w => w.id === wfId);
+        startBgRun(runId, wfId, { sendToCanvas: !!wf?.sendToCanvas, wfName: wf?.name });
+      });
+    } catch (e) { console.error('Failed to run project:', e); }
   }
 
   async function handleDocRunConfirm({ text, filename, saveToMemory }) {
@@ -975,15 +1196,12 @@ function WorkflowsTab({ creating, setCreating }) {
     setPendingDocRun(null);
     try {
       const res = await fetch(`/workflows/${wf.id}/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ doc_text: text, doc_filename: filename, save_to_memory: saveToMemory }),
       });
       const data = await res.json();
       startBgRun(data.run_id, wf.id, { sendToCanvas: !!wf.sendToCanvas, wfName: wf.name });
-    } catch (e) {
-      console.error('Failed to start workflow with doc:', e);
-    }
+    } catch (e) { console.error('Failed to start workflow with doc:', e); }
   }
 
   async function handleRerun(wfId, oldRunId) {
@@ -1010,40 +1228,84 @@ function WorkflowsTab({ creating, setCreating }) {
   // Map wfId → most recent bgRun for card status indicators
   const activeByWf = {};
   Object.values(bgRuns).forEach(r => {
-    if (!activeByWf[r.wfId] || r.startedAt > activeByWf[r.wfId].startedAt) {
+    if (!activeByWf[r.wfId] || r.startedAt > activeByWf[r.wfId].startedAt)
       activeByWf[r.wfId] = r;
-    }
   });
+
+  // Filter workflows based on selected project
+  const visibleWfs = (() => {
+    if (!activeProjectId || activeProjectId === null) return workflows;
+    if (activeProjectId === '__ungrouped__') return workflows.filter(w => !w.project_id);
+    return workflows.filter(w => w.project_id === activeProjectId);
+  })();
+
+  const isRealProject = activeProjectId && activeProjectId !== '__ungrouped__';
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
-        {creating && <WorkflowCreator onSave={handleSave} onCancel={() => setCreating(false)} />}
-        {editingWf && <WorkflowCreator initial={editingWf} onSave={handleSave} onCancel={() => setEditingWf(null)} />}
-        {pendingDocRun && <DocUploadModal onConfirm={handleDocRunConfirm} onCancel={() => setPendingDocRun(null)} />}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {/* Project sidebar */}
+        <ProjectSidebar
+          workflows={workflows}
+          activeProjectId={activeProjectId}
+          onSelect={id => { setActiveProject(id); setCreating(false); setEditingWf(null); }}
+          onCreateWorkflow={() => setCreating(true)}
+        />
 
-        {workflows.length === 0 && !creating && (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--color-sc-text-dim)' }}>
-            <Zap size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
-            <div style={{ fontSize: 14, marginBottom: 8, color: 'var(--color-sc-text-muted)' }}>No workflows yet</div>
-            <div style={{ fontSize: 13 }}>Chain steps together into automated, repeatable pipelines.</div>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {workflows.filter(w => !editingWf || w.id !== editingWf.id).map(wf => (
-            <WorkflowCard key={wf.id} wf={wf}
-              activeRun={activeByWf[wf.id] ?? null}
-              onDelete={handleDelete}
-              onRun={handleRun}
-              onEdit={w => { setCreating(false); setEditingWf(w); }}
-              onHistory={w => setHistoryWf(w)}
+        {/* Main content */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Chain graph — only shown when a real project is selected */}
+          {isRealProject && (
+            <ProjectChainGraph
+              workflows={workflows}
+              projectId={activeProjectId}
+              onRunProject={() => handleRunProject(activeProjectId)}
+              onOpenWorkflow={wf => { setCreating(false); setEditingWf(wf); }}
             />
-          ))}
+          )}
+
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+            {creating && (
+              <WorkflowCreator
+                onSave={handleSave}
+                onCancel={() => setCreating(false)}
+                defaultProjectId={isRealProject ? activeProjectId : null}
+              />
+            )}
+            {editingWf && (
+              <WorkflowCreator
+                initial={editingWf}
+                onSave={handleSave}
+                onCancel={() => setEditingWf(null)}
+              />
+            )}
+            {pendingDocRun && <DocUploadModal onConfirm={handleDocRunConfirm} onCancel={() => setPendingDocRun(null)} />}
+
+            {visibleWfs.length === 0 && !creating && (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--color-sc-text-dim)' }}>
+                <Zap size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
+                <div style={{ fontSize: 14, marginBottom: 8, color: 'var(--color-sc-text-muted)' }}>
+                  {activeProjectId ? 'No workflows in this project yet' : 'No workflows yet'}
+                </div>
+                <div style={{ fontSize: 13 }}>Chain steps together into automated, repeatable pipelines.</div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {visibleWfs.filter(w => !editingWf || w.id !== editingWf.id).map(wf => (
+                <WorkflowCard key={wf.id} wf={wf}
+                  activeRun={activeByWf[wf.id] ?? null}
+                  onDelete={handleDelete}
+                  onRun={handleRun}
+                  onEdit={w => { setCreating(false); setEditingWf(w); }}
+                  onHistory={w => setHistoryWf(w)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Persistent background runs tray — reads from global store */}
       <ActiveRunsTray
         bgRuns={bgRuns}
         workflows={workflows}

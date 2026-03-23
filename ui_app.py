@@ -1620,8 +1620,10 @@ def _test_conn(conn_id: str, creds: dict) -> tuple[bool, str]:
 
 _WORKFLOWS_FILE   = Path(__file__).parent / ".oricli" / "workflows.json"
 _WORKFLOW_RUNS_FILE = Path(__file__).parent / ".oricli" / "workflow_runs.json"
+_PROJECTS_FILE    = Path(__file__).parent / ".oricli" / "projects.json"
 _WF_LOCK  = threading.Lock()
 _WFR_LOCK = threading.Lock()
+_PROJ_LOCK = threading.Lock()
 _RUN_CONTROL: dict[str, str] = {}  # run_id → "cancel" | "pause" | "resume"
 
 
@@ -1637,6 +1639,20 @@ def _load_workflows() -> list:
 def _save_workflows(data: list) -> None:
     _WORKFLOWS_FILE.parent.mkdir(parents=True, exist_ok=True)
     _WORKFLOWS_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _load_projects() -> dict:
+    if _PROJECTS_FILE.exists():
+        try:
+            return json.loads(_PROJECTS_FILE.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _save_projects(data: dict) -> None:
+    _PROJECTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _PROJECTS_FILE.write_text(json.dumps(data, indent=2))
 
 
 def _load_runs() -> dict:
@@ -2091,6 +2107,7 @@ def create_workflow() -> Response:
         "id":          str(uuid.uuid4()),
         "name":        body.get("name", "Untitled workflow"),
         "description": body.get("description", ""),
+        "project_id":  body.get("project_id") or None,
         "agentId":     body.get("agentId"),
         "agentName":   body.get("agentName", "Default"),
         "agentEmoji":  body.get("agentEmoji", "✨"),
@@ -2254,6 +2271,115 @@ def list_wf_runs(wf_id: str) -> Response:
     return jsonify({"runs": wf_runs})
 
 
+# ── Project CRUD ────────────────────────────────────────────────────────────────
+
+@app.route("/projects", methods=["GET"])
+def list_projects() -> Response:
+    with _PROJ_LOCK:
+        projects = _load_projects()
+    with _WF_LOCK:
+        workflows = _load_workflows()
+    # Attach workflow count to each project
+    counts: dict[str, int] = {}
+    for wf in workflows:
+        pid = wf.get("project_id")
+        if pid:
+            counts[pid] = counts.get(pid, 0) + 1
+    result = [dict(p, wf_count=counts.get(p["id"], 0)) for p in projects.values()]
+    result.sort(key=lambda p: p.get("createdAt", ""))
+    return jsonify({"projects": result})
+
+
+@app.route("/projects", methods=["POST"])
+def create_project() -> Response:
+    body = request.get_json(silent=True) or {}
+    proj = {
+        "id":        str(uuid.uuid4()),
+        "name":      body.get("name", "New Project"),
+        "color":     body.get("color", "#7c6af7"),
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+    }
+    with _PROJ_LOCK:
+        projects = _load_projects()
+        projects[proj["id"]] = proj
+        _save_projects(projects)
+    return jsonify({"project": proj})
+
+
+@app.route("/projects/<proj_id>", methods=["PATCH"])
+def update_project(proj_id: str) -> Response:
+    body = request.get_json(silent=True) or {}
+    with _PROJ_LOCK:
+        projects = _load_projects()
+        if proj_id not in projects:
+            return jsonify({"error": "not found"}), 404
+        for k, v in body.items():
+            if k not in ("id", "createdAt"):
+                projects[proj_id][k] = v
+        _save_projects(projects)
+    return jsonify({"project": projects[proj_id]})
+
+
+@app.route("/projects/<proj_id>", methods=["DELETE"])
+def delete_project(proj_id: str) -> Response:
+    with _PROJ_LOCK:
+        projects = _load_projects()
+        projects.pop(proj_id, None)
+        _save_projects(projects)
+    # Unassign workflows that belonged to this project
+    with _WF_LOCK:
+        wfs = _load_workflows()
+        for wf in wfs:
+            if wf.get("project_id") == proj_id:
+                wf["project_id"] = None
+        _save_workflows(wfs)
+    return jsonify({"ok": True})
+
+
+@app.route("/projects/<proj_id>/run", methods=["POST"])
+def run_project(proj_id: str) -> Response:
+    """Fire all entry-point workflows in a project (those not targeted by any sub_workflow step within the project)."""
+    with _WF_LOCK:
+        all_wfs = _load_workflows()
+    proj_wfs = [w for w in all_wfs if w.get("project_id") == proj_id]
+    if not proj_wfs:
+        return jsonify({"error": "No workflows in this project"}), 400
+
+    proj_ids = {w["id"] for w in proj_wfs}
+
+    # Build set of wf_ids that are targets of a sub_workflow step within this project
+    targeted: set[str] = set()
+    for wf in proj_wfs:
+        for step in wf.get("steps", []):
+            if step.get("type") == "sub_workflow":
+                tid = (step.get("params") or {}).get("wf_id") or step.get("wf_id")
+                if tid and tid in proj_ids:
+                    targeted.add(tid)
+
+    entry_wfs = [w for w in proj_wfs if w["id"] not in targeted]
+    if not entry_wfs:
+        # Cycle or all targeted — just run all
+        entry_wfs = proj_wfs
+
+    run_ids = []
+    for wf in entry_wfs:
+        run_id = str(uuid.uuid4())
+        with _WFR_LOCK:
+            runs = _load_runs()
+            runs[run_id] = {
+                "id":           run_id,
+                "wf_id":        wf["id"],
+                "project_id":   proj_id,
+                "status":       "queued",
+                "steps":        [],
+                "created":      datetime.now(timezone.utc).isoformat(),
+                "final_output": None,
+            }
+            _save_runs(runs)
+        threading.Thread(target=_run_workflow_job, args=(wf["id"], run_id), daemon=True).start()
+        run_ids.append(run_id)
+
+    return jsonify({"ok": True, "run_ids": run_ids, "entry_workflows": [w["id"] for w in entry_wfs]})
 
 
 _INDEX_STATUS_FILE = Path(__file__).parent / ".oricli" / "index_status.json"

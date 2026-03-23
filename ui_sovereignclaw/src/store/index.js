@@ -215,6 +215,28 @@ export const useSCStore = create(
   },
 
   // ── Profiles ──────────────────────────────────────────────────────────────
+  projects: [],
+  activeProjectId: null,
+  fetchProjects() {
+    fetch('/projects').then(r => r.json()).then(d => set({ projects: d.projects || [] })).catch(() => {});
+  },
+  setActiveProject(id) { set({ activeProjectId: id }); },
+  async createProject(name, color = '#7c6af7') {
+    const r = await fetch('/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, color }) });
+    const d = await r.json();
+    set(state => ({ projects: [...state.projects, d.project] }));
+    return d.project;
+  },
+  async updateProject(id, patch) {
+    const r = await fetch(`/projects/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+    const d = await r.json();
+    set(state => ({ projects: state.projects.map(p => p.id === id ? d.project : p) }));
+  },
+  async deleteProject(id) {
+    await fetch(`/projects/${id}`, { method: 'DELETE' });
+    set(state => ({ projects: state.projects.filter(p => p.id !== id), activeProjectId: state.activeProjectId === id ? null : state.activeProjectId }));
+  },
+
   profiles: [],
   addProfile(profile) { set(state => ({ profiles: [...state.profiles, { id: makeId(), ...profile, createdAt: Date.now() }] })); },
   updateProfile(id, patch) { set(state => ({ profiles: state.profiles.map(p => p.id === id ? { ...p, ...patch } : p) })); },
