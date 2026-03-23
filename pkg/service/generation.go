@@ -161,7 +161,7 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 		ollamaMessages[i] = m
 	}
 
-	payload := map[string]interface{}{"model": model, "messages": ollamaMessages, "stream": false, "options": map[string]interface{}{"num_thread": s.NumThreads, "num_ctx": 4096, "num_predict": 1024}}
+	payload := map[string]interface{}{"model": model, "messages": ollamaMessages, "stream": false, "think": false, "options": map[string]interface{}{"num_thread": s.NumThreads, "num_ctx": 4096, "num_predict": 1024}}
 
 	if temp, ok := options["temperature"].(float64); ok {
 		payload["options"].(map[string]interface{})["temperature"] = temp
@@ -233,6 +233,7 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		"model":    model,
 		"messages": ollamaMessages,
 		"stream":   true,
+		"think":    false, // disable Qwen3 extended thinking for chat; keeps tok/s high
 		"options": map[string]interface{}{
 			"num_thread":  s.NumThreads, // auto-detected at boot; prevents vCPU over-subscription
 			"num_ctx":     4096, // fast for regular chat; canvas overrides to 32768
