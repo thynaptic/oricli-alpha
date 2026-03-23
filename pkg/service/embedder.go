@@ -64,9 +64,11 @@ func (e *Embedder) Embed(ctx context.Context, text string) []float32 {
 	if text == "" {
 		return nil
 	}
-	// Truncate to avoid overwhelming the model (nomic handles ~8192 tokens)
-	if len(text) > 4000 {
-		text = text[:4000]
+	// all-minilm max context is 256 tokens (~800 chars); nomic-embed-text
+	// handles ~8192 tokens (~32k chars). Cap conservatively at 800 chars
+	// to stay safe across both models.
+	if len(text) > 800 {
+		text = text[:800]
 	}
 
 	body, _ := json.Marshal(ollamaEmbedRequest{Model: e.model, Prompt: text})
