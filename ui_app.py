@@ -755,6 +755,21 @@ def chat() -> Response:
     except ValueError as exc:
         return jsonify({"error": {"message": str(exc), "type": "invalid_request_error", "code": 400}}), 400
 
+    # Inject local RAG context if we have relevant indexed docs
+    messages = payload.get("messages", [])
+    last_user = next((m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), "")
+    if last_user and isinstance(last_user, str) and len(last_user) > 5:
+        rag_hits = _rag_search(last_user, limit=4)
+        if rag_hits:
+            ctx_lines = []
+            for h in rag_hits:
+                meta = h.get("metadata", {})
+                pub = meta.get("published", "")
+                src = h["source"]
+                ctx_lines.append(f"**{h['title']}** ({pub}) [{src}]\n{h['snippet']}")
+            rag_block = "Relevant knowledge from your indexed sources:\n\n" + "\n\n---\n\n".join(ctx_lines)
+            payload = {**payload, "messages": [{"role": "system", "content": rag_block}] + messages}
+
     target_url = f"{API_BASE}/v1/chat/completions"
 
     if stream:
@@ -1668,18 +1683,31 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
 
         elif step_type == "rag_query":
             query = step_input or context.get("output", "")
-            r = _hx.post(
-                f"{_BACKBONE_URL}/v1/knowledge/query",
-                json={"query": query, "limit": 8},
-                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
-                timeout=30,
-            )
-            if r.status_code == 200:
-                data = r.json()
-                facts = data.get("facts") or data.get("results") or []
-                result["output"] = f"Knowledge query: {query}\n\n" + "\n\n".join(str(f) for f in facts[:8])
-            else:
-                result["output"] = f"RAG query returned {r.status_code}"
+            # Try backbone first
+            _backbone_rag_ok = False
+            try:
+                r = _hx.post(
+                    f"{_BACKBONE_URL}/v1/knowledge/query",
+                    json={"query": query, "limit": 8},
+                    headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                    timeout=30,
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    facts = data.get("facts") or data.get("results") or []
+                    if facts:
+                        result["output"] = f"Knowledge query: {query}\n\n" + "\n\n".join(str(f) for f in facts[:8])
+                        _backbone_rag_ok = True
+            except Exception:
+                pass
+            # Fall back to local RAG store
+            if not _backbone_rag_ok:
+                hits = _rag_search(query, limit=8)
+                if hits:
+                    lines = [f"[{h['source']}] {h['title']}\n{h['snippet']}" for h in hits]
+                    result["output"] = f"Knowledge query: {query}\n\n" + "\n\n---\n\n".join(lines)
+                else:
+                    result["output"] = f"No indexed knowledge found for: {query}"
 
         elif step_type == "condition":
             # Evaluate a condition on the previous output
@@ -1987,6 +2015,72 @@ _INDEX_LOCK = threading.Lock()
 _BACKBONE_URL = os.getenv("MAVAIA_BACKBONE_URL", "http://localhost:8089")
 _BACKBONE_KEY = os.getenv("MAVAIA_API_KEY", "glm.8eHruhzb.IPtP2toLOSKATWc5f_KXrRQOO6JcvFBB")
 
+# ── Local RAG store ────────────────────────────────────────────────────────────
+_LOCAL_RAG_PATH = Path(__file__).parent / ".oricli" / "rag_docs.json"
+_RAG_LOCK = threading.Lock()
+
+
+def _rag_load() -> dict:
+    """Load local RAG store — dict keyed by source id."""
+    if _LOCAL_RAG_PATH.exists():
+        try:
+            return json.loads(_LOCAL_RAG_PATH.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _rag_save(store: dict) -> None:
+    _LOCAL_RAG_PATH.write_text(json.dumps(store, ensure_ascii=False))
+
+
+def _rag_ingest(docs: list[dict], source_prefix: str) -> int:
+    """Store docs in local RAG store. Returns count of new/updated docs."""
+    with _RAG_LOCK:
+        store = _rag_load()
+        count = 0
+        for doc in docs:
+            key = doc.get("source") or f"{source_prefix}:{count}"
+            store[key] = {
+                "title":       doc.get("title", ""),
+                "content":     doc.get("content", ""),
+                "source":      key,
+                "source_type": source_prefix,
+                "metadata":    doc.get("metadata", {}),
+                "indexed_at":  datetime.now(timezone.utc).isoformat(),
+            }
+            count += 1
+        _rag_save(store)
+        return count
+
+
+def _rag_search(query: str, limit: int = 5, source_type: str | None = None) -> list[dict]:
+    """Keyword-scored search over local RAG store. Returns top-N matches."""
+    with _RAG_LOCK:
+        store = _rag_load()
+    if not store:
+        return []
+
+    q_tokens = set(query.lower().split())
+    # Remove common stop words
+    stop = {"the","a","an","is","are","was","were","to","of","and","or","in","on","for","with","that","this","it","be","has","have","do","does","i","we","you","they","from","at","by","not","but","what","how","about","can","will","would","their","there","these","those","as","if","so","then","than","into","up","out","more"}
+    q_tokens -= stop
+    if not q_tokens:
+        return []
+
+    results = []
+    for doc in store.values():
+        if source_type and doc.get("source_type") != source_type:
+            continue
+        haystack = f"{doc.get('title','')} {doc.get('content','')}".lower()
+        score = sum(haystack.count(tok) for tok in q_tokens)
+        if score > 0:
+            snippet = doc.get("content", "")[:400].strip()
+            results.append({"source": doc["source"], "title": doc.get("title",""), "snippet": snippet, "score": score, "metadata": doc.get("metadata", {})})
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return results[:limit]
+
 
 def _load_index_status() -> dict:
     if _INDEX_STATUS_FILE.exists():
@@ -2002,7 +2096,7 @@ def _save_index_status(data: dict) -> None:
 
 
 def _ingest_doc(text: str, source: str, metadata: dict) -> bool:
-    """POST a single document to the Go backbone /v1/ingest endpoint."""
+    """POST a single document to the Go backbone /v1/ingest endpoint. Returns True on success."""
     import httpx as _hx
     payload = {"text": text, "source": source, "metadata": metadata}
     try:
@@ -2018,16 +2112,26 @@ def _ingest_doc(text: str, source: str, metadata: dict) -> bool:
 
 
 def _ingest_batch(docs: list[dict], source_prefix: str) -> int:
-    """Ingest a list of {title, content, source, metadata} dicts. Returns count ingested."""
-    count = 0
+    """Ingest docs into backbone; fall back to local RAG store on failure."""
+    # Try backbone first; if it fails or returns 0, use local store
+    backbone_count = 0
+    backbone_ok = True
     for doc in docs:
         text = f"# {doc.get('title', '')}\n\n{doc.get('content', '')}".strip()
         if not text or len(text) < 20:
             continue
         meta = {"title": doc.get("title", ""), "source_type": source_prefix, **doc.get("metadata", {})}
         if _ingest_doc(text, doc.get("source", source_prefix), meta):
-            count += 1
-    return count
+            backbone_count += 1
+        else:
+            backbone_ok = False
+
+    if backbone_count > 0:
+        return backbone_count
+
+    # Backbone unavailable — store locally
+    log.info("[RAG] Backbone ingest unavailable, writing %d docs to local store", len(docs))
+    return _rag_ingest(docs, source_prefix)
 
 
 # ── Per-service fetchers ───────────────────────────────────────────────────────
@@ -2460,13 +2564,21 @@ def _fetch_arxiv(creds: dict, opts: dict) -> list[dict]:
     root = ET.fromstring(r.text)
     docs = []
     for entry in root.findall(f"{{{ns}}}entry"):
-        title   = (entry.find(f"{{{ns}}}title")   or entry).text or ""
-        summary = (entry.find(f"{{{ns}}}summary") or entry).text or ""
-        link    = next((l.get("href", "") for l in entry.findall(f"{{{ns}}}link") if l.get("title") == "pdf"), "")
-        arxiv_id = (entry.find(f"{{{ns}}}id") or entry).text or ""
+        def _text(tag: str) -> str:
+            el = entry.find(f"{{{ns}}}{tag}")
+            return (el.text or "").strip() if el is not None else ""
+
+        title     = _text("title")
+        summary   = _text("summary")
+        arxiv_id  = _text("id")
+        published = _text("published")
+        link      = next((l.get("href", "") for l in entry.findall(f"{{{ns}}}link") if l.get("title") == "pdf"), "")
         paper_cats = [c.get("term", "") for c in entry.findall(f"{{{ns}}}category")]
-        published  = (entry.find(f"{{{ns}}}published") or entry).text or ""
-        authors    = [a.find(f"{{{ns}}}name").text for a in entry.findall(f"{{{ns}}}author") if a.find(f"{{{ns}}}name") is not None]
+        authors    = []
+        for a in entry.findall(f"{{{ns}}}author"):
+            name_el = a.find(f"{{{ns}}}name")
+            if name_el is not None and name_el.text:
+                authors.append(name_el.text)
 
         # Client-side date filter — skip papers older than days_back
         if days_back > 0 and published:
@@ -2477,9 +2589,9 @@ def _fetch_arxiv(creds: dict, opts: dict) -> list[dict]:
             except Exception:
                 pass
 
-        content = f"Authors: {', '.join(authors[:5])}\nPublished: {published[:10]}\nCategories: {', '.join(paper_cats)}\n\n{summary.strip()}"
+        content = f"Authors: {', '.join(authors[:5])}\nPublished: {published[:10]}\nCategories: {', '.join(paper_cats)}\n\n{summary}"
         docs.append({
-            "title":    title.strip(),
+            "title":    title,
             "content":  content[:3000],
             "source":   f"arxiv:{arxiv_id.split('/')[-1]}",
             "metadata": {"url": link or arxiv_id, "categories": paper_cats, "published": published[:10]},
@@ -2852,7 +2964,38 @@ def _run_index_job(conn_id: str, creds: dict, opts: dict) -> None:
 @app.route("/connections/index/status", methods=["GET"])
 def get_all_index_status() -> Response:
     with _INDEX_LOCK:
-        return jsonify(_load_index_status())
+        status = _load_index_status()
+    # Augment with local RAG doc counts per source_type
+    with _RAG_LOCK:
+        store = _rag_load()
+    counts: dict[str, int] = {}
+    for doc in store.values():
+        st = doc.get("source_type", "unknown")
+        counts[st] = counts.get(st, 0) + 1
+    for conn_id, cnt in counts.items():
+        if conn_id in status:
+            status[conn_id]["local_docs"] = cnt
+        else:
+            status[conn_id] = {"status": "indexed", "docs": cnt, "local_docs": cnt}
+    return jsonify(status)
+
+
+@app.route("/rag/search", methods=["GET", "POST"])
+def rag_search_endpoint() -> Response:
+    """Search the local RAG store."""
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        query = body.get("query", "")
+        limit = int(body.get("limit", 5))
+        source_type = body.get("source_type")
+    else:
+        query = request.args.get("q", "")
+        limit = int(request.args.get("limit", 5))
+        source_type = request.args.get("source_type")
+    if not query:
+        return jsonify({"error": "query required"}), 400
+    hits = _rag_search(query, limit=limit, source_type=source_type)
+    return jsonify({"query": query, "results": hits, "count": len(hits)})
 
 
 @app.route("/connections/<conn_id>/index", methods=["POST"])
