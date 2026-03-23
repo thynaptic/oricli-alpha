@@ -2443,8 +2443,8 @@ def _fetch_arxiv(creds: dict, opts: dict) -> list[dict]:
     max_r = int(opts.get("max_results") or creds.get("max_results") or 50)
 
     if days_back > 0:
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y%m%d")
-        search_query = f"({cat_query}) AND submittedDate:[{cutoff}0000 TO *]"
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y%m%d000000")
+        search_query = f"({cat_query}) AND submittedDate:[{cutoff} TO *]"
     else:
         search_query = cat_query
 
