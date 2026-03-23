@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
@@ -20,7 +21,9 @@ export const selectActiveSession = (s) => {
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
-export const useSCStore = create((set, get) => ({
+export const useSCStore = create(
+  persist(
+    (set, get) => ({
   // ── Sessions ──────────────────────────────────────────────────────────────
   sessions: [newSession('Initial Directive')],
   activeSessionId: null,
@@ -185,6 +188,25 @@ export const useSCStore = create((set, get) => ({
     });
   },
 
+  cancelRun(runId) {
+    fetch(`/workflows/runs/${runId}/cancel`, { method: 'POST' }).catch(() => {});
+    set(state => state.bgRuns[runId] ? {
+      bgRuns: { ...state.bgRuns, [runId]: { ...state.bgRuns[runId], run: { ...state.bgRuns[runId].run, status: 'cancelling' } } },
+    } : state);
+  },
+  pauseRun(runId) {
+    fetch(`/workflows/runs/${runId}/pause`, { method: 'POST' }).catch(() => {});
+    set(state => state.bgRuns[runId] ? {
+      bgRuns: { ...state.bgRuns, [runId]: { ...state.bgRuns[runId], run: { ...state.bgRuns[runId].run, status: 'pausing' } } },
+    } : state);
+  },
+  resumeRun(runId) {
+    fetch(`/workflows/runs/${runId}/resume`, { method: 'POST' }).catch(() => {});
+    set(state => state.bgRuns[runId] ? {
+      bgRuns: { ...state.bgRuns, [runId]: { ...state.bgRuns[runId], run: { ...state.bgRuns[runId].run, status: 'resuming' } } },
+    } : state);
+  },
+
   // ── Profiles ──────────────────────────────────────────────────────────────
   profiles: [],
   addProfile(profile) { set(state => ({ profiles: [...state.profiles, { id: makeId(), ...profile, createdAt: Date.now() }] })); },
@@ -313,7 +335,19 @@ export const useSCStore = create((set, get) => ({
 
   activeArtifactId: null,
   setActiveArtifact(id) { set({ activeArtifactId: id }); },
-}));
+    }),
+    {
+      name: 'sc-store-v1',
+      // Only persist bgRuns (so in-flight runs survive refresh) + canvas docs
+      partialize: (state) => ({
+        bgRuns: state.bgRuns,
+        canvasDocuments: state.canvasDocuments,
+        activeCanvasDocId: state.activeCanvasDocId,
+        canvasChatHistories: state.canvasChatHistories,
+      }),
+    }
+  )
+);
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -514,8 +548,9 @@ export function connectHiveWS() {
 // Runs independently of page/component lifecycle — survives navigation.
 setInterval(() => {
   const { bgRuns, updateBgRun, addCanvasDoc, setActivePage } = useSCStore.getState();
+  const TERMINAL = new Set(['done', 'error', 'cancelled']);
   Object.values(bgRuns).forEach(({ runId, run, sendToCanvas, wfName, _canvasPushed }) => {
-    if (run?.status === 'done' || run?.status === 'error') {
+    if (TERMINAL.has(run?.status)) {
       // Push final output to Canvas once when run completes
       if (sendToCanvas && run?.status === 'done' && run?.final_output && !_canvasPushed) {
         useSCStore.setState(state => ({

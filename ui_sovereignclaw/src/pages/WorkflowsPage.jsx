@@ -615,7 +615,7 @@ function WorkflowCreator({ onSave, onCancel, initial }) {
 }
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
-const STATUS_COLOR = { queued: 'var(--color-sc-text-dim)', running: 'var(--color-sc-gold)', done: 'var(--color-sc-success)', error: 'var(--color-sc-danger)' };
+const STATUS_COLOR = { queued: 'var(--color-sc-text-dim)', running: 'var(--color-sc-gold)', pausing: 'var(--color-sc-gold)', paused: '#c49a4a', resuming: 'var(--color-sc-gold)', cancelling: 'var(--color-sc-danger)', cancelled: 'var(--color-sc-text-dim)', done: 'var(--color-sc-success)', error: 'var(--color-sc-danger)' };
 
 function StepStatusIcon({ s }) {
   if (s === 'running') return <Loader size={12} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-sc-gold)' }} />;
@@ -675,7 +675,7 @@ function RunHistoryDrawer({ wf, onClose }) {
 // ─── ActiveRunsTray ──────────────────────────────────────────────────────────
 // Bottom panel showing all in-flight and recently completed workflow runs.
 // Each run is independently polled. Multiple can execute in parallel.
-function ActiveRunsTray({ bgRuns, workflows, onDismiss, onDismissAll, onRerun }) {
+function ActiveRunsTray({ bgRuns, workflows, onDismiss, onDismissAll, onRerun, onCancel, onPause, onResume }) {
   const [collapsed, setCollapsed] = useState(false);
   const [expandedRun, setExpandedRun] = useState({});
   const [expandedStep, setExpandedStep] = useState({});
@@ -761,7 +761,7 @@ function ActiveRunsTray({ bgRuns, workflows, onDismiss, onDismissAll, onRerun })
                   </button>
 
                   {/* Re-run */}
-                  {(status === 'done' || status === 'error') && (
+                  {(status === 'done' || status === 'error' || status === 'cancelled') && (
                     <button onClick={() => onRerun(wfId, runId)} title="Re-run"
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-sc-text-dim)', padding: '2px 4px', display: 'flex', flexShrink: 0, transition: 'color 0.12s' }}
                       onMouseEnter={e => e.currentTarget.style.color = 'var(--color-sc-gold)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--color-sc-text-dim)'}>
@@ -769,12 +769,36 @@ function ActiveRunsTray({ bgRuns, workflows, onDismiss, onDismissAll, onRerun })
                     </button>
                   )}
 
+                  {/* Pause / Resume */}
+                  {status === 'running' && (
+                    <button onClick={() => onPause(runId)} title="Pause"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-sc-text-dim)', padding: '2px 4px', display: 'flex', flexShrink: 0, transition: 'color 0.12s' }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-sc-gold)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--color-sc-text-dim)'}>
+                      <StopCircle size={11} />
+                    </button>
+                  )}
+                  {(status === 'paused' || status === 'pausing') && (
+                    <button onClick={() => onResume(runId)} title="Resume"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-sc-gold)', padding: '2px 4px', display: 'flex', flexShrink: 0 }}>
+                      <Play size={11} />
+                    </button>
+                  )}
+
+                  {/* Stop */}
+                  {(status === 'running' || status === 'paused' || status === 'pausing') && (
+                    <button onClick={() => onCancel(runId)} title="Stop"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-sc-text-dim)', padding: '2px 4px', display: 'flex', flexShrink: 0, transition: 'color 0.12s' }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-sc-danger)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--color-sc-text-dim)'}>
+                      <X size={12} />
+                    </button>
+                  )}
+
                   {/* Dismiss */}
-                  {(status === 'done' || status === 'error') && (
+                  {(status === 'done' || status === 'error' || status === 'cancelled') && (
                     <button onClick={() => onDismiss(runId)} title="Dismiss"
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-sc-text-dim)', padding: '2px 4px', display: 'flex', flexShrink: 0, transition: 'color 0.12s' }}
                       onMouseEnter={e => e.currentTarget.style.color = 'var(--color-sc-danger)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--color-sc-text-dim)'}>
-                      <X size={11} />
+                      <Trash2 size={11} />
                     </button>
                   )}
                 </div>
@@ -914,10 +938,13 @@ function WorkflowsTab({ creating, setCreating }) {
   const [pendingDocRun, setPendingDocRun] = useState(null);
 
   // bgRuns lives in global store — survives page navigation
-  const bgRuns             = useSCStore(s => s.bgRuns);
-  const startBgRun         = useSCStore(s => s.startBgRun);
-  const dismissBgRun       = useSCStore(s => s.dismissBgRun);
+  const bgRuns               = useSCStore(s => s.bgRuns);
+  const startBgRun           = useSCStore(s => s.startBgRun);
+  const dismissBgRun         = useSCStore(s => s.dismissBgRun);
   const dismissAllDoneBgRuns = useSCStore(s => s.dismissAllDoneBgRuns);
+  const cancelRun            = useSCStore(s => s.cancelRun);
+  const pauseRun             = useSCStore(s => s.pauseRun);
+  const resumeRun            = useSCStore(s => s.resumeRun);
 
   async function refresh() {
     try {
@@ -1023,6 +1050,9 @@ function WorkflowsTab({ creating, setCreating }) {
         onDismiss={dismissBgRun}
         onDismissAll={dismissAllDoneBgRuns}
         onRerun={handleRerun}
+        onCancel={cancelRun}
+        onPause={pauseRun}
+        onResume={resumeRun}
       />
 
       {historyWf && <RunHistoryDrawer wf={historyWf} onClose={() => setHistoryWf(null)} />}

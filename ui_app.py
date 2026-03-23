@@ -1622,6 +1622,7 @@ _WORKFLOWS_FILE   = Path(__file__).parent / ".oricli" / "workflows.json"
 _WORKFLOW_RUNS_FILE = Path(__file__).parent / ".oricli" / "workflow_runs.json"
 _WF_LOCK  = threading.Lock()
 _WFR_LOCK = threading.Lock()
+_RUN_CONTROL: dict[str, str] = {}  # run_id → "cancel" | "pause" | "resume"
 
 
 def _load_workflows() -> list:
@@ -2016,6 +2017,26 @@ def _run_workflow_job(wf_id: str, run_id: str) -> None:
         context["save_to_memory"] = run_meta.get("save_to_memory", False)
 
     for idx, step in enumerate(steps):
+        # ── Stop / Pause control ──────────────────────────────────────────
+        ctrl = _RUN_CONTROL.get(run_id)
+        if ctrl == "cancel":
+            _RUN_CONTROL.pop(run_id, None)
+            update_run({"status": "cancelled", "finished": datetime.now(timezone.utc).isoformat(),
+                        "final_output": context.get("output", "")})
+            return
+        if ctrl == "pause":
+            update_run({"status": "paused"})
+            while _RUN_CONTROL.get(run_id) == "pause":
+                time.sleep(0.5)
+            if _RUN_CONTROL.get(run_id) == "cancel":
+                _RUN_CONTROL.pop(run_id, None)
+                update_run({"status": "cancelled", "finished": datetime.now(timezone.utc).isoformat(),
+                            "final_output": context.get("output", "")})
+                return
+            _RUN_CONTROL.pop(run_id, None)
+            update_run({"status": "running"})
+        # ─────────────────────────────────────────────────────────────────
+
         # Mark step as running
         with _WFR_LOCK:
             runs = _load_runs()
@@ -2185,6 +2206,31 @@ def get_run_status(run_id: str) -> Response:
     if not run:
         return jsonify({"error": "run not found"}), 404
     return jsonify(run)
+
+
+@app.route("/workflows/runs/<run_id>/cancel", methods=["POST"])
+def cancel_run(run_id: str) -> Response:
+    _RUN_CONTROL[run_id] = "cancel"
+    # If already done/error, mark directly
+    with _WFR_LOCK:
+        runs = _load_runs()
+    run = runs.get(run_id, {})
+    if run.get("status") in ("done", "error", "cancelled"):
+        return jsonify({"status": run.get("status")})
+    return jsonify({"status": "cancelling"})
+
+
+@app.route("/workflows/runs/<run_id>/pause", methods=["POST"])
+def pause_run(run_id: str) -> Response:
+    _RUN_CONTROL[run_id] = "pause"
+    return jsonify({"status": "pausing"})
+
+
+@app.route("/workflows/runs/<run_id>/resume", methods=["POST"])
+def resume_run(run_id: str) -> Response:
+    if _RUN_CONTROL.get(run_id) == "pause":
+        _RUN_CONTROL[run_id] = "resume"
+    return jsonify({"status": "resuming"})
 
 
 @app.route("/workflows/<wf_id>/runs", methods=["GET"])
