@@ -133,7 +133,7 @@ func (p *PersonalityEngine) GetDirectives() string {
 	directives += "- Description: " + p.State.ActiveArchetype.Description + "\n"
 	directives += "- Response Style: " + p.State.ActiveArchetype.Style + "\n\n"
 
-	directives += "### SIGNATURE PHRASES (Use naturally):\n"
+	directives += "### TONE CALIBRATION (embody this energy; never repeat these verbatim):\n"
 	for _, ph := range p.State.ActiveArchetype.Phrases {
 		directives += "- " + ph + "\n"
 	}
