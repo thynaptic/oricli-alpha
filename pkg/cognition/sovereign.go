@@ -218,6 +218,13 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 	engine.CurrentSensory = engine.Sensory.ComputeSensoryState(0.5, 0.5, "C Major")
 	engine.CurrentHealth = engine.Health.GenerateSnapshot(0, 0, time.Now())
 	engine.Stochastic.Train("I hear you. That sounds really hard. We can figure this out together. Take a breath.", 4)
+
+	// Load default profile — gives her a strong personality baseline from boot
+	if p, ok := engine.Profiles.GetProfile("oricli"); ok {
+		engine.ActiveProfile = p
+		log.Printf("[SovereignEngine] Default profile loaded: %s", p.Name)
+	}
+
 	return engine
 }
 
