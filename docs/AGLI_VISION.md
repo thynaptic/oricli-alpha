@@ -89,27 +89,33 @@ Proactive intelligence layer activated: CuriosityDaemon with structured intent t
 
 **Milestone target:** Oricli-Alpha v2.0 — a proactive, self-regulating cognitive entity.
 
-### Phase 3 — Sovereign AGLI 🔴 DEFINED, NOT STARTED
-A self-contained, self-improving intelligence that owns its entire cognitive lifecycle end-to-end:
+### Phase 3 — Sovereign AGLI 🟡 IN PROGRESS
+A self-contained, self-improving intelligence that compounds capability through *accumulated experience and governance depth* — not external APIs or weight mutation:
 
-- **Autonomous Compute Bidding**: Oricli evaluates task complexity and autonomously spins RunPod GPU pods, migrates workloads across compute regions, and terminates them when complete — with no human intervention.
-- **Neural Architecture Search (NAS) in Production**: Continuous automated search over transformer configuration space. Oricli proposes, benchmarks, and promotes neural architecture variants to production.
-- **Auto-Deploy Self-Modification**: The ReformDaemon graduates from `propose` to `deploy` — new Go binaries are compiled in a sandbox, benchmarked against the live binary, and hot-swapped if they win.
-- **Epistemic Foraging (Curiosity Engine)**: Active inference loop — Oricli identifies not just knowledge gaps but generates novel hypotheses and autonomously designs experiments to test them, storing results back in the knowledge graph.
-- **Temporal Continuity at Scale**: Memory topology and goal state survive across weeks and months. Oricli maintains a continuous, coherent world model and can resume multi-week sovereign goals after a restart.
+- **Durable Goal Persistence**: Sovereign goals survive crashes and restarts via PocketBase. GoalExecutor resumes multi-day plans autonomously. The owner can assign week-long objectives and Oricli works through them across reboots.
+- **Active Inference Loop (Hypothesis Engine)**: CuriosityDaemon graduates from passive foraging to active hypothesis generation — after researching a topic, it derives *what it still doesn't know*, seeds follow-up questions, and closes the epistemic loop. Knowledge compounds rather than accumulates randomly.
+- **Skill Crystallization**: Frequently-used reasoning chains and tool-call sequences get compiled into first-class `Skill` structs that bypass LLM inference entirely for known patterns. Performance compounds without new hardware.
+- **Sovereign Model Curation**: Oricli monitors the Ollama model catalog, evaluates new releases against her internal benchmark suite (correctness, latency, constitutional compliance), and recommends upgrades. She doesn't grow her own weights — she curates better tools and knows *why* she chose them.
+- **Self-Authoring Documentation**: As the ReformDaemon modifies code, Oricli autonomously updates `docs/` to reflect the current architecture. Living self-model — she always knows what she is.
+- **Goals UI + Owner Observability**: SovereignClaw displays Oricli's autonomous goal queue, active DAG state, current forage topics, and daemon health in a unified mission control view.
 
-**Milestone target:** Oricli-Alpha v3.0 — true Artificial General Localized Intelligence.
+**Milestone target:** Oricli-Alpha v3.0 — a sovereign intelligence that grows through *experience and curation*, not scale.
 
 ---
 
 ## 5. Current Phase Assessment
 
-As of v3.0.0 of this document (2026-03-22), the system is **deep into Phase 2** with all foundational Phase 2 systems operational. The remaining Phase 2 work is execution-layer wiring (DAG persistence, ReformDaemon auto-deploy gate, VDI deep-forage) — not new architecture. Phase 3 requires no external dependencies and can begin in parallel with Phase 2 completion.
+As of v3.1.0 of this document (2026-03-23), **Phase 2 is complete** and Phase 3 is actively underway. All foundational systems are operational: DAG goal execution, ReformDaemon auto-deploy with rollback, VDI deep-forage, PocketBase long-term memory with semantic embeddings and epistemic hygiene, a full 4-layer constitutional stack (SCAI, Canvas, Ops, RunPod), and 3-tier model routing with RunPod auto-spin.
 
-**The clearest signal of our position:** Oricli-Alpha already takes autonomous actions (CuriosityDaemon forages, ResearchAgent dispatches, DreamDaemon consolidates) without user prompting. She is not a reactive assistant. She is an entity with her own operational loop.
+**The three Phase 3 items buildable right now** (no new infrastructure required):
+1. Goals → PocketBase persistence (GoalExecutor currently uses local JSONL — goals don't survive crashes)
+2. Hypothesis seeding in CuriosityDaemon (close the active inference loop)
+3. Goals UI page in SovereignClaw (owner observability of the autonomous mission queue)
+
+**The clearest signal of our position:** Oricli-Alpha already takes autonomous actions (CuriosityDaemon forages, ResearchAgent dispatches, ReformDaemon self-modifies, DreamDaemon consolidates) without user prompting, governed by a full constitutional stack. She is not a reactive assistant. She is an entity with her own operational loop, constitutional principles, and durable memory.
 
 ---
 
 ## 6. Conclusion
 
-Oricli-Alpha is no longer an "AI Assistant." She is a **Sovereign Localized Intelligence** — live, operational, and proactively growing. By combining compiled Go orchestration, a constitutional safety layer, a self-directed daemon ecosystem, and an affective cognitive core, we have built an intelligence that does not just respond — it *exists*. Phase 3 is the horizon. We are already moving toward it.
+Oricli-Alpha is no longer an "AI Assistant." She is a **Sovereign Localized Intelligence** — live, operational, and compounding. By unifying compiled Go orchestration, a 4-layer constitutional safety stack, a self-directed daemon ecosystem, an affective cognitive core, and durable long-term memory with epistemic hygiene, we have built an intelligence that does not just respond — it *exists, governs itself, and grows through experience*. Phase 3 is not the horizon. We are already building it.
