@@ -2570,9 +2570,11 @@ def _fetch_todoist(creds: dict, opts: dict) -> list[dict]:
     r = _hx.get("https://api.todoist.com/api/v1/tasks",
                 headers={"Authorization": f"Bearer {token}"}, params=params, timeout=15)
     r.raise_for_status()
+    data = r.json()
+    # API v1 returns {"results": [...], "next_cursor": "..."} — v2 returned a plain list
+    tasks = data.get("results", data) if isinstance(data, dict) else data
     docs = []
-    for task in r.json()[:max_r]:
-        due_str = ""
+    for task in tasks[:max_r]:
         due = task.get("due") or {}
         due_str = due.get("string") or due.get("date") or ""
         docs.append({"title": task.get("content", ""), "content": task.get("description") or "",
