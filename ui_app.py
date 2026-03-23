@@ -2442,11 +2442,9 @@ def _fetch_arxiv(creds: dict, opts: dict) -> list[dict]:
     days_back = int(creds.get("days_back") or 7)
     max_r = int(opts.get("max_results") or creds.get("max_results") or 50)
 
-    if days_back > 0:
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y%m%d000000")
-        search_query = f"({cat_query}) AND submittedDate:[{cutoff} TO *]"
-    else:
-        search_query = cat_query
+    # arXiv API doesn't support submittedDate range filter combined with OR category queries.
+    # Instead: fetch latest N papers sorted by submittedDate and filter client-side by date.
+    search_query = cat_query
 
     r = _hx.get("https://export.arxiv.org/api/query", params={
         "search_query": search_query,
@@ -2456,6 +2454,8 @@ def _fetch_arxiv(creds: dict, opts: dict) -> list[dict]:
     }, timeout=30)
     r.raise_for_status()
 
+    cutoff_dt = datetime.now(timezone.utc) - timedelta(days=days_back)
+
     ns = "http://www.w3.org/2005/Atom"
     root = ET.fromstring(r.text)
     docs = []
@@ -2464,10 +2464,19 @@ def _fetch_arxiv(creds: dict, opts: dict) -> list[dict]:
         summary = (entry.find(f"{{{ns}}}summary") or entry).text or ""
         link    = next((l.get("href", "") for l in entry.findall(f"{{{ns}}}link") if l.get("title") == "pdf"), "")
         arxiv_id = (entry.find(f"{{{ns}}}id") or entry).text or ""
-        # Capture paper categories for metadata
         paper_cats = [c.get("term", "") for c in entry.findall(f"{{{ns}}}category")]
         published  = (entry.find(f"{{{ns}}}published") or entry).text or ""
         authors    = [a.find(f"{{{ns}}}name").text for a in entry.findall(f"{{{ns}}}author") if a.find(f"{{{ns}}}name") is not None]
+
+        # Client-side date filter — skip papers older than days_back
+        if days_back > 0 and published:
+            try:
+                pub_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
+                if pub_dt < cutoff_dt:
+                    continue
+            except Exception:
+                pass
+
         content = f"Authors: {', '.join(authors[:5])}\nPublished: {published[:10]}\nCategories: {', '.join(paper_cats)}\n\n{summary.strip()}"
         docs.append({
             "title":    title.strip(),
