@@ -415,12 +415,11 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		streamOpts["use_code_model"] = true
 	}
 	if isCanvasMode {
-		// Unlock full context window for canvas requests but cap output tokens.
-		// num_predict: -1 means unlimited — at ~1 tok/s on CPU that starves Cloudflare's
-		// 100s timeout before the first real token arrives. 2048 covers any realistic
-		// component, page, or document without blowing the deadline.
+		// Cap at 4096 — covers full landing pages, Python scripts, and multi-section docs.
+		// The 524 fix is the keep-alive flush above, not this cap — CF resets its timer
+		// on every streaming chunk, so mid-generation timeouts aren't the concern.
 		streamOpts["options"] = map[string]interface{}{
-			"num_predict": 2048,
+			"num_predict": 4096,
 			"num_ctx":     16384,
 		}
 	}
