@@ -242,6 +242,81 @@ function ConnectionPicker({ value, query, onChangeConn, onChangeQuery }) {
 
 
 // ─── DocUploadModal ───────────────────────────────────────────────────────────
+// ─── Template variable reference ─────────────────────────────────────────────
+const BUILTIN_VARS = [
+  { key: 'output',         desc: 'Output of the previous step' },
+  { key: 'input',          desc: 'Alias for {{output}}' },
+  { key: 'date',           desc: 'Today\'s date (e.g. March 23, 2026)' },
+  { key: 'time',           desc: 'Current time (e.g. 11:21 PM)' },
+  { key: 'datetime',       desc: 'Full timestamp (2026-03-23 23:21)' },
+  { key: 'workflow_name',  desc: 'Name of this workflow' },
+  { key: 'step_N_output',  desc: 'Output of step N (e.g. step_1_output)' },
+  { key: 'doc_text',       desc: 'Full text of uploaded document' },
+  { key: 'doc_filename',   desc: 'Filename of uploaded document' },
+];
+
+function VarsHint() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(196,164,74,0.2)', background: 'rgba(196,164,74,0.06)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+        {'{{…}}'} variables
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', padding: '8px 4px', minWidth: 280 }}>
+          <div style={{ padding: '2px 10px 6px', fontSize: 10, fontWeight: 700, color: 'var(--color-sc-text-dim)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Built-in variables</div>
+          {BUILTIN_VARS.map(v => (
+            <div key={v.key} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '4px 10px', borderRadius: 6, cursor: 'pointer' }}
+              onClick={() => { navigator.clipboard?.writeText(`{{${v.key}}}`); setOpen(false); }}>
+              <code style={{ fontSize: 11, color: 'var(--color-sc-gold)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{`{{${v.key}}}`}</code>
+              <span style={{ fontSize: 11, color: 'var(--color-sc-text-muted)' }}>{v.desc}</span>
+            </div>
+          ))}
+          <div style={{ padding: '6px 10px 2px', fontSize: 10, color: 'var(--color-sc-text-dim)', borderTop: '1px solid var(--color-sc-border)', marginTop: 4 }}>
+            Any other <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-sc-text-muted)' }}>{'{{custom}}'}</code> variable will prompt you to fill it in at run time.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Run-time variable fill-in modal ─────────────────────────────────────────
+function RunVarsModal({ vars, onConfirm, onCancel }) {
+  const [values, setValues] = useState(() => Object.fromEntries(vars.map(v => [v, ''])));
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--color-sc-surface)', border: '1px solid rgba(196,164,74,0.25)', borderRadius: 16, padding: '28px 28px 24px', width: 420, maxWidth: '90vw' }}>
+        <h3 style={{ margin: '0 0 6px', fontFamily: 'var(--font-grotesk)', fontSize: 15, fontWeight: 700, color: 'var(--color-sc-text)' }}>Fill in variables</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 12, color: 'var(--color-sc-text-dim)' }}>This workflow uses custom variables. Enter a value for each before running.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
+          {vars.map(v => (
+            <div key={v}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--color-sc-text-muted)', marginBottom: 4, fontFamily: 'var(--font-mono)' }}>{`{{${v}}}`}</label>
+              <input
+                autoFocus={vars[0] === v}
+                value={values[v]}
+                onChange={e => setValues(prev => ({ ...prev, [v]: e.target.value }))}
+                onKeyDown={e => { if (e.key === 'Enter' && vars.indexOf(v) === vars.length - 1) onConfirm(values); }}
+                placeholder={`Value for ${v}…`}
+                style={{ width: '100%', background: 'var(--color-sc-bg)', border: '1px solid var(--color-sc-border)', borderRadius: 8, padding: '8px 12px', color: 'var(--color-sc-text)', fontSize: 13, fontFamily: 'var(--font-inter)', boxSizing: 'border-box' }}
+              />
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--color-sc-border)', background: 'transparent', color: 'var(--color-sc-text-muted)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={() => onConfirm(values)} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: 'var(--color-sc-gold)', color: '#0D0D0D', cursor: 'pointer', fontFamily: 'var(--font-grotesk)', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Play size={12} /> Run workflow
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function DocUploadModal({ onConfirm, onCancel }) {
   const [dragging, setDragging]     = useState(false);
   const [file, setFile]             = useState(null);
@@ -418,6 +493,7 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId, compac
             placeholder={`Step ${index + 1} label (optional)`}
             style={{ ...inputStyle, flex: 1, padding: '5px 10px', fontSize: 12 }}
           />
+          <VarsHint />
           <button onClick={onRemove} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-sc-text-dim)', padding: 4, display: 'flex', flexShrink: 0 }}>
             <X size={14} />
           </button>
@@ -1145,6 +1221,7 @@ function WorkflowsTab({ creating, setCreating }) {
   const [historyWf, setHistoryWf] = useState(null);
   const [editingWf, setEditingWf] = useState(null);
   const [pendingDocRun, setPendingDocRun] = useState(null);
+  const [pendingVarsRun, setPendingVarsRun] = useState(null); // { wf, vars[] }
 
   // bgRuns lives in global store — survives page navigation
   const bgRuns               = useSCStore(s => s.bgRuns);
@@ -1167,13 +1244,27 @@ function WorkflowsTab({ creating, setCreating }) {
   }
   useEffect(() => { refresh(); fetchProjects(); }, []);
 
-  async function handleRun(wf) {
+  async function handleRun(wf, userVars = null) {
     if (wf.steps?.some(s => s.type === 'ingest_doc')) {
       setPendingDocRun(wf);
       return;
     }
+    // Check for user-defined template vars (skip if already provided)
+    if (!userVars) {
+      try {
+        const vr = await fetch(`/workflows/${wf.id}/vars`).then(r => r.json());
+        if (vr.vars?.length > 0) {
+          setPendingVarsRun({ wf, vars: vr.vars });
+          return;
+        }
+      } catch {}
+    }
     try {
-      const res  = await fetch(`/workflows/${wf.id}/run`, { method: 'POST' });
+      const res  = await fetch(`/workflows/${wf.id}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_vars: userVars || {} }),
+      });
       const data = await res.json();
       startBgRun(data.run_id, wf.id, { sendToCanvas: !!wf.sendToCanvas, wfName: wf.name });
     } catch (e) { console.error('Failed to start workflow:', e); }
@@ -1280,6 +1371,13 @@ function WorkflowsTab({ creating, setCreating }) {
               />
             )}
             {pendingDocRun && <DocUploadModal onConfirm={handleDocRunConfirm} onCancel={() => setPendingDocRun(null)} />}
+            {pendingVarsRun && (
+              <RunVarsModal
+                vars={pendingVarsRun.vars}
+                onConfirm={vals => { const wf = pendingVarsRun.wf; setPendingVarsRun(null); handleRun(wf, vals); }}
+                onCancel={() => setPendingVarsRun(null)}
+              />
+            )}
 
             {visibleWfs.length === 0 && !creating && (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--color-sc-text-dim)' }}>

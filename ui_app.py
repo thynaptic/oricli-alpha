@@ -1669,13 +1669,46 @@ def _save_runs(data: dict) -> None:
     _WORKFLOW_RUNS_FILE.write_text(json.dumps(data, indent=2))
 
 
+_WF_BUILTIN_VARS: frozenset = frozenset({
+    "output", "input", "date", "time", "datetime", "workflow_name",
+    "doc_text", "doc_filename",
+})
+
+
 def _wf_interpolate(text: str, context: dict) -> str:
-    """Replace {{output}}, {{step_N_output}}, {{var}} in step text."""
+    """Replace {{var}} in step text. Resolves built-ins then context keys."""
     import re as _re
+    from datetime import datetime as _dt
+    now = _dt.now()
+    builtins = {
+        "date":          now.strftime("%B %-d, %Y"),
+        "time":          now.strftime("%-I:%M %p"),
+        "datetime":      now.strftime("%Y-%m-%d %H:%M"),
+        "input":         context.get("output", ""),   # alias
+    }
+    full_ctx = {**builtins, **context}
     def replacer(m):
         key = m.group(1).strip()
-        return str(context.get(key, m.group(0)))
+        return str(full_ctx.get(key, m.group(0)))
     return _re.sub(r'\{\{([^}]+)\}\}', replacer, text or "")
+
+
+def _scan_user_vars(wf: dict) -> list[str]:
+    """Return sorted list of user-defined {{var}} names not covered by builtins."""
+    import re as _re
+    found: set[str] = set()
+    for step in wf.get("steps", []):
+        sources = [
+            step.get("value", ""), step.get("input", ""),
+            step.get("condition", ""),
+            json.dumps(step.get("params") or {}),
+        ]
+        for text in sources:
+            for m in _re.finditer(r'\{\{([^}]+)\}\}', text or ""):
+                key = m.group(1).strip()
+                if key not in _WF_BUILTIN_VARS and not key.startswith("step_"):
+                    found.add(key)
+    return sorted(found)
 
 
 def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_prompt: str = "", _sub_depth: int = 0) -> dict:
@@ -2020,10 +2053,10 @@ def _run_workflow_job(wf_id: str, run_id: str) -> None:
     update_run({"status": "running", "started": datetime.now(timezone.utc).isoformat(),
                 "steps": [{"status": "pending", "output": "", "error": None} for _ in steps]})
 
-    context: dict = {"output": "", "step_0_output": ""}
+    context: dict = {"output": "", "step_0_output": "", "workflow_name": wf.get("name", "")}
     all_outputs = []
 
-    # Inject doc_text from run payload into context for ingest_doc steps
+    # Inject doc_text and user_vars from run payload into context
     with _WFR_LOCK:
         runs = _load_runs()
     run_meta = runs.get(run_id, {})
@@ -2031,6 +2064,9 @@ def _run_workflow_job(wf_id: str, run_id: str) -> None:
         context["doc_text"] = run_meta["doc_text"]
         context["doc_filename"] = run_meta.get("doc_filename", "document")
         context["save_to_memory"] = run_meta.get("save_to_memory", False)
+    # User-defined run-time variables (e.g. {{topic}}, {{client_name}})
+    for k, v in (run_meta.get("user_vars") or {}).items():
+        context[k] = v
 
     for idx, step in enumerate(steps):
         # ── Stop / Pause control ──────────────────────────────────────────
@@ -2208,11 +2244,23 @@ def run_workflow(wf_id: str) -> Response:
             "doc_text":     body.get("doc_text", ""),
             "save_to_memory": bool(body.get("save_to_memory", False)),
             "doc_filename": body.get("doc_filename", ""),
+            "user_vars":    body.get("user_vars") or {},
         }
         _save_runs(runs)
     t = threading.Thread(target=_run_workflow_job, args=(wf_id, run_id), daemon=True)
     t.start()
     return jsonify({"run_id": run_id, "status": "queued"})
+
+
+@app.route("/workflows/<wf_id>/vars", methods=["GET"])
+def get_workflow_vars(wf_id: str) -> Response:
+    """Return list of user-defined {{var}} names used in the workflow's steps."""
+    with _WF_LOCK:
+        wfs = _load_workflows()
+    wf = next((w for w in wfs if w["id"] == wf_id), None)
+    if not wf:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"vars": _scan_user_vars(wf)})
 
 
 @app.route("/workflows/runs/<run_id>", methods=["GET"])
