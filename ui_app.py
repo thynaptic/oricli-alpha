@@ -1732,12 +1732,29 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
                     result["output"] = f"No indexed knowledge found{src_label} for: {query}"
 
         elif step_type == "condition":
-            # Evaluate a condition on the previous output
+            # Legacy: just evaluate and output true/false
             prev = context.get("output", "")
             result["output"] = _llm_complete([
                 {"role": "system", "content": "Evaluate the following condition against the context. Reply with only 'true' or 'false'."},
                 {"role": "user", "content": f"Condition: {step_input}\n\nContext: {prev}"},
             ], max_tokens=10)
+
+        elif step_type == "if_else":
+            # True branching: evaluate condition, run thenSteps or elseSteps
+            condition_q = step.get("condition", step_input).strip()
+            prev = context.get("output", "")
+            verdict = _llm_complete([
+                {"role": "system", "content": "Evaluate the condition below against the given context. Reply with only the single word 'true' or 'false'."},
+                {"role": "user", "content": f"Condition: {condition_q}\n\nContext:\n{prev[:3000]}"},
+            ], max_tokens=10).strip().lower()
+            took_branch = "true" if "true" in verdict else "false"
+            branch_steps = step.get("thenSteps", []) if took_branch == "true" else step.get("elseSteps", [])
+            branch_context = dict(context)
+            for bi, bs in enumerate(branch_steps):
+                br = _execute_step(bs, branch_context, run_id, f"{step_idx}_b{bi}", system_prompt, _sub_depth)
+                branch_context["output"] = br.get("output", branch_context.get("output", ""))
+            result["output"] = branch_context.get("output", prev)
+            result["branch"] = took_branch
 
         elif step_type == "notify":
             # Send a notification via a configured connection

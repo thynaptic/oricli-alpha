@@ -5,7 +5,7 @@ import {
   FileText, X, Clock, Calendar, RotateCcw, CheckCircle, AlertCircle,
   Loader, Bot, ChevronDown, ListTodo, ChevronRight, ChevronUp,
   Database, Bell, Filter, Edit3, Save, History, Sparkles,
-  Layers, ChevronsDown, ChevronsUp, StopCircle, GitBranch, Link2
+  Layers, ChevronsDown, ChevronsUp, StopCircle, GitBranch, Link2, GitMerge, Plus as PlusSmall
 } from 'lucide-react';
 
 // ─── Step type catalog ───────────────────────────────────────────────────────
@@ -24,6 +24,7 @@ const STEP_TYPES = [
   { id: 'template',     label: 'Template',       Icon: FileText,   desc: 'Fill a text template with prior outputs', placeholder: 'Report:\n\nSummary: {{step_0_output}}\n\nDetails: {{output}}' },
   { id: 'ingest_doc',   label: 'Read Document', Icon: FileText,   desc: 'Load a PDF, TXT, or CSV into the workflow', placeholder: '' },
   { id: 'sub_workflow', label: 'Run Workflow',   Icon: GitBranch,  desc: 'Trigger another workflow and chain its output', placeholder: '' },
+  { id: 'if_else',      label: 'If / Else',      Icon: GitMerge,   desc: 'Branch based on a condition', placeholder: '' },
 ];
 
 const STEP_BY_ID = Object.fromEntries(STEP_TYPES.map(s => [s.id, s]));
@@ -144,7 +145,7 @@ function RagSourcePicker({ value, onChange }) {
   const [indexStatus, setIndexStatus] = useState({});
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    fetch('/connections').then(r => r.json()).then(d => setConnections(d.connections || [])).catch(() => {});
+    fetch('/connections').then(r => r.json()).then(d => setConnections(Object.values(d.connections || {}))).catch(() => {});
     fetch('/connections/index/status').then(r => r.json()).then(setIndexStatus).catch(() => {});
   }, []);
 
@@ -208,7 +209,7 @@ function ConnectionPicker({ value, query, onChangeConn, onChangeQuery }) {
   const [connections, setConnections] = useState([]);
   useEffect(() => {
     fetch('/connections').then(r => r.json()).then(d => {
-      const fetchable = (d.connections || []).filter(c =>
+      const fetchable = Object.values(d.connections || {}).filter(c =>
         c.enabled !== false && FETCHABLE_CONN_TYPES.has(c.id)
       );
       setConnections(fetchable);
@@ -333,8 +334,42 @@ function DocUploadModal({ onConfirm, onCancel }) {
   );
 }
 
+// ─── BranchStepList ───────────────────────────────────────────────────────────
+// Compact step list used inside if_else branches (avoids circular dep by
+// rendering StepEditor inline after its own declaration via a ref approach).
+// We keep it simple: just the step editors, no outer chrome.
+function BranchStepList({ steps, onChange }) {
+  const add = () => onChange([...steps, { id: `bs_${Date.now()}`, type: 'prompt', value: '' }]);
+  const remove = (i) => onChange(steps.filter((_, idx) => idx !== i));
+  const update = (i, s) => onChange(steps.map((x, idx) => idx === i ? s : x));
 
-function StepEditor({ step, index, total, onChange, onRemove, parentWfId }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {steps.map((s, i) => (
+        <StepEditor
+          key={s.id || i}
+          step={s}
+          index={i}
+          total={steps.length}
+          onChange={ns => update(i, ns)}
+          onRemove={() => remove(i)}
+          parentWfId={null}
+          compact
+        />
+      ))}
+      <button
+        type="button"
+        onClick={add}
+        style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7, border: '1px dashed rgba(196,164,74,0.3)', background: 'transparent', color: 'var(--color-sc-text-dim)', fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font-grotesk)' }}
+      >
+        <Plus size={10} /> Add step
+      </button>
+    </div>
+  );
+}
+
+
+function StepEditor({ step, index, total, onChange, onRemove, parentWfId, compact }) {
   const [showTypePicker, setShowTypePicker] = useState(false);
   const def = STEP_BY_ID[step.type] ?? STEP_TYPES[0];
   const { Icon } = def;
@@ -411,6 +446,37 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId }) {
             <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-sc-text-dim)' }}>
               The selected workflow will run with the current <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> as its starting context.
               Its final output becomes <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> for your next step.
+            </div>
+          </div>
+        ) : step.type === 'if_else' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Condition */}
+            <div>
+              <div style={{ fontSize: 11, fontFamily: 'var(--font-grotesk)', fontWeight: 600, color: 'var(--color-sc-text-muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Condition</div>
+              <textarea
+                value={step.condition || ''}
+                onChange={e => onChange({ ...step, condition: e.target.value })}
+                placeholder="Does the output mention a risk or warning?"
+                rows={2}
+                style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.55, fontFamily: 'var(--font-inter)', fontSize: 13 }}
+              />
+              <div style={{ fontSize: 11, color: 'var(--color-sc-text-dim)', marginTop: 3 }}>Oricli evaluates this as a yes/no question against the previous output.</div>
+            </div>
+            {/* Then branch */}
+            <div style={{ borderLeft: '2px solid rgba(74,196,74,0.35)', paddingLeft: 12 }}>
+              <div style={{ fontSize: 11, fontFamily: 'var(--font-grotesk)', fontWeight: 700, color: '#4ac44a', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>✓ If true</div>
+              <BranchStepList
+                steps={step.thenSteps || []}
+                onChange={ts => onChange({ ...step, thenSteps: ts })}
+              />
+            </div>
+            {/* Else branch */}
+            <div style={{ borderLeft: '2px solid rgba(196,74,74,0.35)', paddingLeft: 12 }}>
+              <div style={{ fontSize: 11, fontFamily: 'var(--font-grotesk)', fontWeight: 700, color: '#c44a4a', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>✗ If false <span style={{ fontWeight: 400, opacity: 0.7 }}>(optional)</span></div>
+              <BranchStepList
+                steps={step.elseSteps || []}
+                onChange={es => onChange({ ...step, elseSteps: es })}
+              />
             </div>
           </div>
         ) : step.type === 'rag_query' ? (
