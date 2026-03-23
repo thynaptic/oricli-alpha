@@ -1364,7 +1364,7 @@ def _wf_interpolate(text: str, context: dict) -> str:
     return _re.sub(r'\{\{([^}]+)\}\}', replacer, text or "")
 
 
-def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_prompt: str = "") -> dict:
+def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_prompt: str = "", _sub_depth: int = 0) -> dict:
     """Execute one step. Returns {output, status, error}."""
     import httpx as _hx
 
@@ -1528,6 +1528,13 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
                 exec(step_input, safe_globals)  # noqa: S102
             result["output"] = buf.getvalue() or safe_globals.get("result", "(no output)")
 
+        elif step_type == "sub_workflow":
+            target_wf_id = step_input.strip() or step.get("workflowId", "")
+            if not target_wf_id:
+                raise ValueError("sub_workflow step requires a workflow ID")
+            child_output = _execute_sub_workflow(target_wf_id, context, _depth=_sub_depth)
+            result["output"] = child_output
+
         else:
             result["output"] = f"Unknown step type: {step_type}"
 
@@ -1537,6 +1544,49 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
         result["output"] = f"[Error in step: {exc}]"
 
     return result
+
+
+def _execute_sub_workflow(wf_id: str, initial_context: dict, _depth: int = 0) -> str:
+    """Run a sub-workflow synchronously and return its final output.
+
+    Cycles are prevented by a hard depth cap of 5. The parent's current
+    ``output`` is injected into the child's context so chaining works
+    without any extra config.
+    """
+    _MAX_DEPTH = 5
+    if _depth >= _MAX_DEPTH:
+        raise RuntimeError(f"Sub-workflow depth limit ({_MAX_DEPTH}) reached — possible cycle detected")
+
+    with _WF_LOCK:
+        workflows = _load_workflows()
+    wf = next((w for w in workflows if w["id"] == wf_id), None)
+    if not wf:
+        raise ValueError(f"Sub-workflow not found: {wf_id}")
+
+    steps = wf.get("steps", [])
+    system_prompt = ""
+    agent_id = wf.get("agentId")
+    if agent_id:
+        ori_path = Path(__file__).parent / "oricli_core" / "skills" / f"{agent_id}.ori"
+        if ori_path.exists():
+            parsed = _parse_ori(agent_id, ori_path.read_text(encoding="utf-8"))
+            system_prompt = parsed.get("systemPrompt", "")
+
+    # Seed child context with parent's current output
+    context: dict = dict(initial_context)
+    context.setdefault("output", "")
+
+    for idx, step in enumerate(steps):
+        # Propagate depth so nested sub_workflow steps also respect the cap
+        step_result = _execute_step(step, context, run_id="sub", step_idx=idx,
+                                    system_prompt=system_prompt, _sub_depth=_depth + 1)
+        context["output"] = step_result["output"]
+        context[f"step_{idx}_output"] = step_result["output"]
+        context[f"step_{idx + 1}_input"] = step_result["output"]
+        if step_result["status"] == "error" and step.get("haltOnError", True):
+            raise RuntimeError(step_result["error"] or "Sub-workflow step failed")
+
+    return context.get("output", "")
 
 
 def _run_workflow_job(wf_id: str, run_id: str) -> None:
