@@ -21,6 +21,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/core/store/memory"
 	"github.com/thynaptic/oricli-go/pkg/kernel"
 	"github.com/thynaptic/oricli-go/pkg/node"
+	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 )
@@ -137,6 +138,7 @@ func main() {
 	// Initialize GoalService + GoalExecutor (DAG Autonomous Execution)
 	goalDataPath := "/home/mike/Mavaia/.oricli/global_objectives.jsonl"
 	goalService := service.NewGoalService(goalDataPath)
+	goalService.PBClient = pb.NewClientFromEnv()
 	goalExecutor := service.NewGoalExecutor(goalService, nil, 30*time.Second) // Router injected below
 	log.Println("[Boot] DAG GoalService initialized.")
 	reform := service.NewReformDaemon(traceStore, codeMetrics, genService, nil)

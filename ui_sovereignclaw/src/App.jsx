@@ -12,6 +12,7 @@ import { MCPPage } from './pages/MCPPage';
 import { ConnectionsPage } from './pages/ConnectionsPage';
 import { LogsPage } from './pages/LogsPage';
 import { MemoryBrowser } from './pages/MemoryBrowser';
+import { GoalsPage } from './pages/GoalsPage';
 import { SettingsPanel } from './components/SettingsPanel';
 
 // ── ERI state → accent color mapping (mirrors Go sensory.go KosmicColor palette) ──
@@ -76,6 +77,7 @@ export default function App() {
       {activePage === 'connections'  && <ConnectionsPage />}
       {activePage === 'logs'         && <LogsPage />}
       {activePage === 'memory'       && <MemoryBrowser />}
+      {activePage === 'goals'        && <GoalsPage />}
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>

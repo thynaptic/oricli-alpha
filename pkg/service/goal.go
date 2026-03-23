@@ -2,12 +2,14 @@ package service
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
 )
 
 type GoalStatus string
@@ -53,6 +55,7 @@ func (o *Objective) IsReady(all []Objective) bool {
 
 type GoalService struct {
 	FilePath string
+	PBClient *pb.Client
 	mu       sync.Mutex
 }
 
@@ -63,13 +66,99 @@ func NewGoalService(path string) *GoalService {
 	return &GoalService{FilePath: path}
 }
 
+func (s *GoalService) pbAvailable() bool {
+	return s.PBClient != nil && s.PBClient.IsConfigured()
+}
+
+// pbItemToObjective converts a PocketBase response item map to an Objective.
+func pbItemToObjective(item map[string]any) Objective {
+	obj := Objective{}
+
+	if v, ok := item["goal_id"].(string); ok {
+		obj.ID = v
+	}
+	if v, ok := item["goal"].(string); ok {
+		obj.Goal = v
+	}
+	if v, ok := item["status"].(string); ok {
+		obj.Status = GoalStatus(v)
+	}
+	if v, ok := item["created"].(string); ok {
+		obj.CreatedAt = v
+	}
+	if v, ok := item["updated"].(string); ok {
+		obj.UpdatedAt = v
+	}
+	if v, ok := item["priority"]; v != nil && ok {
+		switch n := v.(type) {
+		case float64:
+			obj.Priority = int(n)
+		case int:
+			obj.Priority = n
+		}
+	}
+	if v, ok := item["progress"]; v != nil && ok {
+		if n, ok := v.(float64); ok {
+			obj.Progress = n
+		}
+	}
+	if v, ok := item["retry_count"]; v != nil && ok {
+		if n, ok := v.(float64); ok {
+			obj.RetryCount = int(n)
+		}
+	}
+
+	// depends_on comes back as interface{} from JSON — re-marshal to typed []string
+	if raw, ok := item["depends_on"]; ok && raw != nil {
+		b, _ := json.Marshal(raw)
+		var deps []string
+		if json.Unmarshal(b, &deps) == nil {
+			obj.DependsOn = deps
+		}
+	}
+
+	// metadata: same treatment
+	if raw, ok := item["metadata"]; ok && raw != nil {
+		b, _ := json.Marshal(raw)
+		var meta map[string]interface{}
+		if json.Unmarshal(b, &meta) == nil {
+			obj.Metadata = meta
+		}
+	}
+
+	return obj
+}
+
 func (s *GoalService) AddObjective(goal string, priority int, metadata map[string]interface{}) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	id := uuid.New().String()[:8]
 	now := time.Now().Format(time.RFC3339)
-	
+
+	if s.pbAvailable() {
+		depsJSON, _ := json.Marshal([]string{})
+		metaJSON, _ := json.Marshal(metadata)
+		_ = depsJSON
+		_ = metaJSON
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, err := s.PBClient.CreateRecord(ctx, "sovereign_goals", map[string]any{
+			"goal_id":     id,
+			"goal":        goal,
+			"priority":    priority,
+			"status":      string(GoalPending),
+			"depends_on":  []string{},
+			"retry_count": 0,
+			"progress":    0.0,
+			"metadata":    metadata,
+		})
+		if err == nil {
+			return id, nil
+		}
+		// fall through to JSONL on PB error
+	}
+
 	obj := Objective{
 		ID:        id,
 		Goal:      goal,
@@ -103,6 +192,25 @@ func (s *GoalService) ListObjectives(status string) ([]Objective, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.pbAvailable() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		filter := ""
+		if status != "" {
+			filter = "status='" + status + "'"
+		}
+		result, err := s.PBClient.QueryRecords(ctx, "sovereign_goals", filter, "-created", 500)
+		if err == nil {
+			objectives := make([]Objective, 0, len(result.Items))
+			for _, item := range result.Items {
+				objectives = append(objectives, pbItemToObjective(item))
+			}
+			return objectives, nil
+		}
+		// fall through to JSONL
+	}
+
 	f, err := os.Open(s.FilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -134,6 +242,25 @@ func (s *GoalService) AddObjectiveWithDeps(goal string, priority int, metadata m
 
 	id := uuid.New().String()[:8]
 	now := time.Now().Format(time.RFC3339)
+
+	if s.pbAvailable() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, err := s.PBClient.CreateRecord(ctx, "sovereign_goals", map[string]any{
+			"goal_id":     id,
+			"goal":        goal,
+			"priority":    priority,
+			"status":      string(GoalPending),
+			"depends_on":  dependsOn,
+			"retry_count": 0,
+			"progress":    0.0,
+			"metadata":    metadata,
+		})
+		if err == nil {
+			return id, nil
+		}
+		// fall through to JSONL
+	}
 
 	obj := Objective{
 		ID:        id,
@@ -169,6 +296,20 @@ func (s *GoalService) GetObjective(id string) (*Objective, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.pbAvailable() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		result, err := s.PBClient.QueryRecords(ctx, "sovereign_goals", "goal_id='"+id+"'", "", 1)
+		if err == nil {
+			if len(result.Items) > 0 {
+				obj := pbItemToObjective(result.Items[0])
+				return &obj, nil
+			}
+			return nil, nil
+		}
+		// fall through to JSONL
+	}
+
 	all, err := s.readAll()
 	if err != nil {
 		return nil, err
@@ -187,6 +328,23 @@ func (s *GoalService) UpdateObjective(id string, updates map[string]interface{})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.pbAvailable() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		result, err := s.PBClient.QueryRecords(ctx, "sovereign_goals", "goal_id='"+id+"'", "", 1)
+		if err == nil {
+			if len(result.Items) == 0 {
+				return false, nil
+			}
+			pbID, _ := result.Items[0]["id"].(string)
+			updates["updated_at"] = time.Now().Format(time.RFC3339)
+			if err := s.PBClient.UpdateRecord(ctx, "sovereign_goals", pbID, updates); err == nil {
+				return true, nil
+			}
+		}
+		// fall through to JSONL
+	}
+
 	all, err := s.readAll()
 	if err != nil {
 		return false, err
@@ -195,7 +353,6 @@ func (s *GoalService) UpdateObjective(id string, updates map[string]interface{})
 	found := false
 	for i, obj := range all {
 		if obj.ID == id {
-			// Apply updates
 			data, _ := json.Marshal(obj)
 			var m map[string]interface{}
 			json.Unmarshal(data, &m)
@@ -203,7 +360,7 @@ func (s *GoalService) UpdateObjective(id string, updates map[string]interface{})
 				m[k] = v
 			}
 			m["updated_at"] = time.Now().Format(time.RFC3339)
-			
+
 			var updatedObj Objective
 			updatedData, _ := json.Marshal(m)
 			json.Unmarshal(updatedData, &updatedObj)
@@ -223,6 +380,22 @@ func (s *GoalService) UpdateObjective(id string, updates map[string]interface{})
 func (s *GoalService) DeleteObjective(id string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.pbAvailable() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		result, err := s.PBClient.QueryRecords(ctx, "sovereign_goals", "goal_id='"+id+"'", "", 1)
+		if err == nil {
+			if len(result.Items) == 0 {
+				return false, nil
+			}
+			pbID, _ := result.Items[0]["id"].(string)
+			if err := s.PBClient.DeleteRecord(ctx, "sovereign_goals", pbID); err == nil {
+				return true, nil
+			}
+		}
+		// fall through to JSONL
+	}
 
 	all, err := s.readAll()
 	if err != nil {

@@ -16,6 +16,7 @@ func Bootstrap(ctx context.Context, c *Client) error {
 		knowledgeFragmentsSchema(),
 		spendLedgerSchema(),
 		conversationSummariesSchema(),
+		sovereignGoalsSchema(),
 	}
 
 	for _, schema := range collections {
@@ -192,6 +193,32 @@ func conversationSummariesSchema() CollectionSchema {
 				Name:    "embedding",
 				Type:    "json",
 				Options: map[string]any{"maxSize": 2000000},
+			},
+		},
+	}
+}
+
+// sovereignGoalsSchema stores the GoalService DAG objectives with full lifecycle fields.
+func sovereignGoalsSchema() CollectionSchema {
+	return CollectionSchema{
+		Name: "sovereign_goals",
+		Type: "base",
+		Schema: []FieldSchema{
+			{Name: "goal_id", Type: "text", Required: true, Options: map[string]any{"maxSize": 50}},
+			{Name: "goal", Type: "text", Required: true, Options: map[string]any{"maxSize": 2000}},
+			{Name: "priority", Type: "number"},
+			{Name: "status", Type: "text", Required: true, Options: map[string]any{"maxSize": 20}},
+			{
+				Name:    "depends_on",
+				Type:    "json",
+				Options: map[string]any{"maxSize": 5000},
+			},
+			{Name: "retry_count", Type: "number"},
+			{Name: "progress", Type: "number"},
+			{
+				Name:    "metadata",
+				Type:    "json",
+				Options: map[string]any{"maxSize": 10000},
 			},
 		},
 	}

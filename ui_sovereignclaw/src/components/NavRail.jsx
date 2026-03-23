@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSCStore } from '../store';
-import { MessageSquare, Bot, User, GitBranch, Layers, Settings, Microscope, Plug, Cable, ScrollText, Brain } from 'lucide-react';
+import { MessageSquare, Bot, User, GitBranch, Layers, Settings, Microscope, Plug, Cable, ScrollText, Brain, Target } from 'lucide-react';
 import { resolveEriTheme } from '../App';
 
 const NAV_ITEMS = [
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { id: 'mcp',         Icon: Plug,          label: 'MCP' },
   { id: 'connections', Icon: Cable,          label: 'Connect' },
   { id: 'memory',      Icon: Brain,         label: 'Memory' },
+  { id: 'goals',       Icon: Target,        label: 'Goals' },
   { id: 'logs',        Icon: ScrollText,    label: 'Logs' },
 ];
 

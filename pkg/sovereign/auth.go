@@ -4,18 +4,19 @@
 //	Level 1 (ADMIN)  — elevated chat: full technical detail, no response softening
 //	Level 2 (EXEC)   — all of Level 1 plus safe allowlisted system commands
 //
-// Keys are stored ONLY as bcrypt hashes in env vars:
+// Plain-text keys are loaded from env vars at startup:
 //
-//	SOVEREIGN_ADMIN_KEY_HASH
-//	SOVEREIGN_EXEC_KEY_HASH
+//	SOVEREIGN_ADMIN_KEY
+//	SOVEREIGN_EXEC_KEY
 //
-// The raw keys are never persisted — they are printed once by --gen-keys and then
-// only live in the operator's password manager.
+// Keys are compared with constant-time equality. Set them in .env — the
+// systemd unit loads that file via EnvironmentFile=.
 package sovereign
 
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -23,8 +24,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -54,11 +53,11 @@ type SovereignAuth struct {
 	sessions map[string]*SovereignSession // sessionKey → session
 	fails    map[string]*failRecord        // ip → fail record
 
-	adminHash []byte
-	execHash  []byte
+	adminKey []byte
+	execKey  []byte
 }
 
-// NewSovereignAuth loads key hashes from env and returns a ready auth manager.
+// NewSovereignAuth loads plain-text keys from env and returns a ready auth manager.
 // If the env vars are not set, owner auth is effectively disabled (no key matches).
 func NewSovereignAuth() *SovereignAuth {
 	sa := &SovereignAuth{
@@ -66,22 +65,22 @@ func NewSovereignAuth() *SovereignAuth {
 		fails:    make(map[string]*failRecord),
 	}
 
-	if h := os.Getenv("SOVEREIGN_ADMIN_KEY_HASH"); h != "" {
-		sa.adminHash = []byte(h)
+	if k := strings.TrimSpace(os.Getenv("SOVEREIGN_ADMIN_KEY")); k != "" {
+		sa.adminKey = []byte(k)
 	}
-	if h := os.Getenv("SOVEREIGN_EXEC_KEY_HASH"); h != "" {
-		sa.execHash = []byte(h)
+	if k := strings.TrimSpace(os.Getenv("SOVEREIGN_EXEC_KEY")); k != "" {
+		sa.execKey = []byte(k)
 	}
 
-	if len(sa.adminHash) == 0 && len(sa.execHash) == 0 {
-		log.Println("[SovereignAuth] WARNING: no key hashes configured — owner auth disabled")
+	if len(sa.adminKey) == 0 && len(sa.execKey) == 0 {
+		log.Println("[SovereignAuth] WARNING: no keys configured — owner auth disabled")
 	}
 
 	go sa.gcLoop()
 	return sa
 }
 
-// Authenticate checks a raw key against stored hashes.
+// Authenticate checks a raw key against stored keys using constant-time comparison.
 // Returns the unlocked level (1=admin, 2=exec) or an error.
 func (sa *SovereignAuth) Authenticate(rawKey, sessionKey string) (int, error) {
 	sa.mu.Lock()
@@ -91,32 +90,28 @@ func (sa *SovereignAuth) Authenticate(rawKey, sessionKey string) (int, error) {
 		return 0, fmt.Errorf("too many failed attempts — try again in %s", lockoutDuration)
 	}
 
-	key := strings.TrimSpace(rawKey)
+	key := []byte(strings.TrimSpace(rawKey))
 
-	// Check exec first (higher privilege, separate key)
-	if len(sa.execHash) > 0 {
-		if err := bcrypt.CompareHashAndPassword(sa.execHash, []byte(key)); err == nil {
-			sa.clearFails(sessionKey)
-			sa.sessions[sessionKey] = &SovereignSession{
-				Level:     LevelExec,
-				ExpiresAt: time.Now().Add(sessionTTL),
-			}
-			log.Printf("[SovereignAuth] EXEC session established for %s", sessionKey)
-			return LevelExec, nil
+	// Check exec first (higher privilege)
+	if len(sa.execKey) > 0 && subtle.ConstantTimeCompare(sa.execKey, key) == 1 {
+		sa.clearFails(sessionKey)
+		sa.sessions[sessionKey] = &SovereignSession{
+			Level:     LevelExec,
+			ExpiresAt: time.Now().Add(sessionTTL),
 		}
+		log.Printf("[SovereignAuth] EXEC session established for %s", sessionKey)
+		return LevelExec, nil
 	}
 
 	// Check admin
-	if len(sa.adminHash) > 0 {
-		if err := bcrypt.CompareHashAndPassword(sa.adminHash, []byte(key)); err == nil {
-			sa.clearFails(sessionKey)
-			sa.sessions[sessionKey] = &SovereignSession{
-				Level:     LevelAdmin,
-				ExpiresAt: time.Now().Add(sessionTTL),
-			}
-			log.Printf("[SovereignAuth] ADMIN session established for %s", sessionKey)
-			return LevelAdmin, nil
+	if len(sa.adminKey) > 0 && subtle.ConstantTimeCompare(sa.adminKey, key) == 1 {
+		sa.clearFails(sessionKey)
+		sa.sessions[sessionKey] = &SovereignSession{
+			Level:     LevelAdmin,
+			ExpiresAt: time.Now().Add(sessionTTL),
 		}
+		log.Printf("[SovereignAuth] ADMIN session established for %s", sessionKey)
+		return LevelAdmin, nil
 	}
 
 	sa.recordFail(sessionKey)
@@ -143,14 +138,20 @@ func (sa *SovereignAuth) InvalidateSession(sessionKey string) {
 	log.Printf("[SovereignAuth] Session invalidated for %s", sessionKey)
 }
 
-// ScrubKey replaces the key argument in a /auth message with [REDACTED].
-// Call this before any log write or trace persist.
+// ScrubKey replaces the key argument in an auth command with [REDACTED].
+// Covers /admin, /exec, and the legacy /auth prefix.
 func ScrubKey(message string) string {
 	lower := strings.ToLower(strings.TrimSpace(message))
-	if !strings.HasPrefix(lower, "/auth ") {
-		return message
+	if strings.HasPrefix(lower, "/admin ") {
+		return "/admin [REDACTED]"
 	}
-	return "/auth [REDACTED]"
+	if strings.HasPrefix(lower, "/exec ") {
+		return "/exec [REDACTED]"
+	}
+	if strings.HasPrefix(lower, "/auth ") {
+		return "/auth [REDACTED]"
+	}
+	return message
 }
 
 // --- internal helpers ---
@@ -222,9 +223,9 @@ func GetSovereignLevel(ctx context.Context) int {
 
 // --- Key generation (called by --gen-keys CLI flag) ---
 
-// GenerateKeyPair generates two 32-byte hex keys and their bcrypt hashes.
-// Returns (adminKey, execKey, adminHash, execHash).
-func GenerateKeyPair() (adminKey, execKey, adminHash, execHash string, err error) {
+// GenerateKeyPair generates two 32-byte hex keys for SOVEREIGN_ADMIN_KEY and SOVEREIGN_EXEC_KEY.
+// Returns (adminKey, execKey) — set these directly in .env.
+func GenerateKeyPair() (adminKey, execKey string, err error) {
 	aRaw := make([]byte, 32)
 	eRaw := make([]byte, 32)
 
@@ -237,19 +238,5 @@ func GenerateKeyPair() (adminKey, execKey, adminHash, execHash string, err error
 
 	adminKey = hex.EncodeToString(aRaw)
 	execKey = hex.EncodeToString(eRaw)
-
-	aHash, e := bcrypt.GenerateFromPassword([]byte(adminKey), bcrypt.DefaultCost)
-	if e != nil {
-		err = e
-		return
-	}
-	eHash, e := bcrypt.GenerateFromPassword([]byte(execKey), bcrypt.DefaultCost)
-	if e != nil {
-		err = e
-		return
-	}
-
-	adminHash = string(aHash)
-	execHash = string(eHash)
 	return
 }

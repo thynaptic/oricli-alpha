@@ -39,9 +39,10 @@ type CuriosityEvent struct {
 // CuriositySeed is a topic extracted from a conversation that warrants research.
 type CuriositySeed struct {
 	Topic    string
-	Source   string // e.g. "conversation", "graph_gap"
+	Source   string // e.g. "conversation", "graph_gap", "hypothesis"
 	Priority float64
 	AddedAt  time.Time
+	Depth    int // hypothesis hop count; 0 = ground truth, ≥2 = capped
 }
 
 // CuriosityDaemon accumulates seeds from conversations and forages during idle periods.
@@ -206,7 +207,7 @@ func (d *CuriosityDaemon) runBurst(ctx context.Context) {
 		if seed == nil {
 			break
 		}
-		d.forageTopic(ctx, seed.Topic)
+		d.forageTopic(ctx, seed.Topic, seed.Depth)
 		processed++
 	}
 
@@ -220,7 +221,7 @@ func (d *CuriosityDaemon) runBurst(ctx context.Context) {
 		if d.interrupted(ctx) {
 			break
 		}
-		d.forageTopic(ctx, gap.Label)
+		d.forageTopic(ctx, gap.Label, 0)
 		processed++
 		// Small pause between gap fills to avoid hammering search
 		time.Sleep(3 * time.Second)
@@ -262,7 +263,8 @@ func (d *CuriosityDaemon) popSeed() *CuriositySeed {
 }
 
 // forageTopic researches a single topic: search → scrape → extract → commit.
-func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string) {
+// depth tracks how many hypothesis hops removed from ground truth this topic is.
+func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string, depth int) {
 	// Novelty cap: skip topics we already have ≥3 knowledge fragments for.
 	// This prevents the synthetic echo-chamber — Oricli must explore new territory.
 	if d.MemoryBank != nil {
@@ -397,6 +399,94 @@ func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string) {
 	// Persist finding to PocketBase long-term memory bank (async, non-blocking)
 	if d.MemoryBank != nil {
 		d.MemoryBank.WriteKnowledgeFragment(topic, string(intent), factSummary, 0.7)
+	}
+
+	// Hypothesis Engine: generate follow-up questions from what we just learned.
+	// This closes the active inference loop — Oricli seeds her own future research.
+	// Depth cap prevents infinite synthetic loops (max 2 hypothesis hops from ground truth).
+	go d.generateHypotheses(ctx, topic, factSummary, depth)
+}
+
+// generateHypotheses asks the LLM what it still doesn't know after learning factSummary,
+// then seeds those questions back into the research queue — closing the active inference loop.
+func (d *CuriosityDaemon) generateHypotheses(ctx context.Context, topic, factSummary string, depth int) {
+	// Hard cap: never generate hypotheses from hypothesis-derived knowledge
+	if depth >= 2 {
+		return
+	}
+	if d.Gen == nil {
+		return
+	}
+
+	prompt := fmt.Sprintf(
+		"You just learned the following about \"%s\":\n\n%s\n\n"+
+			"Based only on what is stated above, list exactly 2 specific questions you cannot yet answer about this topic. "+
+			"Each question must start with '?' on its own line. Be concrete and researchable. No preamble.",
+		topic, factSummary,
+	)
+
+	genCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	res, err := d.Gen.Generate(prompt, map[string]interface{}{
+		"model": "ministral-3:3b",
+		"options": map[string]interface{}{
+			"num_predict": 150,
+			"num_ctx":     2048,
+			"temperature": 0.4,
+		},
+	})
+	if err != nil {
+		return
+	}
+	_ = genCtx
+
+	text, _ := res["text"].(string)
+	var hypotheses []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "?") {
+			q := strings.TrimSpace(strings.TrimPrefix(line, "?"))
+			if len(q) > 10 && len(q) < 200 {
+				hypotheses = append(hypotheses, q)
+			}
+		}
+	}
+	if len(hypotheses) == 0 {
+		return
+	}
+
+	added := 0
+	for _, h := range hypotheses {
+		if added >= 2 {
+			break
+		}
+		// Novelty cap: don't add hypothesis if we already have fragments for it
+		if d.MemoryBank != nil {
+			count := d.MemoryBank.KnowledgeCount(ctx, h)
+			if count >= 3 {
+				continue
+			}
+		}
+		d.seedMu.Lock()
+		d.seeds = append(d.seeds, CuriositySeed{
+			Topic:   h,
+			Source:  "hypothesis",
+			Depth:   depth + 1,
+			AddedAt: time.Now(),
+		})
+		d.seedMu.Unlock()
+		log.Printf("[CuriosityDaemon] Hypothesis seeded: %q (depth=%d)", h, depth+1)
+		added++
+	}
+
+	if d.WSHub != nil && added > 0 {
+		d.WSHub.BroadcastEvent("curiosity_sync", CuriosityEvent{
+			TargetEntity: topic,
+			Intent:       "hypothesis",
+			Action:       "seeded",
+			Findings:     strings.Join(hypotheses[:added], " | "),
+		})
 	}
 }
 

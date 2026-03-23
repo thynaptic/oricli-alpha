@@ -147,6 +147,10 @@ func NewMemoryBank() *MemoryBank {
 // IsEnabled returns true if PocketBase credentials are configured.
 func (m *MemoryBank) IsEnabled() bool { return m.enabled }
 
+func (m *MemoryBank) GetAdminClient() *pb.Client {
+	return m.adminClient
+}
+
 // Bootstrap creates all required PocketBase collections on first run,
 // and ensures Oricli's analyst account exists.
 // Safe to call every startup — skips existing collections/users.

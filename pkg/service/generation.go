@@ -205,7 +205,11 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 
 	// Route code/research tiers to RunPod when enabled — Ollama is fallback
 	if (useResearch || useCode) && s.RunPodMgr != nil && s.RunPodMgr.IsEnabled() {
-		ch, err := s.RunPodMgr.ChatStream(ctx, messages, options)
+		tier := "code"
+		if useResearch {
+			tier = "research"
+		}
+		ch, err := s.RunPodMgr.ChatStream(ctx, messages, options, tier)
 		if err != nil {
 			log.Printf("[GenerationService] RunPod unavailable (%v) — falling back to Ollama", err)
 		} else {

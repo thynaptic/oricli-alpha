@@ -2460,6 +2460,85 @@ def proxy_memories_knowledge() -> Response:
     except Exception as exc:
         return jsonify({"error": str(exc), "items": [], "total": 0}), 502
 
+
+@app.route("/api/v1/goals", methods=["GET"])
+def proxy_goals_list() -> Response:
+    """Proxy GET /api/v1/goals → backbone /v1/goals."""
+    try:
+        with _client() as client:
+            r = client.get(
+                f"{_BACKBONE_URL}/v1/goals",
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                params=request.args,
+                timeout=10,
+            )
+            return jsonify(r.json())
+    except Exception as exc:
+        return jsonify({"error": str(exc), "goals": [], "count": 0}), 502
+
+
+@app.route("/api/v1/goals", methods=["POST"])
+def proxy_goals_create() -> Response:
+    """Proxy POST /api/v1/goals → backbone /v1/goals."""
+    try:
+        with _client() as client:
+            r = client.post(
+                f"{_BACKBONE_URL}/v1/goals",
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}", "Content-Type": "application/json"},
+                json=request.get_json(),
+                timeout=10,
+            )
+            return jsonify(r.json()), r.status_code
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/api/v1/goals/<goal_id>", methods=["PUT"])
+def proxy_goals_update(goal_id: str) -> Response:
+    """Proxy PUT /api/v1/goals/:id → backbone /v1/goals/:id."""
+    try:
+        with _client() as client:
+            r = client.put(
+                f"{_BACKBONE_URL}/v1/goals/{goal_id}",
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}", "Content-Type": "application/json"},
+                json=request.get_json(),
+                timeout=10,
+            )
+            return jsonify(r.json()), r.status_code
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/api/v1/goals/<goal_id>", methods=["DELETE"])
+def proxy_goals_delete(goal_id: str) -> Response:
+    """Proxy DELETE /api/v1/goals/:id → backbone /v1/goals/:id."""
+    try:
+        with _client() as client:
+            r = client.delete(
+                f"{_BACKBONE_URL}/v1/goals/{goal_id}",
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                timeout=10,
+            )
+            return jsonify(r.json()), r.status_code
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/api/v1/daemons", methods=["GET"])
+def proxy_daemons() -> Response:
+    """Proxy GET /api/v1/daemons → backbone /v1/daemons."""
+    try:
+        with _client() as client:
+            r = client.get(
+                f"{_BACKBONE_URL}/v1/daemons",
+                headers={"Authorization": f"Bearer {_BACKBONE_KEY}"},
+                timeout=10,
+            )
+            return jsonify(r.json())
+    except Exception as exc:
+        return jsonify({"error": str(exc), "daemons": []}), 502
+
+
 @app.route("/logs/traces")
 def logs_traces() -> Response:
     limit = request.args.get("limit", "50")

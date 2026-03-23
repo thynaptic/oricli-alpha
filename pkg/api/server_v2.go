@@ -194,6 +194,7 @@ func (s *ServerV2) setupRoutes() {
 		protected.POST("/goals", s.handleCreateGoal)
 		protected.PUT("/goals/:id", s.handleUpdateGoal)
 		protected.DELETE("/goals/:id", s.handleDeleteGoal)
+		protected.GET("/daemons", s.handleDaemonHealth)
 
 		protected.GET("/memories", s.handleListMemories)
 		protected.GET("/memories/knowledge", s.handleListKnowledge)
@@ -930,4 +931,48 @@ c.JSON(http.StatusOK, gin.H{
 "page":    page,
 "perPage": perPage,
 })
+}
+
+// handleDaemonHealth returns live status of all autonomous background daemons.
+// Used by the Goals UI mission control panel to show what Oricli is currently doing.
+func (s *ServerV2) handleDaemonHealth(c *gin.Context) {
+type DaemonStatus struct {
+Name      string `json:"name"`
+Status    string `json:"status"`
+Detail    string `json:"detail,omitempty"`
+}
+
+var daemons []DaemonStatus
+
+// CuriosityDaemon
+if cd := s.ActionRouter.CuriosityDaemon; cd != nil {
+idle := cd.IdleSince()
+qDepth := cd.SeedQueueDepth()
+status := "idle"
+detail := fmt.Sprintf("idle for %s | %d seeds queued", idle.Round(time.Second), qDepth)
+if idle < 30*time.Second {
+status = "active"
+}
+daemons = append(daemons, DaemonStatus{Name: "CuriosityDaemon", Status: status, Detail: detail})
+}
+
+// GoalExecutor
+if s.GoalExecutor != nil {
+goals, _ := s.GoalService.ListObjectives("active")
+status := "idle"
+detail := "no active objectives"
+if len(goals) > 0 {
+status = "active"
+detail = fmt.Sprintf("executing: %q", goals[0].Goal)
+}
+daemons = append(daemons, DaemonStatus{Name: "GoalExecutor", Status: status, Detail: detail})
+}
+
+// ReformDaemon — always running (Reform is on SovEngine)
+daemons = append(daemons, DaemonStatus{Name: "ReformDaemon", Status: "running", Detail: "self-modification audit loop"})
+
+// DreamDaemon — always running
+daemons = append(daemons, DaemonStatus{Name: "DreamDaemon", Status: "running", Detail: "memory consolidation loop"})
+
+c.JSON(http.StatusOK, gin.H{"daemons": daemons})
 }
