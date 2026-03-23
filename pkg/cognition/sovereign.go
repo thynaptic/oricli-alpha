@@ -421,35 +421,49 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	return fmt.Sprintf("%s\n\n%s", finalTrace, stimulus), nil
 }
 
-// SelfAlign implements the SCAI Critique-Revision-Preference loop.
+// SelfAlign implements the SCAI Critique-Revision loop with contextual severity scaling.
+// Greetings/casual → skipped. Technical → local gates only. Sensitive ops → full LLM audit.
 func (e *SovereignEngine) SelfAlign(ctx context.Context, query, response string) (string, bool) {
-	log.Printf("[SCAI] Auditing response for Constitutional compliance...")
-	
-	critique, violated, err := e.SCAI.Critique(ctx, query, response)
-	if err != nil || !violated {
+	level := safety.ClassifyAuditLevel(query)
+
+	switch level {
+	case safety.AuditLevelNone:
+		log.Printf("[SCAI] Skipping audit (greeting/casual)")
 		return response, false
+
+	case safety.AuditLevelLight:
+		log.Printf("[SCAI] Light audit (local gates only)")
+		// AuditOutput already runs DID + WebGuard + Canary + Adversarial — no LLM needed
+		audited, blocked := e.AuditOutput(response)
+		return audited, blocked
+
+	default: // AuditLevelFull
+		log.Printf("[SCAI] Full audit (sensitive op)")
+		critique, violated, err := e.SCAI.Critique(ctx, query, response)
+		if err != nil || !violated {
+			return response, false
+		}
+
+		log.Printf("[SCAI] VIOLATION detected: %s. Initiating autonomous revision...", critique)
+
+		revised, err := e.SCAI.Revise(ctx, query, response, critique)
+		if err != nil {
+			return response, false
+		}
+
+		e.AlignmentLog.LogLesson(state.AlignmentLesson{
+			Prompt:   query,
+			Rejected: response,
+			Chosen:   revised,
+			Score:    -1.0,
+			Metadata: map[string]interface{}{
+				"critique": critique,
+				"version":  "v2.10.0",
+			},
+		})
+
+		return revised, true
 	}
-
-	log.Printf("[SCAI] VIOLATION detected: %s. Initiating autonomous revision...", critique)
-	
-	revised, err := e.SCAI.Revise(ctx, query, response, critique)
-	if err != nil {
-		return response, false
-	}
-
-	// Step 13: Log RFAL Lesson (DPO pair)
-	e.AlignmentLog.LogLesson(state.AlignmentLesson{
-		Prompt:   query,
-		Rejected: response,
-		Chosen:   revised,
-		Score:    -1.0, // Initial penalty for violation
-		Metadata: map[string]interface{}{
-			"critique": critique,
-			"version":  "v2.10.0",
-		},
-	})
-
-	return revised, true
 }
 
 func (e *SovereignEngine) AuditOutput(text string) (string, bool) {

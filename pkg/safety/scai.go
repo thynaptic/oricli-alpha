@@ -9,7 +9,65 @@ import (
 )
 
 // --- Pillar 40: Sovereign Constitutional AI (SCAI) Auditor ---
-// Implements the Critique-Revision loop for autonomous self-alignment.
+// Implements the Critique-Revision loop with contextual severity scaling.
+
+// AuditLevel controls how deeply SCAI audits a response.
+type AuditLevel int
+
+const (
+	AuditLevelNone  AuditLevel = iota // greetings / vibe — skip LLM audit entirely
+	AuditLevelLight                   // technical requests — local gates only, no LLM round-trip
+	AuditLevelFull                    // sensitive ops — full Critique + Revise loop
+)
+
+var greetingTokens = []string{
+	"sup", "hey", "hi", "hello", "howdy", "yo", "hiya",
+	"what's up", "whats up", "how are you", "how r you",
+	"good morning", "good evening", "good afternoon",
+	"morning", "evening", "night", "thanks", "thank you",
+	"thx", "ty", "np", "lol", "lmao", "haha", "ok", "okay",
+	"cool", "nice", "sounds good", "got it", "sure", "yep", "nope",
+}
+
+var sensitiveTokens = []string{
+	"password", "passwd", "secret", "api key", "apikey", "token",
+	"credential", "private key", "ssh", "sudo", "rm -rf", "chmod",
+	"deploy", "exec(", "eval(", "os.exec", "subprocess", "shell",
+	"drop table", "delete from", "truncate", "format disk",
+	"wallet", "seed phrase", "mnemonic", "exploit", "payload",
+	"inject", "bypass", "/etc/passwd", "/etc/shadow",
+}
+
+// ClassifyAuditLevel determines the audit tier from the user's query alone.
+// This runs locally with zero LLM calls — pure string heuristics.
+func ClassifyAuditLevel(query string) AuditLevel {
+	lower := strings.ToLower(strings.TrimSpace(query))
+
+	// Short casual messages are almost certainly greetings
+	wordCount := len(strings.Fields(lower))
+	if wordCount <= 6 {
+		for _, tok := range greetingTokens {
+			if strings.Contains(lower, tok) {
+				return AuditLevelNone
+			}
+		}
+	}
+
+	// Any sensitive signal → full audit regardless of length
+	for _, tok := range sensitiveTokens {
+		if strings.Contains(lower, tok) {
+			return AuditLevelFull
+		}
+	}
+
+	// Code blocks, system ops, or long technical content → full
+	if strings.Contains(lower, "```") || strings.Contains(lower, "curl ") ||
+		strings.Contains(lower, "systemctl") || strings.Contains(lower, "docker") {
+		return AuditLevelFull
+	}
+
+	return AuditLevelLight
+}
 
 type SCAIAuditor struct {
 	Constitution *Constitution
