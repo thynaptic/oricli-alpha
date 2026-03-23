@@ -339,8 +339,12 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 		return nil, nil
 	}
 
-	// Generate query embedding for cosine re-ranking
-	queryVec := m.embedder.Embed(ctx, query)
+	// Generate query embedding for cosine re-ranking.
+	// Use a fresh background context so a canceled request context doesn't
+	// abort the embed mid-flight and leave re-ranking skipped.
+	embedCtx, embedCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer embedCancel()
+	queryVec := m.embedder.Embed(embedCtx, query)
 
 	type scoredFrag struct {
 		frag  MemoryFragment

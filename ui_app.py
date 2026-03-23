@@ -621,9 +621,15 @@ def _llm_complete(messages: list, max_tokens: int = 2000, timeout: float = 120.0
                 timeout=timeout,
             )
             resp.raise_for_status()
+            raw = resp.text.strip()
+            if not raw:
+                return "[error: empty response from backbone]"
+            try:
+                data = resp.json()
+            except Exception:
+                return f"[error: invalid JSON from backbone: {raw[:200]}]"
             content = (
-                resp.json()
-                .get("choices", [{}])[0]
+                data.get("choices", [{}])[0]
                 .get("message", {})
                 .get("content", "")
             )
