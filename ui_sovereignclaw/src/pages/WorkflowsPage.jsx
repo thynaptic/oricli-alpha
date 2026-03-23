@@ -529,11 +529,12 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId, compac
 
 // ─── WorkflowCreator ─────────────────────────────────────────────────────────
 function WorkflowCreator({ onSave, onCancel, initial }) {
-  const [name, setName]         = useState(initial?.name || '');
-  const [desc, setDesc]         = useState(initial?.description || '');
-  const [agent, setAgent]       = useState(initial ? { id: initial.agentId, name: initial.agentName, emoji: initial.agentEmoji } : null);
-  const [steps, setSteps]       = useState(initial?.steps?.length ? initial.steps : [{ id: crypto.randomUUID(), type: 'prompt', label: '', value: '' }]);
-  const [saving, setSaving]     = useState(false);
+  const [name, setName]               = useState(initial?.name || '');
+  const [desc, setDesc]               = useState(initial?.description || '');
+  const [agent, setAgent]             = useState(initial ? { id: initial.agentId, name: initial.agentName, emoji: initial.agentEmoji } : null);
+  const [steps, setSteps]             = useState(initial?.steps?.length ? initial.steps : [{ id: crypto.randomUUID(), type: 'prompt', label: '', value: '' }]);
+  const [sendToCanvas, setSendToCanvas] = useState(!!initial?.sendToCanvas);
+  const [saving, setSaving]           = useState(false);
 
   function addStep() {
     setSteps(s => [...s, { id: crypto.randomUUID(), type: 'prompt', label: '', value: '' }]);
@@ -548,7 +549,7 @@ function WorkflowCreator({ onSave, onCancel, initial }) {
       const payload = {
         name: name.trim(), description: desc.trim(),
         agentId: agent?.id || null, agentName: agent?.name || 'Default', agentEmoji: agent?.emoji || '✨',
-        steps,
+        steps, sendToCanvas,
       };
       const method = initial?.id ? 'PUT' : 'POST';
       const url = initial?.id ? `/workflows/${initial.id}` : '/workflows';
@@ -592,6 +593,15 @@ function WorkflowCreator({ onSave, onCancel, initial }) {
       <button type="button" onClick={addStep} style={{ ...goldBtn, padding: '7px 14px', fontSize: 12, marginBottom: 20, background: 'transparent', border: '1px dashed rgba(196,164,74,0.3)' }}>
         <Plus size={12} /> Add step
       </button>
+
+      {/* Canvas output toggle */}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 9, border: `1px solid ${sendToCanvas ? 'rgba(196,164,74,0.4)' : 'var(--color-sc-border)'}`, background: sendToCanvas ? 'rgba(196,164,74,0.06)' : 'transparent', marginBottom: 16, transition: 'all 0.15s' }}>
+        <input type="checkbox" checked={sendToCanvas} onChange={e => setSendToCanvas(e.target.checked)} style={{ accentColor: 'var(--color-sc-gold)', width: 13, height: 13, flexShrink: 0 }} />
+        <div>
+          <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600, color: sendToCanvas ? 'var(--color-sc-gold)' : 'var(--color-sc-text)' }}>Send output to Canvas</div>
+          <div style={{ fontSize: 11, color: 'var(--color-sc-text-dim)' }}>When the workflow finishes, the final output opens as a Canvas document</div>
+        </div>
+      </label>
 
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
         <button onClick={onCancel} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--color-sc-border)', background: 'transparent', color: 'var(--color-sc-text-muted)', cursor: 'pointer', fontFamily: 'var(--font-inter)', fontSize: 13 }}>Cancel</button>
@@ -927,7 +937,7 @@ function WorkflowsTab({ creating, setCreating }) {
     try {
       const res  = await fetch(`/workflows/${wf.id}/run`, { method: 'POST' });
       const data = await res.json();
-      startBgRun(data.run_id, wf.id);
+      startBgRun(data.run_id, wf.id, { sendToCanvas: !!wf.sendToCanvas, wfName: wf.name });
     } catch (e) {
       console.error('Failed to start workflow:', e);
     }
@@ -943,7 +953,7 @@ function WorkflowsTab({ creating, setCreating }) {
         body: JSON.stringify({ doc_text: text, doc_filename: filename, save_to_memory: saveToMemory }),
       });
       const data = await res.json();
-      startBgRun(data.run_id, wf.id);
+      startBgRun(data.run_id, wf.id, { sendToCanvas: !!wf.sendToCanvas, wfName: wf.name });
     } catch (e) {
       console.error('Failed to start workflow with doc:', e);
     }
@@ -952,9 +962,10 @@ function WorkflowsTab({ creating, setCreating }) {
   async function handleRerun(wfId, oldRunId) {
     try {
       dismissBgRun(oldRunId);
+      const wf = workflows.find(w => w.id === wfId);
       const res  = await fetch(`/workflows/${wfId}/run`, { method: 'POST' });
       const data = await res.json();
-      startBgRun(data.run_id, wfId);
+      startBgRun(data.run_id, wfId, { sendToCanvas: !!wf?.sendToCanvas, wfName: wf?.name });
     } catch {}
   }
 

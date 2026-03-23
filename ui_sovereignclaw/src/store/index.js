@@ -166,10 +166,10 @@ export const useSCStore = create((set, get) => ({
   setActivePage(page) { set({ activePage: page }); },
 
   // ── Background Workflow Runs (persists across page navigation) ────────────
-  // { [runId]: { runId, wfId, startedAt, run: {...}|null, error: str|null } }
+  // { [runId]: { runId, wfId, startedAt, run: {...}|null, error: str|null, sendToCanvas: bool } }
   bgRuns: {},
-  startBgRun(runId, wfId) {
-    set(state => ({ bgRuns: { ...state.bgRuns, [runId]: { runId, wfId, startedAt: Date.now(), run: null, error: null } } }));
+  startBgRun(runId, wfId, opts = {}) {
+    set(state => ({ bgRuns: { ...state.bgRuns, [runId]: { runId, wfId, startedAt: Date.now(), run: null, error: null, sendToCanvas: !!opts.sendToCanvas, wfName: opts.wfName || '' } } }));
   },
   updateBgRun(runId, run) {
     set(state => state.bgRuns[runId] ? { bgRuns: { ...state.bgRuns, [runId]: { ...state.bgRuns[runId], run } } } : state);
@@ -513,9 +513,24 @@ export function connectHiveWS() {
 // ── Global workflow run poller ──────────────────────────────────────────────
 // Runs independently of page/component lifecycle — survives navigation.
 setInterval(() => {
-  const { bgRuns, updateBgRun } = useSCStore.getState();
-  Object.values(bgRuns).forEach(({ runId, run }) => {
-    if (run?.status === 'done' || run?.status === 'error') return;
+  const { bgRuns, updateBgRun, addCanvasDoc, setActivePage } = useSCStore.getState();
+  Object.values(bgRuns).forEach(({ runId, run, sendToCanvas, wfName, _canvasPushed }) => {
+    if (run?.status === 'done' || run?.status === 'error') {
+      // Push final output to Canvas once when run completes
+      if (sendToCanvas && run?.status === 'done' && run?.final_output && !_canvasPushed) {
+        useSCStore.setState(state => ({
+          bgRuns: { ...state.bgRuns, [runId]: { ...state.bgRuns[runId], _canvasPushed: true } },
+        }));
+        addCanvasDoc({
+          name: wfName ? `${wfName} — Output` : 'Workflow Output',
+          type: 'markdown',
+          language: 'markdown',
+          content: run.final_output,
+        });
+        setActivePage('canvas');
+      }
+      return;
+    }
     fetch(`/workflows/runs/${runId}`)
       .then(r => r.json())
       .then(data => updateBgRun(runId, data))
