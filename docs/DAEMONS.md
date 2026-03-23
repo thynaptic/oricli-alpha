@@ -141,16 +141,27 @@ Highest-scoring entity forages first — critical unknowns resolved before low-i
 | `COMPARATIVE` | "vs", "difference between", "compare" | Dual-source lookup | general |
 | `PROCEDURAL` | "how to", "steps to", "guide for" | `how to {topic} guide` | general |
 
-### PocketBase Persistence
+### PocketBase Persistence & Novelty Cap
 
 After each `forageTopic()` commit, findings are written to PocketBase `knowledge_fragments` under Oricli's analyst account:
 
 ```go
 MemoryBank.WriteKnowledgeFragment(topic, intent, factSummary, 0.7)
-// → author: "oricli", collection: knowledge_fragments
+// → author: "oricli", provenance: "synthetic_l1", lineage_depth: 1
+// → topic_volatility: inferred from topic keywords (stable|current|ephemeral)
 ```
 
 On the next burst start, these are pre-loaded and marked as `seenKeys` — Oricli never re-researches a topic she already knows across sessions.
+
+**Novelty cap — anti-echo-chamber guard:** Before any web search begins, `forageTopic()` checks `MemoryBank.KnowledgeCount(ctx, topic)`. If the topic already has **≥3 knowledge fragments** stored in PocketBase, the forage is skipped entirely. This prevents Oricli from deepening synthetic knowledge wells about the same topics instead of exploring genuinely new territory. The cap is enforced across sessions.
+
+```
+forageTopic("quantum computing")
+    KnowledgeCount("quantum computing") → 3
+    → SKIP — novelty cap reached, pick next seed
+```
+
+→ Full rationale: **`docs/EPISTEMIC_HYGIENE.md`**
 
 **Supporting service:** `SearXNGSearcher` (`pkg/service/searxng_searcher.go`). Health-checks `127.0.0.1:8080/healthz` with 30s TTL cache. SearXNG runs as `oricli-searxng` Docker container.
 

@@ -163,27 +163,30 @@ The account is auto-created by `Bootstrap()` on first startup if it doesn't alre
 
 ### 7.4 RAG Injection
 
-Before every chat response, `MemoryBank.QuerySimilar(lastUserMsg, 5)` fires a keyword/topic match query against the `memories` collection. If relevant results are found, they are prepended to the system prompt as a `## Relevant Memory Context` block (capped at 1200 chars):
+Before every chat response, `MemoryBank.QuerySimilar(lastUserMsg, 5)` queries the `memories` collection. The retrieval pipeline is:
 
-```
-## Relevant Memory Context
-- [golang] Oricli researched goroutine scheduler internals on 2026-03-10
-- [runpod] Inference pod idle timeout is 15 minutes by default
----
-<sovereign trace>
-```
+1. **Keyword pre-filter** — `topic ~ "..." || content ~ "..."` → up to 50 candidates
+2. **Semantic re-ranking** — cosine similarity via `nomic-embed-text` embeddings
+3. **Provenance weighting** — each result's score is multiplied by its `provenance` weight (see §7.9)
+4. **Anchor injection** — `user_stated` memories are always surfaced first (score + 10.0 bonus)
 
-This gives every response long-horizon grounding without embedding infrastructure.
+Results are prepended to the system prompt as a `## Relevant Memory Context` block (capped at 1200 chars).
 
 ### 7.5 Memory Recycling
 
-When record count in `memories` exceeds `PB_MEMORY_MAX_RECORDS` (default: 500,000), the bottom 10% by retention score is pruned:
+When record count in `memories` exceeds `PB_MEMORY_MAX_RECORDS` (default: 500,000), the bottom 10% by retention score is pruned. The retention formula uses a **per-record half-life** based on `topic_volatility`:
 
 ```
-retention_score = importance × log(1 + access_count) × e^(-age_days / 180)
+retention_score = importance × log(1 + access_count) × e^(-age_days / half_life)
 ```
 
-Frequently accessed, high-importance memories survive indefinitely. Old, never-accessed memories decay out naturally.
+| `topic_volatility` | Half-Life |
+|---|---|
+| `stable` | 180 days |
+| `current` | 30 days |
+| `ephemeral` | 7 days |
+
+`user_stated` anchors return `+Inf` and are **never pruned**. See §7.9 for the full epistemic hygiene system.
 
 ### 7.6 Spend Ledger
 
@@ -196,6 +199,19 @@ Frequently accessed, high-importance memories survive indefinitely. Old, never-a
 1. Creates all 4 collections if they don't exist (idempotent)
 2. Creates Oricli's analyst user account if it doesn't exist
 3. Logs each action — silent on repeat boots
+4. Runs `MigrateEpistemicFields()` — patches existing collections with epistemic hygiene fields (idempotent)
+
+### 7.9 Epistemic Hygiene
+
+A self-learning system that writes its own memories can develop a synthetic data feedback loop — reasoning increasingly within its own fiction. Three interlocking mechanisms prevent this:
+
+**Provenance** — every memory record carries a `provenance` field declaring origin quality. `user_stated` memories are immortal anchors; `synthetic_l1` (curiosity findings) and `synthetic_l2+` (derived from another synthetic record) carry reduced RAG weights.
+
+**Volatility-aware decay** — `topic_volatility` controls the decay half-life: 7 days for ephemeral topics (prices, news), 30 days for current tech, 180 days for stable fundamentals.
+
+**Novelty cap** — CuriosityDaemon enforces a maximum of 3 knowledge fragments per topic across all sessions. A 4th forage attempt is silently skipped — Oricli must keep exploring new territory.
+
+→ Full reference: **`docs/EPISTEMIC_HYGIENE.md`**
 
 ### 7.8 Environment Variables
 

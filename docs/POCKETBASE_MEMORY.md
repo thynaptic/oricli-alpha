@@ -50,7 +50,10 @@ Conversation fragments and research snippets. The primary RAG source.
 | `importance` | number | 0.0–1.0 weight for retention scoring |
 | `access_count` | number | How many times this memory was retrieved |
 | `last_accessed` | text | ISO8601 timestamp of last retrieval |
-| `embedding` | json | (Future) float32 vector for semantic search |
+| `provenance` | text | Origin quality: `user_stated` \| `web_verified` \| `conversation` \| `synthetic_l1` \| `synthetic_l2+` |
+| `topic_volatility` | text | Decay class: `stable` \| `current` \| `ephemeral` |
+| `lineage_depth` | number | Synthetic hops from ground truth (0=direct, 1=curiosity, 2+=derived) |
+| `embedding` | json | float32 vector for semantic search (nomic-embed-text, 768-dim) |
 
 ### `knowledge_fragments`
 CuriosityDaemon research findings. One entry per forged topic. Always authored by Oricli.
@@ -63,7 +66,10 @@ CuriosityDaemon research findings. One entry per forged topic. Always authored b
 | `author` | text | Always `"oricli"` |
 | `importance` | number | 0.7 default (curiosity-derived) |
 | `access_count` | number | Retrieval count |
-| `embedding` | json | (Future) float32 vector |
+| `provenance` | text | Always `"synthetic_l1"` (curiosity-generated) |
+| `topic_volatility` | text | Auto-inferred from topic keywords |
+| `lineage_depth` | number | Always `1` (one hop from web data) |
+| `embedding` | json | float32 vector for semantic search (nomic-embed-text, 768-dim) |
 
 ### `spend_ledger`
 RunPod monthly spend per service. Survives daemon restarts.
@@ -97,7 +103,14 @@ ragCtx  := FormatRAGContext(frags, 1200)
 // → prepended to system prompt if non-empty
 ```
 
-**Filter:** PocketBase filter syntax `topic ~ "query" || content ~ "query"`, sorted by `-importance,-created`.
+**Filter:** PocketBase filter syntax `topic ~ "query" || content ~ "query"`, pre-filters up to 50 candidates.
+
+**Ranking pipeline:**
+1. Cosine similarity re-rank via `nomic-embed-text` embeddings (falls back to `importance` if no embedding yet)
+2. Provenance weight multiplied into score (`user_stated`=×1.5, `web_verified`=×1.2, `conversation`=×0.9, `synthetic_l1`=×0.85, `synthetic_l2+`=×0.6)
+3. `user_stated` anchors receive an additional +10.0 — always surface first
+
+Access counts bumped asynchronously after each retrieval.
 
 **Injection format:**
 ```
@@ -117,14 +130,18 @@ Capped at **1200 chars** to avoid context window bloat. Access counts are bumped
 When `memories` record count exceeds `PB_MEMORY_MAX_RECORDS` (default: 500,000), `Recycle()` prunes the bottom 10% by retention score:
 
 ```
-retention_score = importance × log(1 + access_count) × e^(-age_days / 180)
+retention_score = importance × log(1 + access_count) × e^(-age_days / half_life)
 ```
+
+`half_life` is per-record based on `topic_volatility`: **stable=180d, current=30d, ephemeral=7d**. `user_stated` anchors return `+Inf` and are never pruned.
 
 - High importance + high access = survives indefinitely
 - Low importance + never accessed + old = pruned first
-- The 180-day half-life means a memory accessed monthly stays relevant for years
+- Ephemeral topics (prices, news) decay out in 1–2 weeks without access
 
-`Recycle()` is called as a goroutine — never blocks inference.
+`Recycle()` is called as a goroutine — never blocks inference. Excludes `provenance = "user_stated"` records entirely.
+
+→ Full rationale: **`docs/EPISTEMIC_HYGIENE.md`**
 
 ---
 

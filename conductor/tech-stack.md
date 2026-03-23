@@ -38,7 +38,7 @@
 - **LMDB** (`lmdb-go`): Primary fast key-value store for the Memory Bridge and Chronos temporal index. Path: `/home/mike/Mavaia/.memory/lmdb`.
 - **Neo4j**: Persistent graph database for the Knowledge Vault (entity/relationship storage). Accessed via Go driver.
 - **chromem-go**: In-process vector store for RAG embeddings — no external vector DB required.
-- **PocketBase**: External long-term memory bank on `https://pocketbase.thynaptic.com` (dedicated VPS, 200GB). Cold tier of the four-tier memory stack. Stores conversation memories, curiosity findings, spend ledger, and conversation summaries. Oricli has her own analyst account. Go connector at `pkg/connectors/pocketbase/`.
+- **PocketBase**: External long-term memory bank on `https://pocketbase.thynaptic.com` (dedicated VPS, 200GB). Cold tier of the four-tier memory stack. Stores conversation memories, curiosity findings, spend ledger, and conversation summaries. Oricli has her own analyst account. Go connector at `pkg/connectors/pocketbase/`. Epistemic hygiene layer: provenance tracking, volatility-aware decay, novelty cap — see `docs/EPISTEMIC_HYGIENE.md`.
 - **AWS S3 / RunPod S3**: Persistent storage for model checkpoints, training data archives, and cross-pod coordination state.
 
 ## API Gateway & Networking
