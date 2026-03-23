@@ -273,22 +273,103 @@ function ReactionBar({ msg }) {
 
 // ── Message ───────────────────────────────────────────────────────────────────
 
-function Message({ msg }) {
+function Message({ msg, onEdit }) {
   const [showReactions, setShowReactions] = useState(false);
+  const [editing, setEditing]             = useState(false);
+  const [editText, setEditText]           = useState('');
+  const [hoverBubble, setHoverBubble]     = useState(false);
+  const editRef                           = useRef(null);
   const isUser = msg.role === 'user';
+
+  useEffect(() => {
+    if (editing && editRef.current) {
+      editRef.current.focus();
+      editRef.current.selectionStart = editRef.current.value.length;
+    }
+  }, [editing]);
 
   if (msg.role === 'dispatch') return <DispatchCard msg={msg} />;
 
   if (isUser) {
     return (
-      <div className="animate-fade-slide" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
-        <div style={{
-          maxWidth: '72%', background: 'rgba(196,164,74,0.1)',
-          border: '1px solid rgba(196,164,74,0.18)', borderRadius: '16px 16px 4px 16px',
-          padding: '10px 16px', fontSize: 14, lineHeight: 1.65, color: 'var(--color-sc-text)',
-        }}>
-          {msg.content}
-        </div>
+      <div
+        className="animate-fade-slide"
+        style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20, gap: 6, alignItems: 'flex-start' }}
+        onMouseEnter={() => setHoverBubble(true)}
+        onMouseLeave={() => setHoverBubble(false)}
+      >
+        {/* Edit pencil — shown on hover */}
+        {onEdit && hoverBubble && !editing && (
+          <button
+            title="Edit message"
+            onClick={() => { setEditText(msg.content); setEditing(true); }}
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--color-sc-text-dim)', padding: '4px', marginTop: 6,
+              opacity: 0.6, transition: 'opacity 0.15s',
+              display: 'flex', alignItems: 'center',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+          </button>
+        )}
+
+        {editing ? (
+          <div style={{ maxWidth: '72%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <textarea
+              ref={editRef}
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  setEditing(false);
+                  onEdit(msg.id, editText);
+                }
+                if (e.key === 'Escape') setEditing(false);
+              }}
+              rows={Math.min(8, editText.split('\n').length + 1)}
+              style={{
+                width: '100%', resize: 'none', background: 'rgba(196,164,74,0.07)',
+                border: '1px solid rgba(196,164,74,0.4)', borderRadius: 12,
+                padding: '10px 14px', fontSize: 14, lineHeight: 1.65,
+                color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)',
+                outline: 'none', boxShadow: '0 0 0 2px rgba(196,164,74,0.15)',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setEditing(false)}
+                style={{
+                  padding: '5px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
+                  background: 'transparent', border: '1px solid var(--color-sc-border)',
+                  color: 'var(--color-sc-text-muted)',
+                }}
+              >Cancel</button>
+              <button
+                onClick={() => { setEditing(false); onEdit(msg.id, editText); }}
+                style={{
+                  padding: '5px 14px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
+                  background: 'rgba(196,164,74,0.15)', border: '1px solid rgba(196,164,74,0.4)',
+                  color: 'var(--color-sc-gold)', fontWeight: 600,
+                }}
+              >Save & Resend</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            maxWidth: '72%', background: 'rgba(196,164,74,0.1)',
+            border: '1px solid rgba(196,164,74,0.18)', borderRadius: '16px 16px 4px 16px',
+            padding: '10px 16px', fontSize: 14, lineHeight: 1.65, color: 'var(--color-sc-text)',
+          }}>
+            {msg.content}
+          </div>
+        )}
       </div>
     );
   }
@@ -692,6 +773,8 @@ export function ChatArea() {
   const isStreaming            = useSCStore(s => s.isStreaming);
   const appendMessage          = useSCStore(s => s.appendMessage);
   const updateLastAgentMessage = useSCStore(s => s.updateLastAgentMessage);
+  const updateMessage          = useSCStore(s => s.updateMessage);
+  const truncateAfter          = useSCStore(s => s.truncateAfter);
   const setIsStreaming         = useSCStore(s => s.setIsStreaming);
   const renameSession          = useSCStore(s => s.renameSession);
   const activeChatAgent        = useSCStore(s => s.activeChatAgent);
@@ -797,6 +880,59 @@ export function ChatArea() {
     }
   }
 
+  async function editAndResend(msgId, newText) {
+    const text = newText.trim();
+    if (!text || isStreaming) return;
+
+    const sessionId = activeSession.id;
+
+    // 1. Update the user message in place
+    updateMessage(sessionId, msgId, { content: text });
+    // 2. Drop everything after it (old assistant reply + any dispatch cards)
+    truncateAfter(sessionId, msgId);
+    // 3. Append a fresh streaming assistant slot
+    const newAssistantId = Date.now() + 1;
+    appendMessage(sessionId, { role: 'assistant', content: '', streaming: true, id: newAssistantId });
+    setIsStreaming(true);
+
+    const systemContent = activeChatAgent
+      ? activeChatAgent.systemPrompt
+      : activeSkill ? `You are operating with the ${activeSkill} skill profile.` : null;
+
+    // Build history up to (and including) the edited user message
+    const allMsgs = useSCStore.getState().sessions.find(s => s.id === sessionId)?.messages ?? [];
+    const userIdx = allMsgs.findIndex(m => m.id === msgId);
+    const historySlice = allMsgs.slice(0, userIdx); // messages before the edited one
+
+    const messages = [
+      ...(systemContent ? [{ role: 'system', content: systemContent }] : []),
+      ...historySlice.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: text },
+    ];
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      let full = '';
+      const extraBody = activeChatAgent ? { profile: activeChatAgent.id } : {};
+      for await (const delta of streamChat({ messages, model: activeModel, signal: controller.signal, extraBody })) {
+        full += delta;
+        updateLastAgentMessage(sessionId, { content: full, streaming: true });
+      }
+      updateLastAgentMessage(sessionId, { content: full, streaming: false });
+    } catch (e) {
+      if (e?.name !== 'AbortError') {
+        updateLastAgentMessage(sessionId, { content: '⚠️ Error regenerating reply.', streaming: false });
+      } else {
+        updateLastAgentMessage(sessionId, { streaming: false });
+      }
+    } finally {
+      setIsStreaming(false);
+      abortRef.current = null;
+    }
+  }
+
   const messages = activeSession?.messages ?? [];
 
   return (
@@ -823,7 +959,9 @@ export function ChatArea() {
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', padding: '32px 0' }}>
           <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px' }}>
-            {messages.map(msg => <Message key={msg.id} msg={msg} />)}
+            {messages.map(msg => (
+              <Message key={msg.id} msg={msg} onEdit={msg.role === 'user' ? (id, txt) => editAndResend(id, txt) : null} />
+            ))}
             <div ref={bottomRef} />
           </div>
         </div>

@@ -69,6 +69,26 @@ export const useSCStore = create((set, get) => ({
     }));
   },
 
+  updateMessage(sessionId, msgId, patch) {
+    set(state => ({
+      sessions: state.sessions.map(s => {
+        if (s.id !== sessionId) return s;
+        return { ...s, messages: s.messages.map(m => m.id === msgId ? { ...m, ...patch } : m) };
+      }),
+    }));
+  },
+
+  truncateAfter(sessionId, msgId) {
+    set(state => ({
+      sessions: state.sessions.map(s => {
+        if (s.id !== sessionId) return s;
+        const idx = s.messages.findIndex(m => m.id === msgId);
+        if (idx < 0) return s;
+        return { ...s, messages: s.messages.slice(0, idx + 1) };
+      }),
+    }));
+  },
+
   addArtifact(sessionId, artifact) {
     set(state => ({
       sessions: state.sessions.map(s =>
