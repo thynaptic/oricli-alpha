@@ -237,6 +237,19 @@ function Message({ msg }) {
             {msg.content ?? ''}
           </ReactMarkdown>
         )}
+        {msg.scaiCorrected && (
+          <div title="SCAI Critique-Revision loop detected a constitutional violation and applied a correction." style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8,
+            padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+            background: 'rgba(196,164,74,0.10)', border: '1px solid rgba(196,164,74,0.28)',
+            color: 'rgba(196,164,74,0.85)', letterSpacing: '0.03em',
+          }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+              <path d="M12 2 L14 8 L20 6 L16 11 L20 14 L14 13 L12 20 L10 13 L4 14 L8 11 L4 6 L10 8 Z" fill="currentColor" />
+            </svg>
+            SCAI corrected
+          </div>
+        )}
       </div>
     </div>
   );

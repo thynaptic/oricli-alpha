@@ -18,6 +18,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/model"
 	"github.com/thynaptic/oricli-go/pkg/core/store"
+	"github.com/thynaptic/oricli-go/pkg/reform"
 	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
@@ -382,6 +383,15 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			"num_ctx":     32768,
 		}
 	}
+
+	// Inject Code Constitution into system prompt now that canvas/code mode is resolved.
+	// Canvas gets the language-agnostic CanvasConstitution; code actions get the stricter
+	// Go-scoped CodeConstitution. Must run before ChatStream to influence generation.
+	if isCanvasMode {
+		msgs[0]["content"] += "\n\n" + reform.NewCanvasConstitution().GetSystemPrompt()
+	} else if isCodeAction {
+		msgs[0]["content"] += "\n\n" + reform.NewCodeConstitution().GetSystemPrompt()
+	}
 	tokenCh, err := s.Agent.GenService.ChatStream(c.Request.Context(), msgs, streamOpts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -450,6 +460,26 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	} else {
 		responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
 	}
+
+	// SCAI Critique-Revision loop — fires in background to preserve streaming latency.
+	// If a constitutional violation is detected, a scai_correction WS event is broadcast
+	// so the UI can patch the last assistant message in-place with the revised text.
+	// This also generates an RFAL DPO pair for every violation (learning signal).
+	// Zero impact on the happy path (CLEAR critique → goroutine exits silently).
+	sessionID := c.GetHeader("X-Session-ID")
+	go func(query, response, sid string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		corrected, violated := s.Agent.SovEngine.SelfAlign(ctx, query, response)
+		if !violated {
+			return
+		}
+		s.Agent.SovEngine.WSHub.BroadcastEvent("scai_correction", map[string]interface{}{
+			"session_id":       sid,
+			"corrected":        corrected,
+			"original_preview": response[:min(120, len(response))],
+		})
+	}(lastMsg, responseText, sessionID)
 
 	if s.Agent.SovEngine.Voice != nil {
 		go s.Agent.SovEngine.Voice.Synthesize(responseText, s.Agent.SovEngine.Resonance.Current.ERI, 0.5, s.Agent.SovEngine.Resonance.Current.MusicalKey)
