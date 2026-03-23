@@ -1686,6 +1686,9 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
 
         elif step_type == "rag_query":
             query = step_input or context.get("output", "")
+            # Resolve source filter — '__all__' or None means search everything
+            rag_source = step.get("ragSource") or step.get("rag_source")
+            source_type = None if (not rag_source or rag_source == "__all__") else rag_source
             # Try backbone first
             _backbone_rag_ok = False
             try:
@@ -1703,14 +1706,15 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
                         _backbone_rag_ok = True
             except Exception:
                 pass
-            # Fall back to local RAG store
+            # Fall back to local RAG store (with optional connection filter)
             if not _backbone_rag_ok:
-                hits = _rag_search(query, limit=8)
+                hits = _rag_search(query, limit=8, source_type=source_type)
+                src_label = f" [{source_type}]" if source_type else ""
                 if hits:
                     lines = [f"[{h['source']}] {h['title']}\n{h['snippet']}" for h in hits]
-                    result["output"] = f"Knowledge query: {query}\n\n" + "\n\n---\n\n".join(lines)
+                    result["output"] = f"Knowledge query{src_label}: {query}\n\n" + "\n\n---\n\n".join(lines)
                 else:
-                    result["output"] = f"No indexed knowledge found for: {query}"
+                    result["output"] = f"No indexed knowledge found{src_label} for: {query}"
 
         elif step_type == "condition":
             # Evaluate a condition on the previous output

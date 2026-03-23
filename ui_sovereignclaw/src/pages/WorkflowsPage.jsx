@@ -135,7 +135,65 @@ function WorkflowPicker({ value, onChange, excludeId }) {
   );
 }
 
-// ─── StepEditor ─────────────────────────────────────────────────────────────
+// ─── RagSourcePicker (for rag_query step type) ───────────────────────────────
+const RAG_SOURCE_ICONS = { arxiv: '📄', telegram: '✈️', google_workspace: '🗂️', notion: '📝', slack: '💬', discord: '🎮', github: '🐙', jira: '🎯', confluence: '📚', linear: '🔷', airtable: '📊', hubspot: '🧡', salesforce: '☁️', zendesk: '🎫', dropbox: '📦', box: '📦', onedrive: '💾', pubmed: '🔬', default: '🗄️' };
+function RagSourcePicker({ value, onChange }) {
+  const [connections, setConnections] = useState([]);
+  const [indexStatus, setIndexStatus] = useState({});
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    fetch('/connections').then(r => r.json()).then(d => setConnections(d.connections || [])).catch(() => {});
+    fetch('/connections/index/status').then(r => r.json()).then(setIndexStatus).catch(() => {});
+  }, []);
+
+  const indexable = connections.filter(c => c.enabled !== false && (
+    (indexStatus[c.id]?.docs > 0) || (indexStatus[c.id]?.local_docs > 0)
+  ));
+
+  const selected = value === '__all__' ? null : indexable.find(c => c.id === value);
+  const displayLabel = value === '__all__' || !value ? 'All indexed sources' : (selected?.name || value);
+  const displayIcon = value === '__all__' || !value ? '🗄️' : (RAG_SOURCE_ICONS[value] || RAG_SOURCE_ICONS.default);
+
+  return (
+    <div style={{ position: 'relative', marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: 'var(--color-sc-text-dim)', marginBottom: 4 }}>Search source</div>
+      <button type="button" onClick={() => setOpen(o => !o)} style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 12px', width: '100%' }}>
+        <span style={{ fontSize: 13 }}>{displayIcon}</span>
+        <span style={{ flex: 1, textAlign: 'left', color: 'var(--color-sc-text)', fontSize: 13 }}>{displayLabel}</span>
+        <ChevronDown size={12} style={{ opacity: 0.5, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50, background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', padding: 4, maxHeight: 220, overflowY: 'auto' }}>
+          <button type="button" onClick={() => { onChange('__all__'); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: (!value || value === '__all__') ? 'rgba(196,164,74,0.08)' : 'transparent', color: 'var(--color-sc-text)', textAlign: 'left' }}>
+            <span style={{ fontSize: 14 }}>🗄️</span>
+            <div>
+              <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600 }}>All indexed sources</div>
+              <div style={{ fontSize: 11, color: 'var(--color-sc-text-muted)' }}>Search across every connection</div>
+            </div>
+          </button>
+          {indexable.length === 0 && (
+            <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--color-sc-text-dim)' }}>No indexed connections yet — index some in Connections first</div>
+          )}
+          {indexable.map(c => {
+            const docs = indexStatus[c.id]?.local_docs || indexStatus[c.id]?.docs || 0;
+            return (
+              <button key={c.id} type="button" onClick={() => { onChange(c.id); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: value === c.id ? 'rgba(196,164,74,0.08)' : 'transparent', color: 'var(--color-sc-text)', textAlign: 'left' }}>
+                <span style={{ fontSize: 14 }}>{RAG_SOURCE_ICONS[c.id] || RAG_SOURCE_ICONS.default}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600 }}>{c.name || c.id}</div>
+                  <div style={{ fontSize: 11, color: 'var(--color-sc-text-muted)' }}>{docs} doc{docs !== 1 ? 's' : ''} indexed</div>
+                </div>
+                {value === c.id && <CheckCircle size={12} style={{ color: 'var(--color-sc-gold)' }} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function StepEditor({ step, index, total, onChange, onRemove, parentWfId }) {
   const [showTypePicker, setShowTypePicker] = useState(false);
   const def = STEP_BY_ID[step.type] ?? STEP_TYPES[0];
@@ -200,6 +258,20 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId }) {
               The selected workflow will run with the current <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> as its starting context.
               Its final output becomes <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> for your next step.
             </div>
+          </div>
+        ) : step.type === 'rag_query' ? (
+          <div>
+            <RagSourcePicker
+              value={step.ragSource || '__all__'}
+              onChange={src => onChange({ ...step, ragSource: src })}
+            />
+            <textarea
+              value={step.value || ''}
+              onChange={e => onChange({ ...step, value: e.target.value })}
+              placeholder="What do we know about {{output}}?"
+              rows={2}
+              style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.55, fontFamily: 'var(--font-inter)', fontSize: 13 }}
+            />
           </div>
         ) : (
           <textarea
