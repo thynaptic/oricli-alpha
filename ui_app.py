@@ -1684,6 +1684,21 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
             text = _re.sub(r"\s{3,}", "\n", text)[:8000]
             result["output"] = f"Content from {url}:\n\n{text.strip()}"
 
+        elif step_type == "ingest_doc":
+            doc_text = context.get("doc_text", "")
+            doc_filename = context.get("doc_filename", "document")
+            if not doc_text:
+                raise ValueError("No document provided. Upload a file when starting the workflow.")
+            save = step.get("saveToMemory", False) or context.get("save_to_memory", False)
+            if save:
+                _rag_ingest([{
+                    "title":    doc_filename,
+                    "content":  doc_text,
+                    "source":   f"doc:{doc_filename}",
+                    "metadata": {"filename": doc_filename, "source_type": "documents"},
+                }], "documents")
+            result["output"] = doc_text
+
         elif step_type == "rag_query":
             query = step_input or context.get("output", "")
             # Resolve source filter — '__all__' or None means search everything
@@ -1883,6 +1898,15 @@ def _run_workflow_job(wf_id: str, run_id: str) -> None:
     context: dict = {"output": "", "step_0_output": ""}
     all_outputs = []
 
+    # Inject doc_text from run payload into context for ingest_doc steps
+    with _WFR_LOCK:
+        runs = _load_runs()
+    run_meta = runs.get(run_id, {})
+    if run_meta.get("doc_text"):
+        context["doc_text"] = run_meta["doc_text"]
+        context["doc_filename"] = run_meta.get("doc_filename", "document")
+        context["save_to_memory"] = run_meta.get("save_to_memory", False)
+
     for idx, step in enumerate(steps):
         # Mark step as running
         with _WFR_LOCK:
@@ -1975,18 +1999,69 @@ def delete_workflow_api(wf_id: str) -> Response:
     return jsonify({"ok": True})
 
 
+@app.route("/workflows/ingest-doc", methods=["POST"])
+def workflow_ingest_doc() -> Response:
+    """Extract text from an uploaded PDF/TXT/CSV for use in a workflow step."""
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No file provided"}), 400
+
+    filename = file.filename or "document"
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    raw = file.read()
+    text = ""
+
+    try:
+        if ext == "pdf":
+            import pypdf, io as _io
+            reader = pypdf.PdfReader(_io.BytesIO(raw))
+            pages = [p.extract_text() or "" for p in reader.pages]
+            text = "\n\n".join(p.strip() for p in pages if p.strip())
+        elif ext == "csv":
+            import csv, io as _io
+            decoded = raw.decode("utf-8", errors="replace")
+            reader = csv.reader(_io.StringIO(decoded))
+            rows = list(reader)
+            if rows:
+                header = rows[0]
+                lines = [", ".join(header)]
+                for row in rows[1:]:
+                    lines.append(", ".join(row))
+                text = "\n".join(lines)
+        elif ext in ("txt", "md", "rst", "log", "json", "yaml", "yml", "xml", "html"):
+            text = raw.decode("utf-8", errors="replace")
+        else:
+            return jsonify({"error": f"Unsupported file type: .{ext}. Use PDF, TXT, or CSV."}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Failed to extract text: {exc}"}), 500
+
+    if not text.strip():
+        return jsonify({"error": "No readable text found in document"}), 400
+
+    return jsonify({
+        "filename": filename,
+        "chars": len(text),
+        "preview": text[:300],
+        "text": text[:50_000],  # cap at 50k chars
+    })
+
+
 @app.route("/workflows/<wf_id>/run", methods=["POST"])
 def run_workflow(wf_id: str) -> Response:
+    body = request.get_json(silent=True) or {}
     run_id = str(uuid.uuid4())
     with _WFR_LOCK:
         runs = _load_runs()
         runs[run_id] = {
-            "id":        run_id,
-            "wf_id":     wf_id,
-            "status":    "queued",
-            "steps":     [],
-            "created":   datetime.now(timezone.utc).isoformat(),
+            "id":           run_id,
+            "wf_id":        wf_id,
+            "status":       "queued",
+            "steps":        [],
+            "created":      datetime.now(timezone.utc).isoformat(),
             "final_output": None,
+            "doc_text":     body.get("doc_text", ""),
+            "save_to_memory": bool(body.get("save_to_memory", False)),
+            "doc_filename": body.get("doc_filename", ""),
         }
         _save_runs(runs)
     t = threading.Thread(target=_run_workflow_job, args=(wf_id, run_id), daemon=True)

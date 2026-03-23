@@ -21,6 +21,7 @@ const STEP_TYPES = [
   { id: 'condition',    label: 'Condition',      Icon: Filter,     desc: 'Evaluate a condition on previous output', placeholder: 'Does the output mention pricing?' },
   { id: 'notify',       label: 'Notify',         Icon: Bell,       desc: 'Send notification via a connection', placeholder: 'discord: {{output}}' },
   { id: 'template',     label: 'Template',       Icon: FileText,   desc: 'Fill a text template with prior outputs', placeholder: 'Report:\n\nSummary: {{step_0_output}}\n\nDetails: {{output}}' },
+  { id: 'ingest_doc',   label: 'Read Document', Icon: FileText,   desc: 'Load a PDF, TXT, or CSV into the workflow', placeholder: '' },
   { id: 'sub_workflow', label: 'Run Workflow',   Icon: GitBranch,  desc: 'Trigger another workflow and chain its output', placeholder: '' },
 ];
 
@@ -194,6 +195,101 @@ function RagSourcePicker({ value, onChange }) {
 }
 
 
+// ─── DocUploadModal ───────────────────────────────────────────────────────────
+function DocUploadModal({ onConfirm, onCancel }) {
+  const [dragging, setDragging]     = useState(false);
+  const [file, setFile]             = useState(null);
+  const [uploading, setUploading]   = useState(false);
+  const [extracted, setExtracted]   = useState(null);
+  const [saveToMemory, setSave]     = useState(false);
+  const [error, setError]           = useState('');
+  const inputRef = useRef(null);
+
+  async function handleFile(f) {
+    setFile(f); setError(''); setExtracted(null); setUploading(true);
+    const fd = new FormData(); fd.append('file', f);
+    try {
+      const res = await fetch('/workflows/ingest-doc', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Extraction failed'); setUploading(false); return; }
+      setExtracted(data);
+    } catch (e) { setError('Upload failed'); }
+    setUploading(false);
+  }
+
+  function onDrop(e) {
+    e.preventDefault(); setDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
+      <div style={{ background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 16, padding: 28, width: 440, maxWidth: '90vw' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div style={{ fontFamily: 'var(--font-grotesk)', fontWeight: 700, fontSize: 16 }}>Upload Document</div>
+          <button onClick={onCancel} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-sc-text-dim)' }}><X size={16} /></button>
+        </div>
+
+        {/* Drop zone */}
+        <div
+          onDragOver={e => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          onClick={() => inputRef.current?.click()}
+          style={{ border: `2px dashed ${dragging ? 'var(--color-sc-gold)' : 'var(--color-sc-border)'}`, borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.15s', background: dragging ? 'rgba(196,164,74,0.05)' : 'transparent', marginBottom: 16 }}
+        >
+          <input ref={inputRef} type="file" accept=".pdf,.txt,.csv,.md,.json" style={{ display: 'none' }} onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
+          {uploading ? (
+            <div style={{ color: 'var(--color-sc-text-dim)', fontSize: 13 }}><Loader size={18} style={{ animation: 'spin 1s linear infinite', display: 'inline', marginRight: 8 }} />Reading document…</div>
+          ) : extracted ? (
+            <div style={{ color: 'var(--color-sc-gold)', fontSize: 13 }}>
+              <CheckCircle size={18} style={{ display: 'inline', marginRight: 6 }} />
+              <strong>{extracted.filename}</strong> — {extracted.chars.toLocaleString()} characters
+            </div>
+          ) : (
+            <>
+              <FileText size={28} style={{ color: 'var(--color-sc-text-dim)', marginBottom: 8 }} />
+              <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Drop a file or click to browse</div>
+              <div style={{ fontSize: 11, color: 'var(--color-sc-text-dim)' }}>PDF · TXT · CSV · Markdown · JSON</div>
+            </>
+          )}
+        </div>
+
+        {error && <div style={{ color: '#ef4444', fontSize: 12, marginBottom: 12 }}>{error}</div>}
+
+        {/* Preview */}
+        {extracted && (
+          <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-sc-text-muted)', marginBottom: 16, maxHeight: 80, overflowY: 'auto', lineHeight: 1.6 }}>
+            {extracted.preview}{extracted.chars > 300 ? '…' : ''}
+          </div>
+        )}
+
+        {/* Memory toggle */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--color-sc-border)', marginBottom: 20, background: saveToMemory ? 'rgba(196,164,74,0.06)' : 'transparent' }}>
+          <input type="checkbox" checked={saveToMemory} onChange={e => setSave(e.target.checked)} style={{ accentColor: 'var(--color-sc-gold)', width: 14, height: 14 }} />
+          <div>
+            <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 13, fontWeight: 600, color: saveToMemory ? 'var(--color-sc-gold)' : 'var(--color-sc-text)' }}>Commit to long-term memory</div>
+            <div style={{ fontSize: 11, color: 'var(--color-sc-text-dim)' }}>Oricli will retain this document across future sessions</div>
+          </div>
+        </label>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onCancel} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid var(--color-sc-border)', background: 'transparent', color: 'var(--color-sc-text-muted)', cursor: 'pointer', fontFamily: 'var(--font-grotesk)', fontSize: 13 }}>Cancel</button>
+          <button
+            disabled={!extracted}
+            onClick={() => extracted && onConfirm({ text: extracted.text, filename: extracted.filename, saveToMemory })}
+            style={{ flex: 2, padding: '10px 0', borderRadius: 8, border: 'none', background: extracted ? 'var(--color-sc-gold)' : 'rgba(196,164,74,0.2)', color: extracted ? '#0a0a0a' : 'var(--color-sc-text-dim)', cursor: extracted ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-grotesk)', fontSize: 13, fontWeight: 700 }}
+          >
+            Run Workflow
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function StepEditor({ step, index, total, onChange, onRemove, parentWfId }) {
   const [showTypePicker, setShowTypePicker] = useState(false);
   const def = STEP_BY_ID[step.type] ?? STEP_TYPES[0];
@@ -247,7 +343,21 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId }) {
           </button>
         </div>
         {/* Step value */}
-        {step.type === 'sub_workflow' ? (
+        {step.type === 'ingest_doc' ? (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--color-sc-border)', background: 'rgba(0,0,0,0.2)', marginBottom: 10 }}>
+              <FileText size={14} style={{ color: 'var(--color-sc-gold)', flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: 'var(--color-sc-text-muted)' }}>You'll be prompted to upload a <strong>PDF, TXT, or CSV</strong> when this workflow runs. Its contents become <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> for the next step.</span>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '9px 12px', borderRadius: 8, border: `1px solid ${step.saveToMemory ? 'rgba(196,164,74,0.4)' : 'var(--color-sc-border)'}`, background: step.saveToMemory ? 'rgba(196,164,74,0.06)' : 'transparent', transition: 'all 0.15s' }}>
+              <input type="checkbox" checked={!!step.saveToMemory} onChange={e => onChange({ ...step, saveToMemory: e.target.checked })} style={{ accentColor: 'var(--color-sc-gold)', width: 13, height: 13 }} />
+              <div>
+                <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600, color: step.saveToMemory ? 'var(--color-sc-gold)' : 'var(--color-sc-text)' }}>Commit to long-term memory</div>
+                <div style={{ fontSize: 11, color: 'var(--color-sc-text-dim)' }}>Oricli retains this document across future sessions</div>
+              </div>
+            </label>
+          </div>
+        ) : step.type === 'sub_workflow' ? (
           <div>
             <WorkflowPicker
               value={step.workflowId || step.value || ''}
@@ -667,6 +777,7 @@ function WorkflowsTab({ creating, setCreating }) {
   const [workflows, setWorkflows] = useState([]);
   const [historyWf, setHistoryWf] = useState(null);
   const [editingWf, setEditingWf] = useState(null);
+  const [pendingDocRun, setPendingDocRun] = useState(null);
 
   // bgRuns lives in global store — survives page navigation
   const bgRuns             = useSCStore(s => s.bgRuns);
@@ -684,12 +795,33 @@ function WorkflowsTab({ creating, setCreating }) {
   useEffect(() => { refresh(); }, []);
 
   async function handleRun(wf) {
+    // If workflow has an ingest_doc step, show upload modal first
+    if (wf.steps?.some(s => s.type === 'ingest_doc')) {
+      setPendingDocRun(wf);
+      return;
+    }
     try {
       const res  = await fetch(`/workflows/${wf.id}/run`, { method: 'POST' });
       const data = await res.json();
       startBgRun(data.run_id, wf.id);
     } catch (e) {
       console.error('Failed to start workflow:', e);
+    }
+  }
+
+  async function handleDocRunConfirm({ text, filename, saveToMemory }) {
+    const wf = pendingDocRun;
+    setPendingDocRun(null);
+    try {
+      const res = await fetch(`/workflows/${wf.id}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_text: text, doc_filename: filename, save_to_memory: saveToMemory }),
+      });
+      const data = await res.json();
+      startBgRun(data.run_id, wf.id);
+    } catch (e) {
+      console.error('Failed to start workflow with doc:', e);
     }
   }
 
@@ -726,6 +858,7 @@ function WorkflowsTab({ creating, setCreating }) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
         {creating && <WorkflowCreator onSave={handleSave} onCancel={() => setCreating(false)} />}
         {editingWf && <WorkflowCreator initial={editingWf} onSave={handleSave} onCancel={() => setEditingWf(null)} />}
+        {pendingDocRun && <DocUploadModal onConfirm={handleDocRunConfirm} onCancel={() => setPendingDocRun(null)} />}
 
         {workflows.length === 0 && !creating && (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--color-sc-text-dim)' }}>
