@@ -1,9 +1,9 @@
 package service
 
 import (
-	"context"
 	"log"
 	"strings"
+	"time"
 )
 
 // SeedIdentity bootstraps Oricli-Alpha's self-knowledge into the MemoryBank.
@@ -11,28 +11,31 @@ import (
 // secrets, credentials, or internal paths. They are stored at maximum
 // importance and UserStated provenance so they surface reliably in RAG.
 //
-// Idempotent: checks for an existing identity fragment before writing,
-// so a restart never duplicates the seed.
+// Idempotent: uses a direct PocketBase source-filter check (no embedder call)
+// so it works even if Ollama is not yet warm. Delays 15s at boot to let the
+// embedder come up, then writes fragments sequentially to avoid overloading it.
 func SeedIdentity(mb *MemoryBank) {
 	if mb == nil || !mb.IsEnabled() {
 		return
 	}
 
-	// Idempotency guard: if any identity fragment already exists, skip.
-	ctx := context.Background()
-	existing, _ := mb.QuerySimilar(ctx, "what is Oricli", 5)
-	for _, f := range existing {
-		if f.Source == "identity" {
-			log.Println("[IdentitySeed] Already seeded — skipping.")
-			return
-		}
+	// Give Ollama time to warm up before we start embedding 12 fragments.
+	time.Sleep(15 * time.Second)
+
+	// Idempotency guard: PocketBase source-filter check — no embedder needed.
+	if mb.HasSource("identity") {
+		log.Println("[IdentitySeed] Already seeded — skipping.")
+		return
 	}
 
 	fragments := identityFragments()
+	ok := 0
 	for _, f := range fragments {
 		mb.Write(f)
+		ok++
+		time.Sleep(800 * time.Millisecond) // breathing room between embed calls
 	}
-	log.Printf("[IdentitySeed] Seeded %d identity fragments into MemoryBank.", len(fragments))
+	log.Printf("[IdentitySeed] Seeded %d/%d identity fragments into MemoryBank.", ok, len(fragments))
 }
 
 func identityFragments() []MemoryFragment {

@@ -151,6 +151,22 @@ func (m *MemoryBank) GetAdminClient() *pb.Client {
 	return m.adminClient
 }
 
+// HasSource returns true if at least one memory fragment with the given source
+// already exists in PocketBase. Uses a direct DB query — no embedder required.
+func (m *MemoryBank) HasSource(source string) bool {
+	if !m.enabled || m.adminClient == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	filter := fmt.Sprintf("source='%s'", source)
+	result, err := m.adminClient.QueryRecords(ctx, "memories", filter, "", 1)
+	if err != nil {
+		return false
+	}
+	return result != nil && result.TotalItems > 0
+}
+
 // Bootstrap creates all required PocketBase collections on first run,
 // and ensures Oricli's analyst account exists.
 // Safe to call every startup — skips existing collections/users.
