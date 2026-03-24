@@ -183,6 +183,7 @@ func (s *ServerV2) setupRoutes() {
 	v1.GET("/ws", s.handleWS)
 	v1.GET("/traces", s.handleGetTraces)
 	v1.GET("/loglines", s.handleLogLines)
+	v1.GET("/modules", s.handleListModules)
 	// Prometheus metrics endpoint — scraped by local Prometheus container
 	v1.GET("/metrics", func(c *gin.Context) {
 		s.Metrics.PrometheusHandler().ServeHTTP(c.Writer, c.Request)
@@ -238,6 +239,37 @@ func (s *ServerV2) handleERI(c *gin.Context) {
 		"bpm":        res.BPM,
 		"state":      s.Agent.SovEngine.Resonance.GetStateDescription(),
 	})
+}
+
+// handleListModules returns the live skills + registered Go modules.
+// Public endpoint — used by ORI Studio's Hive panel for node labelling.
+func (s *ServerV2) handleListModules(c *gin.Context) {
+	type moduleEntry struct {
+		ID          string   `json:"id"`
+		Name        string   `json:"name"`
+		Description string   `json:"description,omitempty"`
+		Kind        string   `json:"kind"`
+		Triggers    []string `json:"triggers,omitempty"`
+		Status      string   `json:"status"`
+	}
+
+	var entries []moduleEntry
+
+	// Skills loaded from .ori skill files
+	if s.Skills != nil {
+		for _, sk := range s.Skills.ListSkills() {
+			entries = append(entries, moduleEntry{
+				ID:          sk.Name,
+				Name:        sk.Name,
+				Description: sk.Description,
+				Kind:        "skill",
+				Triggers:    sk.Triggers,
+				Status:      "active",
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"modules": entries, "count": len(entries)})
 }
 
 func (s *ServerV2) handleChatCompletions(c *gin.Context) {

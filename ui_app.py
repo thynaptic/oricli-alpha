@@ -235,34 +235,13 @@ def models() -> Response:
 
 @app.route("/modules", methods=["GET"])
 def modules() -> Response:
-    """Serve module listing directly from the local brain registry scan."""
+    """Proxy to backbone live skills/modules listing."""
+    target = f"{API_BASE}/v1/modules"
     try:
-        # Try installed mavaia_core first, fall back to oricli_core_old
-        import site
-        candidates = [
-            Path(__file__).parent / "oricli_core" / "brain" / "modules",
-            Path(__file__).parent / "oricli_core_old" / "brain" / "modules",
-        ]
-        for sp in site.getsitepackages():
-            candidates.append(Path(sp) / "mavaia_core" / "brain" / "modules")
-
-        mods_dir = next((p for p in candidates if p.exists()), None)
-        modules_list = []
-        if mods_dir:
-            for f in sorted(mods_dir.rglob("*.py")):
-                if f.name.startswith("_"):
-                    continue
-                rel = f.relative_to(mods_dir)
-                mod_id = str(rel.with_suffix("")).replace(os.sep, ".")
-                modules_list.append({
-                    "id":     mod_id,
-                    "name":   f.stem.replace("_", " ").title(),
-                    "status": "available",
-                    "path":   str(rel),
-                })
-        return jsonify({"modules": modules_list, "count": len(modules_list)})
-    except Exception as exc:  # noqa: BLE001
-        print(f"[modules] scan error: {exc}", file=sys.stderr)
+        resp = _forward_with_retry("GET", target)
+        return Response(resp.content, status=resp.status_code,
+                        content_type=resp.headers.get("content-type", "application/json"))
+    except Exception:
         return jsonify({"modules": [], "count": 0})
 
 
