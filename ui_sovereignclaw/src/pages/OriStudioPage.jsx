@@ -3,6 +3,7 @@ import { useSCStore } from '../store';
 import {
   Code2, RefreshCw, Save, Play, Download, FileCode, Check, Loader,
   AlertCircle, AlertTriangle, Info, Trash2, ChevronDown, Zap, Copy,
+  Wand2, MessageSquare, X, Sparkles, CornerDownLeft, RotateCcw,
 } from 'lucide-react';
 
 // ─── Starter template ────────────────────────────────────────────────────────
@@ -268,7 +269,7 @@ function AutocompleteDropdown({ items, index, x, y, onSelect, onHover }) {
 }
 
 // ─── Editor component (gutter + textarea + highlight overlay) ────────────────
-function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflows = [], userVars = [] }) {
+function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflows = [], userVars = [], onInlineEdit }) {
   const taRef     = useRef(null);
   const preRef    = useRef(null);
   const gutterRef = useRef(null);
@@ -322,6 +323,19 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
   }
 
   function onKeyDown(e) {
+    // Ctrl+K → inline edit for selection
+    if (e.ctrlKey && e.key === 'k') {
+      e.preventDefault();
+      const ta = e.target;
+      if (ta.selectionStart !== ta.selectionEnd) {
+        const start = ta.selectionStart;
+        const end   = ta.selectionEnd;
+        const text  = value.substring(start, end);
+        const pos   = approxCaretPos(ta, end);
+        onInlineEdit?.({ start, end, text, x: Math.min(pos.x, window.innerWidth - 440), y: Math.min(pos.y, window.innerHeight - 320) });
+      }
+      return;
+    }
     if (!ac.visible) {
       // Ctrl+Space → force show
       if (e.key === ' ' && e.ctrlKey) {
@@ -595,6 +609,335 @@ function RunLog({ entries, onClear }) {
   );
 }
 
+// ─── AI assist streaming helper ───────────────────────────────────────────────
+async function streamAiAssist(params, { onChunk, onDone, onError } = {}) {
+  try {
+    const r = await fetch('/ori/ai-assist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!r.ok) { onError?.('Request failed'); return; }
+    const reader  = r.body.getReader();
+    const decoder = new TextDecoder();
+    let full = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const d = line.slice(6).trim();
+        if (d === '[DONE]') { onDone?.(full); return; }
+        try {
+          const p = JSON.parse(d);
+          if (p.error) { onError?.(p.error); return; }
+          if (p.text)  { full += p.text; onChunk?.(p.text, full); }
+        } catch {}
+      }
+    }
+    onDone?.(full);
+  } catch (e) { onError?.(e.message); }
+}
+
+// ─── Inline Edit Bar (Ctrl+K) ─────────────────────────────────────────────────
+function InlineEditBar({ editState, source, onApply, onClose }) {
+  const [instruction, setInstruction] = useState('');
+  const [result,      setResult]      = useState(null);
+  const [streaming,   setStreaming]   = useState('');
+  const [busy,        setBusy]        = useState(false);
+  const [mode,        setMode]        = useState('edit'); // edit | explain
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  async function run(m = mode) {
+    if (!instruction.trim() && m !== 'explain') return;
+    setBusy(true); setResult(null); setStreaming('');
+    await streamAiAssist(
+      { mode: m === 'explain' ? 'explain' : 'edit', source, sel_text: editState.text, instruction: instruction.trim() },
+      {
+        onChunk: (_, full) => setStreaming(full),
+        onDone:  full => { setResult(full); setStreaming(''); setBusy(false); },
+        onError: err  => { setResult(`⚠ ${err}`); setStreaming(''); setBusy(false); },
+      }
+    );
+  }
+
+  const boxStyle = {
+    position: 'fixed', left: editState.x, top: editState.y, zIndex: 3000,
+    background: '#13171f', border: '1px solid rgba(168,156,247,0.35)',
+    borderRadius: 10, width: 420, maxWidth: 'calc(100vw - 32px)',
+    boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
+    fontFamily: "'JetBrains Mono', monospace",
+    overflow: 'hidden',
+  };
+
+  return (
+    <div style={boxStyle} onMouseDown={e => e.stopPropagation()}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: '#0d1117' }}>
+        <Wand2 size={12} style={{ color: '#a89cf7' }} />
+        <span style={{ fontSize: 11, color: '#a89cf7', fontWeight: 700 }}>Inline Edit</span>
+        <span style={{ fontSize: 10, color: '#37474f', flex: 1 }}>
+          {editState.text.split('\n').length} lines selected · Ctrl+K
+        </span>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#546e7a', padding: 2 }}>
+          <X size={12} />
+        </button>
+      </div>
+
+      {/* Input */}
+      <div style={{ display: 'flex', gap: 6, padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <input
+          ref={inputRef}
+          value={instruction}
+          onChange={e => setInstruction(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') run(); if (e.key === 'Escape') onClose(); }}
+          placeholder="Describe the edit… (Enter to run)"
+          style={{
+            flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 6, padding: '6px 10px', color: '#e1e4e8', fontSize: 12, outline: 'none',
+            fontFamily: 'inherit',
+          }}
+        />
+        <button
+          onClick={() => run('edit')}
+          disabled={busy || !instruction.trim()}
+          style={{ ...goldBtn, padding: '6px 10px', fontSize: 11 }}
+        >
+          {busy ? <Loader size={11} style={{ animation: 'ori-spin 1s linear infinite' }} /> : <Wand2 size={11} />}
+          {busy ? '' : 'Edit'}
+        </button>
+        <button
+          onClick={() => run('explain')}
+          disabled={busy}
+          style={{ ...ghostBtn, padding: '6px 10px', fontSize: 11 }}
+        >
+          Explain
+        </button>
+      </div>
+
+      {/* Streaming / result */}
+      {(streaming || result) && (
+        <div style={{ padding: '8px 12px', maxHeight: 220, overflowY: 'auto' }}>
+          <pre style={{
+            margin: 0, fontSize: 11, lineHeight: 1.65,
+            color: result?.startsWith('⚠') ? '#ef5350' : '#abb2bf',
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit',
+          }}>
+            {streaming || result}
+            {busy && <span style={{ color: '#a89cf7', animation: 'ori-spin 1s linear infinite', display: 'inline-block' }}>▊</span>}
+          </pre>
+        </div>
+      )}
+
+      {/* Accept / Reject */}
+      {result && !result.startsWith('⚠') && (
+        <div style={{ display: 'flex', gap: 8, padding: '8px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <button
+            onClick={() => { onApply(editState.start, editState.end, result.trim()); onClose(); }}
+            style={{ ...greenBtn, fontSize: 11, padding: '5px 12px' }}
+          >
+            <Check size={11} /> Apply
+          </button>
+          <button onClick={() => { setResult(null); setInstruction(''); }} style={{ ...ghostBtn, fontSize: 11, padding: '5px 10px' }}>
+            <RotateCcw size={11} /> Retry
+          </button>
+          <button onClick={onClose} style={{ ...ghostBtn, fontSize: 11, padding: '5px 10px', marginLeft: 'auto' }}>
+            Dismiss
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Vibe Coding Panel ────────────────────────────────────────────────────────
+function VibeCodingPanel({ source, onApply, onClose }) {
+  const [messages,  setMessages]  = useState([
+    { role: 'ori', text: "I know ORI inside out. Describe a workflow and I'll build it — or tell me how to modify the current one.", isSystem: true },
+  ]);
+  const [input,     setInput]     = useState('');
+  const [busy,      setBusy]      = useState(false);
+  const [streaming, setStreaming] = useState('');
+  const endRef   = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, streaming]);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  async function send() {
+    if (!input.trim() || busy) return;
+    const userText = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: userText }]);
+    setBusy(true); setStreaming('');
+
+    const hasSource = source.trim() && source.trim() !== '';
+    const instruction = hasSource
+      ? `Current workflow:\n${source}\n\nModification: ${userText}`
+      : userText;
+
+    await streamAiAssist(
+      { mode: 'generate', instruction },
+      {
+        onChunk: (_, full) => setStreaming(full),
+        onDone: full => {
+          const clean = full.replace(/^```ori\n?/i, '').replace(/\n?```$/, '').trim();
+          setMessages(prev => [...prev, { role: 'ori', text: clean, isCode: true }]);
+          setStreaming('');
+          setBusy(false);
+        },
+        onError: err => {
+          setMessages(prev => [...prev, { role: 'ori', text: `⚠ ${err}`, isError: true }]);
+          setStreaming('');
+          setBusy(false);
+        },
+      }
+    );
+  }
+
+  const FONT = "'JetBrains Mono', 'Fira Code', monospace";
+
+  return (
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      borderTop: '1px solid rgba(168,156,247,0.2)', background: '#090d13',
+    }}>
+      {/* Panel header */}
+      <div style={{
+        flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8,
+        padding: '7px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background: '#0a0e13',
+      }}>
+        <Sparkles size={12} style={{ color: '#a89cf7' }} />
+        <span style={{ fontSize: 11, fontWeight: 800, color: '#a89cf7', fontFamily: "var(--font-grotesk, sans-serif)", letterSpacing: '0.04em' }}>
+          VIBE MODE
+        </span>
+        <span style={{ fontSize: 10, color: '#37474f', fontFamily: 'monospace', flex: 1 }}>
+          describe → generate
+        </span>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#37474f', padding: 2 }}>
+          <X size={12} />
+        </button>
+      </div>
+
+      {/* Message list */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{
+            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+            maxWidth: '95%',
+          }}>
+            {m.role === 'user' ? (
+              <div style={{
+                background: 'rgba(168,156,247,0.12)', color: '#c9c0f5',
+                borderRadius: '10px 10px 3px 10px', padding: '7px 12px',
+                fontSize: 12, fontFamily: "var(--font-inter, sans-serif)", lineHeight: 1.55,
+              }}>
+                {m.text}
+              </div>
+            ) : m.isCode ? (
+              <div style={{ width: '100%' }}>
+                <pre style={{
+                  margin: 0, padding: '10px 12px',
+                  background: '#0d1117', borderRadius: '10px 10px 10px 3px',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  fontSize: 11, lineHeight: 1.65, color: '#abb2bf',
+                  fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  overflowX: 'auto',
+                }}>
+                  {m.text}
+                </pre>
+                <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
+                  <button onClick={() => onApply(m.text)} style={{ ...greenBtn, fontSize: 10, padding: '3px 10px' }}>
+                    <Check size={10} /> Apply to Editor
+                  </button>
+                  <button
+                    onClick={() => navigator.clipboard?.writeText(m.text)}
+                    style={{ ...ghostBtn, fontSize: 10, padding: '3px 8px' }}
+                  >
+                    <Copy size={10} /> Copy
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                color: m.isError ? '#ef5350' : m.isSystem ? '#546e7a' : '#78909c',
+                fontSize: 11, fontFamily: "var(--font-inter, sans-serif)", lineHeight: 1.55,
+                fontStyle: m.isSystem ? 'italic' : 'normal',
+                padding: '4px 0',
+              }}>
+                {m.text}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Live streaming */}
+        {streaming && (
+          <div style={{ alignSelf: 'flex-start', maxWidth: '95%' }}>
+            <pre style={{
+              margin: 0, padding: '10px 12px',
+              background: '#0d1117', borderRadius: 10,
+              border: '1px solid rgba(168,156,247,0.15)',
+              fontSize: 11, lineHeight: 1.65, color: '#abb2bf',
+              fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}>
+              {streaming}
+              <span style={{ color: '#a89cf7' }}>▊</span>
+            </pre>
+          </div>
+        )}
+
+        {busy && !streaming && (
+          <div style={{ alignSelf: 'flex-start', color: '#37474f', fontSize: 11, fontStyle: 'italic', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Loader size={10} style={{ animation: 'ori-spin 1s linear infinite' }} /> thinking…
+          </div>
+        )}
+
+        <div ref={endRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{
+        flexShrink: 0, padding: '8px 12px',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        background: '#09100f',
+        display: 'flex', gap: 8, alignItems: 'flex-end',
+      }}>
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+          placeholder="Describe a workflow, or ask to modify the current one…  (↵ send  ⇧↵ newline)"
+          rows={2}
+          style={{
+            flex: 1, resize: 'none', background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
+            padding: '7px 10px', color: '#e1e4e8', fontSize: 11, outline: 'none',
+            fontFamily: "var(--font-inter, sans-serif)", lineHeight: 1.5,
+          }}
+        />
+        <button
+          onClick={send}
+          disabled={busy || !input.trim()}
+          style={{
+            ...goldBtn, padding: '7px 12px', fontSize: 12,
+            opacity: (!input.trim() || busy) ? 0.4 : 1,
+          }}
+        >
+          {busy
+            ? <Loader size={13} style={{ animation: 'ori-spin 1s linear infinite' }} />
+            : <CornerDownLeft size={13} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Button styles ────────────────────────────────────────────────────────────
 const btnBase = {
   display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -623,6 +966,8 @@ export default function OriStudioPage() {
   const [autoCompile, setAutoCompile] = useState(true);
   const [loadOpen,    setLoadOpen]    = useState(false);
   const [cursor,      setCursor]      = useState({ ln: 1, col: 1 });
+  const [vibeOpen,    setVibeOpen]    = useState(false);
+  const [inlineEdit,  setInlineEdit]  = useState(null); // { start, end, text, x, y }
   const debounceRef  = useRef(null);
   const pollRef      = useRef(null);
 
@@ -909,6 +1254,21 @@ export default function OriStudioPage() {
         <button onClick={exportOri} style={ghostBtn} title="Export as .ori file">
           <Download size={12} /> .ori
         </button>
+
+        <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.07)', margin: '0 2px' }} />
+
+        <button
+          onClick={() => setVibeOpen(o => !o)}
+          style={{
+            ...btnBase,
+            background: vibeOpen ? 'rgba(168,156,247,0.22)' : 'rgba(168,156,247,0.08)',
+            color: '#a89cf7',
+            border: `1px solid ${vibeOpen ? 'rgba(168,156,247,0.4)' : 'transparent'}`,
+          }}
+          title="Vibe Mode — describe workflows in natural language"
+        >
+          <Sparkles size={12} /> Vibe
+        </button>
       </div>
 
       {/* ── Main split ── */}
@@ -945,6 +1305,7 @@ export default function OriStudioPage() {
             onCursorChange={(ln, col) => setCursor({ ln, col })}
             workflows={workflows}
             userVars={extractUserVars(source)}
+            onInlineEdit={setInlineEdit}
           />
           {/* ── Status bar ── */}
           <div style={{
@@ -1008,7 +1369,7 @@ export default function OriStudioPage() {
           )}
 
           {/* Quick-ref syntax card */}
-          {!runLog.length && (
+          {!runLog.length && !vibeOpen && (
             <div style={{
               flex: 1, overflowY: 'auto', padding: '14px 16px', background: '#0d1117',
             }}>
@@ -1019,9 +1380,29 @@ export default function OriStudioPage() {
             </div>
           )}
 
-          <RunLog entries={runLog} onClear={() => setRunLog([])} />
+          {!vibeOpen && <RunLog entries={runLog} onClear={() => setRunLog([])} />}
+
+          {vibeOpen && (
+            <VibeCodingPanel
+              source={source}
+              onApply={newSource => { setSource(newSource); }}
+              onClose={() => setVibeOpen(false)}
+            />
+          )}
         </div>
       </div>
+
+      {/* ── Inline Edit Bar (Ctrl+K) ── */}
+      {inlineEdit && (
+        <InlineEditBar
+          editState={inlineEdit}
+          source={source}
+          onApply={(start, end, newText) => {
+            setSource(source.substring(0, start) + newText + source.substring(end));
+          }}
+          onClose={() => setInlineEdit(null)}
+        />
+      )}
     </div>
   );
 }

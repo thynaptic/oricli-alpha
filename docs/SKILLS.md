@@ -24,6 +24,12 @@ Oricli-Alpha ships with a small set of **builtin skill personas** defined in `or
   - **Typical use**: READMEs, API specs, tutorials, docstrings, migration guides.  
   - **Triggers**: `["document this", "readme", "api spec", "swagger", "docstring", "tutorial"]`.
 
+- **`ori_language_expert`**  
+  - **Description**: Deep knowledge of the ORI workflow definition language and ORI Studio IDE.  
+  - **Typical use**: Writing `.ori` files, explaining syntax, building and chaining workflows, compiler diagnostics.  
+  - **Triggers**: `["ori", ".ori", "ori syntax", "workflow syntax", "ori studio", "build a workflow", "compile", "decompile", "step:", "@workflow", "ori file"]`.  
+  - **Reference**: See [`ORI_SYNTAX.md`](./ORI_SYNTAX.md) for the full language spec.
+
 - **`data_scientist`**  
   - **Description**: Advanced data analysis, statistical modeling, and visualization.  
   - **Typical use**: Exploratory data analysis, feature engineering, plots, statistical checks.  

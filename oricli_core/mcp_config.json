@@ -5,8 +5,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-github"
-      ],
-      "enabled": false
+      ]
     },
     "filesystem": {
       "command": "npx",
@@ -14,16 +13,38 @@
         "-y",
         "@modelcontextprotocol/server-filesystem",
         "/home/mike"
-      ],
-      "enabled": true
+      ]
     },
     "puppeteer": {
       "command": "npx",
       "args": [
         "-y",
         "@modelcontextprotocol/server-puppeteer"
+      ]
+    },
+    "fetch": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-fetch"
+      ]
+    },
+    "memory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    "brave_search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
       ],
-      "enabled": false
+      "env": {
+        "BRAVE_API_KEY": ""
+      }
     }
   }
 }

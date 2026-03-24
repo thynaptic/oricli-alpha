@@ -2719,6 +2719,116 @@ def ori_decompile(wf_id: str) -> Response:
     return jsonify({"source": source, "wf_id": wf_id})
 
 
+# ── ORI AI Assist ──────────────────────────────────────────────────────────────
+_ORI_SYNTAX_KNOWLEDGE = """
+# ORI Workflow DSL — Syntax Reference
+
+## Structure
+```
+workflow "Name" {
+  description: "..."
+  agent: @agent-id        # optional
+  sendToCanvas: true      # optional
+  var topic               # runtime variable (prompted before run)
+  var limit = "10"        # with default
+  step[label]: type "value"
+  step: type "value"
+  if "condition" { step: ... } else { step: ... }
+  parallel { step: ... \n  step: ... }
+  run @workflow-id
+  output → canvas
+}
+```
+
+## Step types
+prompt, web, summarize, transform, extract, template, code, notify, search, rag, ingest, fetch, run
+
+## Built-in variables
+{{output}} {{input}} {{date}} {{time}} {{datetime}} {{workflow_name}} {{doc_text}} {{doc_filename}} {{step_LABEL_output}}
+
+## User variables
+Declared with `var name` or `var name = "default"`, referenced as `{{name}}`.
+Runtime variables are prompted before each run.
+
+## Conditionals
+`if "condition string" { ... } else { ... }` — condition evaluated as true/false by AI against previous output.
+
+## Parallel
+`parallel { step: ... \n  step: ... }` — steps run simultaneously, outputs concatenated.
+"""
+
+
+def _ori_ai_system() -> str:
+    return (
+        "You are an expert ORI workflow developer for the SovereignClaw sovereign AI platform. "
+        "You write precise, idiomatic .ori workflow files.\n\n"
+        + _ORI_SYNTAX_KNOWLEDGE
+        + "\nOutput rules:\n"
+        "- generate/edit modes: output ONLY .ori source code — no markdown fences, no explanations\n"
+        "- explain mode: be concise and technical\n"
+        "- Use meaningful step labels: step[research], step[brief], step[report]\n"
+        "- Chain steps via {{output}} rather than repeating queries\n"
+    )
+
+
+@app.route("/ori/ai-assist", methods=["POST"])
+def ori_ai_assist():
+    data = request.get_json(silent=True) or {}
+    mode        = data.get("mode", "generate")   # generate | edit | explain
+    instruction = data.get("instruction", "")
+    source      = data.get("source", "")
+    sel_text    = data.get("sel_text", "")
+
+    sys_msg = _ori_ai_system()
+
+    if mode == "generate":
+        user_msg = (
+            f"Build a complete .ori workflow file for this request:\n\n{instruction}\n\n"
+            "Output only valid .ori source code."
+        )
+    elif mode == "edit":
+        ctx = f"\nFull workflow context:\n{source}\n" if source else ""
+        user_msg = (
+            f"{ctx}\nEdit this selected section:\n{sel_text}\n\n"
+            f"Instruction: {instruction}\n\n"
+            "Output ONLY the replacement .ori code for the selected section."
+        )
+    elif mode == "explain":
+        code = sel_text or source
+        user_msg = f"Explain this .ori workflow code concisely and technically:\n{code}"
+    else:
+        return jsonify({"error": "unknown mode"}), 400
+
+    def _stream():
+        try:
+            result = _llm_complete(
+                [{"role": "system", "content": sys_msg},
+                 {"role": "user",   "content": user_msg}],
+                max_tokens=2500,
+            )
+            # Clean markdown fences if model adds them
+            result = result.strip()
+            if result.startswith("```"):
+                result = "\n".join(result.split("\n")[1:])
+            if result.endswith("```"):
+                result = "\n".join(result.split("\n")[:-1])
+            result = result.strip()
+            # Stream word-by-word for typing effect
+            for word in result.split(" "):
+                import time as _time
+                yield f"data: {json.dumps({'text': word + ' '})}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return Response(
+        _stream(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 _INDEX_STATUS_FILE = Path(__file__).parent / ".oricli" / "index_status.json"
 _INDEX_LOCK = threading.Lock()
 _BACKBONE_URL = os.getenv("MAVAIA_BACKBONE_URL", "http://localhost:8089")
