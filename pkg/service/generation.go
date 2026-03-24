@@ -231,10 +231,10 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 	// Default to fast-chat settings; callers pass options["options"] to override.
 	// Large-context canvas requests override num_ctx/num_predict via rawOpts below.
 	payload := map[string]interface{}{
-		"model":    model,
-		"messages": ollamaMessages,
-		"stream":   true,
-		"think":    false, // disable Qwen3 extended thinking for chat; keeps tok/s high
+		"model":      model,
+		"messages":   ollamaMessages,
+		"stream":     true,
+		"keep_alive": "60m", // keep model hot; cold loads take 60+ s on CPU-only VPS
 		"options": map[string]interface{}{
 			"num_thread":  s.NumThreads, // auto-detected at boot; prevents vCPU over-subscription
 			"num_ctx":     4096, // fast for regular chat; canvas overrides to 32768
@@ -243,6 +243,11 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 	}
 	if temp, ok := options["temperature"].(float64); ok {
 		payload["options"].(map[string]interface{})["temperature"] = temp
+	}
+	// Disable Qwen3 extended thinking for chat to keep tok/s high.
+	// Only set on qwen3 models — other models silently drop the stream when this field is present.
+	if strings.HasPrefix(strings.ToLower(model), "qwen3") {
+		payload["think"] = false
 	}
 	// Allow callers to override num_predict / num_ctx / other Ollama options
 	if rawOpts, ok := options["options"].(map[string]interface{}); ok {

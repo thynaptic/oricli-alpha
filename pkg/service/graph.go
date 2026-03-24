@@ -43,6 +43,9 @@ func NewGraphService() (*GraphService, error) {
 }
 
 func (s *GraphService) ExecuteQuery(query string, params map[string]interface{}) ([]map[string]interface{}, error) {
+	if s == nil || s.Driver == nil {
+		return nil, fmt.Errorf("graph service unavailable (Neo4j not connected)")
+	}
 	ctx := context.Background()
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)

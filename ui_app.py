@@ -319,17 +319,14 @@ def _strip_artifact_xml(text: str) -> str:
 
 def _sse_stream(target_url: str, payload: Dict[str, Any]) -> Iterable[str]:
     """
-    SSE pass-through with non-streaming fallback.
+    SSE pass-through with proper line-buffering.
 
-    The Go backbone does NOT stream — it returns a single JSON blob after
-    processing. We detect that case (presence of `message.content` but no
-    `delta.content`) and convert it into a proper SSE delta event so the
-    client's stream reader receives a valid chunk.
+    httpx's iter_text() returns arbitrary byte chunks that can split mid-line,
+    causing partial 'data:' payloads to be silently dropped.  iter_lines()
+    returns complete lines, so we reconstruct proper SSE events.
 
-    The Go sovereign engine also wraps every response body in
-    <artifact type="..." language="...">…</artifact> XML.  We strip that
-    wrapper and convert it to a markdown code fence so the canvas extractor
-    can pick it up.
+    Non-streaming fallback: if the backend returns a plain JSON blob
+    (no SSE events at all), we convert it to one delta + [DONE].
     """
     for attempt in range(RETRY_COUNT):
         try:
@@ -337,23 +334,25 @@ def _sse_stream(target_url: str, payload: Dict[str, Any]) -> Iterable[str]:
                 "POST", target_url, json=payload, headers=_build_headers(), timeout=None
             ) as r:
                 r.raise_for_status()
+                sse_seen = False
                 accumulated = ""
-                for chunk in r.iter_text():
-                    if not chunk:
+                for line in r.iter_lines():
+                    if not line:
                         continue
-                    trimmed = chunk.strip()
-                    if trimmed.startswith("data:"):
-                        # Real SSE from upstream — pass through
-                        yield f"{trimmed}\n\n"
+                    if line.startswith("data:"):
+                        sse_seen = True
+                        yield f"{line}\n\n"
+                    elif sse_seen:
+                        # Ignore non-data SSE fields (event:, id:, retry:)
+                        pass
                     else:
-                        # Accumulate non-SSE body (Go backbone sends one big JSON)
-                        accumulated += trimmed
+                        # No SSE yet — accumulating plain JSON body (non-streaming backend)
+                        accumulated += line
 
-                # If we got a plain JSON body (non-streaming response), convert it
+                # Plain JSON fallback — convert to SSE delta so the client stream reader works
                 if accumulated:
                     try:
                         body = json.loads(accumulated)
-                        # Non-streaming: choices[0].message.content
                         content = (
                             body.get("choices", [{}])[0]
                             .get("message", {})
@@ -361,21 +360,9 @@ def _sse_stream(target_url: str, payload: Dict[str, Any]) -> Iterable[str]:
                         )
                         if content:
                             content = _strip_artifact_xml(content)
-                            # Emit as delta chunk + DONE so the client stream reader works
-                            delta_event = json.dumps({
-                                "id": body.get("id", "chatcmpl-0"),
-                                "object": "chat.completion.chunk",
-                                "choices": [{"index": 0, "delta": {"role": "assistant", "content": content}, "finish_reason": None}],
-                            })
-                            yield f"data: {delta_event}\n\n"
-                            done_event = json.dumps({
-                                "id": body.get("id", "chatcmpl-0"),
-                                "object": "chat.completion.chunk",
-                                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-                            })
-                            yield f"data: {done_event}\n\n"
+                            yield f"data: {json.dumps({'id': body.get('id', 'chatcmpl-0'), 'object': 'chat.completion.chunk', 'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': content}, 'finish_reason': None}]})}\n\n"
+                            yield f"data: {json.dumps({'id': body.get('id', 'chatcmpl-0'), 'object': 'chat.completion.chunk', 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
                         else:
-                            # Error or unexpected shape — forward raw
                             yield f"data: {accumulated}\n\n"
                     except (json.JSONDecodeError, IndexError, KeyError):
                         yield f"data: {accumulated}\n\n"
