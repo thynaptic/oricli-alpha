@@ -57,10 +57,8 @@ except ImportError:
 
 
 STATIC_DIR = Path(__file__).parent / "ui_static"
-API_BASE = os.getenv("MAVAIA_API_BASE", "http://localhost:8089")
-# Separate base for endpoints that live on the Python API (models, modules, health)
-# Falls back to API_BASE if not set.
-PYTHON_API_BASE = os.getenv("MAVAIA_PYTHON_API_BASE", "http://localhost:8081")
+API_BASE    = os.getenv("MAVAIA_API_BASE",    "http://localhost:8089")   # Go backbone
+OLLAMA_BASE = os.getenv("MAVAIA_OLLAMA_BASE", "http://localhost:11434")  # Ollama
 API_KEY = os.getenv("MAVAIA_API_KEY")
 ATTACHMENT_LIMIT_MB = float(os.getenv("MAVAIA_UI_ATTACHMENT_MB", "5"))
 MAX_ATTACHMENT_BYTES = int(ATTACHMENT_LIMIT_MB * 1024 * 1024)
@@ -160,23 +158,28 @@ def _forward_with_retry(
 
 @app.route("/health", methods=["GET"])
 def health() -> Response:
-    """Health check with API connectivity verification"""
+    """Health check — backbone + Ollama connectivity."""
+    backbone_ok = False
+    ollama_ok   = False
     try:
         with _client() as client:
-            resp = client.get(
-                f"{PYTHON_API_BASE}/health",
-                headers=_build_headers(),
-                timeout=5.0,
-            )
-            api_healthy = resp.status_code == 200
+            r = client.get(f"{API_BASE}/v1/health", timeout=3.0)
+            backbone_ok = r.status_code == 200
     except Exception:  # noqa: BLE001
-        api_healthy = False
+        pass
+    try:
+        with _client() as client:
+            r = client.get(f"{OLLAMA_BASE}/api/tags", timeout=3.0)
+            ollama_ok = r.status_code == 200
+    except Exception:  # noqa: BLE001
+        pass
 
     return jsonify({
-        "ok": True,
-        "api_connected": api_healthy,
-        "api_base": API_BASE,
-        "python_api_base": PYTHON_API_BASE,
+        "ok":           True,
+        "backbone":     backbone_ok,
+        "ollama":       ollama_ok,
+        "api_base":     API_BASE,
+        "ollama_base":  OLLAMA_BASE,
     })
 
 
@@ -222,15 +225,19 @@ def spa_assets(filename: str) -> Response:
 
 @app.route("/models", methods=["GET"])
 def models() -> Response:
-    """Proxy to models listing endpoint"""
-    target = f"{PYTHON_API_BASE}/v1/models"
+    """Return available models from Ollama, formatted as OpenAI-compatible list."""
     try:
-        resp = _forward_with_retry("GET", target)
-        return Response(
-            resp.content, status=resp.status_code, content_type=resp.headers.get("content-type")
-        )
-    except Exception as exc:  # noqa: BLE001
-        return jsonify({"error": {"message": str(exc), "type": "server_error", "code": 502}}), 502
+        with _client() as client:
+            r = client.get(f"{OLLAMA_BASE}/api/tags", timeout=5.0)
+            r.raise_for_status()
+            tags = r.json().get("models", [])
+        model_list = [
+            {"id": m["name"], "object": "model", "owned_by": "ollama"}
+            for m in tags
+        ]
+        return jsonify({"object": "list", "data": model_list})
+    except Exception:  # noqa: BLE001
+        return jsonify({"object": "list", "data": []})
 
 
 @app.route("/modules", methods=["GET"])
