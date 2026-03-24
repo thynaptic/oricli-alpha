@@ -75,6 +75,8 @@ const ORI_CSS = `
 .ori-err-line { background: rgba(239,83,80,0.08); }
 .ori-warn-line{ background: rgba(255,183,77,0.07); }
 @keyframes ori-spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
+/* hide scrollbar on highlight overlay div (WebKit) */
+[data-ori-highlight]::-webkit-scrollbar { display: none; }
 `;
 
 function injectOriCSS() {
@@ -429,15 +431,19 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
 
       {/* ── Code area ── */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        <pre
+        <div
           ref={preRef}
           aria-hidden="true"
+          data-ori-highlight
           style={{
             ...baseTextStyle,
             position: 'absolute', inset: 0,
             color: '#abb2bf',
             pointerEvents: 'none',
-            overflow: 'hidden',
+            /* overflow scroll + hidden scrollbar so scrollTop sync works reliably */
+            overflowY: 'scroll',
+            scrollbarWidth: 'none',       /* Firefox */
+            msOverflowStyle: 'none',      /* IE/Edge */
             background: 'transparent',
             zIndex: 0,
           }}
