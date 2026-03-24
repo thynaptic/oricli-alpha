@@ -860,16 +860,17 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
               </div>
             ) : m.isCode ? (
               <div style={{ width: '100%' }}>
-                <pre style={{
-                  margin: 0, padding: '10px 12px',
-                  background: '#0d1117', borderRadius: '10px 10px 10px 3px',
-                  border: '1px solid rgba(255,255,255,0.07)',
-                  fontSize: 11, lineHeight: 1.65, color: '#abb2bf',
-                  fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                  overflowX: 'auto',
-                }}>
-                  {m.text}
-                </pre>
+                <pre
+                  style={{
+                    margin: 0, padding: '10px 12px',
+                    background: '#0d1117', borderRadius: '10px 10px 10px 3px',
+                    border: '1px solid rgba(255,255,255,0.07)',
+                    fontSize: 12, lineHeight: 1.65, color: '#abb2bf',
+                    fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                    overflowX: 'auto', tabSize: 2, MozTabSize: 2,
+                  }}
+                  dangerouslySetInnerHTML={{ __html: highlight(m.text) }}
+                />
                 <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
                   <button onClick={() => onApply(m.text)} style={{ ...greenBtn, fontSize: 10, padding: '3px 10px' }}>
                     <Check size={10} /> Apply to Editor
@@ -902,10 +903,11 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
               margin: 0, padding: '10px 12px',
               background: '#0d1117', borderRadius: 10,
               border: '1px solid rgba(168,156,247,0.15)',
-              fontSize: 11, lineHeight: 1.65, color: '#abb2bf',
+              fontSize: 12, lineHeight: 1.65, color: '#abb2bf',
               fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              tabSize: 2, MozTabSize: 2,
             }}>
-              {streaming}
+              <span dangerouslySetInnerHTML={{ __html: highlight(streaming) }} />
               <span style={{ color: '#a89cf7' }}>▊</span>
             </pre>
           </div>
