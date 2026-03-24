@@ -218,7 +218,7 @@ func (m *MemoryBank) Write(frag MemoryFragment) {
 		}
 		// Async embedding — patch the record after creation so write latency is unchanged
 		go func() {
-			ectx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			ectx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
 			vec := m.embedder.Embed(ectx, frag.Content)
 			if vec != nil {
@@ -257,7 +257,7 @@ func (m *MemoryBank) WriteKnowledgeFragment(topic, intent, content string, impor
 			return
 		}
 		go func() {
-			ectx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			ectx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
 			vec := m.embedder.Embed(ectx, topic+" "+content)
 			if vec != nil {
@@ -342,7 +342,7 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 	// Generate query embedding for cosine re-ranking.
 	// Use a fresh background context so a canceled request context doesn't
 	// abort the embed mid-flight and leave re-ranking skipped.
-	embedCtx, embedCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	embedCtx, embedCancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer embedCancel()
 	queryVec := m.embedder.Embed(embedCtx, query)
 
