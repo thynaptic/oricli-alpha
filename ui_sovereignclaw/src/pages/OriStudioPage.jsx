@@ -84,18 +84,200 @@ function injectOriCSS() {
   document.head.appendChild(s);
 }
 
+// ─── Autocomplete data ────────────────────────────────────────────────────────
+const AC_KEYWORDS = [
+  { label: 'workflow', insert: 'workflow "${1:Name}" {\n  $0\n}',        kind: 'keyword',  detail: 'Define a workflow' },
+  { label: 'var',      insert: 'var ${1:name}',                          kind: 'keyword',  detail: 'Runtime variable' },
+  { label: 'step',     insert: 'step: ',                                 kind: 'keyword',  detail: 'Add a step' },
+  { label: 'if',       insert: 'if "${1:condition}" {\n  $0\n}',         kind: 'keyword',  detail: 'Conditional block' },
+  { label: 'else',     insert: 'else {\n  $0\n}',                        kind: 'keyword',  detail: 'Else branch' },
+  { label: 'run',      insert: 'run @',                                  kind: 'keyword',  detail: 'Run a sub-workflow' },
+  { label: 'parallel', insert: 'parallel {\n  $0\n}',                    kind: 'keyword',  detail: 'Parallel steps' },
+  { label: 'output',   insert: 'output → canvas',                        kind: 'keyword',  detail: 'Output directive' },
+  { label: 'description',  insert: 'description: "${1}"',                kind: 'meta',     detail: 'Workflow description' },
+  { label: 'agent',        insert: 'agent: @',                           kind: 'meta',     detail: 'Assign agent' },
+  { label: 'sendToCanvas', insert: 'sendToCanvas: true',                 kind: 'meta',     detail: 'Push output to Canvas' },
+];
+
+const AC_STEP_TYPES = [
+  { label: 'prompt',    insert: 'prompt "${1:Ask the AI something}"',    kind: 'type', detail: 'AI prompt' },
+  { label: 'web',       insert: 'web "${1:search query}"',               kind: 'type', detail: 'Web search' },
+  { label: 'summarize', insert: 'summarize "${1:Summarise the above}"',  kind: 'type', detail: 'Summarize output' },
+  { label: 'transform', insert: 'transform "${1:instructions}"',         kind: 'type', detail: 'Transform data' },
+  { label: 'extract',   insert: 'extract "${1:what to extract}"',        kind: 'type', detail: 'Extract structured data' },
+  { label: 'template',  insert: 'template "${1:{{output}}}"',            kind: 'type', detail: 'Format template' },
+  { label: 'code',      insert: 'code "js: return input"',               kind: 'type', detail: 'Execute code' },
+  { label: 'notify',    insert: 'notify "${1:channel}: ${2:message}"',   kind: 'type', detail: 'Send notification' },
+  { label: 'search',    insert: 'search "${1:query}"',                   kind: 'type', detail: 'Memory search' },
+  { label: 'rag',       insert: 'rag "${1:query}"',                      kind: 'type', detail: 'RAG query' },
+  { label: 'ingest',    insert: 'ingest "${1:source}"',                  kind: 'type', detail: 'Ingest document' },
+  { label: 'fetch',     insert: 'fetch @',                               kind: 'type', detail: 'Fetch connection' },
+];
+
+const AC_BUILTIN_VARS = [
+  { label: 'output',        insert: 'output}}',        kind: 'variable', detail: 'Previous step output' },
+  { label: 'input',         insert: 'input}}',         kind: 'variable', detail: 'Workflow input' },
+  { label: 'date',          insert: 'date}}',          kind: 'variable', detail: "Today's date" },
+  { label: 'time',          insert: 'time}}',          kind: 'variable', detail: 'Current time' },
+  { label: 'datetime',      insert: 'datetime}}',      kind: 'variable', detail: 'Current datetime' },
+  { label: 'workflow_name', insert: 'workflow_name}}', kind: 'variable', detail: 'Workflow name' },
+  { label: 'doc_text',      insert: 'doc_text}}',      kind: 'variable', detail: 'Uploaded doc text' },
+  { label: 'doc_filename',  insert: 'doc_filename}}',  kind: 'variable', detail: 'Uploaded doc filename' },
+];
+
+function extractUserVars(source) {
+  const vars = [];
+  const re = /^\s*var\s+([\w_]+)/gm;
+  let m;
+  while ((m = re.exec(source)) !== null) vars.push(m[1]);
+  return vars;
+}
+
+function getCompletions(source, cursorPos, { workflows = [], userVars = [] } = {}) {
+  const before = source.substring(0, cursorPos);
+  const lines  = before.split('\n');
+  const line   = lines[lines.length - 1];
+
+  // {{ variable trigger
+  const varM = line.match(/\{\{([\w_]*)$/);
+  if (varM) {
+    const pfx = varM[1].toLowerCase();
+    const builtins = AC_BUILTIN_VARS.filter(v => v.label.startsWith(pfx));
+    const custom   = userVars
+      .filter(v => v.startsWith(pfx) && !AC_BUILTIN_VARS.find(b => b.label === v))
+      .map(v => ({ label: v, insert: v + '}}', kind: 'variable', detail: 'var' }));
+    return { items: [...builtins, ...custom], replaceLen: varM[1].length };
+  }
+
+  // @ reference trigger
+  const atM = line.match(/@([\w-]*)$/);
+  if (atM) {
+    const pfx = atM[1].toLowerCase();
+    const wfs = workflows
+      .filter(w => w.id.includes(pfx) || w.name.toLowerCase().includes(pfx))
+      .map(w => ({ label: w.name, insert: w.id, kind: 'reference', detail: `wf · ${w.id.slice(0, 8)}` }));
+    return { items: wfs, replaceLen: atM[1].length };
+  }
+
+  // Step type trigger (after "step:" or "step[label]:")
+  const stM = line.match(/step(?:\[[^\]]*\])?\s*:\s*([\w]*)$/);
+  if (stM) {
+    const pfx = stM[1].toLowerCase();
+    return { items: AC_STEP_TYPES.filter(t => t.label.startsWith(pfx)), replaceLen: stM[1].length };
+  }
+
+  // Keyword trigger (word at start of line, possibly indented)
+  const kwM = line.match(/^(\s*)([\w]*)$/);
+  if (kwM && kwM[2].length >= 1) {
+    const pfx = kwM[2].toLowerCase();
+    return { items: AC_KEYWORDS.filter(k => k.label.startsWith(pfx)), replaceLen: kwM[2].length };
+  }
+
+  return { items: [], replaceLen: 0 };
+}
+
+// Strip snippet placeholder syntax ($0, ${1:x}) to get plain insert text
+function snippetToText(insert) {
+  return insert.replace(/\$\{[0-9]+:([^}]*)\}/g, '$1').replace(/\$[0-9]+/g, '');
+}
+
+// Compute approximate caret position in viewport coords
+function approxCaretPos(textarea, cursorPos) {
+  const before    = textarea.value.substring(0, cursorPos);
+  const lines     = before.split('\n');
+  const lineNum   = lines.length - 1;
+  const colNum    = lines[lineNum].length;
+  const taRect    = textarea.getBoundingClientRect();
+  const LINE_H_PX = 13 * 1.65;
+  const CHAR_W    = 7.8;
+  const PAD_T     = 14;
+  const PAD_L     = 16;
+  const rawX = taRect.left + PAD_L + colNum * CHAR_W;
+  const rawY = taRect.top  + PAD_T + (lineNum + 1) * LINE_H_PX - textarea.scrollTop + 4;
+  return {
+    x: Math.min(rawX, window.innerWidth  - 300),
+    y: Math.min(rawY, window.innerHeight - 260),
+  };
+}
+
+// ─── Autocomplete dropdown ────────────────────────────────────────────────────
+const KIND_ICON  = { keyword: '⌨', meta: '⚙', type: '⬡', variable: '⬦', reference: '@', snippet: '✦' };
+const KIND_COLOR = { keyword: '#c792ea', meta: '#82aaff', type: '#80cbc4', variable: '#f78c6c', reference: '#ffcb6b', snippet: '#a89cf7' };
+
+function AutocompleteDropdown({ items, index, x, y, onSelect, onHover }) {
+  const listRef = useRef(null);
+
+  useEffect(() => {
+    const el = listRef.current?.children[index];
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [index]);
+
+  if (!items.length) return null;
+
+  return (
+    <div
+      ref={listRef}
+      style={{
+        position: 'fixed', left: x, top: y, zIndex: 2000,
+        background: '#13171f',
+        border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: 9, overflow: 'hidden auto',
+        minWidth: 240, maxWidth: 380, maxHeight: 220,
+        boxShadow: '0 12px 40px rgba(0,0,0,0.75)',
+        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+      }}
+    >
+      {items.map((item, i) => {
+        const active = i === index;
+        return (
+          <div
+            key={i}
+            onMouseDown={e => { e.preventDefault(); onSelect(item); }}
+            onMouseEnter={() => onHover(i)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              padding: '5px 12px',
+              background: active ? 'rgba(168,156,247,0.13)' : 'transparent',
+              borderLeft: `2px solid ${active ? '#a89cf7' : 'transparent'}`,
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ color: KIND_COLOR[item.kind] || '#90a4ae', fontSize: 10, flexShrink: 0 }}>
+              {KIND_ICON[item.kind] || '○'}
+            </span>
+            <span style={{ fontSize: 12, color: active ? '#e1e4e8' : '#b0bec5', flex: 1, whiteSpace: 'nowrap' }}>
+              {item.label}
+            </span>
+            <span style={{ fontSize: 10, color: '#37474f', flexShrink: 0 }}>
+              {item.detail}
+            </span>
+          </div>
+        );
+      })}
+      {/* Footer showing keybindings */}
+      <div style={{
+        padding: '4px 12px', borderTop: '1px solid rgba(255,255,255,0.05)',
+        fontSize: 10, color: '#263238', display: 'flex', gap: 12,
+      }}>
+        <span>↑↓ navigate</span>
+        <span>↵ / Tab  accept</span>
+        <span>Esc  dismiss</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Editor component (gutter + textarea + highlight overlay) ────────────────
-function OriEditor({ value, onChange, diagnostics = [], onCursorChange }) {
+function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflows = [], userVars = [] }) {
   const taRef     = useRef(null);
   const preRef    = useRef(null);
   const gutterRef = useRef(null);
 
+  const [ac, setAc] = useState({ visible: false, items: [], index: 0, x: 0, y: 0, replaceLen: 0 });
+
   useEffect(() => { injectOriCSS(); }, []);
 
-  const lines      = value.split('\n');
-  const lineCount  = lines.length;
-
-  // Build per-line error/warning sets from diagnostics (by line number if available)
+  const lines     = value.split('\n');
   const errLines  = new Set(diagnostics.filter(d => d.level === 'error'   && d.line).map(d => d.line));
   const warnLines = new Set(diagnostics.filter(d => d.level === 'warning' && d.line).map(d => d.line));
 
@@ -105,13 +287,77 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange }) {
     if (gutterRef.current) gutterRef.current.scrollTop = top;
   }
 
-  function onKeyUp(e) {
-    const ta = taRef.current;
+  function updateCursor(ta) {
     if (!ta || !onCursorChange) return;
-    const pre  = value.substring(0, ta.selectionStart);
-    const ln   = pre.split('\n').length;
-    const col  = pre.split('\n').pop().length + 1;
+    const pre = value.substring(0, ta.selectionStart);
+    const ln  = pre.split('\n').length;
+    const col = pre.split('\n').pop().length + 1;
     onCursorChange(ln, col);
+  }
+
+  function triggerAC(ta) {
+    const pos = ta.selectionStart;
+    const { items, replaceLen } = getCompletions(value, pos, { workflows, userVars });
+    if (items.length === 0) { setAc(prev => ({ ...prev, visible: false })); return; }
+    const { x, y } = approxCaretPos(ta, pos);
+    setAc({ visible: true, items, index: 0, x, y, replaceLen, cursorPos: pos });
+  }
+
+  function acceptCompletion(item) {
+    const ta      = taRef.current;
+    if (!ta) return;
+    const pos     = ta.selectionStart;
+    const plain   = snippetToText(item.insert);
+    const before  = value.substring(0, pos - ac.replaceLen);
+    const after   = value.substring(pos);
+    const newVal  = before + plain + after;
+    const newPos  = before.length + plain.length;
+    onChange(newVal);
+    setAc(prev => ({ ...prev, visible: false }));
+    // Restore focus + cursor after React re-render
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(newPos, newPos);
+    });
+  }
+
+  function onKeyDown(e) {
+    if (!ac.visible) {
+      // Ctrl+Space → force show
+      if (e.key === ' ' && e.ctrlKey) {
+        e.preventDefault();
+        triggerAC(e.target);
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setAc(prev => ({ ...prev, index: Math.min(prev.index + 1, prev.items.length - 1) }));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setAc(prev => ({ ...prev, index: Math.max(prev.index - 1, 0) }));
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      acceptCompletion(ac.items[ac.index]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setAc(prev => ({ ...prev, visible: false }));
+    }
+  }
+
+  function onInput(e) {
+    onChange(e.target.value);
+    triggerAC(e.target);
+    updateCursor(e.target);
+    syncScroll();
+  }
+
+  function onKeyUp(e) {
+    updateCursor(e.target);
+    // Re-trigger on navigation keys
+    if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key)) {
+      triggerAC(e.target);
+    }
   }
 
   const FONT = "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace";
@@ -127,19 +373,18 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange }) {
     tabSize: 2, boxSizing: 'border-box',
   };
 
-  // Build highlighted HTML with per-line wrappers for error/warn backgrounds
   function buildHighlightedHtml(code) {
     const raw = highlight(code);
     return raw.split('\n').map((lineHtml, i) => {
-      const ln = i + 1;
+      const ln  = i + 1;
       const cls = errLines.has(ln) ? ' class="ori-err-line"' : warnLines.has(ln) ? ' class="ori-warn-line"' : '';
       return `<span${cls} style="display:block">${lineHtml || ' '}</span>`;
     }).join('');
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#0d1117' }}>
-      {/* ── Gutter (line numbers + markers) ── */}
+    <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#0d1117', position: 'relative' }}>
+      {/* ── Gutter ── */}
       <div
         ref={gutterRef}
         style={{
@@ -168,16 +413,15 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange }) {
         })}
       </div>
 
-      {/* ── Code area (highlight pre + transparent textarea) ── */}
+      {/* ── Code area ── */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {/* Highlight layer */}
         <pre
           ref={preRef}
           aria-hidden="true"
           style={{
             ...baseTextStyle,
             position: 'absolute', inset: 0,
-            color: '#abb2bf',           /* ← default text color; spans override per-token */
+            color: '#abb2bf',
             pointerEvents: 'none',
             overflow: 'hidden',
             background: 'transparent',
@@ -185,14 +429,16 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange }) {
           }}
           dangerouslySetInnerHTML={{ __html: buildHighlightedHtml(value) }}
         />
-        {/* Editable layer (transparent text, visible caret) */}
         <textarea
           ref={taRef}
           value={value}
-          onChange={e => onChange(e.target.value)}
+          onInput={onInput}
+          onChange={() => {}}      /* controlled via onInput */
           onScroll={syncScroll}
+          onKeyDown={onKeyDown}
           onKeyUp={onKeyUp}
-          onClick={onKeyUp}
+          onClick={e => { updateCursor(e.target); triggerAC(e.target); }}
+          onBlur={() => setTimeout(() => setAc(prev => ({ ...prev, visible: false })), 120)}
           spellCheck={false}
           autoComplete="off"
           autoCorrect="off"
@@ -210,6 +456,18 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange }) {
           }}
         />
       </div>
+
+      {/* ── Autocomplete dropdown (portal via fixed position) ── */}
+      {ac.visible && (
+        <AutocompleteDropdown
+          items={ac.items}
+          index={ac.index}
+          x={ac.x}
+          y={ac.y}
+          onSelect={acceptCompletion}
+          onHover={i => setAc(prev => ({ ...prev, index: i }))}
+        />
+      )}
     </div>
   );
 }
@@ -685,6 +943,8 @@ export default function OriStudioPage() {
             onChange={setSource}
             diagnostics={diagnostics}
             onCursorChange={(ln, col) => setCursor({ ln, col })}
+            workflows={workflows}
+            userVars={extractUserVars(source)}
           />
           {/* ── Status bar ── */}
           <div style={{
