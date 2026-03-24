@@ -1,7 +1,7 @@
 # Plan: Real-Time WebSocket Gateway
 
 ## Objective
-Implement a high-speed WebSocket gateway in Oricli-Alpha to enable real-time state synchronization with the SovereignClaw UI. This allows the system to "push" affective, resonant, and visual state changes to the client without waiting for a request.
+Implement a high-speed WebSocket gateway in Oricli-Alpha to enable real-time state synchronization with the ORI Studio UI. This allows the system to "push" affective, resonant, and visual state changes to the client without waiting for a request.
 
 ## Architecture
 

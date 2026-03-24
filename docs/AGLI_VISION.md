@@ -88,7 +88,7 @@ Go-native backbone operational: Hive OS (Swarm Bus, Kernel Ring-0, Sovereign Eng
 **Milestone shipped:** Oricli-Alpha v1.0 — a homeostatic cognitive OS.
 
 ### Phase 2 — The Autonomous Entity ✅ COMPLETE
-Proactive intelligence layer activated: CuriosityDaemon with structured intent taxonomy, ConfidenceDetector inline web grounding, async ResearchAgent, ReformDaemon (propose mode), DreamDaemon memory consolidation, JIT training pipeline, SovereignClaw consumer UI (chat, canvas, research, workflows, connections, logs, memory), sovereign key auth, Docker sovereign stack, full safety test suite, 4-layer constitutional stack (SCAI, Canvas, Ops, Remote Compute).  
+Proactive intelligence layer activated: CuriosityDaemon with structured intent taxonomy, ConfidenceDetector inline web grounding, async ResearchAgent, ReformDaemon (propose mode), DreamDaemon memory consolidation, JIT training pipeline, ORI Studio consumer UI (chat, canvas, research, workflows, connections, logs, memory), sovereign key auth, Docker sovereign stack, full safety test suite, 4-layer constitutional stack (SCAI, Canvas, Ops, Remote Compute).  
 **Milestone shipped:** Oricli-Alpha v2.0 — a proactive, self-regulating cognitive entity.
 
 ### Phase 3 — Sovereign AGLI 🟡 IN PROGRESS
@@ -96,7 +96,7 @@ A self-contained intelligence that compounds capability through *accumulated exp
 
 - **Durable Goal Persistence** ✅: Sovereign goals survive crashes and restarts via PocketBase. GoalExecutor resumes multi-day plans autonomously. The owner can assign week-long objectives and Oricli works through them across reboots.
 - **Active Inference Loop (Hypothesis Engine)** ✅: CuriosityDaemon graduates from passive foraging to active hypothesis generation — after researching a topic, it derives *what it still doesn't know*, seeds follow-up questions, and closes the epistemic loop. Knowledge compounds rather than accumulates randomly. Depth-capped at 2 hops to prevent synthetic data spirals.
-- **Goals UI + Owner Observability** ✅: SovereignClaw Mission Control displays Oricli's autonomous goal queue, active DAG state, daemon health panel, and dependency graph in a unified view.
+- **Goals UI + Owner Observability** ✅: ORI Studio Mission Control displays Oricli's autonomous goal queue, active DAG state, daemon health panel, and dependency graph in a unified view.
 - **Skill Crystallization**: Frequently-used reasoning chains and tool-call sequences get compiled into first-class `Skill` structs that bypass LLM inference entirely for known patterns. Performance compounds without new hardware.
 - **Sovereign Model Curation**: Oricli monitors the local model catalog, evaluates new releases against her internal benchmark suite (correctness, latency, constitutional compliance), and recommends upgrades. She curates better tools and knows *why* she chose them.
 - **Self-Authoring Documentation**: As the ReformDaemon modifies code, Oricli autonomously updates `docs/` to reflect the current architecture. Living self-model — she always knows what she is.

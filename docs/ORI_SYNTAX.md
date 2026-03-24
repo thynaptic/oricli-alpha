@@ -2,7 +2,7 @@
 
 ORI is Oricli-Alpha's native **workflow definition language**. It compiles to the same JSON workflow format used internally, but is designed to be human-writable, version-controllable, and readable at a glance.
 
-Files use the `.ori` extension. They are authored in **ORI Studio** (`/ori-studio` in the SovereignClaw UI) and compiled server-side via `POST /ori/compile`.
+Files use the `.ori` extension. They are authored in **ORI Studio** (`/ori-studio` in the ORI Studio UI) and compiled server-side via `POST /ori/compile`.
 
 ---
 
