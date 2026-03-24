@@ -45,8 +45,10 @@ type actionPattern struct {
 }
 
 var patterns = []actionPattern{
-	// Research
-	{regexp.MustCompile(`(?i)\b(?:research|investigate|look\s+into|deep\s+dive(?:\s+into|\s+on)?|find\s+out\s+(?:about|more\s+about)|tell\s+me\s+about|what\s+(?:is|are|do\s+you\s+know\s+about)|study|explore)\s+(.+)`), ActionResearch},
+	// Research — explicit research-intent verbs only.
+	// "tell me about" and "what is/are" are omitted: they're conversational and fire
+	// on self-referential questions like "tell me about yourself".
+	{regexp.MustCompile(`(?i)\b(?:research|investigate|look\s+into|deep\s+dive(?:\s+into|\s+on)?|find\s+out\s+(?:about|more\s+about)|study\s+(?:up\s+on|about)|do\s+(?:a\s+)?research\s+on)\s+(.+)`), ActionResearch},
 	// Search
 	{regexp.MustCompile(`(?i)\b(?:search(?:\s+for)?|google|look\s+up|find)\s+(.+)`), ActionSearch},
 	// Task / Reminder — must come before Create to capture "create a task/todo/reminder"
