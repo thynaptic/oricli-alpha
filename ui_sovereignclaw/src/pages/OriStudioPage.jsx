@@ -71,6 +71,9 @@ const ORI_CSS = `
 .ori-label   { color: #c3e88d; }
 .ori-string  { color: #c3e88d; }
 .ori-comment { color: #546e7a; font-style: italic; }
+.ori-err-line { background: rgba(239,83,80,0.08); }
+.ori-warn-line{ background: rgba(255,183,77,0.07); }
+@keyframes ori-spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
 `;
 
 function injectOriCSS() {
@@ -81,65 +84,132 @@ function injectOriCSS() {
   document.head.appendChild(s);
 }
 
-// ─── Editor component (textarea + highlight overlay) ─────────────────────────
-function OriEditor({ value, onChange }) {
-  const taRef  = useRef(null);
-  const preRef = useRef(null);
+// ─── Editor component (gutter + textarea + highlight overlay) ────────────────
+function OriEditor({ value, onChange, diagnostics = [], onCursorChange }) {
+  const taRef     = useRef(null);
+  const preRef    = useRef(null);
+  const gutterRef = useRef(null);
 
   useEffect(() => { injectOriCSS(); }, []);
 
+  const lines      = value.split('\n');
+  const lineCount  = lines.length;
+
+  // Build per-line error/warning sets from diagnostics (by line number if available)
+  const errLines  = new Set(diagnostics.filter(d => d.level === 'error'   && d.line).map(d => d.line));
+  const warnLines = new Set(diagnostics.filter(d => d.level === 'warning' && d.line).map(d => d.line));
+
   function syncScroll() {
-    if (preRef.current && taRef.current) {
-      preRef.current.scrollTop  = taRef.current.scrollTop;
-      preRef.current.scrollLeft = taRef.current.scrollLeft;
-    }
+    const top = taRef.current?.scrollTop ?? 0;
+    if (preRef.current)    preRef.current.scrollTop    = top;
+    if (gutterRef.current) gutterRef.current.scrollTop = top;
   }
 
-  const baseStyle = {
-    position: 'absolute', inset: 0, margin: 0, padding: '14px 18px',
-    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace",
-    fontSize: 13, lineHeight: 1.65,
+  function onKeyUp(e) {
+    const ta = taRef.current;
+    if (!ta || !onCursorChange) return;
+    const pre  = value.substring(0, ta.selectionStart);
+    const ln   = pre.split('\n').length;
+    const col  = pre.split('\n').pop().length + 1;
+    onCursorChange(ln, col);
+  }
+
+  const FONT = "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace";
+  const LINE_H = 1.65;
+  const FONT_SZ = 13;
+  const PAD_V = 14;
+  const PAD_H = 16;
+
+  const baseTextStyle = {
+    margin: 0, padding: `${PAD_V}px ${PAD_H}px`,
+    fontFamily: FONT, fontSize: FONT_SZ, lineHeight: LINE_H,
     whiteSpace: 'pre-wrap', wordWrap: 'break-word', overflowWrap: 'break-word',
-    tabSize: 2,
+    tabSize: 2, boxSizing: 'border-box',
   };
 
+  // Build highlighted HTML with per-line wrappers for error/warn backgrounds
+  function buildHighlightedHtml(code) {
+    const raw = highlight(code);
+    return raw.split('\n').map((lineHtml, i) => {
+      const ln = i + 1;
+      const cls = errLines.has(ln) ? ' class="ori-err-line"' : warnLines.has(ln) ? ' class="ori-warn-line"' : '';
+      return `<span${cls} style="display:block">${lineHtml || ' '}</span>`;
+    }).join('');
+  }
+
   return (
-    <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-      {/* Highlight layer (behind) */}
-      <pre
-        ref={preRef}
-        aria-hidden="true"
+    <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#0d1117' }}>
+      {/* ── Gutter (line numbers + markers) ── */}
+      <div
+        ref={gutterRef}
         style={{
-          ...baseStyle,
-          color: 'transparent',
-          pointerEvents: 'none',
-          overflow: 'hidden',
-          background: '#0d1117',
-          zIndex: 0,
+          flexShrink: 0, width: 52, overflowY: 'hidden', overflowX: 'hidden',
+          background: '#0a0d12', borderRight: '1px solid rgba(255,255,255,0.05)',
+          userSelect: 'none', paddingTop: PAD_V, paddingBottom: PAD_V,
         }}
-        dangerouslySetInnerHTML={{ __html: highlight(value) + '\n' }}
-      />
-      {/* Editable layer (on top, transparent) */}
-      <textarea
-        ref={taRef}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onScroll={syncScroll}
-        spellCheck={false}
-        autoComplete="off"
-        autoCorrect="off"
-        style={{
-          ...baseStyle,
-          color: 'transparent',
-          caretColor: '#e1e4e8',
-          background: 'transparent',
-          border: 'none',
-          outline: 'none',
-          resize: 'none',
-          overflowY: 'auto',
-          zIndex: 1,
-        }}
-      />
+      >
+        {lines.map((_, i) => {
+          const ln = i + 1;
+          const hasErr  = errLines.has(ln);
+          const hasWarn = warnLines.has(ln);
+          return (
+            <div key={ln} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+              paddingRight: 8, gap: 4,
+              fontFamily: FONT, fontSize: FONT_SZ, lineHeight: LINE_H,
+              color: hasErr ? '#ef5350' : hasWarn ? '#ffb74d' : '#3d4f5c',
+              background: hasErr ? 'rgba(239,83,80,0.08)' : hasWarn ? 'rgba(255,183,77,0.07)' : 'transparent',
+            }}>
+              {hasErr  && <span style={{ color: '#ef5350', fontSize: 9 }}>●</span>}
+              {hasWarn && <span style={{ color: '#ffb74d', fontSize: 9 }}>●</span>}
+              <span style={{ minWidth: 24, textAlign: 'right' }}>{ln}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Code area (highlight pre + transparent textarea) ── */}
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {/* Highlight layer */}
+        <pre
+          ref={preRef}
+          aria-hidden="true"
+          style={{
+            ...baseTextStyle,
+            position: 'absolute', inset: 0,
+            color: '#abb2bf',           /* ← default text color; spans override per-token */
+            pointerEvents: 'none',
+            overflow: 'hidden',
+            background: 'transparent',
+            zIndex: 0,
+          }}
+          dangerouslySetInnerHTML={{ __html: buildHighlightedHtml(value) }}
+        />
+        {/* Editable layer (transparent text, visible caret) */}
+        <textarea
+          ref={taRef}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          onScroll={syncScroll}
+          onKeyUp={onKeyUp}
+          onClick={onKeyUp}
+          spellCheck={false}
+          autoComplete="off"
+          autoCorrect="off"
+          style={{
+            ...baseTextStyle,
+            position: 'absolute', inset: 0,
+            color: 'transparent',
+            caretColor: '#e1e4e8',
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            resize: 'none',
+            overflowY: 'auto',
+            zIndex: 1,
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -148,69 +218,88 @@ function OriEditor({ value, onChange }) {
 function DiagnosticsPanel({ diagnostics, compiled, vars }) {
   const errors   = diagnostics.filter(d => d.level === 'error');
   const warnings = diagnostics.filter(d => d.level === 'warning');
-  const infos    = diagnostics.filter(d => d.level === 'info');
 
-  const chipStyle = (bg, fg = '#fff') => ({
-    display: 'inline-flex', alignItems: 'center', gap: 4,
-    background: bg, color: fg, borderRadius: 4, padding: '2px 8px',
-    fontSize: 11, fontWeight: 700, fontFamily: "var(--font-grotesk, sans-serif)",
-  });
+  const badge = (count, color, bg) => count > 0 && (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      background: bg, color, borderRadius: 4, padding: '1px 7px',
+      fontSize: 10, fontWeight: 700, fontFamily: 'monospace',
+    }}>
+      {count === 1 ? (color === '#ef5350' ? 'E' : 'W') : count}
+      {count > 1 && (color === '#ef5350' ? ' errors' : ' warnings')}
+      {count === 1 && (color === '#ef5350' ? ' error' : ' warning')}
+    </span>
+  );
 
   return (
     <div style={{
-      padding: '14px 16px',
       borderBottom: '1px solid rgba(255,255,255,0.07)',
-      overflowY: 'auto',
-      maxHeight: 280,
-      background: '#0d1117',
+      overflowY: 'auto', maxHeight: 260,
+      background: '#090c10',
     }}>
-      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#546e7a', marginBottom: 10 }}>
-        Compiler Output
+      {/* Header bar (always visible) */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)',
+        background: '#0a0d12', flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#3d4f5c' }}>
+          PROBLEMS
+        </span>
+        {badge(errors.length,   '#ef5350', 'rgba(239,83,80,0.15)')}
+        {badge(warnings.length, '#ffb74d', 'rgba(255,183,77,0.15)')}
+        {compiled && (
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: '#3d4f5c', fontFamily: 'monospace' }}>
+              {compiled.steps?.length ?? 0} steps
+              {vars?.length > 0 ? `  ·  ${vars.length} var${vars.length > 1 ? 's' : ''}` : ''}
+              {compiled.sendToCanvas ? '  ·  → canvas' : ''}
+            </span>
+          </span>
+        )}
       </div>
 
-      {/* Summary chips */}
-      {compiled && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-          <span style={chipStyle('rgba(100,221,23,0.15)', '#64dd17')}>
-            ✓ {compiled.steps?.length ?? 0} steps
-          </span>
-          {vars?.length > 0 && (
-            <span style={chipStyle('rgba(247,140,108,0.15)', '#f78c6c')}>
-              ⬡ {vars.length} var{vars.length !== 1 ? 's' : ''}
-            </span>
-          )}
-          {compiled.sendToCanvas && (
-            <span style={chipStyle('rgba(130,170,255,0.15)', '#82aaff')}>
-              → canvas
-            </span>
-          )}
-          {errors.length === 0 && warnings.length === 0 && (
-            <span style={chipStyle('rgba(100,221,23,0.08)', '#546e7a')}>
-              No issues
-            </span>
-          )}
-        </div>
-      )}
-
-      {!compiled && diagnostics.length === 0 && (
-        <div style={{ color: '#546e7a', fontSize: 12, fontFamily: 'monospace' }}>
-          Write or load a workflow above — auto-compile is on.
-        </div>
-      )}
-
-      {diagnostics.map((d, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 5, fontSize: 12 }}>
-          {d.level === 'error'
-            ? <AlertCircle size={13} style={{ color: '#ef5350', flexShrink: 0, marginTop: 1 }} />
-            : d.level === 'warning'
-            ? <AlertTriangle size={13} style={{ color: '#ffb74d', flexShrink: 0, marginTop: 1 }} />
-            : <Info size={13} style={{ color: '#a89cf7', flexShrink: 0, marginTop: 1 }} />}
-          <span style={{
-            color: d.level === 'error' ? '#ef5350' : d.level === 'warning' ? '#ffb74d' : '#78909c',
-            fontFamily: 'monospace', lineHeight: 1.5,
-          }}>{d.message}</span>
-        </div>
-      ))}
+      {/* Compiler messages */}
+      <div style={{ padding: '6px 0' }}>
+        {diagnostics.length === 0 && (
+          <div style={{ padding: '6px 14px', color: '#3d4f5c', fontSize: 11, fontFamily: 'monospace' }}>
+            No problems detected.
+          </div>
+        )}
+        {diagnostics.map((d, i) => {
+          const isErr  = d.level === 'error';
+          const isWarn = d.level === 'warning';
+          const col    = isErr ? '#ef5350' : isWarn ? '#ffb74d' : '#546e7a';
+          const code   = isErr ? 'E' : isWarn ? 'W' : 'I';
+          const n      = String(i + 1).padStart(3, '0');
+          return (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 0,
+              padding: '3px 0',
+              background: isErr ? 'rgba(239,83,80,0.04)' : isWarn ? 'rgba(255,183,77,0.03)' : 'transparent',
+              borderLeft: `2px solid ${isErr ? '#ef5350' : isWarn ? '#ffb74d' : 'transparent'}`,
+            }}>
+              {/* Severity tag */}
+              <span style={{
+                flexShrink: 0, width: 68, paddingLeft: 10,
+                fontFamily: 'monospace', fontSize: 11,
+                color: col, fontWeight: 700,
+              }}>
+                {code}[{n}]
+              </span>
+              {/* Message */}
+              <span style={{
+                flex: 1, fontFamily: 'monospace', fontSize: 11, lineHeight: 1.6,
+                color: isErr ? '#e57373' : isWarn ? '#ffd54f' : '#607d8b',
+                paddingRight: 14,
+              }}>
+                {d.message}
+                {d.line ? <span style={{ color: '#3d4f5c' }}>  :{d.line}</span> : null}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -275,6 +364,7 @@ export default function OriStudioPage() {
   const [workflows,   setWorkflows]   = useState([]);
   const [autoCompile, setAutoCompile] = useState(true);
   const [loadOpen,    setLoadOpen]    = useState(false);
+  const [cursor,      setCursor]      = useState({ ln: 1, col: 1 });
   const debounceRef  = useRef(null);
   const pollRef      = useRef(null);
 
@@ -483,7 +573,7 @@ export default function OriStudioPage() {
         {/* Status indicator */}
         {compiling && (
           <span style={{ color: '#546e7a', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Loader size={11} style={{ animation: 'spin 1s linear infinite' }} /> compiling…
+            <Loader size={11} style={{ animation: 'ori-spin 1s linear infinite' }} /> compiling…
           </span>
         )}
         {!compiling && errorCount > 0 && (
@@ -540,7 +630,7 @@ export default function OriStudioPage() {
         </button>
 
         <button onClick={compile} disabled={compiling} style={ghostBtn}>
-          <RefreshCw size={12} style={compiling ? { animation: 'spin 1s linear infinite' } : {}} />
+          <RefreshCw size={12} style={compiling ? { animation: 'ori-spin 1s linear infinite' } : {}} />
           Compile
         </button>
 
@@ -548,13 +638,13 @@ export default function OriStudioPage() {
           {saved
             ? <><Check size={12} /> Saved!</>
             : saving
-            ? <><Loader size={12} style={{ animation: 'spin 1s linear infinite' }} /> Saving…</>
+            ? <><Loader size={12} style={{ animation: 'ori-spin 1s linear infinite' }} /> Saving…</>
             : <><Save size={12} /> Save</>}
         </button>
 
         <button onClick={runWorkflow} disabled={!compiled || running} style={compiled ? greenBtn : dimBtn}>
           {running
-            ? <><Loader size={12} style={{ animation: 'spin 1s linear infinite' }} /> Running…</>
+            ? <><Loader size={12} style={{ animation: 'ori-spin 1s linear infinite' }} /> Running…</>
             : <><Play size={12} /> Run</>}
         </button>
 
@@ -590,7 +680,41 @@ export default function OriStudioPage() {
               </label>
             </span>
           </div>
-          <OriEditor value={source} onChange={setSource} />
+          <OriEditor
+            value={source}
+            onChange={setSource}
+            diagnostics={diagnostics}
+            onCursorChange={(ln, col) => setCursor({ ln, col })}
+          />
+          {/* ── Status bar ── */}
+          <div style={{
+            flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12,
+            padding: '3px 14px', background: '#07090e',
+            borderTop: '1px solid rgba(255,255,255,0.05)',
+            fontSize: 10, fontFamily: 'monospace', color: '#3d4f5c',
+            userSelect: 'none',
+          }}>
+            <span>Ln {cursor.ln}, Col {cursor.col}</span>
+            <span style={{ marginLeft: 4 }}>
+              {source.split('\n').length} lines
+            </span>
+            <span style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
+              {diagnostics.filter(d => d.level === 'error').length > 0 && (
+                <span style={{ color: '#ef5350' }}>
+                  ✕ {diagnostics.filter(d => d.level === 'error').length} error{diagnostics.filter(d => d.level === 'error').length > 1 ? 's' : ''}
+                </span>
+              )}
+              {diagnostics.filter(d => d.level === 'warning').length > 0 && (
+                <span style={{ color: '#ffb74d' }}>
+                  ⚠ {diagnostics.filter(d => d.level === 'warning').length} warning{diagnostics.filter(d => d.level === 'warning').length > 1 ? 's' : ''}
+                </span>
+              )}
+              {compiled && diagnostics.filter(d => d.level === 'error').length === 0 && (
+                <span style={{ color: '#37474f' }}>✓ compiled</span>
+              )}
+              <span style={{ color: '#263238' }}>ORI v1.0</span>
+            </span>
+          </div>
         </div>
 
         {/* ── Right: diagnostics + log ── */}
