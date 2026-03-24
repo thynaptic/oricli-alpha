@@ -2430,6 +2430,295 @@ def run_project(proj_id: str) -> Response:
     return jsonify({"ok": True, "run_ids": run_ids, "entry_workflows": [w["id"] for w in entry_wfs]})
 
 
+# ── ORI Syntax: Serializer + Parser + Routes ─────────────────────────────────
+
+_ORI_TYPE_TO_KW: dict[str, str] = {
+    "prompt": "prompt", "summarize": "summarize", "transform": "transform",
+    "extract": "extract", "web": "web", "code": "code", "template": "template",
+    "notify": "notify", "memory_search": "search", "rag_query": "rag",
+    "ingest_doc": "ingest", "fetch_connection": "fetch", "sub_workflow": "run",
+}
+_ORI_KW_TO_TYPE: dict[str, str] = {v: k for k, v in _ORI_TYPE_TO_KW.items() if k != "sub_workflow"}
+
+
+def _ori_serialize(wf: dict, all_workflows: list | None = None) -> str:
+    """Serialize a workflow dict to .ori source text."""
+    import re as _re
+    wf_name_map = {w["id"]: w["name"] for w in (all_workflows or [])}
+
+    lines: list[str] = [f'workflow "{wf.get("name", "Untitled")}" {{']
+    if wf.get("description"):
+        lines.append(f'  description: "{wf["description"]}"')
+    if wf.get("agentId"):
+        lines.append(f'  agent: @{wf["agentId"]}')
+    if wf.get("sendToCanvas"):
+        lines.append(f'  sendToCanvas: true')
+
+    # Detect user-defined vars
+    vars_found: set[str] = set()
+    for step in wf.get("steps", []):
+        for text in [step.get("value", ""), step.get("condition", ""),
+                     json.dumps(step.get("params") or {}), step.get("input", "")]:
+            for m in re.finditer(r'\{\{([^}]+)\}\}', text or ""):
+                key = m.group(1).strip()
+                if key not in _WF_BUILTIN_VARS and not key.startswith("step_"):
+                    vars_found.add(key)
+    if vars_found:
+        lines.append("")
+        for v in sorted(vars_found):
+            lines.append(f"  var {v}")
+
+    def fmt_val(v: str) -> str:
+        if not v:
+            return ""
+        if "\n" in v:
+            return f" `{v}`"
+        return f' "{v.replace(chr(34), chr(92)+chr(34))}"'
+
+    def ser(steps: list, indent: str = "  ") -> list[str]:
+        out: list[str] = []
+        for step in steps:
+            stype = step.get("type", "prompt")
+            label = step.get("label", "")
+            value = step.get("value", "") or step.get("input", "")
+            lp = f"[{label}]" if label else ""
+
+            if stype == "if_else":
+                cond = step.get("condition") or value or ""
+                out.append(f'{indent}if "{cond}" {{')
+                out.extend(ser(step.get("thenSteps") or [], indent + "  "))
+                out.append(f'{indent}}}')
+                if step.get("elseSteps"):
+                    out.append(f'{indent}else {{')
+                    out.extend(ser(step.get("elseSteps") or [], indent + "  "))
+                    out.append(f'{indent}}}')
+
+            elif stype == "sub_workflow":
+                wf_id = (step.get("params") or {}).get("wf_id") or value or ""
+                display = wf_name_map.get(wf_id, "")
+                comment = f"  # {display}" if display and display != wf_id else ""
+                out.append(f'{indent}run @{wf_id}{comment}')
+
+            elif stype == "fetch_connection":
+                conn_id = (step.get("params") or {}).get("connectionId", "")
+                kw = value or ""
+                kw_part = f' "{kw}"' if kw else ""
+                out.append(f'{indent}step{lp}: fetch @{conn_id}{kw_part}')
+
+            else:
+                kw = _ORI_TYPE_TO_KW.get(stype, stype)
+                out.append(f'{indent}step{lp}: {kw}{fmt_val(value)}')
+        return out
+
+    lines.append("")
+    lines.extend(ser(wf.get("steps", [])))
+
+    if wf.get("sendToCanvas"):
+        lines.append("")
+        lines.append("  output → canvas")
+
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _ori_parse(source: str) -> dict:
+    """Parse .ori source → {ok, workflow, diagnostics, vars}."""
+    diagnostics: list[dict] = []
+
+    def err(msg: str):  diagnostics.append({"level": "error",   "message": msg})
+    def warn(msg: str): diagnostics.append({"level": "warning", "message": msg})
+    def info(msg: str): diagnostics.append({"level": "info",    "message": msg})
+
+    # Strip line comments
+    src = re.sub(r'#[^\n]*', '', source)
+
+    hdr = re.search(r'workflow\s+"([^"]+)"\s*\{', src)
+    if not hdr:
+        err('Missing workflow declaration. Expected: workflow "Name" { ... }')
+        return {"ok": False, "workflow": None, "diagnostics": diagnostics, "vars": []}
+
+    wf: dict = {
+        "id": str(uuid.uuid4()), "name": hdr.group(1), "description": "",
+        "agentId": None, "agentName": "Default", "agentEmoji": "✨",
+        "steps": [], "sendToCanvas": False, "project_id": None,
+    }
+    vars_found: set[str] = set()
+
+    # Extract outer block
+    def extract_block(s: str, from_pos: int) -> tuple[str, int]:
+        depth = 0
+        i = from_pos
+        while i < len(s):
+            if s[i] == '{':
+                depth += 1
+            elif s[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    return s[from_pos + 1:i], i + 1
+            i += 1
+        return s[from_pos + 1:], len(s)
+
+    # Find brace that closes the workflow header
+    brace_pos = src.index('{', hdr.start())
+    body, _ = extract_block(src, brace_pos)
+
+    def get_stmts(text: str) -> list[str]:
+        """Split body text into balanced statements."""
+        stmts: list[str] = []
+        lines = text.splitlines()
+        j = 0
+        while j < len(lines):
+            line = lines[j].strip()
+            if not line:
+                j += 1
+                continue
+            opens = line.count('{') - line.count('}')
+            if opens > 0:
+                buf = [line]
+                j += 1
+                depth = opens
+                while j < len(lines) and depth > 0:
+                    bl = lines[j]
+                    depth += bl.count('{') - bl.count('}')
+                    buf.append(bl.strip())
+                    j += 1
+                stmts.append('\n'.join(buf))
+            else:
+                stmts.append(line)
+                j += 1
+        return stmts
+
+    def read_val(text: str) -> str:
+        t = text.strip()
+        mq = re.match(r'"((?:[^"\\]|\\.)*)"', t)
+        if mq:
+            return mq.group(1).replace('\\"', '"')
+        mb = re.match(r'`(.*?)`', t, re.DOTALL)
+        if mb:
+            return mb.group(1)
+        return t
+
+    def extract_block_from_stmt(stmt: str) -> tuple[str, str]:
+        """Return (inner, after_close) for the first {...} block in stmt."""
+        s = stmt.index('{')
+        e = stmt.rindex('}')
+        return stmt[s + 1:e].strip(), stmt[e + 1:].strip()
+
+    def parse_stmts(stmts: list[str]) -> list[dict]:
+        steps: list[dict] = []
+        k = 0
+        while k < len(stmts):
+            stmt = stmts[k]
+
+            # metadata
+            m = re.match(r'description\s*:\s*"([^"]*)"', stmt)
+            if m: wf["description"] = m.group(1); k += 1; continue
+
+            m = re.match(r'agent\s*:\s*@(\S+)', stmt)
+            if m: wf["agentId"] = m.group(1); k += 1; continue
+
+            if re.match(r'sendToCanvas\s*:\s*true', stmt):
+                wf["sendToCanvas"] = True; k += 1; continue
+
+            m = re.match(r'var\s+(\w+)', stmt)
+            if m: vars_found.add(m.group(1)); k += 1; continue
+
+            m = re.match(r'output\s*(?:→|->)\s*(\S+)', stmt)
+            if m:
+                if m.group(1) == "canvas": wf["sendToCanvas"] = True
+                k += 1; continue
+
+            # run @wf-id
+            m = re.match(r'run\s+@(\S+)', stmt)
+            if m:
+                steps.append({"id": str(uuid.uuid4()), "type": "sub_workflow",
+                               "value": m.group(1), "label": "",
+                               "params": {"wf_id": m.group(1)}})
+                k += 1; continue
+
+            # if "cond" { ... } [else { ... }]
+            m = re.match(r'if\s+"([^"]*)"', stmt)
+            if m and '{' in stmt:
+                condition = m.group(1)
+                then_body, _ = extract_block_from_stmt(stmt)
+                then_steps = parse_stmts(get_stmts(then_body))
+                else_steps: list[dict] = []
+                if k + 1 < len(stmts) and re.match(r'else\s*\{', stmts[k + 1]):
+                    else_body, _ = extract_block_from_stmt(stmts[k + 1])
+                    else_steps = parse_stmts(get_stmts(else_body))
+                    k += 1
+                steps.append({"id": str(uuid.uuid4()), "type": "if_else",
+                               "value": condition, "condition": condition, "label": "",
+                               "thenSteps": then_steps, "elseSteps": else_steps})
+                k += 1; continue
+
+            # step[label]: type [@conn] ["value"]
+            m = re.match(r'step(?:\[([^\]]*)\])?\s*:\s*(\w+)(.*)', stmt)
+            if m:
+                s_label = m.group(1) or ""
+                s_kw    = m.group(2)
+                s_rest  = m.group(3).strip()
+
+                if s_kw == "fetch":
+                    at_m = re.search(r'@(\S+)', s_rest)
+                    kw_m = re.search(r'"([^"]*)"', s_rest)
+                    steps.append({"id": str(uuid.uuid4()), "type": "fetch_connection",
+                                  "value": kw_m.group(1) if kw_m else "", "label": s_label,
+                                  "params": {"connectionId": at_m.group(1) if at_m else ""}})
+                else:
+                    s_type = _ORI_KW_TO_TYPE.get(s_kw, s_kw)
+                    s_val  = read_val(s_rest) if s_rest else ""
+                    steps.append({"id": str(uuid.uuid4()), "type": s_type,
+                                  "value": s_val, "label": s_label})
+                k += 1; continue
+
+            # skip else / closing braces / unknown
+            if stmt and not stmt.startswith("else") and stmt != "}":
+                warn(f'Unrecognized statement: "{stmt[:70]}"')
+            k += 1
+        return steps
+
+    wf["steps"] = parse_stmts(get_stmts(body))
+
+    if not wf["steps"]:
+        warn("No steps found in workflow body")
+    else:
+        info(f"{len(wf['steps'])} step(s) parsed successfully")
+    if vars_found:
+        info(f"Variables declared: {', '.join(sorted(vars_found))}")
+    for step in wf["steps"]:
+        if step["type"] == "sub_workflow":
+            warn(f"run @{step['value']} — verify this workflow ID exists")
+
+    return {
+        "ok": not any(d["level"] == "error" for d in diagnostics),
+        "workflow": wf,
+        "diagnostics": diagnostics,
+        "vars": sorted(vars_found),
+    }
+
+
+@app.route("/ori/compile", methods=["POST"])
+def ori_compile() -> Response:
+    body = request.get_json(silent=True) or {}
+    source = body.get("source", "")
+    if not source.strip():
+        return jsonify({"ok": False, "workflow": None,
+                        "diagnostics": [{"level": "error", "message": "Empty source"}], "vars": []})
+    return jsonify(_ori_parse(source))
+
+
+@app.route("/ori/decompile/<wf_id>", methods=["GET"])
+def ori_decompile(wf_id: str) -> Response:
+    with _WF_LOCK:
+        wfs = _load_workflows()
+    wf = next((w for w in wfs if w["id"] == wf_id), None)
+    if not wf:
+        return jsonify({"error": "not found"}), 404
+    source = _ori_serialize(wf, all_workflows=wfs)
+    return jsonify({"source": source, "wf_id": wf_id})
+
+
 _INDEX_STATUS_FILE = Path(__file__).parent / ".oricli" / "index_status.json"
 _INDEX_LOCK = threading.Lock()
 _BACKBONE_URL = os.getenv("MAVAIA_BACKBONE_URL", "http://localhost:8089")
