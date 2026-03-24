@@ -87,7 +87,7 @@ function RawLogsTab() {
     const text = visible.map(l => l.raw).join('\n');
     const blob = new Blob([text], { type: 'text/plain' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `sovereignclaw-logs-${Date.now()}.txt`; a.click();
+    a.download = `oristudio-logs-${Date.now()}.txt`; a.click();
   }
 
   return (

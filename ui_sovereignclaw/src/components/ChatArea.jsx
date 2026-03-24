@@ -552,7 +552,7 @@ function ChatInput({ value, onChange, onSend, onAbort, isStreaming, disabled }) 
           onKeyDown={handleKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder="Message SovereignClaw…"
+          placeholder="Message ORI Studio…"
           rows={1}
           style={{
             display: 'block', width: '100%', background: 'transparent',
@@ -945,7 +945,7 @@ export function ChatArea() {
       }}>
         <AgentSwitcher />
         <span style={{ fontSize: 13, color: 'var(--color-sc-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-          {messages.length > 0 ? activeSession?.title : 'SovereignClaw'}
+          {messages.length > 0 ? activeSession?.title : 'ORI Studio'}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--color-sc-text-dim)' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-sc-success)', display: 'inline-block' }} />
@@ -980,7 +980,7 @@ export function ChatArea() {
           <div style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: 'var(--color-sc-text-dim)' }}>
             {activeChatAgent
               ? <span>Using <span style={{ color: 'var(--color-sc-gold)' }}>{activeChatAgent.emoji} {activeChatAgent.name}</span> — Your data never leaves your infrastructure.</span>
-              : 'SovereignClaw runs locally — your data never leaves your infrastructure.'
+              : 'ORI Studio runs locally — your data never leaves your infrastructure.'
             }
           </div>
         </div>

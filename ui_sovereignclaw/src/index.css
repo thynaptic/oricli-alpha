@@ -1,29 +1,29 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
-/* ── ERI-driven accent color (transitionable via @property) ── */
+/* ── ORI accent color (transitionable via @property) ── */
 @property --color-sc-gold {
   syntax: '<color>';
   inherits: true;
-  initial-value: #C4A44A;
+  initial-value: #E5004C;
 }
 @property --color-sc-gold-glow {
   syntax: '<color>';
   inherits: true;
-  initial-value: #FFD166;
+  initial-value: #FF0055;
 }
 
 @theme {
   --color-sc-bg: #080810;
-  --color-sc-surface: #10101C;
-  --color-sc-surface2: #14142A;
-  --color-sc-border: #1E1E32;
-  --color-sc-border2: #2A2A44;
-  --color-sc-gold: #C4A44A;
-  --color-sc-gold-glow: #FFD166;
-  --color-sc-text: #E8E8F0;
-  --color-sc-text-muted: #888899;
-  --color-sc-text-dim: #44445A;
+  --color-sc-surface: #0E0810;
+  --color-sc-surface2: #150A14;
+  --color-sc-border: #1E0A18;
+  --color-sc-border2: #2A0F22;
+  --color-sc-gold: #E5004C;
+  --color-sc-gold-glow: #FF0055;
+  --color-sc-text: #F0ECE8;
+  --color-sc-text-muted: #8A7880;
+  --color-sc-text-dim: #3D2030;
   --color-sc-success: #06D6A0;
   --color-sc-danger: #FF4D6D;
   --color-sc-blue: #4D9EFF;

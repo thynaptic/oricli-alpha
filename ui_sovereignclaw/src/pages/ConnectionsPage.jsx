@@ -222,7 +222,7 @@ const CATALOG = [
     fields: [
       { key: 'client_id', label: 'App Client ID', type: 'text', required: true },
       { key: 'client_secret', label: 'App Client Secret', type: 'password', required: true },
-      { key: 'user_agent', label: 'User Agent', type: 'text', placeholder: 'SovereignClaw/1.0 (by u/username)' },
+      { key: 'user_agent', label: 'User Agent', type: 'text', placeholder: 'ORI Studio/1.0 (by u/username)' },
     ],
   },
   {
