@@ -339,7 +339,11 @@ def _sse_stream(target_url: str, payload: Dict[str, Any]) -> Iterable[str]:
                 for line in r.iter_lines():
                     if not line:
                         continue
-                    if line.startswith("data:"):
+                    if line.startswith(":"):
+                        # SSE comment (e.g. ": keep-alive") — forward to client so
+                        # Cloudflare's 524 idle timer keeps resetting.
+                        yield f"{line}\n\n"
+                    elif line.startswith("data:"):
                         sse_seen = True
                         yield f"{line}\n\n"
                     elif sse_seen:

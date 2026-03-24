@@ -61,7 +61,7 @@ func NewGenerationService() *GenerationService {
 		IdleConnTimeout:     120 * time.Second,
 		DisableCompression:  false,
 	}
-	return &GenerationService{
+	svc := &GenerationService{
 		BaseURL:       url,
 		GenerateURL:   genUrl,
 		DefaultModel:  model,
@@ -72,7 +72,44 @@ func NewGenerationService() *GenerationService {
 		StreamClient:  &http.Client{Timeout: 0, Transport: transport},
 		RunPodMgr:     NewRunPodManager(),
 	}
-}// --- PROMPT ENGINEERING & PHRASING ---
+	// Pre-warm the default chat model so the first user request is fast.
+	// Runs in background — backbone boot is not blocked.
+	go svc.prewarmModel(model)
+	return svc
+}
+
+// prewarmModel sends a minimal chat request to Ollama to load the model into RAM.
+// Sets keep_alive to 60m so it stays hot between conversations.
+func (s *GenerationService) prewarmModel(model string) {
+	payload := map[string]interface{}{
+		"model":      model,
+		"messages":   []map[string]interface{}{{"role": "user", "content": "."}},
+		"stream":     false,
+		"keep_alive": "60m",
+		"options":    map[string]interface{}{"num_predict": 1},
+	}
+	if strings.HasPrefix(strings.ToLower(model), "qwen3") {
+		payload["think"] = false
+	}
+	body, _ := json.Marshal(payload)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "POST", s.GenerateURL+"/api/chat", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("[GenerationService] pre-warm request error: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.HTTPClient.Do(req)
+	if err != nil {
+		log.Printf("[GenerationService] pre-warm failed for %s: %v", model, err)
+		return
+	}
+	resp.Body.Close()
+	log.Printf("[GenerationService] pre-warm complete: %s is ready", model)
+}
+
+// --- PROMPT ENGINEERING & PHRASING ---
 
 func (s *GenerationService) EnhancePrompt(ctx context.Context, prompt string) (string, error) {
 	enhanced := "Enhanced: " + prompt // Native heuristic or LLM-based enhancement
