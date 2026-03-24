@@ -179,6 +179,7 @@ func (s *ServerV2) setupRoutes() {
 
 	// Public
 	v1.GET("/health", s.handleHealth)
+	v1.GET("/eri", s.handleERI)
 	v1.GET("/ws", s.handleWS)
 	v1.GET("/traces", s.handleGetTraces)
 	v1.GET("/loglines", s.handleLogLines)
@@ -220,6 +221,23 @@ func (s *ServerV2) setupRoutes() {
 
 func (s *ServerV2) handleHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ready", "system": "oricli-alpha-v2", "pure_go": true})
+}
+
+// handleERI returns the current Ecospheric Resonance Index and swarm state.
+// This is a public endpoint — no auth required — polled by the ORI Studio UI
+// to drive real-time accent color and surface tone shifts.
+func (s *ServerV2) handleERI(c *gin.Context) {
+	res := s.Agent.SovEngine.Resonance.Current
+	c.JSON(http.StatusOK, gin.H{
+		"eri":        res.ERI,
+		"ers":        res.ERS,
+		"pacing":     res.Pacing,
+		"volatility": res.Volatility,
+		"coherence":  res.Coherence,
+		"musical_key": res.MusicalKey,
+		"bpm":        res.BPM,
+		"state":      s.Agent.SovEngine.Resonance.GetStateDescription(),
+	})
 }
 
 func (s *ServerV2) handleChatCompletions(c *gin.Context) {

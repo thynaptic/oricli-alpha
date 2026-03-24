@@ -15,14 +15,15 @@ import { MemoryBrowser } from './pages/MemoryBrowser';
 import { GoalsPage } from './pages/GoalsPage';
 import OriStudioPage from './pages/OriStudioPage';
 import { SettingsPanel } from './components/SettingsPanel';
+import { useERI } from './hooks/useERI';
 
-// ── ERI state → accent color mapping (mirrors Go sensory.go KosmicColor palette) ──
+// ── ERI state → accent color mapping ──
+// ERI -1.0…1.0: swarm coherence composite from Go ResonanceService
 export const ERI_STATES = [
-  { min: 0.7,        name: 'Symphonic',  accent: '#994CFF', glow: '#C490FF', label: 'E Major ✦' },
-  { min: 0.45,       name: 'Stable',     accent: '#C4A44A', glow: '#FFD166', label: 'C Major ◈' },
-  { min: 0.25,       name: 'Dissonant',  accent: '#00CCCC', glow: '#66FFFF', label: 'G Minor ◇' },
-  { min: 0.0,        name: 'Discordant', accent: '#FF9900', glow: '#FFBB44', label: 'D Minor △' },
-  { min: -Infinity,  name: 'Cacophonic', accent: '#FF4D6D', glow: '#FF8898', label: 'B Locrian ⚠' },
+  { min: 0.7,       name: 'Symphonic',  accent: '#FF1A5E', glow: '#FF4D80', label: 'E Major ✦' },
+  { min: 0.3,       name: 'Stable',     accent: '#E5004C', glow: '#FF0055', label: 'C Major ◈' },
+  { min: -0.3,      name: 'Dissonant',  accent: '#B8003D', glow: '#D4004A', label: 'G Minor ◇' },
+  { min: -Infinity, name: 'Cacophonic', accent: '#7A0028', glow: '#9E0035', label: 'B Locrian ⚠' },
 ];
 
 export function resolveEriTheme(eri) {
@@ -37,13 +38,8 @@ export default function App() {
   const eriState   = useSCStore(s => s.eriState);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Apply ERI accent to CSS custom properties whenever ERI changes
-  useEffect(() => {
-    const theme = resolveEriTheme(eriState.eri ?? 0.5);
-    const root = document.documentElement;
-    root.style.setProperty('--color-sc-gold', theme.accent);
-    root.style.setProperty('--color-sc-gold-glow', theme.glow);
-  }, [eriState]);
+  // ERI → live CSS color shifts (poll + SSE live value)
+  useERI(eriState?.eri ?? null);
 
   useEffect(() => {
     fetchHealth().then(h => setHealth(h));

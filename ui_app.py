@@ -180,8 +180,24 @@ def health() -> Response:
     })
 
 
-@app.route("/events", methods=["GET"])
-def events_stub() -> Response:
+@app.route("/api/eri", methods=["GET"])
+def proxy_eri() -> Response:
+    """Proxy ERI + swarm resonance state from backbone — polled by UI for live color theming."""
+    try:
+        with _client() as client:
+            resp = client.get(
+                f"{API_BASE}/v1/eri",
+                timeout=3.0,
+            )
+            if resp.status_code == 200:
+                return jsonify(resp.json())
+    except Exception:  # noqa: BLE001
+        pass
+    # Fallback neutral state if backbone unreachable
+    return jsonify({"eri": 0.5, "ers": 0.5, "pacing": 0.5, "volatility": 0.0, "coherence": 1.0, "state": "Stable"})
+
+
+
     return jsonify({"events": [], "note": "stub"})
 
 
