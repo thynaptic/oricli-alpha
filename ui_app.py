@@ -225,15 +225,31 @@ def spa_assets(filename: str) -> Response:
 
 @app.route("/models", methods=["GET"])
 def models() -> Response:
-    """Return available models from Ollama, formatted as OpenAI-compatible list."""
+    """Return chat-capable models from Ollama, sorted with the backbone default first."""
+    # Patterns that identify embedding/vision-only models — not valid for /api/chat
+    _EMBED_PATTERNS = ("embed", "minilm", "nomic", "mxbai", "bge-", "e5-", "gte-")
+
     try:
         with _client() as client:
             r = client.get(f"{OLLAMA_BASE}/api/tags", timeout=5.0)
             r.raise_for_status()
             tags = r.json().get("models", [])
+
+        backbone_default = os.getenv("OLLAMA_MODEL", "qwen3:1.7b")
+
+        chat_models = []
+        for m in tags:
+            name = m["name"].lower()
+            if any(pat in name for pat in _EMBED_PATTERNS):
+                continue  # skip embedding-only models
+            chat_models.append(m["name"])
+
+        # Backbone default goes first so the UI picks it as activeModel
+        chat_models.sort(key=lambda n: (0 if n == backbone_default else 1, n))
+
         model_list = [
-            {"id": m["name"], "object": "model", "owned_by": "ollama"}
-            for m in tags
+            {"id": name, "object": "model", "owned_by": "ollama"}
+            for name in chat_models
         ]
         return jsonify({"object": "list", "data": model_list})
     except Exception:  # noqa: BLE001

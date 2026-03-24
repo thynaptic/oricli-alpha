@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -262,8 +263,9 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		return nil, err
 	}
 	if resp.StatusCode >= 400 {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		resp.Body.Close()
-		return nil, fmt.Errorf("Ollama returned status %d for streaming chat", resp.StatusCode)
+		return nil, fmt.Errorf("Ollama returned status %d for streaming chat: %s", resp.StatusCode, strings.TrimSpace(string(errBody)))
 	}
 
 	ch := make(chan string, 64)
