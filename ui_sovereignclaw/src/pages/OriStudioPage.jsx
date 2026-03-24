@@ -760,7 +760,7 @@ function InlineEditBar({ editState, source, onApply, onClose }) {
 }
 
 // ─── Vibe Coding Panel ────────────────────────────────────────────────────────
-function VibeCodingPanel({ source, onApply, onClose }) {
+function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
   const [messages,  setMessages]  = useState([
     { role: 'ori', text: "I know ORI inside out. Describe a workflow and I'll build it — or tell me how to modify the current one.", isSystem: true },
   ]);
@@ -773,20 +773,34 @@ function VibeCodingPanel({ source, onApply, onClose }) {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, streaming]);
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  async function send() {
-    if (!input.trim() || busy) return;
-    const userText = input.trim();
+  const FIX_RE = /\b(fix|repair|correct|resolve|errors?|warnings?|broken|issues?)\b/i;
+
+  async function send(overrideText, overrideMode) {
+    const userText = overrideText ?? input.trim();
+    if (!userText || busy) return;
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setBusy(true); setStreaming('');
 
-    const hasSource = source.trim() && source.trim() !== '';
-    const instruction = hasSource
-      ? `Current workflow:\n${source}\n\nModification: ${userText}`
-      : userText;
+    const hasSource = source.trim() !== '';
+    const hasDiags  = diagnostics.length > 0;
+
+    // Auto-detect fix intent OR explicit override
+    const isFix = overrideMode === 'fix' || (hasDiags && FIX_RE.test(userText));
+
+    let mode, instruction;
+    if (isFix) {
+      mode        = 'fix';
+      instruction = userText;
+    } else {
+      mode = 'generate';
+      instruction = hasSource
+        ? `Current workflow:\n${source}\n\nModification: ${userText}`
+        : userText;
+    }
 
     await streamAiAssist(
-      { mode: 'generate', instruction },
+      { mode, instruction, source: hasSource ? source : '', diagnostics: hasDiags ? diagnostics : [] },
       {
         onChunk: (_, full) => setStreaming(full),
         onDone: full => {
@@ -906,39 +920,68 @@ function VibeCodingPanel({ source, onApply, onClose }) {
         <div ref={endRef} />
       </div>
 
-      {/* Input */}
+      {/* Fix issues chip + Input */}
       <div style={{
         flexShrink: 0, padding: '8px 12px',
         borderTop: '1px solid rgba(255,255,255,0.06)',
         background: '#09100f',
-        display: 'flex', gap: 8, alignItems: 'flex-end',
+        display: 'flex', flexDirection: 'column', gap: 6,
       }}>
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder="Describe a workflow, or ask to modify the current one…  (↵ send  ⇧↵ newline)"
-          rows={2}
-          style={{
-            flex: 1, resize: 'none', background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
-            padding: '7px 10px', color: '#e1e4e8', fontSize: 11, outline: 'none',
-            fontFamily: "var(--font-inter, sans-serif)", lineHeight: 1.5,
-          }}
-        />
-        <button
-          onClick={send}
-          disabled={busy || !input.trim()}
-          style={{
-            ...goldBtn, padding: '7px 12px', fontSize: 12,
-            opacity: (!input.trim() || busy) ? 0.4 : 1,
-          }}
-        >
-          {busy
-            ? <Loader size={13} style={{ animation: 'ori-spin 1s linear infinite' }} />
-            : <CornerDownLeft size={13} />}
-        </button>
+        {/* Quick-fix chip — shown when diagnostics exist */}
+        {diagnostics.length > 0 && !busy && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {(() => {
+              const errCnt  = diagnostics.filter(d => d.level === 'error').length;
+              const warnCnt = diagnostics.filter(d => d.level === 'warning').length;
+              const label   = [errCnt && `${errCnt} error${errCnt > 1 ? 's' : ''}`, warnCnt && `${warnCnt} warning${warnCnt > 1 ? 's' : ''}`].filter(Boolean).join(' + ');
+              return (
+                <button
+                  onClick={() => send(`Fix all diagnostics`, 'fix')}
+                  style={{
+                    background: errCnt ? 'rgba(239,83,80,0.12)' : 'rgba(255,183,77,0.1)',
+                    border: `1px solid ${errCnt ? 'rgba(239,83,80,0.3)' : 'rgba(255,183,77,0.3)'}`,
+                    borderRadius: 6, padding: '3px 10px', cursor: 'pointer',
+                    color: errCnt ? '#ef5350' : '#ffb74d',
+                    fontSize: 10, fontFamily: 'monospace', fontWeight: 700,
+                    display: 'flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <Zap size={9} />
+                  Fix {label}
+                </button>
+              );
+            })()}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+            placeholder="Describe a workflow, or ask to modify the current one…  (↵ send  ⇧↵ newline)"
+            rows={2}
+            style={{
+              flex: 1, resize: 'none', background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
+              padding: '7px 10px', color: '#e1e4e8', fontSize: 11, outline: 'none',
+              fontFamily: "var(--font-inter, sans-serif)", lineHeight: 1.5,
+            }}
+          />
+          <button
+            onClick={() => send()}
+            disabled={busy || !input.trim()}
+            style={{
+              ...goldBtn, padding: '7px 12px', fontSize: 12,
+              opacity: (!input.trim() || busy) ? 0.4 : 1,
+            }}
+          >
+            {busy
+              ? <Loader size={13} style={{ animation: 'ori-spin 1s linear infinite' }} />
+              : <CornerDownLeft size={13} />}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1391,6 +1434,7 @@ export default function OriStudioPage() {
           {vibeOpen && (
             <VibeCodingPanel
               source={source}
+              diagnostics={diagnostics}
               onApply={newSource => { setSource(newSource); }}
               onClose={() => setVibeOpen(false)}
             />

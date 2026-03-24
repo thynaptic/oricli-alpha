@@ -2776,42 +2776,66 @@ Runtime variables are prompted before each run.
 
 def _ori_ai_system() -> str:
     return (
-        "You are an expert ORI workflow developer for the SovereignClaw sovereign AI platform. "
+        "You are an expert ORI workflow developer for the ORI Studio sovereign AI platform. "
         "You write precise, idiomatic .ori workflow files.\n\n"
         + _ORI_SYNTAX_KNOWLEDGE
         + "\nOutput rules:\n"
-        "- generate/edit modes: output ONLY .ori source code — no markdown fences, no explanations\n"
+        "- generate/edit/fix modes: output ONLY .ori source code — no markdown fences, no explanations\n"
         "- explain mode: be concise and technical\n"
         "- Use meaningful step labels: step[research], step[brief], step[report]\n"
         "- Chain steps via {{output}} rather than repeating queries\n"
+        "- When fixing diagnostics, address every listed error and warning\n"
     )
 
 
 @app.route("/ori/ai-assist", methods=["POST"])
 def ori_ai_assist():
     data = request.get_json(silent=True) or {}
-    mode        = data.get("mode", "generate")   # generate | edit | explain
+    mode        = data.get("mode", "generate")   # generate | edit | explain | fix
     instruction = data.get("instruction", "")
     source      = data.get("source", "")
     sel_text    = data.get("sel_text", "")
+    diagnostics = data.get("diagnostics", [])    # [{level, message, line?}, ...]
 
     sys_msg = _ori_ai_system()
 
+    def _fmt_diagnostics(diags):
+        lines = []
+        for i, d in enumerate(diags, 1):
+            code  = 'E' if d.get('level') == 'error' else 'W' if d.get('level') == 'warning' else 'I'
+            n     = str(i).zfill(3)
+            loc   = f" (line {d['line']})" if d.get('line') else ""
+            lines.append(f"  {code}[{n}]{loc}: {d.get('message', '')}")
+        return "\n".join(lines)
+
     if mode == "generate":
+        diag_ctx = ""
+        if diagnostics:
+            diag_ctx = f"\n\nCompiler diagnostics to be aware of:\n{_fmt_diagnostics(diagnostics)}\n"
         user_msg = (
-            f"Build a complete .ori workflow file for this request:\n\n{instruction}\n\n"
+            f"Build a complete .ori workflow file for this request:\n\n{instruction}{diag_ctx}\n\n"
             "Output only valid .ori source code."
         )
     elif mode == "edit":
         ctx = f"\nFull workflow context:\n{source}\n" if source else ""
+        diag_ctx = f"\nCurrent diagnostics:\n{_fmt_diagnostics(diagnostics)}\n" if diagnostics else ""
         user_msg = (
-            f"{ctx}\nEdit this selected section:\n{sel_text}\n\n"
+            f"{ctx}{diag_ctx}\nEdit this selected section:\n{sel_text}\n\n"
             f"Instruction: {instruction}\n\n"
             "Output ONLY the replacement .ori code for the selected section."
         )
     elif mode == "explain":
         code = sel_text or source
         user_msg = f"Explain this .ori workflow code concisely and technically:\n{code}"
+    elif mode == "fix":
+        diag_text = _fmt_diagnostics(diagnostics) if diagnostics else "  (no specific diagnostics provided)"
+        extra = f"\n\nAdditional instruction: {instruction}" if instruction.strip() else ""
+        user_msg = (
+            f"This .ori workflow has compiler diagnostics that must ALL be fixed:\n\n"
+            f"{diag_text}\n\n"
+            f"Current source code:\n{source}{extra}\n\n"
+            "Fix every diagnostic. Output ONLY the corrected .ori source code."
+        )
     else:
         return jsonify({"error": "unknown mode"}), 400
 
