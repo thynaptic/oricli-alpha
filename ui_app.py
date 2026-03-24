@@ -235,29 +235,35 @@ def models() -> Response:
 
 @app.route("/modules", methods=["GET"])
 def modules() -> Response:
-    """Proxy to modules listing endpoint"""
-    target = f"{PYTHON_API_BASE}/v1/modules"
+    """Serve module listing directly from the local brain registry scan."""
     try:
-        resp = _forward_with_retry("GET", target)
-        # Ensure we return JSON content type
-        content_type = resp.headers.get("content-type", "application/json")
-        return Response(
-            resp.content, status=resp.status_code, content_type=content_type
-        )
-    except ConnectError as exc:
-        error_msg = f"Cannot connect to API at {API_BASE}. Is the API server running?"
-        print(f"Error connecting to API: {exc}", file=sys.stderr)
-        return jsonify({"error": {"message": error_msg, "type": "connection_error", "code": 502}}), 502
-    except HTTPStatusError as exc:
-        error_msg = f"API returned error {exc.response.status_code}: {exc.response.text}"
-        print(f"API error: {error_msg}", file=sys.stderr)
-        return jsonify({"error": {"message": error_msg, "type": "api_error", "code": exc.response.status_code}}), exc.response.status_code
+        # Try installed mavaia_core first, fall back to oricli_core_old
+        import site
+        candidates = [
+            Path(__file__).parent / "oricli_core" / "brain" / "modules",
+            Path(__file__).parent / "oricli_core_old" / "brain" / "modules",
+        ]
+        for sp in site.getsitepackages():
+            candidates.append(Path(sp) / "mavaia_core" / "brain" / "modules")
+
+        mods_dir = next((p for p in candidates if p.exists()), None)
+        modules_list = []
+        if mods_dir:
+            for f in sorted(mods_dir.rglob("*.py")):
+                if f.name.startswith("_"):
+                    continue
+                rel = f.relative_to(mods_dir)
+                mod_id = str(rel.with_suffix("")).replace(os.sep, ".")
+                modules_list.append({
+                    "id":     mod_id,
+                    "name":   f.stem.replace("_", " ").title(),
+                    "status": "available",
+                    "path":   str(rel),
+                })
+        return jsonify({"modules": modules_list, "count": len(modules_list)})
     except Exception as exc:  # noqa: BLE001
-        error_msg = f"Error fetching modules: {str(exc)}"
-        print(f"Unexpected error: {error_msg}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        return jsonify({"error": {"message": error_msg, "type": "server_error", "code": 502}}), 502
+        print(f"[modules] scan error: {exc}", file=sys.stderr)
+        return jsonify({"modules": [], "count": 0})
 
 
 @app.route("/embeddings", methods=["POST"])
