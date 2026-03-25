@@ -177,7 +177,7 @@ function HtmlRenderer({ content }) {
   return (
     <iframe
       srcDoc={content}
-      sandbox="allow-scripts allow-same-origin"
+      sandbox="allow-scripts"
       style={{ flex: 1, border: 'none', background: '#fff', width: '100%', height: '100%', display: 'block' }}
       title="HTML preview"
     />
@@ -625,8 +625,11 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
   const previewRef = useRef(null);
 
   const displayDoc = liveArtifact && streaming
-    ? { ...doc, ...liveArtifact }
+    ? { ...(doc || {}), ...liveArtifact }
     : doc;
+
+  // Show content area when there's a committed doc OR a live streaming artifact
+  const showContent = doc || (streaming && liveArtifact);
 
   const hasSelection = selection.end > selection.start;
   const TypeIcon = TYPE_ICONS[displayDoc?.type] || FileText;
@@ -671,12 +674,12 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, background: 'var(--color-sc-bg)', position: 'relative' }}>
       {/* Canvas toolbar */}
       <div style={{ height: 46, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 8, borderBottom: '1px solid var(--color-sc-border)', background: 'var(--color-sc-surface)' }}>
-        {doc ? (
+        {showContent ? (
           <>
             <TypeIcon size={13} style={{ color: 'var(--color-sc-gold)', flexShrink: 0 }} />
             <input
-              value={doc.name}
-              onChange={e => onUpdate({ name: e.target.value })}
+              value={doc?.name ?? 'Generating…'}
+              onChange={e => doc && onUpdate({ name: e.target.value })}
               style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: 'var(--color-sc-text)', fontFamily: 'var(--font-grotesk)', fontWeight: 500, flex: 1, minWidth: 0 }}
             />
             <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', fontFamily: 'var(--font-grotesk)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
@@ -720,14 +723,14 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
       </div>
 
       {/* Content area */}
-      {doc ? (
+      {showContent ? (
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
           {mode === 'image' ? (
-            <ImageGenPanel onInsertToCanvas={(imgTag) => onUpdate({ content: imgTag, type: 'html' })} />
+            doc ? <ImageGenPanel onInsertToCanvas={(imgTag) => onUpdate({ content: imgTag, type: 'html' })} /> : null
           ) : mode === 'preview' ? (
             <div ref={previewRef} onMouseUp={handlePreviewMouseUp} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <ArtifactRenderer doc={displayDoc} partial={streaming && liveArtifact?.partial} />
-              {previewSel.text && previewSel.rect && (
+              {previewSel.text && previewSel.rect && doc && (
                 <SelectionPopup
                   text={previewSel.text}
                   rect={previewSel.rect}
@@ -920,6 +923,16 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
   const abortRef = useRef(null);
   const bottomRef = useRef(null);
   const prevDocIdRef = useRef(null);
+  // Mirror messages in a ref so the async finally block always reads current state
+  const messagesRef = useRef([]);
+  // Keep ref in sync so async callbacks read current messages
+  function setMsgs(updater) {
+    setMessages(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      messagesRef.current = next;
+      return next;
+    });
+  }
 
   // Switch chat history when docId changes
   useEffect(() => {
@@ -927,12 +940,12 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
 
     // Save current messages for the previous doc before switching
     if (prevId && prevId !== docId) {
-      setCanvasChatHistory(prevId, useSCStore.getState().canvasChatHistories[prevId] ?? []);
+      setCanvasChatHistory(prevId, messagesRef.current);
     }
 
     // Load history for the new doc (or empty if none)
     const history = docId ? (canvasChatHistories[docId] ?? []) : [];
-    setMessages(history);
+    setMsgs(history);
     setInput('');
 
     prevDocIdRef.current = docId;
@@ -940,7 +953,7 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
 
   // Save messages to store whenever they change
   useEffect(() => {
-    if (docId) setCanvasChatHistory(docId, messages);
+    if (docId) setCanvasChatHistory(docId, messagesRef.current);
   }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-send a pending prompt (triggered from main chat "create" dispatch)
@@ -1042,7 +1055,7 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
     };
 
     // Append user msg + a lightweight generation-card placeholder (no raw code in state)
-    setMessages(prev => [...prev,
+    setMsgs(prev => [...prev,
       { role: 'user', content: userMsg },
       { role: 'assistant', _gen: { tokens: 0, lines: 0, language: null, done: false, stopped: false } },
     ]);
@@ -1078,7 +1091,7 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
               // Update card metadata cheaply — no raw code in state
               const lineCount = buffer.split('\n').length;
               const lang = live?.language || null;
-              setMessages(prev => prev.map((m, i) =>
+              setMsgs(prev => prev.map((m, i) =>
                 i === prev.length - 1
                   ? { ...m, _gen: { tokens: tokenCount, lines: lineCount, language: lang, done: false, stopped: false } }
                   : m
@@ -1089,13 +1102,13 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
       }
     } catch (err) {
       const stopped = err.name === 'AbortError';
-      setMessages(prev => prev.map((m, i) =>
+      setMsgs(prev => prev.map((m, i) =>
         i === prev.length - 1
           ? { ...m, _gen: { tokens: tokenCount, lines: buffer.split('\n').length, language: extractLiveArtifact(buffer)?.language || null, done: !stopped, stopped } }
           : m
       ));
       if (!stopped && !buffer) {
-        setMessages(prev => prev.filter((_, i) => i < prev.length - 1));
+        setMsgs(prev => prev.filter((_, i) => i < prev.length - 1));
       }
     } finally {
       setStreaming(false);
@@ -1103,13 +1116,13 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
       if (buffer) {
         const artifact = extractLiveArtifact(buffer);
         if (artifact) {
-          onCommitArtifact(artifact, buffer);
-          // Mark card done
-          setMessages(prev => prev.map((m, i) =>
+          // Mark card done BEFORE committing so messagesRef is current
+          setMsgs(prev => prev.map((m, i) =>
             i === prev.length - 1 && m._gen
               ? { ...m, _gen: { ...m._gen, done: true } }
               : m
           ));
+          onCommitArtifact(artifact, buffer, messagesRef.current);
         }
       }
     }
@@ -1229,7 +1242,7 @@ export function ArtifactsCanvas() {
     addCanvasDoc({ name: 'Untitled', type: 'markdown', language: 'markdown', content: '' });
   }
 
-  function handleCommitArtifact(artifact, rawText) {
+  function handleCommitArtifact(artifact, rawText, chatMessages) {
     // Always read fresh state to avoid stale closure — activeDoc can change between
     // when sendMessage was called and when the async stream finally completes.
     const freshId = useSCStore.getState().activeCanvasDocId;
@@ -1239,7 +1252,13 @@ export function ArtifactsCanvas() {
       useSCStore.getState().updateCanvasDoc(freshId, { ...artifact, name });
       useSCStore.getState().addCanvasVersion(freshId, artifact.content, 'AI generated');
     } else {
-      useSCStore.getState().addCanvasDoc({ ...artifact, name });
+      // Create a new doc; addCanvasDoc returns the full doc with its generated id
+      const newDoc = useSCStore.getState().addCanvasDoc({ ...artifact, name });
+      // Pre-seed chat history for the new docId BEFORE React processes the
+      // docId change — this prevents CanvasChatPanel's useEffect from wiping messages
+      if (newDoc?.id && chatMessages?.length) {
+        useSCStore.getState().setCanvasChatHistory(newDoc.id, chatMessages);
+      }
     }
     setLiveArtifact(null);
   }

@@ -6,6 +6,9 @@ After=network.target
 Environment=NEO4J_URI=bolt://localhost:7687
 Environment=NEO4J_USER=neo4j
 Environment=NEO4J_PASSWORD=password
+Environment=PB_BASE_URL=https://pocketbase.thynaptic.com
+Environment=PB_ADMIN_EMAIL=cass@thynaptic.com
+Environment=PB_ADMIN_PASSWORD=nFj1VXlle3vMjYX
 Environment=OLLAMA_URL=http://localhost:11434
 Environment=OLLAMA_MODEL=qwen2.5-coder:3b
 Environment=ORICLI_BROWSERLESS_URL=ws://localhost:3000
