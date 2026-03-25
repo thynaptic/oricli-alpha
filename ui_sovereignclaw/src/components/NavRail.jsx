@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSCStore } from '../store';
-import { MessageSquare, Bot, User, GitBranch, Layers, Settings, Microscope, Plug, Cable, ScrollText, Brain, Target, Code2 } from 'lucide-react';
+import { MessageSquare, Bot, User, GitBranch, Layers, Settings, Microscope, Plug, Cable, ScrollText, Brain, Target, Code2, Sun, Moon } from 'lucide-react';
 import { resolveEriTheme } from '../App';
 
 const NAV_ITEMS = [
@@ -99,6 +99,8 @@ export function NavRail({ onOpenSettings }) {
   const activePage    = useSCStore(s => s.activePage);
   const setActivePage = useSCStore(s => s.setActivePage);
   const bgRuns        = useSCStore(s => s.bgRuns);
+  const theme         = useSCStore(s => s.theme);
+  const toggleTheme   = useSCStore(s => s.toggleTheme);
 
   const activeRunCount = Object.values(bgRuns).filter(r =>
     r.run?.status === 'running' || r.run?.status === 'queued' || !r.run
@@ -170,6 +172,27 @@ export function NavRail({ onOpenSettings }) {
 
       {/* ERI Status Orb */}
       <ERIOrb />
+
+      {/* Theme toggle */}
+      <button
+        onClick={toggleTheme}
+        title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        style={{
+          width: 44, height: 44, borderRadius: 10, border: 'none', cursor: 'pointer',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+          background: 'transparent', color: 'var(--color-sc-text-muted)', transition: 'background 0.15s, color 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(128,128,128,0.1)'; e.currentTarget.style.color = 'var(--color-sc-text)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-sc-text-muted)'; }}
+      >
+        {theme === 'dark'
+          ? <Sun size={15} strokeWidth={1.7} />
+          : <Moon size={15} strokeWidth={1.7} />
+        }
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-inter)' }}>
+          {theme === 'dark' ? 'Light' : 'Dark'}
+        </span>
+      </button>
 
       {/* Settings */}
       <button

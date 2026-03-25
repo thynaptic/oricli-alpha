@@ -168,6 +168,11 @@ export const useSCStore = create(
   activePage: 'chat', // 'chat' | 'agents' | 'profiles' | 'workflows' | 'canvas'
   setActivePage(page) { set({ activePage: page }); },
 
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  theme: 'dark', // 'dark' | 'light'
+  setTheme(t) { set({ theme: t }); },
+  toggleTheme() { set(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })); },
+
   // ── Background Workflow Runs (persists across page navigation) ────────────
   // { [runId]: { runId, wfId, startedAt, run: {...}|null, error: str|null, sendToCanvas: bool } }
   bgRuns: {},
@@ -367,12 +372,13 @@ export const useSCStore = create(
     }),
     {
       name: 'sc-store-v1',
-      // Only persist bgRuns (so in-flight runs survive refresh) + canvas docs
+      // Only persist bgRuns (so in-flight runs survive refresh) + canvas docs + theme
       partialize: (state) => ({
         bgRuns: state.bgRuns,
         canvasDocuments: state.canvasDocuments,
         activeCanvasDocId: state.activeCanvasDocId,
         canvasChatHistories: state.canvasChatHistories,
+        theme: state.theme,
       }),
     }
   )

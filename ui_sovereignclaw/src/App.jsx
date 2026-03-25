@@ -36,7 +36,13 @@ export default function App() {
   const setModules = useSCStore(s => s.setModules);
   const activePage = useSCStore(s => s.activePage);
   const eriState   = useSCStore(s => s.eriState);
+  const theme      = useSCStore(s => s.theme);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Apply theme attribute to root element — all CSS vars cascade from here
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme ?? 'dark');
+  }, [theme]);
 
   // ERI → live CSS color shifts (poll + SSE live value)
   useERI(eriState?.eri ?? null);

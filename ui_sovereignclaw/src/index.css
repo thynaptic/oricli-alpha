@@ -22,8 +22,8 @@
   --color-sc-gold: #E5004C;
   --color-sc-gold-glow: #FF0055;
   --color-sc-text: #F0ECE8;
-  --color-sc-text-muted: #8A7880;
-  --color-sc-text-dim: #3D2030;
+  --color-sc-text-muted: #9A8890;
+  --color-sc-text-dim: #4D2F42;
   --color-sc-success: #06D6A0;
   --color-sc-danger: #FF4D6D;
   --color-sc-blue: #4D9EFF;
@@ -33,11 +33,35 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
+/* ── Light theme overrides ── */
+[data-theme="light"] {
+  --color-sc-bg: #F5F0EC;
+  --color-sc-surface: #EDE8E3;
+  --color-sc-surface2: #E5DFD9;
+  --color-sc-border: #D4CDC5;
+  --color-sc-border2: #C5BDB4;
+  --color-sc-gold: #C4001E;
+  --color-sc-gold-glow: #E5003A;
+  --color-sc-text: #1A1214;
+  --color-sc-text-muted: #6B5F68;
+  --color-sc-text-dim: #9E9099;
+  --color-sc-success: #059669;
+  --color-sc-danger: #DC2626;
+  --color-sc-blue: #1D4ED8;
+}
+
 /* Smooth ERI accent transitions on key elements */
 :root {
   transition:
     --color-sc-gold 1.2s ease,
     --color-sc-gold-glow 1.2s ease;
+}
+
+/* Smooth theme transitions — background/color only, no layout thrash */
+html {
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease;
 }
 
 *, *::before, *::after {
