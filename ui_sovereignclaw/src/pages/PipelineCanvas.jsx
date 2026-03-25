@@ -172,7 +172,15 @@ function WorkflowDrawer({ wfId, onClose, onSaved }) {
                   <textarea
                     value={step.value || ''}
                     onChange={e => updateStep(idx, { value: e.target.value })}
-                    placeholder={step.type === 'prompt' ? 'Enter prompt… use {{output}} for prior step' : step.type === 'condition' ? 'Condition expression…' : 'Value…'}
+                    placeholder={
+                      step.type === 'prompt'   ? 'Enter prompt… use {{output}} for prior step output' :
+                      step.type === 'web'      ? 'Search query… use {{output}} to search using prior step output' :
+                      step.type === 'fetch_url'? 'https://example.com/page-to-fetch' :
+                      step.type === 'template' ? 'Template text… use {{output}}, {{input}}, {{date}}' :
+                      step.type === 'condition'? 'Condition expression…' :
+                      step.type === 'code'     ? 'Python code… result variable is the output' :
+                      'Value…'
+                    }
                     rows={4}
                     style={{
                       width: '100%', boxSizing: 'border-box', resize: 'vertical',

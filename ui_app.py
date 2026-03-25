@@ -1787,13 +1787,19 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
             ], max_tokens=2000, timeout=_LLM_TIMEOUT)
 
         elif step_type == "web":
-            query = step_input or context.get("output", "")
-            results = _ddg_search(query, max_results=5)
-            if results:
-                lines = [f"**{r.get('title', '')}**\n{r.get('snippet', r.get('body', ''))}\n{r.get('url', '')}" for r in results]
-                result["output"] = f"Web search results for: {query}\n\n" + "\n\n---\n\n".join(lines)
+            query = (step_input or context.get("output", "")).strip()
+            if not query:
+                result["output"] = "⚠️ Web Search step has no query. Set the step value to a search term (e.g. 'latest AI news'), or use {{output}} to search using the prior step's output."
             else:
-                result["output"] = f"No results found for: {query}"
+                # If prior output is very long, it's a bad query — extract first sentence only
+                if len(query) > 300:
+                    query = query.split("\n")[0][:300].strip()
+                results = _ddg_search(query, max_results=5)
+                if results:
+                    lines = [f"**{r.get('title', '')}**\n{r.get('snippet', r.get('body', ''))}\n{r.get('url', '')}" for r in results]
+                    result["output"] = f"Web search results for: {query}\n\n" + "\n\n---\n\n".join(lines)
+                else:
+                    result["output"] = f"No results found for: {query}"
 
         elif step_type == "fetch_url":
             url = step_input.strip()
