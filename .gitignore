@@ -194,3 +194,6 @@ runpod_bridge*.log
 runpod_monitor*.log
 trainer_daemon.log
 ui_daemon.log
+
+# Source constitution — proprietary IP, never commit
+data/source_constitution.json

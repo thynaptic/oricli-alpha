@@ -21,20 +21,29 @@ type FilterResult struct {
 }
 
 // EpistemicFilter evaluates arbitrary retrieved text against a topic and
-// source URL. It applies three layers:
-//   - Relevance: keyword overlap between topic tokens and text tokens
-//   - Source trust: domain-tier heuristic based on known credibility tiers
-//   - Combined threshold gate (default 0.30)
-//
-// The result embeds scores for observability; use FilterResult.Pass to decide
-// whether to include the text in downstream processing.
+// source URL. Scoring weights and thresholds are driven by the loaded
+// Source Constitution (data/source_constitution.json), with safe hardcoded
+// fallbacks when the file is absent.
 func EpistemicFilter(topic, text, rawURL string) FilterResult {
-	rel := scoreRelevance(topic, text)
-	trust := scoreSourceTrust(rawURL)
-	combined := 0.55*rel + 0.45*trust
+	c := LoadConstitution()
 
-	const threshold = 0.30
-	pass := combined >= threshold
+	// Hard-block check — constitution absolute veto
+	host := hostOf(rawURL)
+	if c.IsHardBlocked(host, rawURL) {
+		return FilterResult{Pass: false, Reason: "hard-blocked by constitution"}
+	}
+
+	// Ingestion rules — length + paywall/block signals
+	if ok, reason := c.PassesIngestionRules("", text, rawURL); !ok {
+		return FilterResult{Pass: false, Reason: "ingestion rule: " + reason}
+	}
+
+	relW, trustW := c.Weights()
+	rel   := scoreRelevance(topic, text)
+	trust := scoreSourceTrust(host, c)
+	combined := relW*rel + trustW*trust
+
+	pass := combined >= c.Threshold()
 	reason := buildReason(pass, rel, trust, combined)
 	return FilterResult{
 		Pass:      pass,
@@ -89,45 +98,26 @@ func scoreRelevance(topic, text string) float64 {
 	return r
 }
 
-// scoreSourceTrust returns a credibility score 0–1 based on the domain of url.
-// Tiers:
-//
-//	Tier 1 (0.95): academic/government/primary journals
-//	Tier 2 (0.80): reputable news, reference, major tech docs
-//	TLD bonus  :  .edu → 0.88, .gov → 0.90, .org → 0.65
-//	Default    :  0.50
-//	Tier 0     :  known low-trust / content farms → 0.20
-func scoreSourceTrust(rawURL string) float64 {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
+// scoreSourceTrust returns a credibility score 0–1 for a hostname,
+// driven entirely by the loaded Source Constitution.
+func scoreSourceTrust(host string, c *Constitution) float64 {
+	if host == "" {
 		return 0.40
 	}
-	host := strings.ToLower(parsed.Hostname())
-	host = strings.TrimPrefix(host, "www.")
-
-	if score, ok := domainTrustLookup(host); ok {
-		return score
-	}
-	// TLD fallback
-	switch {
-	case strings.HasSuffix(host, ".edu"):
-		return 0.88
-	case strings.HasSuffix(host, ".gov"):
-		return 0.90
-	case strings.HasSuffix(host, ".org"):
-		return 0.65
-	default:
-		return 0.50
-	}
+	return c.DomainScore(host)
 }
 
-func domainTrustLookup(host string) (float64, bool) {
-	for domain, score := range trustTiers {
-		if host == domain || strings.HasSuffix(host, "."+domain) {
-			return score, true
-		}
+// hostOf extracts and normalises the hostname from a raw URL string.
+func hostOf(rawURL string) string {
+	if rawURL == "" {
+		return ""
 	}
-	return 0, false
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return strings.TrimPrefix(host, "www.")
 }
 
 func buildReason(pass bool, rel, trust, combined float64) string {
@@ -188,66 +178,3 @@ var stopWords = map[string]bool{
 	"war": true, "win": true, "won": true, "yes": true,
 }
 
-// trustTiers maps canonical domain → trust score (0–1).
-var trustTiers = map[string]float64{
-	// ── Tier 1: academic, primary journals, government ──────────────────────
-	"arxiv.org":                   0.95,
-	"pubmed.ncbi.nlm.nih.gov":     0.95,
-	"ncbi.nlm.nih.gov":            0.95,
-	"nature.com":                  0.95,
-	"science.org":                 0.95,
-	"cell.com":                    0.95,
-	"thelancet.com":               0.95,
-	"bmj.com":                     0.95,
-	"nejm.org":                    0.95,
-	"ieee.org":                    0.95,
-	"acm.org":                     0.95,
-	"who.int":                     0.95,
-	"cdc.gov":                     0.95,
-	"nih.gov":                     0.95,
-	"gov.uk":                      0.92,
-	"europa.eu":                   0.90,
-	"mit.edu":                     0.92,
-	"stanford.edu":                0.92,
-	"harvard.edu":                 0.92,
-	"cambridge.org":               0.92,
-	"oxfordacademic.com":          0.90,
-	"link.springer.com":           0.90,
-	"sciencedirect.com":           0.90,
-	"jstor.org":                   0.90,
-
-	// ── Tier 2: reputable news, reference, tech documentation ───────────────
-	"reuters.com":           0.82,
-	"apnews.com":            0.82,
-	"bbc.com":               0.80,
-	"bbc.co.uk":             0.80,
-	"theguardian.com":       0.78,
-	"nytimes.com":           0.78,
-	"wsj.com":               0.78,
-	"economist.com":         0.80,
-	"ft.com":                0.78,
-	"bloomberg.com":         0.78,
-	"npr.org":               0.80,
-	"pbs.org":               0.78,
-	"wikipedia.org":         0.75,
-	"britannica.com":        0.80,
-	"github.com":            0.78,
-	"stackoverflow.com":     0.72,
-	"docs.python.org":       0.85,
-	"developer.mozilla.org": 0.85,
-	"techcrunch.com":        0.68,
-	"wired.com":             0.70,
-	"arstechnica.com":       0.72,
-	"theverge.com":          0.65,
-
-	// ── Tier 0: known low-quality / content farms ───────────────────────────
-	"buzzfeed.com":      0.20,
-	"dailymail.co.uk":   0.22,
-	"thesun.co.uk":      0.22,
-	"infowars.com":      0.05,
-	"naturalnews.com":   0.08,
-	"breitbart.com":     0.15,
-	"ask.com":           0.20,
-	"answers.com":       0.20,
-	"quora.com":         0.28,
-}

@@ -621,35 +621,65 @@ def _ddg_search(query: str, max_results: int = 6) -> list:
 
 # ── Epistemic filtering ───────────────────────────────────────────────────────
 
-# Domain trust tiers — higher = more credible
-_TRUST_TIER: dict[str, float] = {
-    # Tier 1 — authoritative
-    **{d: 0.95 for d in [
-        "arxiv.org", "pubmed.ncbi.nlm.nih.gov", "ncbi.nlm.nih.gov",
-        "nature.com", "science.org", "cell.com", "thelancet.com",
-        "bmj.com", "nejm.org", "ieee.org", "acm.org",
-        "who.int", "cdc.gov", "nih.gov", "gov.uk", "europa.eu",
-        "mit.edu", "stanford.edu", "harvard.edu", "cambridge.org",
-        "oxfordacademic.com", "springerlink.com",
-    ]},
-    # Tier 2 — reputable news / reference
-    **{d: 0.80 for d in [
-        "reuters.com", "apnews.com", "bbc.com", "bbc.co.uk",
-        "theguardian.com", "nytimes.com", "wsj.com", "economist.com",
-        "ft.com", "bloomberg.com", "npr.org", "pbs.org",
-        "wikipedia.org", "britannica.com",
-        "github.com", "stackoverflow.com", "docs.python.org",
-        "developer.mozilla.org", "techcrunch.com", "wired.com",
-        "arstechnica.com", "theverge.com",
-    ]},
-    # Tier 3 — general (default)
-    # Tier 0 — low-trust content farms
-    **{d: 0.20 for d in [
-        "buzzfeed.com", "dailymail.co.uk", "thesun.co.uk",
-        "infowars.com", "naturalnews.com", "breitbart.com",
-        "ask.com", "answers.com", "quora.com",
-    ]},
-}
+_constitution_cache: dict | None = None
+_CONSTITUTION_PATHS = [
+    os.path.join(os.path.dirname(__file__), "data/source_constitution.json"),
+    "data/source_constitution.json",
+]
+
+def _load_constitution() -> dict:
+    """Load and cache the Source Constitution from disk. Falls back to
+    a minimal safe default if the file is absent."""
+    global _constitution_cache
+    if _constitution_cache is not None:
+        return _constitution_cache
+    for path in _CONSTITUTION_PATHS:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                _constitution_cache = json.load(f)
+            return _constitution_cache
+        except (OSError, json.JSONDecodeError):
+            continue
+    # Minimal fallback — never fails
+    _constitution_cache = {
+        "ingestion_rules": {
+            "min_snippet_length": 40, "min_title_length": 5,
+            "min_combined_score": 0.30, "borderline_min": 0.30, "borderline_max": 0.55,
+            "relevance_weight": 0.55, "trust_weight": 0.45,
+            "block_paywalled_signals": ["Subscribe to read", "Members only"],
+            "block_content_signals": ["404 Not Found", "Access Denied"],
+        },
+        "trust_tiers": {
+            "tier1": {"score": 0.95, "domains": ["arxiv.org", "ncbi.nlm.nih.gov", "nature.com", "ieee.org", "who.int"]},
+            "tier2": {"score": 0.80, "domains": ["reuters.com", "bbc.com", "wikipedia.org", "github.com", "stackoverflow.com"]},
+            "tier0": {"score": 0.10, "domains": ["infowars.com", "naturalnews.com"]},
+        },
+        "tld_scores": {".edu": 0.88, ".gov": 0.90, ".org": 0.65},
+        "default_score": 0.50,
+        "hard_blocked_domains": ["infowars.com", "naturalnews.com"],
+        "hard_blocked_url_patterns": ["/login", "/subscribe", "/paywall"],
+    }
+    return _constitution_cache
+
+
+def _build_trust_index() -> dict[str, float]:
+    """Flatten all trust tiers into a single domain→score lookup dict."""
+    c = _load_constitution()
+    idx: dict[str, float] = {}
+    for tier in c.get("trust_tiers", {}).values():
+        score = tier.get("score", 0.50)
+        for domain in tier.get("domains", []):
+            idx[domain.lower()] = score
+    return idx
+
+_trust_index: dict[str, float] | None = None
+
+def _get_trust_index() -> dict[str, float]:
+    global _trust_index
+    if _trust_index is None:
+        _trust_index = _build_trust_index()
+    return _trust_index
+
 
 _STOP_WORDS = frozenset({
     "the","a","an","is","are","was","were","be","been","being",
@@ -665,26 +695,50 @@ _STOP_WORDS = frozenset({
 
 
 def _source_trust_score(url: str) -> float:
-    """Return 0-1 trust score for a URL based on domain heuristics."""
+    """Return 0-1 trust score for a URL using the Source Constitution."""
+    c = _load_constitution()
+    hard_blocked = {d.lower() for d in c.get("hard_blocked_domains", [])}
     try:
-        host = urllib.parse.urlparse(url).netloc.lower().lstrip("www.")
-        # Exact match first
-        if host in _TRUST_TIER:
-            return _TRUST_TIER[host]
-        # Suffix match (e.g. "en.wikipedia.org" → "wikipedia.org")
-        for domain, score in _TRUST_TIER.items():
-            if host.endswith("." + domain) or host == domain:
+        parsed = urllib.parse.urlparse(url)
+        host = parsed.netloc.lower().lstrip("www.")
+        if host in hard_blocked:
+            return 0.0
+        # Check hard-blocked URL patterns
+        for pat in c.get("hard_blocked_url_patterns", []):
+            if pat in url.lower():
+                return 0.0
+        idx = _get_trust_index()
+        if host in idx:
+            return idx[host]
+        for domain, score in idx.items():
+            if host.endswith("." + domain):
                 return score
-        # TLD heuristics
-        if host.endswith(".edu"):
-            return 0.88
-        if host.endswith(".gov"):
-            return 0.90
-        if host.endswith(".org"):
-            return 0.65
-        return 0.50  # default for unrecognised domains
+        # TLD fallback from constitution
+        tld_scores = c.get("tld_scores", {})
+        for tld, score in tld_scores.items():
+            if host.endswith(tld):
+                return score
+        return float(c.get("default_score", 0.50))
     except Exception:
         return 0.40
+
+
+def _passes_ingestion_rules(title: str, snippet: str, url: str) -> tuple[bool, str]:
+    """Check constitution ingestion rules against a result."""
+    c = _load_constitution()
+    rules = c.get("ingestion_rules", {})
+    if len(title) < rules.get("min_title_length", 5):
+        return False, "title too short"
+    if len(snippet) < rules.get("min_snippet_length", 40):
+        return False, "snippet too short"
+    lower = snippet.lower()
+    for sig in rules.get("block_paywalled_signals", []):
+        if sig.lower() in lower:
+            return False, f"paywall: {sig}"
+    for sig in rules.get("block_content_signals", []):
+        if sig.lower() in lower:
+            return False, f"blocked signal: {sig}"
+    return True, ""
 
 
 def _relevance_score(query: str, title: str, snippet: str) -> float:
@@ -723,15 +777,14 @@ def _answers_query_llm(query: str, title: str, snippet: str) -> bool:
         return True  # fail-open — don't discard on timeout
 
 
-def _epistemic_filter(query: str, results: list[dict], threshold: float = 0.35) -> list[dict]:
-    """Score and filter search results before synthesis.
+def _epistemic_filter(query: str, results: list[dict]) -> list[dict]:
+    """Score and filter search results before synthesis using the Source Constitution.
 
-    Each result gets a composite score:
-        combined = 0.55 * relevance + 0.45 * trust
-
-    Borderline results (threshold ≤ combined < 0.55) are sent through
-    a cheap LLM YES/NO gate. Clear passes (≥0.55) skip the LLM.
-    Clear fails (<threshold) are dropped immediately.
+    Pipeline:
+      1. Ingestion rules (length, paywall, block signals)
+      2. Combined score = relevance_weight * relevance + trust_weight * trust
+      3. Hard drop if combined < threshold (from constitution)
+      4. LLM YES/NO gate only for borderline scores (borderline_min ≤ combined < borderline_max)
 
     Returns filtered results sorted best-first, each annotated with
     '_epistemic' metadata: {relevance, trust, combined, passed_llm}.
@@ -739,23 +792,34 @@ def _epistemic_filter(query: str, results: list[dict], threshold: float = 0.35) 
     if not results:
         return results
 
+    c = _load_constitution()
+    rules = c.get("ingestion_rules", {})
+    threshold      = float(rules.get("min_combined_score", 0.30))
+    borderline_min = float(rules.get("borderline_min", 0.30))
+    borderline_max = float(rules.get("borderline_max", 0.55))
+    rel_w          = float(rules.get("relevance_weight", 0.55))
+    trust_w        = float(rules.get("trust_weight", 0.45))
+
     scored: list[tuple[float, dict]] = []
     for r in results:
         title   = r.get("title", "")
         snippet = r.get("snippet", r.get("body", ""))
         url     = r.get("url", "")
 
-        rel   = _relevance_score(query, title, snippet)
-        trust = _source_trust_score(url)
-        combined = 0.55 * rel + 0.45 * trust
+        # Layer 0: ingestion rules
+        ok, reason = _passes_ingestion_rules(title, snippet, url)
+        if not ok:
+            continue
+
+        rel      = _relevance_score(query, title, snippet)
+        trust    = _source_trust_score(url)
+        combined = rel_w * rel + trust_w * trust
 
         passed_llm: bool | None = None
 
         if combined < threshold:
-            # Clearly irrelevant — drop
             continue
-        elif combined < 0.55:
-            # Borderline — ask the LLM
+        elif borderline_min <= combined < borderline_max:
             passed_llm = _answers_query_llm(query, title, snippet)
             if not passed_llm:
                 continue
@@ -770,7 +834,6 @@ def _epistemic_filter(query: str, results: list[dict], threshold: float = 0.35) 
             },
         }))
 
-    # Sort best-first, strip internal scores from output (keep metadata)
     scored.sort(key=lambda x: x[0], reverse=True)
     return [r for _, r in scored]
 
