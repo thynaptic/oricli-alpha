@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/thynaptic/oricli-go/pkg/cache"
 	"github.com/thynaptic/oricli-go/pkg/core/auth"
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/model"
@@ -49,6 +50,7 @@ type ServerV2 struct {
 	MemoryBank       *service.MemoryBank
 	DocumentIngestor *service.DocumentIngestor
 	Skills           *service.SkillManager
+	ResponseCache    *cache.ResponseCache
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -152,6 +154,10 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	// Load skills from oricli_core/skills/
 	s.Skills = service.NewSkillManager("oricli_core/skills")
 	log.Printf("[ServerV2] Loaded %d skills", len(s.Skills.ListSkills()))
+
+	// Bootstrap semantic response cache — L1 (hash) + L2 (chromem-go vectors).
+	// Cache misses fall through to LLM normally. Zero impact on latency on miss.
+	s.ResponseCache = cache.New(".memory", service.NewEmbedder())
 
 	s.setupRoutes()
 	return s
@@ -379,6 +385,40 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			"choices": []gin.H{{"index": 0, "message": gin.H{"role": "assistant", "content": result}, "finish_reason": "stop"}},
 		})
 		return
+	}
+
+	// ── Semantic response cache check ────────────────────────────────────────
+	// L1 (exact hash) is always checked. L2 (vector) only when model is idle.
+	// On hit: stream the cached response as SSE and return — LLM never called.
+	if s.ResponseCache != nil && lastMsg != "" {
+		if cached, hit := s.ResponseCache.Get(c.Request.Context(), lastMsg); hit {
+			chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
+			c.Header("Content-Type", "text/event-stream")
+			c.Header("Cache-Control", "no-cache")
+			c.Header("X-Accel-Buffering", "no")
+			c.Header("X-Cache", "HIT")
+			c.Writer.WriteString(": keep-alive\n\n")
+			chunk := map[string]interface{}{
+				"id":     chatID,
+				"object": "chat.completion.chunk",
+				"choices": []map[string]interface{}{
+					{"index": 0, "delta": map[string]interface{}{"role": "assistant", "content": cached}, "finish_reason": nil},
+				},
+			}
+			data, _ := json.Marshal(chunk)
+			c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+			doneChunk := map[string]interface{}{
+				"id":     chatID,
+				"object": "chat.completion.chunk",
+				"choices": []map[string]interface{}{
+					{"index": 0, "delta": map[string]interface{}{}, "finish_reason": "stop"},
+				},
+			}
+			data, _ = json.Marshal(doneChunk)
+			c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+			c.Writer.Flush()
+			return
+		}
 	}
 
 	// Commit to SSE NOW — before any blocking I/O (ProcessInference, Ollama warm-up).
@@ -621,6 +661,12 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		responseText, _ = s.Agent.SovEngine.AuditCanvasOutput(responseText)
 	} else {
 		responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
+	}
+
+	// Store in semantic cache — async, never blocks. Skips canvas/code outputs
+	// (too context-specific to be reusable) and action-dispatched responses.
+	if s.ResponseCache != nil && lastMsg != "" && !isCanvasMode && dispatch == nil {
+		s.ResponseCache.Put(lastMsg, responseText)
 	}
 
 	// SCAI Critique-Revision loop — fires in background to preserve streaming latency.

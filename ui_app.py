@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import signal as _signal
@@ -3397,35 +3398,130 @@ def _rag_ingest(docs: list[dict], source_prefix: str) -> int:
             }
             count += 1
         _rag_save(store)
-        return count
+    _bm25_rag.invalidate()  # mark index dirty after write
+    return count
+
+
+# ── BM25 RAG index ─────────────────────────────────────────────────────────────
+# Okapi BM25 — same parameters as pkg/memory/bm25.go (k1=1.2, b=0.75).
+# Replaces the naive token-count scorer. LLM is never involved in retrieval.
+
+class _BM25Rag:
+    """In-memory BM25 index over the local JSON RAG store.
+
+    The index is rebuilt lazily whenever the backing store file changes
+    (checked via mtime). Thread-safe via the shared _RAG_LOCK for reads
+    and a dedicated lock for index mutation.
+    """
+    K1 = 1.2
+    B  = 0.75
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._index: dict[str, dict] = {}   # docid → {tf, length, doc}
+        self._df:    dict[str, int]  = {}   # term  → doc count
+        self._avg_len: float = 0.0
+        self._mtime: float = 0.0
+        self._dirty: bool = True
+
+    def invalidate(self) -> None:
+        """Mark index as dirty so the next search triggers a rebuild."""
+        with self._lock:
+            self._dirty = True
+
+    @staticmethod
+    def _tokenize(text: str) -> list[str]:
+        return [t for t in re.findall(r"[a-z0-9]+", text.lower()) if len(t) >= 2]
+
+    def _needs_rebuild(self) -> bool:
+        if self._dirty:
+            return True
+        try:
+            return _RAG_PATH.stat().st_mtime != self._mtime
+        except OSError:
+            return True
+
+    def _rebuild(self, store: dict) -> None:
+        index: dict[str, dict] = {}
+        df: dict[str, int]     = {}
+        total_len = 0
+        for key, doc in store.items():
+            text   = f"{doc.get('title', '')} {doc.get('content', '')}".strip()
+            tokens = self._tokenize(text)
+            tf: dict[str, int] = {}
+            for t in tokens:
+                tf[t] = tf.get(t, 0) + 1
+            index[key] = {"tf": tf, "length": len(tokens), "doc": doc}
+            total_len += len(tokens)
+            for term in tf:
+                df[term] = df.get(term, 0) + 1
+        self._index   = index
+        self._df      = df
+        self._avg_len = total_len / max(len(index), 1)
+        self._dirty   = False
+        try:
+            self._mtime = _RAG_PATH.stat().st_mtime
+        except OSError:
+            self._mtime = 0.0
+
+    def search(self, query: str, limit: int = 5, source_type: str | None = None) -> list[dict]:
+        with _RAG_LOCK:
+            store = _rag_load()
+        if not store:
+            return []
+
+        with self._lock:
+            if self._needs_rebuild():
+                self._rebuild(store)
+
+            q_terms = list(set(self._tokenize(query)))
+            if not q_terms:
+                return []
+
+            N = len(self._index)
+            scores: dict[str, float] = {}
+            for term in q_terms:
+                df = self._df.get(term, 0)
+                if df == 0:
+                    continue
+                idf = math.log(1.0 + ((N - df + 0.5) / (df + 0.5)))
+                for docid, entry in self._index.items():
+                    if source_type and entry["doc"].get("source_type") != source_type:
+                        continue
+                    tf = entry["tf"].get(term, 0)
+                    if tf == 0:
+                        continue
+                    dl    = max(entry["length"], 1)
+                    avgdl = max(self._avg_len, 1.0)
+                    score = idf * (tf * (self.K1 + 1)) / (
+                        tf + self.K1 * (1.0 - self.B + self.B * dl / avgdl)
+                    )
+                    scores[docid] = scores.get(docid, 0.0) + score
+
+            if not scores:
+                return []
+
+            top = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:limit]
+            results = []
+            for docid, score in top:
+                doc     = self._index[docid]["doc"]
+                snippet = doc.get("content", "")[:400].strip()
+                results.append({
+                    "source":   doc["source"],
+                    "title":    doc.get("title", ""),
+                    "snippet":  snippet,
+                    "score":    round(score, 4),
+                    "metadata": doc.get("metadata", {}),
+                })
+            return results
+
+
+_bm25_rag = _BM25Rag()
 
 
 def _rag_search(query: str, limit: int = 5, source_type: str | None = None) -> list[dict]:
-    """Keyword-scored search over local RAG store. Returns top-N matches."""
-    with _RAG_LOCK:
-        store = _rag_load()
-    if not store:
-        return []
-
-    q_tokens = set(query.lower().split())
-    # Remove common stop words
-    stop = {"the","a","an","is","are","was","were","to","of","and","or","in","on","for","with","that","this","it","be","has","have","do","does","i","we","you","they","from","at","by","not","but","what","how","about","can","will","would","their","there","these","those","as","if","so","then","than","into","up","out","more"}
-    q_tokens -= stop
-    if not q_tokens:
-        return []
-
-    results = []
-    for doc in store.values():
-        if source_type and doc.get("source_type") != source_type:
-            continue
-        haystack = f"{doc.get('title','')} {doc.get('content','')}".lower()
-        score = sum(haystack.count(tok) for tok in q_tokens)
-        if score > 0:
-            snippet = doc.get("content", "")[:400].strip()
-            results.append({"source": doc["source"], "title": doc.get("title",""), "snippet": snippet, "score": score, "metadata": doc.get("metadata", {})})
-
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return results[:limit]
+    """BM25 search over local RAG store (Okapi BM25, k1=1.2, b=0.75)."""
+    return _bm25_rag.search(query, limit=limit, source_type=source_type)
 
 
 def _load_index_status() -> dict:
