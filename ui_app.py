@@ -1748,10 +1748,18 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
-            if context.get("output"):
+            # Only inject prior context as system message if the user prompt doesn't
+            # already reference {{output}} explicitly — avoids confusing duplicates
+            output_in_prompt = "{{output}}" in (step.get("value", "") or step.get("input", ""))
+            if context.get("output") and not output_in_prompt:
                 messages.append({"role": "system", "content": f"Prior context:\n\n{_trim(context['output'])}"})
             messages.append({"role": "user", "content": step_input or "Continue."})
             result["output"] = _llm_complete(messages, max_tokens=3000, timeout=_LLM_TIMEOUT)
+
+        elif step_type == "template":
+            # Pure variable substitution — no LLM call. Useful for assembling
+            # structured documents from prior step outputs.
+            result["output"] = step_input  # _wf_interpolate already ran on line 1738
 
         elif step_type == "summarize":
             target = context.get("output", "")
