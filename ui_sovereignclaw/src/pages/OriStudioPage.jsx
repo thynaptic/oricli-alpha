@@ -72,8 +72,58 @@ const ORI_CSS = `
 .ori-label   { color: #c3e88d; }
 .ori-string  { color: #c3e88d; }
 .ori-comment { color: #546e7a; font-style: italic; }
-.ori-err-line { background: rgba(239,83,80,0.08); }
-.ori-warn-line{ background: rgba(255,183,77,0.07); }
+.ori-err-line {
+  background: rgba(239,83,80,0.10);
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(239,83,80,0.8) 0px, rgba(239,83,80,0.8) 2px,
+    transparent 2px, transparent 5px,
+    rgba(239,83,80,0.8) 5px, rgba(239,83,80,0.8) 6px,
+    transparent 6px, transparent 9px
+  );
+  background-size: 9px 2px;
+  background-position: 0 calc(100% - 1px);
+  background-repeat: repeat-x;
+}
+.ori-warn-line {
+  background: rgba(255,183,77,0.08);
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255,183,77,0.7) 0px, rgba(255,183,77,0.7) 2px,
+    transparent 2px, transparent 5px,
+    rgba(255,183,77,0.7) 5px, rgba(255,183,77,0.7) 6px,
+    transparent 6px, transparent 9px
+  );
+  background-size: 9px 2px;
+  background-position: 0 calc(100% - 1px);
+  background-repeat: repeat-x;
+}
+.ori-err-pill {
+  margin-left: 14px;
+  padding: 0 7px;
+  border-radius: 3px;
+  background: rgba(239,83,80,0.14);
+  color: rgba(239,83,80,0.75);
+  font-size: 10.5px;
+  font-style: italic;
+  font-weight: 400;
+  pointer-events: none;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.ori-warn-pill {
+  margin-left: 14px;
+  padding: 0 7px;
+  border-radius: 3px;
+  background: rgba(255,183,77,0.12);
+  color: rgba(255,183,77,0.72);
+  font-size: 10.5px;
+  font-style: italic;
+  font-weight: 400;
+  pointer-events: none;
+  white-space: nowrap;
+  vertical-align: middle;
+}
 @keyframes ori-spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
 /* hide scrollbar on highlight overlay div (WebKit) */
 [data-ori-highlight]::-webkit-scrollbar { display: none; }
@@ -271,18 +321,23 @@ function AutocompleteDropdown({ items, index, x, y, onSelect, onHover }) {
 }
 
 // ─── Editor component (gutter + textarea + highlight overlay) ────────────────
-function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflows = [], userVars = [], onInlineEdit }) {
-  const taRef     = useRef(null);
+function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflows = [], userVars = [], onInlineEdit, onJumpToLine, taExternalRef }) {
+  const taInternalRef = useRef(null);
+  const taRef         = taExternalRef ?? taInternalRef;
   const preRef    = useRef(null);
   const gutterRef = useRef(null);
 
-  const [ac, setAc] = useState({ visible: false, items: [], index: 0, x: 0, y: 0, replaceLen: 0 });
+  const [ac,      setAc]      = useState({ visible: false, items: [], index: 0, x: 0, y: 0, replaceLen: 0 });
+  const [tooltip, setTooltip] = useState(null); // { x, y, msg, level }
 
   useEffect(() => { injectOriCSS(); }, []);
 
   const lines     = value.split('\n');
   const errLines  = new Set(diagnostics.filter(d => d.level === 'error'   && d.line).map(d => d.line));
   const warnLines = new Set(diagnostics.filter(d => d.level === 'warning' && d.line).map(d => d.line));
+  // Map line → diagnostic for quick lookup
+  const diagByLine = {};
+  diagnostics.forEach(d => { if (d.line) diagByLine[d.line] = d; });
 
   function syncScroll() {
     const top = taRef.current?.scrollTop ?? 0;
@@ -392,11 +447,35 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
   function buildHighlightedHtml(code) {
     const raw = highlight(code);
     return raw.split('\n').map((lineHtml, i) => {
-      const ln  = i + 1;
-      const cls = errLines.has(ln) ? ' class="ori-err-line"' : warnLines.has(ln) ? ' class="ori-warn-line"' : '';
-      return `<span${cls} style="display:block">${lineHtml || ' '}</span>`;
+      const ln    = i + 1;
+      const isErr  = errLines.has(ln);
+      const isWarn = warnLines.has(ln);
+      const cls   = isErr ? ' class="ori-err-line"' : isWarn ? ' class="ori-warn-line"' : '';
+      const diag  = diagByLine[ln];
+      const pill  = diag
+        ? `<span class="${isErr ? 'ori-err-pill' : 'ori-warn-pill'}">${
+            diag.message.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+          }</span>`
+        : '';
+      return `<span${cls} style="display:block">${lineHtml || ' '}${pill}</span>`;
     }).join('');
   }
+
+  function onMouseMoveEditor(e) {
+    const ta = taRef.current;
+    if (!ta) return;
+    const rect   = ta.getBoundingClientRect();
+    const relY   = e.clientY - rect.top + ta.scrollTop - PAD_V;
+    const lineH  = FONT_SZ * LINE_H;
+    const lineNo = Math.floor(relY / lineH) + 1;
+    const diag   = diagByLine[lineNo];
+    if (diag) {
+      setTooltip({ x: e.clientX + 14, y: e.clientY - 10, msg: diag.message, level: diag.level });
+    } else {
+      setTooltip(null);
+    }
+  }
+
 
   return (
     <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#0d1117', position: 'relative' }}>
@@ -414,13 +493,19 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
           const hasErr  = errLines.has(ln);
           const hasWarn = warnLines.has(ln);
           return (
-            <div key={ln} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-              paddingRight: 8, gap: 4,
-              fontFamily: FONT, fontSize: FONT_SZ, lineHeight: LINE_H,
-              color: hasErr ? '#ef5350' : hasWarn ? '#ffb74d' : '#3d4f5c',
-              background: hasErr ? 'rgba(239,83,80,0.08)' : hasWarn ? 'rgba(255,183,77,0.07)' : 'transparent',
-            }}>
+            <div
+              key={ln}
+              title={diagByLine[ln]?.message}
+              onClick={() => onJumpToLine?.(ln)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                paddingRight: 8, gap: 4,
+                fontFamily: FONT, fontSize: FONT_SZ, lineHeight: LINE_H,
+                color: hasErr ? '#ef5350' : hasWarn ? '#ffb74d' : '#3d4f5c',
+                background: hasErr ? 'rgba(239,83,80,0.08)' : hasWarn ? 'rgba(255,183,77,0.07)' : 'transparent',
+                cursor: (hasErr || hasWarn) ? 'pointer' : 'default',
+              }}
+            >
               {hasErr  && <span style={{ color: '#ef5350', fontSize: 9 }}>●</span>}
               {hasWarn && <span style={{ color: '#ffb74d', fontSize: 9 }}>●</span>}
               <span style={{ minWidth: 24, textAlign: 'right' }}>{ln}</span>
@@ -459,6 +544,8 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
           onKeyUp={onKeyUp}
           onClick={e => { updateCursor(e.target); triggerAC(e.target); }}
           onBlur={() => setTimeout(() => setAc(prev => ({ ...prev, visible: false })), 120)}
+          onMouseMove={onMouseMoveEditor}
+          onMouseLeave={() => setTooltip(null)}
           spellCheck={false}
           autoComplete="off"
           autoCorrect="off"
@@ -488,12 +575,30 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
           onHover={i => setAc(prev => ({ ...prev, index: i }))}
         />
       )}
+
+      {/* ── Diagnostic hover tooltip ── */}
+      {tooltip && (
+        <div style={{
+          position: 'fixed', left: Math.min(tooltip.x, window.innerWidth - 340), top: tooltip.y,
+          zIndex: 200, pointerEvents: 'none',
+          maxWidth: 320, padding: '5px 10px', borderRadius: 6,
+          background: tooltip.level === 'error' ? 'rgba(30,10,10,0.96)' : 'rgba(20,15,5,0.96)',
+          border: `1px solid ${tooltip.level === 'error' ? 'rgba(239,83,80,0.45)' : 'rgba(255,183,77,0.35)'}`,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+          color: tooltip.level === 'error' ? '#ef9a9a' : '#ffd54f',
+          fontSize: 11.5, fontFamily: "'JetBrains Mono','Fira Code',monospace",
+          lineHeight: 1.5, whiteSpace: 'pre-wrap',
+        }}>
+          <span style={{ opacity: 0.5, marginRight: 6 }}>{tooltip.level === 'error' ? 'E' : 'W'}</span>
+          {tooltip.msg}
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Diagnostics panel ────────────────────────────────────────────────────────
-function DiagnosticsPanel({ diagnostics, compiled, vars }) {
+function DiagnosticsPanel({ diagnostics, compiled, vars, onJumpToLine }) {
   const errors   = diagnostics.filter(d => d.level === 'error');
   const warnings = diagnostics.filter(d => d.level === 'warning');
 
@@ -550,13 +655,22 @@ function DiagnosticsPanel({ diagnostics, compiled, vars }) {
           const col    = isErr ? '#ef5350' : isWarn ? '#ffb74d' : '#546e7a';
           const code   = isErr ? 'E' : isWarn ? 'W' : 'I';
           const n      = String(i + 1).padStart(3, '0');
+          const canJump = d.line && onJumpToLine;
           return (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'flex-start', gap: 0,
-              padding: '3px 0',
-              background: isErr ? 'rgba(239,83,80,0.04)' : isWarn ? 'rgba(255,183,77,0.03)' : 'transparent',
-              borderLeft: `2px solid ${isErr ? '#ef5350' : isWarn ? '#ffb74d' : 'transparent'}`,
-            }}>
+            <div
+              key={i}
+              onClick={() => canJump && onJumpToLine(d.line)}
+              style={{
+                display: 'flex', alignItems: 'flex-start', gap: 0,
+                padding: '3px 0',
+                background: isErr ? 'rgba(239,83,80,0.04)' : isWarn ? 'rgba(255,183,77,0.03)' : 'transparent',
+                borderLeft: `2px solid ${isErr ? '#ef5350' : isWarn ? '#ffb74d' : 'transparent'}`,
+                cursor: canJump ? 'pointer' : 'default',
+                transition: 'background 0.1s',
+              }}
+              onMouseEnter={e => { if (canJump) e.currentTarget.style.background = isErr ? 'rgba(239,83,80,0.09)' : 'rgba(255,183,77,0.07)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = isErr ? 'rgba(239,83,80,0.04)' : isWarn ? 'rgba(255,183,77,0.03)' : 'transparent'; }}
+            >
               {/* Severity tag */}
               <span style={{
                 flexShrink: 0, width: 68, paddingLeft: 10,
@@ -572,7 +686,8 @@ function DiagnosticsPanel({ diagnostics, compiled, vars }) {
                 paddingRight: 14,
               }}>
                 {d.message}
-                {d.line ? <span style={{ color: '#3d4f5c' }}>  :{d.line}</span> : null}
+                {d.line ? <span style={{ color: canJump ? '#546e7a' : '#3d4f5c', marginLeft: 4 }}>:{d.line}</span> : null}
+                {canJump && <span style={{ marginLeft: 6, fontSize: 9, color: '#3d4f5c', opacity: 0.7 }}>↑ jump</span>}
               </span>
             </div>
           );
@@ -1021,6 +1136,19 @@ export default function OriStudioPage() {
   const [inlineEdit,  setInlineEdit]  = useState(null); // { start, end, text, x, y }
   const debounceRef  = useRef(null);
   const pollRef      = useRef(null);
+  const editorTaRef  = useRef(null); // forwarded textarea ref for jump-to-line
+
+  function jumpToLine(ln) {
+    const ta = editorTaRef.current;
+    if (!ta) return;
+    const lines = source.split('\n');
+    const charPos = lines.slice(0, ln - 1).reduce((acc, l) => acc + l.length + 1, 0);
+    ta.focus();
+    ta.setSelectionRange(charPos, charPos);
+    // Scroll the line into view
+    const FONT_SZ = 13, LINE_H = 1.65, PAD_V = 14;
+    ta.scrollTop = Math.max(0, (ln - 1) * FONT_SZ * LINE_H + PAD_V - ta.clientHeight / 2);
+  }
 
   // Load workflow list for decompile dropdown
   useEffect(() => {
@@ -1357,6 +1485,8 @@ export default function OriStudioPage() {
             workflows={workflows}
             userVars={extractUserVars(source)}
             onInlineEdit={setInlineEdit}
+            onJumpToLine={jumpToLine}
+            taExternalRef={editorTaRef}
           />
           {/* ── Status bar ── */}
           <div style={{
@@ -1391,7 +1521,7 @@ export default function OriStudioPage() {
 
         {/* ── Right: diagnostics + log ── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <DiagnosticsPanel diagnostics={diagnostics} compiled={compiled} vars={vars} />
+          <DiagnosticsPanel diagnostics={diagnostics} compiled={compiled} vars={vars} onJumpToLine={jumpToLine} />
 
           {/* Variable list */}
           {vars.length > 0 && (
