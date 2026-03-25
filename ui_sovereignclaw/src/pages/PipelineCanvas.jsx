@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   addEdge, useNodesState, useEdgesState, useReactFlow,
-  MarkerType, Panel,
+  MarkerType, Panel, Handle, Position,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
@@ -35,6 +35,14 @@ function WorkflowNode({ data }) {
   const spinning = status === 'running';
   const [showOut, setShowOut] = useState(false);
 
+  const handleStyle = {
+    width: 10, height: 10,
+    background: 'var(--color-sc-surface)',
+    border: `2px solid ${color}`,
+    borderRadius: '50%',
+    transition: 'background 0.15s, transform 0.15s',
+  };
+
   return (
     <div
       onClick={() => output && setShowOut(v => !v)}
@@ -52,6 +60,20 @@ function WorkflowNode({ data }) {
         position: 'relative',
       }}
     >
+      {/* Target handle — left side (receives connections) */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        style={handleStyle}
+      />
+
+      {/* Source handle — right side (drag from here to connect) */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        style={handleStyle}
+      />
+
       {/* Status ring pulse */}
       {status === 'running' && (
         <div style={{
@@ -544,6 +566,33 @@ function PipelineCanvasInner() {
         @keyframes pipelinePulse {
           0%, 100% { opacity: 0.4; transform: scale(1); }
           50% { opacity: 0.9; transform: scale(1.02); }
+        }
+        /* Handle hover — glow + scale */
+        .react-flow__handle:hover {
+          background: var(--color-sc-gold) !important;
+          border-color: var(--color-sc-gold) !important;
+          transform: scale(1.5);
+          box-shadow: 0 0 6px var(--color-sc-gold);
+        }
+        /* Live connection line while dragging */
+        .react-flow__connection-line {
+          stroke: var(--color-sc-gold);
+          stroke-width: 2;
+          stroke-dasharray: 6 3;
+        }
+        /* React Flow edge path color */
+        .react-flow__edge-path {
+          stroke: var(--color-sc-border);
+          stroke-width: 2;
+        }
+        .react-flow__edge.selected .react-flow__edge-path,
+        .react-flow__edge:hover .react-flow__edge-path {
+          stroke: var(--color-sc-gold);
+        }
+        /* Arrow marker */
+        .react-flow__arrowhead polyline {
+          stroke: var(--color-sc-gold);
+          fill: var(--color-sc-gold);
         }
       `}</style>
     </div>
