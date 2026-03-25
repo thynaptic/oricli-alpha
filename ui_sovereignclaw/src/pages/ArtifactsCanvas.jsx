@@ -14,6 +14,9 @@ import {
 
 const CANVAS_SYSTEM = `You are a collaborative document assistant. When producing code, diagrams, or structured documents, always wrap the content in a single fenced code block with the correct language tag (e.g. \`\`\`go, \`\`\`mermaid, \`\`\`html, \`\`\`markdown). Produce clean, complete content. No prose wrappers unless the user explicitly asks for explanation alongside the artifact.`;
 
+// Used for follow-up messages when a document already exists on the canvas
+const CANVAS_EDIT_SYSTEM = `You are a collaborative document editor. The user is making a follow-up request to modify an existing document. Apply the requested changes precisely and surgically, then return the COMPLETE updated document in a single fenced code block — never return just a diff, a snippet, or only the changed lines. Preserve all unchanged content exactly as-is. Do not add prose before or after the code block unless the user explicitly asks for an explanation.`;
+
 const TYPE_MAP = {
   mermaid: 'diagram', plantuml: 'diagram',
   html: 'html', htm: 'html',
@@ -1019,9 +1022,12 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
       } catch { /* non-fatal */ }
     }
 
+    // Use edit-mode prompt when a document already exists (follow-up / refinement)
+    const isFollowUp = messages.length > 0 && activeDoc?.content?.trim();
+    const baseSystem = isFollowUp ? CANVAS_EDIT_SYSTEM : CANVAS_SYSTEM;
     const contextSystem = (activeDoc?.content
-      ? `${CANVAS_SYSTEM}\n\nCurrent document (${activeDoc.type}, ${activeDoc.language}):\n\`\`\`${activeDoc.language}\n${activeDoc.content.slice(0, 2000)}\n\`\`\``
-      : CANVAS_SYSTEM) + searchContext;
+      ? `${baseSystem}\n\nCurrent document (${activeDoc.type}, ${activeDoc.language}):\n\`\`\`${activeDoc.language}\n${activeDoc.content.slice(0, 12000)}\n\`\`\``
+      : baseSystem) + searchContext;
 
     const history = messages.slice(-12);
     const payload = {
@@ -1111,11 +1117,25 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
 
   function stop() { abortRef.current?.abort(); setStreaming(false); }
 
+  const hasDoc = Boolean(activeDoc?.content?.trim());
+  const isEditMode = messages.length > 0 && hasDoc;
+
   return (
     <div style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--color-sc-border)', background: 'var(--color-sc-surface)', overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ height: 46, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 16px', borderBottom: '1px solid var(--color-sc-border)', gap: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-sc-text)', fontFamily: 'var(--font-grotesk)', flex: 1 }}>AI Chat</span>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 7, overflow: 'hidden' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-sc-text)', fontFamily: 'var(--font-grotesk)', flexShrink: 0 }}>AI Chat</span>
+          {isEditMode && (
+            <span style={{
+              fontSize: 10.5, padding: '2px 7px', borderRadius: 5, flexShrink: 0,
+              background: 'rgba(196,164,74,0.12)', color: 'var(--color-sc-gold)',
+              fontFamily: 'var(--font-inter)', fontWeight: 500, letterSpacing: '0.03em',
+            }}>
+              editing canvas
+            </span>
+          )}
+        </div>
         <button
           onClick={() => setWebSearch(w => !w)}
           title={webSearch ? 'Web search ON — click to disable' : 'Enable web search for grounded context'}
@@ -1150,12 +1170,17 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
 
       {/* Input */}
       <div style={{ padding: '10px 12px', borderTop: '1px solid var(--color-sc-border)', background: 'var(--color-sc-surface)' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', background: 'var(--color-sc-surface2)', border: '1px solid var(--color-sc-border2)', borderRadius: 10, padding: '8px 10px' }}>
+        {isEditMode && (
+          <div style={{ marginBottom: 6, fontSize: 11, color: 'var(--color-sc-text-dim)', paddingLeft: 2 }}>
+            Follow-up edits apply to the current canvas document.
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', background: 'var(--color-sc-surface2)', border: `1px solid ${isEditMode ? 'rgba(196,164,74,0.3)' : 'var(--color-sc-border2)'}`, borderRadius: 10, padding: '8px 10px', transition: 'border-color 0.15s' }}>
           <textarea
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            placeholder="Write a Go HTTP handler… Shift+Enter for newline"
+            placeholder={isEditMode ? 'Describe changes, add features, refactor sections…' : 'Write a Go HTTP handler… Shift+Enter for newline'}
             rows={2}
             style={{ flex: 1, background: 'none', border: 'none', outline: 'none', resize: 'none', fontSize: 13, color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', lineHeight: 1.5 }}
           />
