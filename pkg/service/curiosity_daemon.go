@@ -378,27 +378,10 @@ func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string, depth i
 	log.Printf("[CuriosityDaemon] epistemic pass %q (rel=%.2f trust=%.2f combined=%.2f)",
 		topic, epistemicResult.Relevance, epistemicResult.Trust, epistemicResult.Combined)
 
-	// Fact extraction with 90s deadline
-	extractionPrompt := buildExtractionPrompt(topic, intent, rawText)
-	genCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-	defer cancel()
-
-	_ = genCtx
-	res, err := d.Gen.Generate(extractionPrompt, map[string]interface{}{
-		"system": "Epistemic Curator",
-		"model":  "ministral-3:3b",
-		"options": map[string]interface{}{
-			"num_predict": 512,
-			"num_ctx":     4096,
-			"temperature": 0.3,
-		},
-	})
-	if err != nil {
-		log.Printf("[CuriosityDaemon] Extraction failed for %q: %v", topic, err)
-		return
-	}
-
-	factSummary, _ := res["text"].(string)
+	// Fact extraction — TF-IDF extractive summarizer (no LLM call).
+	// Selects the highest-scoring sentences by cosine similarity to the
+	// topic query, preserving document order. Deterministic, <5ms.
+	factSummary := cognition.ExtractFacts(topic, rawText, intent)
 
 	// Find or create entity in graph and commit
 	gaps := d.Graph.FindGaps()
@@ -623,29 +606,6 @@ func extractTopics(msg string) []string {
 	return topics
 }
 
-// ─── Extraction prompt builder (unchanged) ───────────────────────────────────
 
-func buildExtractionPrompt(label string, intent searchintent.SearchIntent, rawText string) string {
-	var instruction string
-	switch intent {
-	case searchintent.IntentDefinition:
-		instruction = fmt.Sprintf("Extract the clear, concise definition of %q from the text below. Include etymology if present. 2-3 sentences max.", label)
-	case searchintent.IntentFactual:
-		instruction = fmt.Sprintf("Extract the key verifiable facts that answer the question %q. Be precise and cite any dates, numbers, or named entities.", label)
-	case searchintent.IntentEntity:
-		instruction = fmt.Sprintf("Extract 3-5 key biographical or descriptive facts about %q. Include: what it is, when it originated/was born, why it matters.", label)
-	case searchintent.IntentTechnical:
-		instruction = fmt.Sprintf("Extract 3-5 key technical facts about %q: what it does, core use cases, current version or status if mentioned.", label)
-	case searchintent.IntentCurrentEvents:
-		instruction = fmt.Sprintf("Summarise the most recent developments regarding %q from the text. Focus on what is new, changed, or noteworthy.", label)
-	case searchintent.IntentComparative:
-		instruction = fmt.Sprintf("Extract the key differences and similarities between the items in %q. Organise as: Item A — Item B — Key Difference.", label)
-	case searchintent.IntentProcedural:
-		instruction = fmt.Sprintf("Extract the core steps or procedure for %q from the text. List as numbered steps, 3-6 items max.", label)
-	default:
-		instruction = fmt.Sprintf("Extract 3-5 key facts about %q from the text. Format as a concise description suitable for a knowledge graph.", label)
-	}
-	return fmt.Sprintf("%s\n\nTEXT:\n%s", instruction, rawText)
-}
 
 
