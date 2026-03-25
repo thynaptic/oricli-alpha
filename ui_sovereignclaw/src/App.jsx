@@ -101,6 +101,11 @@ export default function App() {
         <ArtifactsCanvas />
       </div>
 
+      {/* Pipeline canvas stays mounted so runs survive tab switches */}
+      <div style={{ display: activePage === 'pipelines' ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
+        <PipelineCanvas />
+      </div>
+
       {activePage === 'research'  && <ResearchPage />}
       {activePage === 'agents'    && <AgentsPage />}
       {activePage === 'profiles'  && <ProfilesPage />}
@@ -111,11 +116,6 @@ export default function App() {
       {activePage === 'memory'       && <MemoryBrowser />}
       {activePage === 'goals'        && <GoalsPage />}
       {activePage === 'ori-studio'   && <OriStudioPage />}
-      {activePage === 'pipelines'    && (
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-          <PipelineCanvas />
-        </div>
-      )}
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>
