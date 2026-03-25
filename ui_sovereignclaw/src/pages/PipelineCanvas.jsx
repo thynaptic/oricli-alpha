@@ -8,8 +8,215 @@ import '@xyflow/react/dist/style.css';
 import {
   GitMerge, Play, Square, Plus, Trash2, Save, ChevronLeft,
   Loader2, CheckCircle2, AlertCircle, Clock, Workflow, X,
+  GripVertical, ChevronDown, ChevronRight, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { useSCStore } from '../store';
+
+// ── Step type config ──────────────────────────────────────────────────────────
+const STEP_TYPES = [
+  { value: 'prompt',       label: 'Prompt',       color: '#7c9ef8' },
+  { value: 'template',     label: 'Template',     color: '#a89cf7' },
+  { value: 'summarize',    label: 'Summarize',    color: '#5ec4a8' },
+  { value: 'condition',    label: 'Condition',    color: '#f0a070' },
+  { value: 'web',          label: 'Web Search',   color: '#f0c070' },
+  { value: 'fetch_url',    label: 'Fetch URL',    color: '#f0c070' },
+  { value: 'code',         label: 'Code',         color: '#e07070' },
+  { value: 'sub_workflow', label: 'Sub-workflow', color: '#a89cf7' },
+];
+const STEP_TYPE_COLOR = Object.fromEntries(STEP_TYPES.map(s => [s.value, s.color]));
+
+// ── WorkflowDrawer ────────────────────────────────────────────────────────────
+function WorkflowDrawer({ wfId, onClose, onSaved }) {
+  const [wf, setWf]           = useState(null);
+  const [name, setName]       = useState('');
+  const [steps, setSteps]     = useState([]);
+  const [expanded, setExpanded] = useState(null); // step index
+  const [saving, setSaving]   = useState(false);
+  const [dirty, setDirty]     = useState(false);
+
+  useEffect(() => {
+    if (!wfId) return;
+    fetch('/workflows').then(r => r.json()).then(d => {
+      const found = (d.workflows || []).find(w => w.id === wfId);
+      if (found) {
+        setWf(found);
+        setName(found.name || '');
+        setSteps((found.steps || []).map((s, i) => ({ ...s, _id: i })));
+        setDirty(false);
+      }
+    });
+  }, [wfId]);
+
+  function mark() { setDirty(true); }
+
+  function updateStep(idx, patch) {
+    setSteps(prev => prev.map((s, i) => i === idx ? { ...s, ...patch } : s));
+    mark();
+  }
+
+  function addStep() {
+    setSteps(prev => {
+      const ns = [...prev, { _id: Date.now(), type: 'prompt', name: '', value: '' }];
+      setExpanded(ns.length - 1);
+      return ns;
+    });
+    mark();
+  }
+
+  function removeStep(idx) {
+    setSteps(prev => prev.filter((_, i) => i !== idx));
+    if (expanded === idx) setExpanded(null);
+    mark();
+  }
+
+  function moveStep(idx, dir) {
+    const next = idx + dir;
+    if (next < 0 || next >= steps.length) return;
+    setSteps(prev => {
+      const a = [...prev];
+      [a[idx], a[next]] = [a[next], a[idx]];
+      return a;
+    });
+    setExpanded(next);
+    mark();
+  }
+
+  async function save() {
+    if (!wf || !dirty) return;
+    setSaving(true);
+    const cleaned = steps.map(({ _id, ...rest }) => rest);
+    await fetch(`/workflows/${wf.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, steps: cleaned }),
+    });
+    setSaving(false);
+    setDirty(false);
+    onSaved?.({ ...wf, name, steps: cleaned });
+  }
+
+  if (!wf) return (
+    <div style={DRAWER_STYLE}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--color-sc-border)' }}>
+        <span style={{ fontFamily: 'var(--font-grotesk)', fontWeight: 800, fontSize: 13, color: 'var(--color-sc-text)' }}>Loading…</span>
+        <button onClick={onClose} style={ICON_BTN}><X size={14} /></button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={DRAWER_STYLE}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--color-sc-border)', flexShrink: 0 }}>
+        <Workflow size={13} style={{ color: 'var(--color-sc-gold)', flexShrink: 0 }} />
+        <input
+          value={name}
+          onChange={e => { setName(e.target.value); mark(); }}
+          style={{
+            flex: 1, background: 'transparent', border: 'none', outline: 'none',
+            fontFamily: 'var(--font-grotesk)', fontWeight: 800, fontSize: 13,
+            color: 'var(--color-sc-text)',
+          }}
+        />
+        <button onClick={onClose} style={ICON_BTN}><X size={13} /></button>
+      </div>
+
+      {/* Steps list */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+        {steps.length === 0 && (
+          <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--color-sc-text-dim)', fontSize: 12 }}>
+            No steps yet.<br />Hit + to add one.
+          </div>
+        )}
+        {steps.map((step, idx) => {
+          const isOpen = expanded === idx;
+          const typeColor = STEP_TYPE_COLOR[step.type] ?? 'var(--color-sc-border)';
+          return (
+            <div key={step._id} style={{ margin: '2px 8px', borderRadius: 8, border: `1px solid ${isOpen ? typeColor + '88' : 'var(--color-sc-border)'}`, overflow: 'hidden', transition: 'border-color 0.15s' }}>
+              {/* Row header */}
+              <div
+                onClick={() => setExpanded(isOpen ? null : idx)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', cursor: 'pointer', background: isOpen ? 'var(--color-sc-surface2)' : 'transparent' }}
+              >
+                <span style={{ fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-grotesk)', color: 'var(--color-sc-text-dim)', minWidth: 14, textAlign: 'right' }}>{idx + 1}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: typeColor + '22', color: typeColor, fontFamily: 'var(--font-grotesk)', flexShrink: 0 }}>
+                  {STEP_TYPES.find(t => t.value === step.type)?.label ?? step.type}
+                </span>
+                <span style={{ flex: 1, fontSize: 11, color: 'var(--color-sc-text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {step.name || step.value?.slice(0, 60) || '—'}
+                </span>
+                {isOpen ? <ChevronDown size={11} style={{ color: 'var(--color-sc-text-dim)', flexShrink: 0 }} /> : <ChevronRight size={11} style={{ color: 'var(--color-sc-text-dim)', flexShrink: 0 }} />}
+              </div>
+
+              {/* Expanded editor */}
+              {isOpen && (
+                <div style={{ padding: '10px 12px', borderTop: `1px solid ${typeColor}44`, background: 'var(--color-sc-bg)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {/* Type + Name row */}
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <select
+                      value={step.type}
+                      onChange={e => updateStep(idx, { type: e.target.value })}
+                      style={{ fontSize: 11, background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 5, color: 'var(--color-sc-text)', padding: '3px 6px', flex: '0 0 auto', fontFamily: 'var(--font-grotesk)' }}
+                    >
+                      {STEP_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                    <input
+                      value={step.name || ''}
+                      onChange={e => updateStep(idx, { name: e.target.value })}
+                      placeholder="Step label (optional)"
+                      style={{ flex: 1, fontSize: 11, background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 5, color: 'var(--color-sc-text)', padding: '3px 7px', outline: 'none', fontFamily: 'var(--font-grotesk)' }}
+                    />
+                  </div>
+
+                  {/* Value textarea */}
+                  <textarea
+                    value={step.value || ''}
+                    onChange={e => updateStep(idx, { value: e.target.value })}
+                    placeholder={step.type === 'prompt' ? 'Enter prompt… use {{output}} for prior step' : step.type === 'condition' ? 'Condition expression…' : 'Value…'}
+                    rows={4}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', resize: 'vertical',
+                      fontSize: 11, lineHeight: 1.5, fontFamily: 'var(--font-mono)',
+                      background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)',
+                      borderRadius: 6, color: 'var(--color-sc-text)', padding: '6px 8px', outline: 'none',
+                    }}
+                  />
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 4, justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button onClick={() => moveStep(idx, -1)} disabled={idx === 0} style={MINI_BTN} title="Move up"><ArrowUp size={11} /></button>
+                      <button onClick={() => moveStep(idx, 1)} disabled={idx === steps.length - 1} style={MINI_BTN} title="Move down"><ArrowDown size={11} /></button>
+                    </div>
+                    <button onClick={() => removeStep(idx)} style={{ ...MINI_BTN, color: 'var(--color-sc-danger)' }} title="Delete step"><Trash2 size={11} /></button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding: '10px 14px', borderTop: '1px solid var(--color-sc-border)', display: 'flex', gap: 8, flexShrink: 0 }}>
+        <button onClick={addStep} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '6px 0', borderRadius: 7, border: '1px dashed var(--color-sc-border)', background: 'transparent', cursor: 'pointer', color: 'var(--color-sc-text-dim)', fontSize: 11, fontFamily: 'var(--font-grotesk)', fontWeight: 600 }}>
+          <Plus size={11} /> Add step
+        </button>
+        <button onClick={save} disabled={!dirty || saving} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 7, border: 'none', cursor: dirty ? 'pointer' : 'default', background: dirty ? 'var(--color-sc-gold)' : 'var(--color-sc-surface2)', color: dirty ? '#fff' : 'var(--color-sc-text-dim)', fontFamily: 'var(--font-grotesk)', fontWeight: 800, fontSize: 11, transition: 'all 0.15s' }}>
+          {saving ? <Loader2 size={11} style={{ animation: 'ori-spin 1s linear infinite' }} /> : <Save size={11} />} Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const DRAWER_STYLE = {
+  width: 290, flexShrink: 0, display: 'flex', flexDirection: 'column',
+  background: 'var(--color-sc-surface)', borderLeft: '1px solid var(--color-sc-border)',
+  overflow: 'hidden',
+};
+const ICON_BTN = { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-sc-text-dim)', padding: 3, display: 'flex', borderRadius: 5 };
+const MINI_BTN = { background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 5, cursor: 'pointer', color: 'var(--color-sc-text-dim)', padding: '3px 6px', display: 'flex', alignItems: 'center' };
 
 // ── Status colours ────────────────────────────────────────────────────────────
 const STATUS_COLOR = {
@@ -153,6 +360,7 @@ function PipelineCanvasInner() {
   const [namingNew, setNamingNew]   = useState(false);
   const [newName, setNewName]       = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [drawerWfId, setDrawerWfId] = useState(null); // open workflow drawer
   const pollRef = useRef(null);
   const dragWfRef = useRef(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
@@ -258,6 +466,10 @@ function PipelineCanvasInner() {
     setDirty(true);
   }, []);
 
+  function onNodeClick(_e, node) {
+    setDrawerWfId(node.data?.wfId ?? null);
+  }
+
   function onNodesChangeDirty(changes) {
     onNodesChange(changes);
     if (changes.some(c => c.type === 'position' || c.type === 'remove')) setDirty(true);
@@ -265,6 +477,16 @@ function PipelineCanvasInner() {
   function onEdgesChangeDirty(changes) {
     onEdgesChange(changes);
     if (changes.some(c => c.type === 'remove')) setDirty(true);
+  }
+
+  // When drawer saves, refresh node step counts + workflow list
+  function onDrawerSaved(updated) {
+    setWorkflows(prev => prev.map(w => w.id === updated.id ? updated : w));
+    setNodes(prev => prev.map(n =>
+      n.data?.wfId === updated.id
+        ? { ...n, data: { ...n.data, stepCount: updated.steps?.length ?? 0, label: updated.name } }
+        : n
+    ));
   }
 
   // Run pipeline
@@ -501,9 +723,10 @@ function PipelineCanvasInner() {
           )}
         </div>
 
-        {/* React Flow canvas */}
+        {/* React Flow canvas + workflow drawer */}
         {activePipe ? (
-          <div style={{ flex: 1, overflow: 'hidden' }}>
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -511,6 +734,7 @@ function PipelineCanvasInner() {
               onNodesChange={onNodesChangeDirty}
               onEdgesChange={onEdgesChangeDirty}
               onConnect={onConnect}
+              onNodeClick={onNodeClick}
               defaultEdgeOptions={EDGE_DEFAULTS}
               onDrop={onDrop}
               onDragOver={onDragOver}
@@ -538,6 +762,15 @@ function PipelineCanvasInner() {
                 )}
               </Panel>
             </ReactFlow>
+            </div>
+            {/* Workflow editor drawer */}
+            {drawerWfId && (
+              <WorkflowDrawer
+                wfId={drawerWfId}
+                onClose={() => setDrawerWfId(null)}
+                onSaved={onDrawerSaved}
+              />
+            )}
           </div>
         ) : (
           <div style={{
