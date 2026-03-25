@@ -2342,7 +2342,205 @@ def list_wf_runs(wf_id: str) -> Response:
     return jsonify({"runs": wf_runs})
 
 
-# ── Project CRUD ────────────────────────────────────────────────────────────────
+# ── Pipeline (visual orchestration canvas) CRUD + run ────────────────────────
+
+_PIPELINES_FILE = Path(__file__).parent / ".oricli" / "pipelines.json"
+_PIPE_LOCK = threading.Lock()
+
+
+def _load_pipelines() -> list:
+    if _PIPELINES_FILE.exists():
+        try:
+            return json.loads(_PIPELINES_FILE.read_text())
+        except Exception:
+            pass
+    return []
+
+
+def _save_pipelines(data: list) -> None:
+    _PIPELINES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _PIPELINES_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _topo_sort(nodes: list, edges: list) -> list[str]:
+    """Return node ids in topological execution order (Kahn's algorithm)."""
+    in_degree: dict[str, int] = {n["id"]: 0 for n in nodes}
+    adj: dict[str, list[str]] = {n["id"]: [] for n in nodes}
+    for e in edges:
+        src, tgt = e.get("source"), e.get("target")
+        if src in adj and tgt in in_degree:
+            adj[src].append(tgt)
+            in_degree[tgt] += 1
+    queue = [nid for nid, deg in in_degree.items() if deg == 0]
+    order: list[str] = []
+    while queue:
+        nid = queue.pop(0)
+        order.append(nid)
+        for tgt in adj[nid]:
+            in_degree[tgt] -= 1
+            if in_degree[tgt] == 0:
+                queue.append(tgt)
+    return order
+
+
+def _run_pipeline_job(pipeline_id: str, run_id: str) -> None:
+    """Execute pipeline workflows in topological order, chaining outputs."""
+    with _PIPE_LOCK:
+        pipelines = _load_pipelines()
+    pipeline = next((p for p in pipelines if p["id"] == pipeline_id), None)
+    if not pipeline:
+        return
+
+    nodes  = pipeline.get("nodes", [])
+    edges  = pipeline.get("edges", [])
+    order  = _topo_sort(nodes, edges)
+    node_map = {n["id"]: n for n in nodes}
+
+    # Run metadata — node_statuses: {node_id: {status, output, error, started, finished}}
+    run_data: dict = {
+        "id":           run_id,
+        "pipeline_id":  pipeline_id,
+        "status":       "running",
+        "started":      datetime.now(timezone.utc).isoformat(),
+        "node_statuses": {n["id"]: {"status": "pending", "output": "", "error": None} for n in nodes},
+    }
+
+    runs_file = Path(__file__).parent / ".oricli" / "pipeline_runs.json"
+
+    def _save_run():
+        runs_file.parent.mkdir(parents=True, exist_ok=True)
+        all_runs: dict = {}
+        if runs_file.exists():
+            try:
+                all_runs = json.loads(runs_file.read_text())
+            except Exception:
+                pass
+        all_runs[run_id] = run_data
+        runs_file.write_text(json.dumps(all_runs, indent=2))
+
+    _save_run()
+
+    context_output = ""  # chained output between nodes
+
+    for node_id in order:
+        node = node_map.get(node_id)
+        if not node:
+            continue
+        wf_id = node.get("wfId") or node.get("data", {}).get("wfId")
+        if not wf_id:
+            run_data["node_statuses"][node_id]["status"] = "skipped"
+            _save_run()
+            continue
+
+        run_data["node_statuses"][node_id]["status"] = "running"
+        run_data["node_statuses"][node_id]["started"] = datetime.now(timezone.utc).isoformat()
+        _save_run()
+
+        try:
+            # Execute the workflow as a sub-workflow, passing chained context
+            with _WF_LOCK:
+                workflows = _load_workflows()
+            wf = next((w for w in workflows if w["id"] == wf_id), None)
+            if not wf:
+                raise ValueError(f"Workflow '{wf_id}' not found")
+
+            init_ctx: dict = {
+                "output":        context_output,
+                "input":         context_output,
+                "workflow_name": wf.get("name", ""),
+            }
+            result_output = _execute_sub_workflow(wf_id, init_ctx)
+            context_output = result_output
+
+            run_data["node_statuses"][node_id].update({
+                "status":   "done",
+                "output":   result_output,
+                "finished": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as exc:
+            run_data["node_statuses"][node_id].update({
+                "status":   "error",
+                "error":    str(exc),
+                "output":   f"[Error: {exc}]",
+                "finished": datetime.now(timezone.utc).isoformat(),
+            })
+        _save_run()
+
+    run_data["status"]   = "done"
+    run_data["finished"] = datetime.now(timezone.utc).isoformat()
+    run_data["final_output"] = context_output
+    _save_run()
+
+
+@app.route("/pipelines", methods=["GET"])
+def list_pipelines() -> Response:
+    with _PIPE_LOCK:
+        return jsonify({"pipelines": _load_pipelines()})
+
+
+@app.route("/pipelines", methods=["POST"])
+def create_pipeline() -> Response:
+    body = request.get_json(silent=True) or {}
+    pipe: dict = {
+        "id":          f"pipe_{uuid.uuid4().hex[:10]}",
+        "name":        body.get("name", "Untitled Pipeline"),
+        "description": body.get("description", ""),
+        "nodes":       body.get("nodes", []),
+        "edges":       body.get("edges", []),
+        "createdAt":   datetime.now(timezone.utc).isoformat(),
+        "updatedAt":   datetime.now(timezone.utc).isoformat(),
+    }
+    with _PIPE_LOCK:
+        pipes = _load_pipelines()
+        pipes.append(pipe)
+        _save_pipelines(pipes)
+    return jsonify(pipe), 201
+
+
+@app.route("/pipelines/<pipe_id>", methods=["PUT"])
+def update_pipeline(pipe_id: str) -> Response:
+    body = request.get_json(silent=True) or {}
+    with _PIPE_LOCK:
+        pipes = _load_pipelines()
+        idx = next((i for i, p in enumerate(pipes) if p["id"] == pipe_id), None)
+        if idx is None:
+            return jsonify({"error": "Not found"}), 404
+        pipes[idx].update({k: v for k, v in body.items() if k not in ("id", "createdAt")})
+        pipes[idx]["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        _save_pipelines(pipes)
+        return jsonify(pipes[idx])
+
+
+@app.route("/pipelines/<pipe_id>", methods=["DELETE"])
+def delete_pipeline(pipe_id: str) -> Response:
+    with _PIPE_LOCK:
+        pipes = _load_pipelines()
+        pipes = [p for p in pipes if p["id"] != pipe_id]
+        _save_pipelines(pipes)
+    return jsonify({"ok": True})
+
+
+@app.route("/pipelines/<pipe_id>/run", methods=["POST"])
+def run_pipeline(pipe_id: str) -> Response:
+    run_id = f"prun_{uuid.uuid4().hex[:12]}"
+    t = threading.Thread(target=_run_pipeline_job, args=(pipe_id, run_id), daemon=True)
+    t.start()
+    return jsonify({"run_id": run_id})
+
+
+@app.route("/pipelines/runs/<run_id>", methods=["GET"])
+def get_pipeline_run(run_id: str) -> Response:
+    runs_file = Path(__file__).parent / ".oricli" / "pipeline_runs.json"
+    if not runs_file.exists():
+        return jsonify({"error": "Not found"}), 404
+    try:
+        all_runs = json.loads(runs_file.read_text())
+        run = all_runs.get(run_id)
+        if not run:
+            return jsonify({"error": "Not found"}), 404
+        return jsonify(run)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
 
 @app.route("/projects", methods=["GET"])
 def list_projects() -> Response:

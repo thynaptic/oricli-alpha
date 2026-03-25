@@ -6,6 +6,7 @@ import { ChatArea } from './components/ChatArea';
 import { AgentsPage } from './pages/AgentsPage';
 import { ProfilesPage } from './pages/ProfilesPage';
 import { WorkflowsPage } from './pages/WorkflowsPage';
+import PipelineCanvas from './pages/PipelineCanvas';
 import { ArtifactsCanvas } from './pages/ArtifactsCanvas';
 import { ResearchPage } from './pages/ResearchPage';
 import { MCPPage } from './pages/MCPPage';
@@ -110,6 +111,7 @@ export default function App() {
       {activePage === 'memory'       && <MemoryBrowser />}
       {activePage === 'goals'        && <GoalsPage />}
       {activePage === 'ori-studio'   && <OriStudioPage />}
+      {activePage === 'pipelines'    && <PipelineCanvas />}
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>
