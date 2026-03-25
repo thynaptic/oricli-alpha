@@ -10,8 +10,25 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"time"
 )
+
+// chatModelActive is set to 1 while a ChatStream generation is in flight.
+// Embed() checks this and returns nil immediately to avoid evicting the chat
+// model from Ollama's single-slot memory. Re-ranking falls back to importance.
+var chatModelActive atomic.Int32
+
+// SetChatModelActive marks whether a chat generation is currently running.
+// Call SetChatModelActive(true) at the start of ChatStream and
+// SetChatModelActive(false) (deferred) when the stream goroutine exits.
+func SetChatModelActive(active bool) {
+	if active {
+		chatModelActive.Store(1)
+	} else {
+		chatModelActive.Store(0)
+	}
+}
 
 // Embedder generates float32 vectors via Ollama's /api/embeddings endpoint.
 // Default model: nomic-embed-text (50MB, already pulled, 768-dim vectors).
@@ -35,23 +52,16 @@ func NewEmbedder() *Embedder {
 	e := &Embedder{
 		baseURL: base,
 		model:   model,
-		// CPU-only cold load can take 60-90s; use 120s to be safe.
-		client: &http.Client{Timeout: 120 * time.Second},
+		// HTTP client timeout: 10s (per-request context deadline caps live calls at 8s).
+		client: &http.Client{Timeout: 10 * time.Second},
 	}
-	// Pre-warm: fire a silent background embed so the model is hot for
-	// the first real request.
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 130*time.Second)
-		defer cancel()
-		e.Embed(ctx, "warm")
-		log.Printf("[embedder] model %q pre-warmed", model)
-	}()
 	return e
 }
 
 type ollamaEmbedRequest struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
+	Model     string `json:"model"`
+	Prompt    string `json:"prompt"`
+	KeepAlive string `json:"keep_alive,omitempty"`
 }
 
 type ollamaEmbedResponse struct {
@@ -60,7 +70,12 @@ type ollamaEmbedResponse struct {
 
 // Embed generates a normalized float32 embedding vector for text.
 // Returns nil on any error — callers must handle nil gracefully.
+// Returns nil immediately if the chat model is currently active to avoid
+// evicting it from Ollama's single-slot memory on CPU-only machines.
 func (e *Embedder) Embed(ctx context.Context, text string) []float32 {
+	if chatModelActive.Load() != 0 {
+		return nil // don't evict chat model for re-ranking
+	}
 	if text == "" {
 		return nil
 	}
@@ -71,7 +86,7 @@ func (e *Embedder) Embed(ctx context.Context, text string) []float32 {
 		text = text[:800]
 	}
 
-	body, _ := json.Marshal(ollamaEmbedRequest{Model: e.model, Prompt: text})
+	body, _ := json.Marshal(ollamaEmbedRequest{Model: e.model, Prompt: text, KeepAlive: "60m"})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		e.baseURL+"/api/embeddings", bytes.NewReader(body))
 	if err != nil {

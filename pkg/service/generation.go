@@ -72,9 +72,6 @@ func NewGenerationService() *GenerationService {
 		StreamClient:  &http.Client{Timeout: 0, Transport: transport},
 		RunPodMgr:     NewRunPodManager(),
 	}
-	// Pre-warm the default chat model so the first user request is fast.
-	// Runs in background — backbone boot is not blocked.
-	go svc.prewarmModel(model)
 	return svc
 }
 

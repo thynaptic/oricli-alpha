@@ -385,6 +385,26 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	c.Writer.WriteString(": keep-alive\n\n")
 	c.Writer.Flush()
 
+	// Pipeline heartbeat — keeps the CF/browser connection alive during the
+	// blocking pipeline stages (ProcessInference + RAG embed, up to 90s).
+	// The main token-stream ticker takes over once ChatStream starts.
+	heartbeatDone := make(chan struct{})
+	go func() {
+		t := time.NewTicker(15 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-t.C:
+				c.Writer.WriteString(": keep-alive\n\n")
+				c.Writer.Flush()
+			case <-heartbeatDone:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	// Helper to emit an SSE error event (can't use c.JSON once SSE headers are sent)
 	sseError := func(msg string) {
 		errChunk := map[string]interface{}{
@@ -398,6 +418,11 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
 		c.Writer.Flush()
 	}
+
+	// Mark chat model as active — prevents Embed() from cold-loading all-minilm
+	// and evicting qwen3 from Ollama's single memory slot during the pipeline.
+	service.SetChatModelActive(true)
+	defer service.SetChatModelActive(false)
 
 	sovTrace, err := s.Agent.SovEngine.ProcessInference(ctx, lastMsg)
 	if err != nil {
@@ -418,9 +443,14 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		systemContent = sovTrace + "\n\n---\n\n" + clientSystem
 	}
 
-	// Inject relevant long-term memories as RAG context prefix
+	// Inject relevant long-term memories as RAG context prefix.
+	// Use a short deadline — if the embedder is cold (model evicted), we skip RAG
+	// rather than blocking the user for 90s waiting for all-minilm to reload.
 	if s.MemoryBank != nil && s.MemoryBank.IsEnabled() && lastMsg != "" {
-		if frags, err := s.MemoryBank.QuerySimilar(c.Request.Context(), lastMsg, 5); err == nil && len(frags) > 0 {
+		ragCtx_ctx, ragCancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
+		frags, ragErr := s.MemoryBank.QuerySimilar(ragCtx_ctx, lastMsg, 5)
+		ragCancel()
+		if ragErr == nil && len(frags) > 0 {
 			ragCtx := service.FormatRAGContext(frags, 1200)
 			if ragCtx != "" {
 				systemContent = ragCtx + "\n\n---\n\n" + systemContent
@@ -507,9 +537,12 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 	tokenCh, err := s.Agent.GenService.ChatStream(c.Request.Context(), msgs, streamOpts)
 	if err != nil {
+		close(heartbeatDone)
 		sseError(err.Error())
 		return
 	}
+	// Stop pipeline heartbeat — token-stream ticker takes over from here.
+	close(heartbeatDone)
 
 	// Emit agent_dispatch SSE event before the first token so the UI renders
 	// the dispatch card immediately

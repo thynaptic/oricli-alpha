@@ -340,11 +340,10 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 	}
 
 	// Generate query embedding for cosine re-ranking.
-	// Use a fresh background context so a canceled request context doesn't
-	// abort the embed mid-flight and leave re-ranking skipped.
-	embedCtx, embedCancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer embedCancel()
-	queryVec := m.embedder.Embed(embedCtx, query)
+	// Use the caller's context so the 8s RAG deadline from server_v2 is honoured.
+	// If the embedder is cold (all-minilm evicted by qwen3), this fails fast
+	// and we fall back to importance-based scoring below — no 90s block.
+	queryVec := m.embedder.Embed(ctx, query)
 
 	type scoredFrag struct {
 		frag  MemoryFragment
