@@ -133,7 +133,7 @@ function PipelineCanvasInner() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const pollRef = useRef(null);
   const dragWfRef = useRef(null);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
   // Load pipelines + workflows on mount
   useEffect(() => {
@@ -163,6 +163,10 @@ function PipelineCanvasInner() {
     setNodes(hydrated);
     setEdges(pipe.edges || []);
     setDirty(false);
+    // Fit view to existing nodes after a tick (only for saved pipelines with nodes)
+    if (hydrated.length > 0) {
+      setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
+    }
   }
 
   // Save current canvas state to backend
@@ -477,7 +481,7 @@ function PipelineCanvasInner() {
 
         {/* React Flow canvas */}
         {activePipe ? (
-          <div style={{ flex: 1, overflow: 'hidden' }} onDrop={onDrop} onDragOver={onDragOver}>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -486,7 +490,9 @@ function PipelineCanvasInner() {
               onEdgesChange={onEdgesChangeDirty}
               onConnect={onConnect}
               defaultEdgeOptions={EDGE_DEFAULTS}
-              fitView
+              onDrop={onDrop}
+              onDragOver={onDragOver}
+              defaultViewport={{ x: 80, y: 80, zoom: 1 }}
               proOptions={{ hideAttribution: true }}
             >
               <Background color="var(--color-sc-border)" gap={20} size={1} />
