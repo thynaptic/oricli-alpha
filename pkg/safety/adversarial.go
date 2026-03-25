@@ -58,8 +58,12 @@ func (a *AdversarialAuditor) loadAdvancedPatterns() {
 }
 
 // AuditInput checks the user message for sophisticated malicious intent.
-func (a *AdversarialAuditor) AuditInput(input string, history []string) AdversarialResult {
+// Set codeContext=true when the request originates from canvas or IDE editing
+// mode — command injection check is skipped because code naturally contains
+// shell symbols and commands as legitimate content.
+func (a *AdversarialAuditor) AuditInput(input string, history []string, codeContext ...bool) AdversarialResult {
 	lower := strings.ToLower(input)
+	isCodeCtx := len(codeContext) > 0 && codeContext[0]
 
 	// 1. Static Pattern Match
 	for t, patterns := range a.Patterns {
@@ -76,15 +80,30 @@ func (a *AdversarialAuditor) AuditInput(input string, history []string) Adversar
 		}
 	}
 
-	// 2. Command Injection Check (Regex ported from Swift)
-	re := regexp.MustCompile(`[;&|]|\$\(|\x60`) // ; & | $( `
-	if re.MatchString(input) && (strings.Contains(lower, "rm ") || strings.Contains(lower, "cat ") || strings.Contains(lower, "ls ")) {
-		return AdversarialResult{
-			Detected:   true,
-			Type:       ThreatEscape,
-			Confidence: 0.95,
-			Patterns:   []string{"command_injection_symbols"},
-			Refusal:    "Executing system commands? That's a hard no, babe. I'm not your shell.",
+	// 2. Command Injection Check
+	// Skip entirely in code/canvas context — code legitimately contains shell
+	// symbols and commands. Only fire on actual injection indicators outside
+	// code editing (destructive commands + shell escape symbols).
+	if !isCodeCtx {
+		reSymbols := regexp.MustCompile(`[;&|]|\$\(|\x60`)
+		// Require actually dangerous commands, not benign ones like cat/ls that
+		// appear constantly in normal code and prose.
+		dangerousShell := strings.Contains(lower, "rm -") ||
+			strings.Contains(lower, "curl ") ||
+			strings.Contains(lower, "wget ") ||
+			strings.Contains(lower, "sudo ") ||
+			strings.Contains(lower, "chmod ") ||
+			strings.Contains(lower, "dd if=") ||
+			strings.Contains(lower, "| bash") ||
+			strings.Contains(lower, "| sh")
+		if reSymbols.MatchString(input) && dangerousShell {
+			return AdversarialResult{
+				Detected:   true,
+				Type:       ThreatEscape,
+				Confidence: 0.95,
+				Patterns:   []string{"command_injection_symbols"},
+				Refusal:    "Executing system commands? That's a hard no, babe. I'm not your shell.",
+			}
 		}
 	}
 

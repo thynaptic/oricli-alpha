@@ -326,7 +326,14 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		return
 	}
 
-	if blocked, refusal := s.Agent.SovEngine.CheckInputSafetyWithHistory(history, sessionKey); blocked {
+	// Detect canvas/code context early — needed for safety gate tuning.
+	// Canvas: large token budget or explicit header. ORI Studio IDE sets X-Canvas-Mode.
+	// The /v1/studio/vibe endpoint also sets X-Canvas-Mode via its own handler.
+	isCodeCtx := (req.MaxTokens != nil && *req.MaxTokens >= 8192) ||
+		c.GetHeader("X-Canvas-Mode") == "true" ||
+		c.GetHeader("X-Code-Context") == "true"
+
+	if blocked, refusal := s.Agent.SovEngine.CheckInputSafetyWithHistory(history, sessionKey, isCodeCtx); blocked {
 		// Record the block with the rate limiter for probe trip-wire
 		s.RateLimiter.RecordBlock(sessionKey, "injection")
 		chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())

@@ -619,7 +619,7 @@ def _ddg_search(query: str, max_results: int = 6) -> list:
         return []
 
 
-def _llm_complete(messages: list, max_tokens: int = 2000, timeout: float = 120.0) -> str:
+def _llm_complete(messages: list, max_tokens: int = 2000, timeout: float = 120.0, extra_headers: dict = None) -> str:
     """Synchronous LLM call — handles both plain-JSON and SSE responses.
 
     The backbone returns SSE (text/event-stream) for some model tiers even
@@ -637,7 +637,7 @@ def _llm_complete(messages: list, max_tokens: int = 2000, timeout: float = 120.0
             resp = client.post(
                 f"{API_BASE}/v1/chat/completions",
                 json=payload,
-                headers=_build_headers(),
+                headers=_build_headers(extra=extra_headers),
                 timeout=timeout,
             )
             resp.raise_for_status()
@@ -2844,6 +2844,7 @@ def ori_ai_assist():
                 [{"role": "system", "content": sys_msg},
                  {"role": "user",   "content": user_msg}],
                 max_tokens=2500,
+                extra_headers={"X-Code-Context": "true"},
             )
             # Clean markdown fences if model adds them
             result = result.strip()

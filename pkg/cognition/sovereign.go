@@ -541,7 +541,9 @@ func (e *SovereignEngine) AuditCanvasOutput(text string) (string, bool) {
 // Gate order: Normalize → MultiTurn check → Sentinel → Adversarial → DID → Web Injection → Canary
 // Returns (blocked=true, refusal message) if the input should be rejected outright,
 // bypassing Ollama entirely. Call this BEFORE ProcessInference.
-func (e *SovereignEngine) CheckInputSafety(input string) (bool, string) {
+// Set codeContext=true for canvas/IDE requests — relaxes command injection detection.
+func (e *SovereignEngine) CheckInputSafety(input string, codeContext ...bool) (bool, string) {
+	isCodeCtx := len(codeContext) > 0 && codeContext[0]
 	// Pre-processing: normalize obfuscation (unicode, base64, leetspeak, ROT13, zero-width)
 	normalized := safety.NormalizeInput(input)
 
@@ -552,7 +554,7 @@ func (e *SovereignEngine) CheckInputSafety(input string) (bool, string) {
 		return true, sentinelRes.Replacement
 	}
 	// Gate 2: Adversarial auditor — DAN patterns, routing hijack, dual-use
-	adversarialRes := e.Adversarial.AuditInput(normalized, nil)
+	adversarialRes := e.Adversarial.AuditInput(normalized, nil, isCodeCtx)
 	if adversarialRes.Detected {
 		log.Printf("[Safety:Input] Adversarial blocked [%s %.2f]: %q", adversarialRes.Type, adversarialRes.Confidence, input[:min(len(input), 120)])
 		return true, adversarialRes.Refusal
@@ -580,7 +582,9 @@ func (e *SovereignEngine) CheckInputSafety(input string) (bool, string) {
 
 // CheckInputSafetyWithHistory runs full multi-turn analysis plus per-message gates.
 // Pass the full message history (oldest first) and the client IP/session key for suspicion tracking.
-func (e *SovereignEngine) CheckInputSafetyWithHistory(messages []safety.ChatTurn, sessionKey string) (bool, string) {
+// Set codeContext=true for canvas/IDE requests — relaxes command injection detection.
+func (e *SovereignEngine) CheckInputSafetyWithHistory(messages []safety.ChatTurn, sessionKey string, codeContext ...bool) (bool, string) {
+	isCodeCtx := len(codeContext) > 0 && codeContext[0]
 	// Multi-turn poisoning analysis (scans the whole conversation for escalation sequences)
 	if len(messages) >= 2 {
 		mtRes := e.MultiTurn.AnalyzeHistory(messages)
@@ -603,7 +607,7 @@ func (e *SovereignEngine) CheckInputSafetyWithHistory(messages []safety.ChatTurn
 		return false, ""
 	}
 
-	blocked, refusal := e.CheckInputSafety(lastMsg)
+	blocked, refusal := e.CheckInputSafety(lastMsg, isCodeCtx)
 	if blocked {
 		e.Suspicion.RecordBlock(sessionKey, "critical")
 	}
