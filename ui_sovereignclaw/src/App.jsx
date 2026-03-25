@@ -111,7 +111,11 @@ export default function App() {
       {activePage === 'memory'       && <MemoryBrowser />}
       {activePage === 'goals'        && <GoalsPage />}
       {activePage === 'ori-studio'   && <OriStudioPage />}
-      {activePage === 'pipelines'    && <PipelineCanvas />}
+      {activePage === 'pipelines'    && (
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+          <PipelineCanvas />
+        </div>
+      )}
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>

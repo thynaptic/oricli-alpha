@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  ReactFlow, Background, Controls, MiniMap,
-  addEdge, useNodesState, useEdgesState,
+  ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
+  addEdge, useNodesState, useEdgesState, useReactFlow,
   MarkerType, Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -118,7 +118,7 @@ const EDGE_DEFAULTS = {
 };
 
 // ── PipelineCanvas page ───────────────────────────────────────────────────────
-export default function PipelineCanvas() {
+function PipelineCanvasInner() {
   const [pipelines, setPipelines]   = useState([]);
   const [activePipe, setActivePipe] = useState(null); // full pipeline obj
   const [workflows, setWorkflows]   = useState([]);
@@ -133,6 +133,7 @@ export default function PipelineCanvas() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const pollRef = useRef(null);
   const dragWfRef = useRef(null);
+  const { screenToFlowPosition } = useReactFlow();
 
   // Load pipelines + workflows on mount
   useEffect(() => {
@@ -210,8 +211,8 @@ export default function PipelineCanvas() {
     e.preventDefault();
     const wf = dragWfRef.current;
     if (!wf) return;
-    const bounds = e.currentTarget.getBoundingClientRect();
-    const position = { x: e.clientX - bounds.left - 90, y: e.clientY - bounds.top - 30 };
+    // Convert screen coordinates to React Flow canvas coordinates (respects zoom/pan)
+    const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
     const newNode = {
       id:   `node_${Date.now()}`,
       type: 'workflowNode',
@@ -540,5 +541,14 @@ export default function PipelineCanvas() {
         }
       `}</style>
     </div>
+  );
+}
+
+// Wrap with ReactFlowProvider so useReactFlow() works inside PipelineCanvasInner
+export default function PipelineCanvas() {
+  return (
+    <ReactFlowProvider>
+      <PipelineCanvasInner />
+    </ReactFlowProvider>
   );
 }
