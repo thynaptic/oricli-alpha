@@ -225,7 +225,8 @@ func (e *TaskExecutor) executeAction(ctx context.Context, t *Task, results map[s
 		}
 		prompt := buildSynthesisPrompt(depCtx)
 		res, err := e.svc.Generator.Generate(prompt, map[string]interface{}{
-			"model": "ministral-3:3b",
+			// No "model" override — Generator uses its configured DefaultModel
+			// (same model as chat) to avoid Ollama eviction penalty.
 			"options": map[string]interface{}{
 				"num_predict": 512,
 				"temperature": 0.5,

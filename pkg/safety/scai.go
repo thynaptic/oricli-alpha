@@ -3,6 +3,7 @@ package safety
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/ollama/ollama/api"
@@ -76,7 +77,10 @@ type SCAIAuditor struct {
 
 func NewSCAIAuditor(c *Constitution, model string) *SCAIAuditor {
 	if model == "" {
-		model = "ministral-3:3b" // Default sovereign SLM
+		model = os.Getenv("OLLAMA_MODEL")
+		if model == "" {
+			model = "qwen3:1.7b"
+		}
 	}
 	return &SCAIAuditor{
 		Constitution: c,

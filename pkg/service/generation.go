@@ -28,6 +28,16 @@ type GenerationService struct {
 	RunPodMgr      *RunPodManager // nil when disabled
 }
 
+// DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
+// All background daemons should use this instead of hardcoded model names so
+// that the same model stays resident in Ollama memory and avoids eviction.
+func DefaultLLMModel() string {
+	if m := os.Getenv("OLLAMA_MODEL"); m != "" {
+		return m
+	}
+	return "qwen3:1.7b"
+}
+
 func NewGenerationService() *GenerationService {
 	url := "http://127.0.0.1:11434"
 	genUrl := os.Getenv("OLLAMA_GEN_URL")
@@ -271,8 +281,8 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		"keep_alive": "60m", // keep model hot; cold loads take 60+ s on CPU-only VPS
 		"options": map[string]interface{}{
 			"num_thread":  s.NumThreads, // auto-detected at boot; prevents vCPU over-subscription
-			"num_ctx":     4096, // fast for regular chat; canvas overrides to 32768
-			"num_predict": 1024, // sane default; canvas overrides to -1
+			"num_ctx":     4096, // covers system-prompt + skill + RAG + history comfortably
+			"num_predict": 512,  // 512 tokens covers most conversational answers; canvas overrides to -1
 		},
 	}
 	if temp, ok := options["temperature"].(float64); ok {

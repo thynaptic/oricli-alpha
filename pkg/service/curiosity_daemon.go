@@ -439,7 +439,7 @@ func (d *CuriosityDaemon) generateHypotheses(ctx context.Context, topic, factSum
 	defer cancel()
 
 	res, err := d.Gen.Generate(prompt, map[string]interface{}{
-		"model": "ministral-3:3b",
+		"model": d.Gen.DefaultModel, // use chat model to avoid Ollama eviction
 		"options": map[string]interface{}{
 			"num_predict": 150,
 			"num_ctx":     2048,
