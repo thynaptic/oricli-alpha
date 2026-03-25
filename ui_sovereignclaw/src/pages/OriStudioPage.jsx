@@ -712,8 +712,8 @@ function RunLog({ entries, onClear }) {
       borderTop: '1px solid rgba(255,255,255,0.07)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#546e7a' }}>Run Log</span>
-        <button onClick={onClear} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#546e7a', padding: '2px 6px' }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-sc-text-dim)' }}>Run Log</span>
+        <button onClick={onClear} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-sc-text-dim)', padding: '2px 6px' }}>
           <Trash2 size={11} />
         </button>
       </div>
@@ -798,12 +798,12 @@ function InlineEditBar({ editState, source, onApply, onClose }) {
     <div style={boxStyle} onMouseDown={e => e.stopPropagation()}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'var(--color-sc-bg)' }}>
-        <Wand2 size={12} style={{ color: '#a89cf7' }} />
-        <span style={{ fontSize: 11, color: '#a89cf7', fontWeight: 700 }}>Inline Edit</span>
+        <Wand2 size={12} style={{ color: 'var(--color-sc-gold)' }} />
+        <span style={{ fontSize: 11, color: 'var(--color-sc-gold)', fontWeight: 700 }}>Inline Edit</span>
         <span style={{ fontSize: 10, color: '#37474f', flex: 1 }}>
           {editState.text.split('\n').length} lines selected · Ctrl+K
         </span>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#546e7a', padding: 2 }}>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-sc-text-dim)', padding: 2 }}>
           <X size={12} />
         </button>
       </div>
@@ -818,7 +818,7 @@ function InlineEditBar({ editState, source, onApply, onClose }) {
           placeholder="Describe the edit… (Enter to run)"
           style={{
             flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 6, padding: '6px 10px', color: '#e1e4e8', fontSize: 12, outline: 'none',
+            borderRadius: 6, padding: '6px 10px', color: 'var(--color-sc-text)', fontSize: 12, outline: 'none',
             fontFamily: 'inherit',
           }}
         />
@@ -848,7 +848,7 @@ function InlineEditBar({ editState, source, onApply, onClose }) {
             whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit',
           }}>
             {streaming || result}
-            {busy && <span style={{ color: '#a89cf7', animation: 'ori-spin 1s linear infinite', display: 'inline-block' }}>▊</span>}
+            {busy && <span style={{ color: 'var(--color-sc-gold)', animation: 'ori-spin 1s linear infinite', display: 'inline-block' }}>▊</span>}
           </pre>
         </div>
       )}
@@ -946,8 +946,8 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
         padding: '7px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)',
         background: 'var(--color-sc-surface)',
       }}>
-        <Sparkles size={12} style={{ color: '#a89cf7' }} />
-        <span style={{ fontSize: 11, fontWeight: 800, color: '#a89cf7', fontFamily: "var(--font-grotesk, sans-serif)", letterSpacing: '0.04em' }}>
+        <Sparkles size={12} style={{ color: 'var(--color-sc-gold)' }} />
+        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--color-sc-gold)', fontFamily: "var(--font-grotesk, sans-serif)", letterSpacing: '0.04em' }}>
           VIBE MODE
         </span>
         <span style={{ fontSize: 10, color: '#37474f', fontFamily: 'monospace', flex: 1 }}>
@@ -1023,7 +1023,7 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
               tabSize: 2, MozTabSize: 2,
             }}>
               <span dangerouslySetInnerHTML={{ __html: highlight(streaming) }} />
-              <span style={{ color: '#a89cf7' }}>▊</span>
+              <span style={{ color: 'var(--color-sc-gold)' }}>▊</span>
             </pre>
           </div>
         )}
@@ -1082,7 +1082,7 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
             style={{
               flex: 1, resize: 'none', background: 'rgba(255,255,255,0.04)',
               border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
-              padding: '7px 10px', color: '#e1e4e8', fontSize: 11, outline: 'none',
+              padding: '7px 10px', color: 'var(--color-sc-text)', fontSize: 11, outline: 'none',
               fontFamily: "var(--font-inter, sans-serif)", lineHeight: 1.5,
             }}
           />
@@ -1113,7 +1113,7 @@ const btnBase = {
   whiteSpace: 'nowrap',
 };
 const ghostBtn = { ...btnBase, background: 'rgba(255,255,255,0.06)', color: '#90a4ae' };
-const goldBtn  = { ...btnBase, background: 'rgba(168,156,247,0.18)', color: '#a89cf7' };
+const goldBtn  = { ...btnBase, background: 'rgba(168,156,247,0.18)', color: 'var(--color-sc-gold)' };
 const greenBtn = { ...btnBase, background: 'rgba(100,221,23,0.15)',  color: '#64dd17' };
 const dimBtn   = { ...btnBase, background: 'rgba(255,255,255,0.03)', color: '#374151', cursor: 'not-allowed' };
 
@@ -1334,19 +1334,20 @@ export default function OriStudioPage() {
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      background: 'var(--color-sc-bg)', color: '#e1e4e8',
+      background: 'var(--color-sc-bg)', color: 'var(--color-sc-text)',
     }}>
       {/* ── Toolbar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
-        borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0,
+        borderBottom: '1px solid var(--color-sc-border)', flexShrink: 0,
         background: 'var(--color-sc-surface)',
       }}>
-        <Code2 size={15} style={{ color: '#a89cf7' }} />
-        <span style={{ fontFamily: "var(--font-grotesk, sans-serif)", fontWeight: 800, fontSize: 13, color: '#e1e4e8', letterSpacing: '0.02em' }}>
+        <img src="/ori-studio-logo.png" alt="ORI Studio" className="logo-dark-src"
+          style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0 }} />
+        <span style={{ fontFamily: "var(--font-grotesk, sans-serif)", fontWeight: 800, fontSize: 13, color: 'var(--color-sc-text)', letterSpacing: '0.02em' }}>
           ORI Studio
         </span>
-        <span style={{ fontSize: 10, color: '#546e7a', fontFamily: 'monospace', paddingTop: 1 }}>
+        <span style={{ fontSize: 10, color: 'var(--color-sc-text-dim)', fontFamily: 'monospace', paddingTop: 1 }}>
           .ori workflow compiler
         </span>
 
@@ -1354,7 +1355,7 @@ export default function OriStudioPage() {
 
         {/* Status indicator */}
         {compiling && (
-          <span style={{ color: '#546e7a', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ color: 'var(--color-sc-text-dim)', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Loader size={11} style={{ animation: 'ori-spin 1s linear infinite' }} /> compiling…
           </span>
         )}
@@ -1374,7 +1375,7 @@ export default function OriStudioPage() {
           </span>
         )}
 
-        <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.07)', margin: '0 4px' }} />
+        <div style={{ width: 1, height: 20, background: 'var(--color-sc-border)', margin: '0 4px' }} />
 
         {/* Load dropdown */}
         <div style={{ position: 'relative' }}>
@@ -1389,7 +1390,7 @@ export default function OriStudioPage() {
               overflow: 'hidden',
             }}>
               {workflows.length === 0
-                ? <div style={{ padding: '12px 14px', color: '#546e7a', fontSize: 12 }}>No saved workflows</div>
+                ? <div style={{ padding: '12px 14px', color: 'var(--color-sc-text-dim)', fontSize: 12 }}>No saved workflows</div>
                 : workflows.map(w => (
                   <button key={w.id} onClick={() => decompile(w.id)} style={{
                     display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px',
@@ -1397,7 +1398,7 @@ export default function OriStudioPage() {
                     color: '#90a4ae', fontSize: 12, fontFamily: "var(--font-inter, sans-serif)",
                     transition: 'background 0.1s',
                   }}
-                    onMouseEnter={e => e.target.style.background = 'rgba(255,255,255,0.05)'}
+                    onMouseEnter={e => e.target.style.background = 'var(--color-sc-border)'}
                     onMouseLeave={e => e.target.style.background = 'none'}
                   >
                     {w.agentEmoji || '⚙️'} {w.name}
@@ -1434,14 +1435,14 @@ export default function OriStudioPage() {
           <Download size={12} /> .ori
         </button>
 
-        <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.07)', margin: '0 2px' }} />
+        <div style={{ width: 1, height: 20, background: 'var(--color-sc-border)', margin: '0 2px' }} />
 
         <button
           onClick={() => setVibeOpen(o => !o)}
           style={{
             ...btnBase,
             background: vibeOpen ? 'rgba(168,156,247,0.22)' : 'rgba(168,156,247,0.08)',
-            color: '#a89cf7',
+            color: 'var(--color-sc-gold)',
             border: `1px solid ${vibeOpen ? 'rgba(168,156,247,0.4)' : 'transparent'}`,
           }}
           title="Vibe Mode — describe workflows in natural language"
@@ -1462,7 +1463,7 @@ export default function OriStudioPage() {
           <div style={{
             padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)',
             display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-sc-surface)',
-            fontSize: 11, color: '#546e7a', flexShrink: 0,
+            fontSize: 11, color: 'var(--color-sc-text-dim)', flexShrink: 0,
           }}>
             <span style={{ fontFamily: 'monospace' }}>workflow.ori</span>
             <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1529,7 +1530,7 @@ export default function OriStudioPage() {
               padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)',
               background: 'var(--color-sc-bg)',
             }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#546e7a', marginBottom: 7 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-sc-text-dim)', marginBottom: 7 }}>
                 Runtime Variables
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -1554,7 +1555,7 @@ export default function OriStudioPage() {
             <div style={{
               flex: 1, overflowY: 'auto', padding: '14px 16px', background: 'var(--color-sc-bg)',
             }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#546e7a', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-sc-text-dim)', marginBottom: 12 }}>
                 ORI Syntax Reference
               </div>
               <SyntaxRef />
@@ -1593,7 +1594,7 @@ export default function OriStudioPage() {
 function SyntaxRef() {
   const block = (label, code) => (
     <div key={label} style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 10, color: '#546e7a', fontFamily: "var(--font-grotesk, sans-serif)", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>
+      <div style={{ fontSize: 10, color: 'var(--color-sc-text-dim)', fontFamily: "var(--font-grotesk, sans-serif)", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>
         {label}
       </div>
       <pre style={{

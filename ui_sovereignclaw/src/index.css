@@ -64,6 +64,12 @@ html {
     color 0.25s ease;
 }
 
+/* ── Theme-aware logo helpers ──
+   .logo-light-src = black/dark artwork (oricli-icon, wordmark): invert → white on dark
+   .logo-dark-src  = white/light artwork (OriStudio chrome):     invert → dark on light  */
+[data-theme="dark"]  .logo-light-src { filter: invert(1); }
+[data-theme="light"] .logo-dark-src  { filter: invert(1) brightness(0.12); }
+
 *, *::before, *::after {
   box-sizing: border-box;
 }

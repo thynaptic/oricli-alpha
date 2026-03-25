@@ -405,7 +405,7 @@ function Message({ msg, onEdit }) {
             background: 'rgba(196,164,74,0.10)', border: '1px solid rgba(196,164,74,0.28)',
             color: 'rgba(196,164,74,0.85)', letterSpacing: '0.03em',
           }}>
-            <img src="/ori-studio-logo.png" alt="SCAI" width="10" height="10" style={{ flexShrink: 0, objectFit: 'contain' }} />
+            <img src="/oricli-icon.png" alt="SCAI" width="10" height="10" className="logo-light-src" style={{ flexShrink: 0, objectFit: 'contain' }} />
             SCAI corrected
           </div>
         )}
@@ -432,7 +432,7 @@ function WelcomeScreen({ onSuggest }) {
       flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', padding: '40px 20px', gap: 0,
     }}>
-      <img src="/oricli-logo.png" alt="ORI" style={{ width: 64, height: 64, objectFit: 'contain', marginBottom: 18, opacity: 0.92 }} />
+      <img src="/oricli-avatar.png" alt="ORI" style={{ width: 80, height: 80, objectFit: 'contain', marginBottom: 18 }} />
       <h1 style={{
         fontFamily: 'var(--font-grotesk)', fontSize: 24, fontWeight: 700,
         color: 'var(--color-sc-text)', margin: '0 0 8px', textAlign: 'center',
