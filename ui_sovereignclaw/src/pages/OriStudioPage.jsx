@@ -779,7 +779,7 @@ function InlineEditBar({ editState, source, onApply, onClose }) {
       { mode: m === 'explain' ? 'explain' : 'edit', source, sel_text: editState.text, instruction: instruction.trim() },
       {
         onChunk: (_, full) => setStreaming(full),
-        onDone:  full => { setResult(full); setStreaming(''); setBusy(false); },
+        onDone:  full => { setResult(full.replace(/^```\w*\n?/,'').replace(/\n?```$/,'').trim()); setStreaming(''); setBusy(false); },
         onError: err  => { setResult(`⚠ ${err}`); setStreaming(''); setBusy(false); },
       }
     );

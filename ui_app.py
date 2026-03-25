@@ -2839,28 +2839,56 @@ def ori_ai_assist():
         return jsonify({"error": "unknown mode"}), 400
 
     def _stream():
+        """Stream tokens directly from backbone → avoids 524 (no silent wait)."""
+        import json as _json
+        payload = {
+            "model": "oricli-cognitive",
+            "stream": True,
+            "max_tokens": 2500,
+            "messages": [
+                {"role": "system", "content": sys_msg},
+                {"role": "user",   "content": user_msg},
+            ],
+        }
+        # Immediate keepalive so Cloudflare sees bytes before it times out
+        yield ": keepalive\n\n"
         try:
-            result = _llm_complete(
-                [{"role": "system", "content": sys_msg},
-                 {"role": "user",   "content": user_msg}],
-                max_tokens=2500,
-                extra_headers={"X-Code-Context": "true"},
-            )
-            # Clean markdown fences if model adds them
-            result = result.strip()
-            if result.startswith("```"):
-                result = "\n".join(result.split("\n")[1:])
-            if result.endswith("```"):
-                result = "\n".join(result.split("\n")[:-1])
-            result = result.strip()
-            # Stream word-by-word for typing effect
-            for word in result.split(" "):
-                import time as _time
-                yield f"data: {json.dumps({'text': word + ' '})}\n\n"
-            yield "data: [DONE]\n\n"
+            with _client().stream(
+                "POST",
+                f"{API_BASE}/v1/chat/completions",
+                json=payload,
+                headers=_build_headers(extra={"X-Code-Context": "true"}),
+            ) as resp:
+                resp.raise_for_status()
+                fence_buf = ""       # accumulate to detect/strip opening fence
+                fence_stripped = False
+                open_fence_re = __import__('re').compile(r'^```\w*\n')
+                for raw_line in resp.iter_lines():
+                    if not raw_line.startswith("data:"):
+                        continue
+                    data = raw_line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        delta = _json.loads(data)["choices"][0]["delta"].get("content", "")
+                    except Exception:
+                        continue
+                    if not delta:
+                        continue
+                    # Strip leading ``` fence once we have enough to detect it
+                    if not fence_stripped:
+                        fence_buf += delta
+                        if len(fence_buf) >= 12 or '\n' in fence_buf:
+                            fence_stripped = True
+                            fence_buf = open_fence_re.sub("", fence_buf, count=1)
+                            if fence_buf:
+                                yield f"data: {_json.dumps({'text': fence_buf})}\n\n"
+                        # else keep buffering
+                        continue
+                    yield f"data: {_json.dumps({'text': delta})}\n\n"
         except Exception as exc:
-            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
-            yield "data: [DONE]\n\n"
+            yield f"data: {_json.dumps({'error': str(exc)})}\n\n"
+        yield "data: [DONE]\n\n"
 
     return Response(
         _stream(),
