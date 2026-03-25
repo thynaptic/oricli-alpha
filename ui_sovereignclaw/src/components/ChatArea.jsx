@@ -432,7 +432,7 @@ function WelcomeScreen({ onSuggest }) {
       flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', padding: '40px 20px', gap: 0,
     }}>
-      <img src="/oricli-avatar.png" alt="ORI" style={{ width: 80, height: 80, objectFit: 'contain', marginBottom: 18 }} />
+      <img src="/oricli-avatar.png" alt="ORI" className="logo-adaptive" style={{ width: 80, height: 80, objectFit: 'contain', marginBottom: 18 }} />
       <h1 style={{
         fontFamily: 'var(--font-grotesk)', fontSize: 24, fontWeight: 700,
         color: 'var(--color-sc-text)', margin: '0 0 8px', textAlign: 'center',

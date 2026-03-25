@@ -66,9 +66,12 @@ html {
 
 /* ── Theme-aware logo helpers ──
    .logo-light-src = black/dark artwork (oricli-icon, wordmark): invert → white on dark
-   .logo-dark-src  = white/light artwork (OriStudio chrome):     invert → dark on light  */
+   .logo-dark-src  = white/light artwork (OriStudio chrome):     invert → dark on light
+   .logo-adaptive  = full-color/RGBA art: multiply in light removes any white fringing  */
 [data-theme="dark"]  .logo-light-src { filter: invert(1); }
 [data-theme="light"] .logo-dark-src  { filter: invert(1) brightness(0.12); }
+[data-theme="light"] .logo-adaptive  { mix-blend-mode: multiply; }
+[data-theme="light"] .logo-light-src { mix-blend-mode: multiply; }
 
 *, *::before, *::after {
   box-sizing: border-box;
