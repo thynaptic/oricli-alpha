@@ -114,10 +114,11 @@ export function NavRail({ onOpenSettings }) {
     }}>
       {/* Logo */}
       <div style={{ marginBottom: 16, padding: '4px 0' }}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2 L14 8 L20 6 L16 11 L20 14 L14 13 L12 20 L10 13 L4 14 L8 11 L4 6 L10 8 Z" fill="#C4A44A" opacity="0.9" />
-          <circle cx="12" cy="11" r="2" fill="#080810" />
-        </svg>
+        <img
+          src="/ori-studio-logo.png"
+          alt="ORI Studio"
+          style={{ width: 32, height: 32, objectFit: 'contain', display: 'block' }}
+        />
       </div>
 
       {/* Nav items */}
