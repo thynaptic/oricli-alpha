@@ -17,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/thynaptic/oricli-go/pkg/cache"
+	"github.com/thynaptic/oricli-go/pkg/cognition"
 	"github.com/thynaptic/oricli-go/pkg/core/auth"
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/model"
@@ -471,6 +472,35 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	service.SetChatModelActive(true)
 	defer service.SetChatModelActive(false)
 
+	// ── Pre-execution task decomposer ────────────────────────────────────────
+	// For clearly multi-step prompts (research + compare + save chains), build
+	// a Task DAG and execute it deterministically before the main LLM call.
+	// The accumulated results are injected as rich context into the system prompt.
+	// Single-step prompts fall through without any overhead.
+	var taskContext string
+	if cognition.IsMultiStep(lastMsg) {
+		if tasks := cognition.DecomposePrompt(lastMsg); len(tasks) > 0 {
+			sseEmitter := func(eventType string, payload interface{}) {
+				data, err := json.Marshal(map[string]interface{}{
+					"event":   eventType,
+					"payload": payload,
+				})
+				if err != nil {
+					return
+				}
+				c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+				c.Writer.Flush()
+			}
+			svc := cognition.TaskServices{
+				Searcher: s.Agent.SovEngine.SearXNG,
+				MemoryBank: s.MemoryBank,
+				Generator:  s.Agent.GenService,
+			}
+			exec := cognition.NewTaskExecutor(svc, sseEmitter)
+			taskContext, _ = exec.Run(c.Request.Context(), tasks)
+		}
+	}
+
 	sovTrace, err := s.Agent.SovEngine.ProcessInference(ctx, lastMsg)
 	if err != nil {
 		sseError("sovereign engine failure")
@@ -486,6 +516,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		msgStart = 1
 	}
 	systemContent := sovTrace
+	if taskContext != "" {
+		systemContent = sovTrace + "\n\n--- TASK RESEARCH CONTEXT ---\n" + taskContext
+	}
 	if clientSystem != "" {
 		systemContent = sovTrace + "\n\n---\n\n" + clientSystem
 	}

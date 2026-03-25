@@ -429,6 +429,21 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 	return frags, nil
 }
 
+// QuerySimilarStrings is a convenience wrapper over QuerySimilar that returns
+// plain content strings. Used by the cognition.TaskExecutor to avoid a direct
+// import dependency on the service package from within the cognition package.
+func (m *MemoryBank) QuerySimilarStrings(ctx context.Context, query string, topN int) ([]string, error) {
+	frags, err := m.QuerySimilar(ctx, query, topN)
+	if err != nil || len(frags) == 0 {
+		return nil, err
+	}
+	out := make([]string, len(frags))
+	for i, f := range frags {
+		out[i] = f.Content
+	}
+	return out, nil
+}
+
 // extractQueryKeywords splits a query into meaningful keywords for PocketBase
 // filter construction. Strips stopwords and short tokens so "what is SCAI?"
 // becomes ["SCAI"] rather than trying to match the full phrase.

@@ -72,11 +72,31 @@ export const useSCStore = create(
     }));
   },
 
-  updateMessage(sessionId, msgId, patch) {
+  updateMessage(sessionId, msgId, patchOrFn) {
     set(state => ({
       sessions: state.sessions.map(s => {
         if (s.id !== sessionId) return s;
-        return { ...s, messages: s.messages.map(m => m.id === msgId ? { ...m, ...patch } : m) };
+        return {
+          ...s,
+          messages: s.messages.map(m => {
+            if (m.id !== msgId) return m;
+            return typeof patchOrFn === 'function' ? patchOrFn(m) : { ...m, ...patchOrFn };
+          }),
+        };
+      }),
+    }));
+  },
+
+  // Insert a message immediately before the last message in the session.
+  // Used by the task plan card to appear above the streaming assistant bubble.
+  insertBeforeLastMessage(sessionId, msg) {
+    set(state => ({
+      sessions: state.sessions.map(s => {
+        if (s.id !== sessionId) return s;
+        const msgs = [...s.messages];
+        if (msgs.length === 0) return { ...s, messages: [msg] };
+        msgs.splice(msgs.length - 1, 0, msg);
+        return { ...s, messages: msgs };
       }),
     }));
   },
@@ -411,7 +431,7 @@ export async function fetchModules() {
   } catch { return []; }
 }
 
-export async function* streamChat({ messages, model, signal, onDispatch, ...extraBody }) {
+export async function* streamChat({ messages, model, signal, onDispatch, onTaskPlan, onTaskUpdate, ...extraBody }) {
   const apiKey = import.meta.env.VITE_API_KEY;
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
@@ -447,6 +467,15 @@ export async function* streamChat({ messages, model, signal, onDispatch, ...extr
         // Agent dispatch event — fire callback, don't yield a token
         if (chunk.type === 'agent_dispatch') {
           onDispatch?.(chunk);
+          continue;
+        }
+        // Task plan / task update events (from TaskExecutor)
+        if (chunk.event === 'task_plan') {
+          onTaskPlan?.(chunk.payload);
+          continue;
+        }
+        if (chunk.event === 'task_update') {
+          onTaskUpdate?.(chunk.payload);
           continue;
         }
         const delta = chunk.choices?.[0]?.delta?.content;

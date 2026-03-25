@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import TaskPlanCard from './TaskPlanCard';
 
 // ── Dispatch card ──────────────────────────────────────────────────────────────
 
@@ -289,6 +290,7 @@ function Message({ msg, onEdit }) {
   }, [editing]);
 
   if (msg.role === 'dispatch') return <DispatchCard msg={msg} />;
+  if (msg.role === 'task_plan') return <TaskPlanCard tasks={msg.tasks} />;
 
   if (isUser) {
     return (
@@ -828,6 +830,7 @@ export function ChatArea() {
 
     const controller = new AbortController();
     abortRef.current = controller;
+    let taskPlanMsgId = null; // tracks the injected task plan card message
 
     try {
       let full = '';
@@ -853,6 +856,29 @@ export function ChatArea() {
           if (pendingTier) {
             updateLastAgentMessage(sessionId, { modelTier: pendingTier });
           }
+        },
+        onTaskPlan: (payload) => {
+          // Insert a task plan card message before the streaming assistant bubble
+          taskPlanMsgId = `task-plan-${Date.now()}`;
+          // Insert it just before the last (assistant) message by appending to session
+          // and relying on insertion order — plan card was appended before assistant slot
+          const store = useSCStore.getState();
+          store.insertBeforeLastMessage(sessionId, {
+            role: 'task_plan',
+            id: taskPlanMsgId,
+            tasks: payload.tasks ?? [],
+          });
+        },
+        onTaskUpdate: (payload) => {
+          if (!taskPlanMsgId) return;
+          useSCStore.getState().updateMessage(sessionId, taskPlanMsgId, (prev) => ({
+            ...prev,
+            tasks: (prev.tasks ?? []).map(t =>
+              t.id === payload.id
+                ? { ...t, status: payload.status, snippet: payload.snippet }
+                : t
+            ),
+          }));
         },
         ...extraBody,
       })) {

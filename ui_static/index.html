@@ -4,11 +4,39 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="SovereignClaw — Sovereign Intelligence OS. No rented minds." />
-    <meta name="theme-color" content="#C4A44A" />
-    <title>SovereignClaw</title>
-    <script type="module" crossorigin src="/assets/index-CI9708AB.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BBQwTPSZ.css">
+    <meta name="description" content="ORI Studio — Sovereign Intelligence OS. No rented minds." />
+    <meta name="theme-color" content="#E5004C" />
+    <title>ORI Studio</title>
+    <!-- Blocking theme init: runs before React, eliminates light-mode FOUC on refresh -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('sc-store-v1');
+          if (stored) {
+            var theme = JSON.parse(stored).state?.theme;
+            if (theme === 'light') {
+              var r = document.documentElement.style;
+              r.setProperty('--color-sc-bg',         '#F5F0EC');
+              r.setProperty('--color-sc-surface',    '#EDE8E3');
+              r.setProperty('--color-sc-surface2',   '#E5DFD9');
+              r.setProperty('--color-sc-border',     '#D4CDC5');
+              r.setProperty('--color-sc-border2',    '#C5BDB4');
+              r.setProperty('--color-sc-gold',       '#C4001E');
+              r.setProperty('--color-sc-gold-glow',  '#E5003A');
+              r.setProperty('--color-sc-text',       '#1A1214');
+              r.setProperty('--color-sc-text-muted', '#6B5F68');
+              r.setProperty('--color-sc-text-dim',   '#9E9099');
+              r.setProperty('--color-sc-success',    '#059669');
+              r.setProperty('--color-sc-danger',     '#DC2626');
+              r.setProperty('--color-sc-blue',       '#1D4ED8');
+              document.documentElement.setAttribute('data-theme', 'light');
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-B6Xs_Ku5.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Bj_ulDW5.css">
   </head>
   <body>
     <div id="root"></div>
