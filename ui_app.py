@@ -619,6 +619,162 @@ def _ddg_search(query: str, max_results: int = 6) -> list:
         return []
 
 
+# ── Epistemic filtering ───────────────────────────────────────────────────────
+
+# Domain trust tiers — higher = more credible
+_TRUST_TIER: dict[str, float] = {
+    # Tier 1 — authoritative
+    **{d: 0.95 for d in [
+        "arxiv.org", "pubmed.ncbi.nlm.nih.gov", "ncbi.nlm.nih.gov",
+        "nature.com", "science.org", "cell.com", "thelancet.com",
+        "bmj.com", "nejm.org", "ieee.org", "acm.org",
+        "who.int", "cdc.gov", "nih.gov", "gov.uk", "europa.eu",
+        "mit.edu", "stanford.edu", "harvard.edu", "cambridge.org",
+        "oxfordacademic.com", "springerlink.com",
+    ]},
+    # Tier 2 — reputable news / reference
+    **{d: 0.80 for d in [
+        "reuters.com", "apnews.com", "bbc.com", "bbc.co.uk",
+        "theguardian.com", "nytimes.com", "wsj.com", "economist.com",
+        "ft.com", "bloomberg.com", "npr.org", "pbs.org",
+        "wikipedia.org", "britannica.com",
+        "github.com", "stackoverflow.com", "docs.python.org",
+        "developer.mozilla.org", "techcrunch.com", "wired.com",
+        "arstechnica.com", "theverge.com",
+    ]},
+    # Tier 3 — general (default)
+    # Tier 0 — low-trust content farms
+    **{d: 0.20 for d in [
+        "buzzfeed.com", "dailymail.co.uk", "thesun.co.uk",
+        "infowars.com", "naturalnews.com", "breitbart.com",
+        "ask.com", "answers.com", "quora.com",
+    ]},
+}
+
+_STOP_WORDS = frozenset({
+    "the","a","an","is","are","was","were","be","been","being",
+    "have","has","had","do","does","did","will","would","could","should",
+    "may","might","shall","can","need","dare","ought","used",
+    "and","or","but","if","in","on","at","to","for","of","with",
+    "by","from","up","about","into","through","during","before","after",
+    "above","below","between","each","more","most","other","some","such",
+    "no","nor","not","only","own","same","so","than","too","very",
+    "just","as","this","that","these","those","it","its","how","what",
+    "which","who","when","where","why","all","both","few","many","much",
+})
+
+
+def _source_trust_score(url: str) -> float:
+    """Return 0-1 trust score for a URL based on domain heuristics."""
+    try:
+        host = urllib.parse.urlparse(url).netloc.lower().lstrip("www.")
+        # Exact match first
+        if host in _TRUST_TIER:
+            return _TRUST_TIER[host]
+        # Suffix match (e.g. "en.wikipedia.org" → "wikipedia.org")
+        for domain, score in _TRUST_TIER.items():
+            if host.endswith("." + domain) or host == domain:
+                return score
+        # TLD heuristics
+        if host.endswith(".edu"):
+            return 0.88
+        if host.endswith(".gov"):
+            return 0.90
+        if host.endswith(".org"):
+            return 0.65
+        return 0.50  # default for unrecognised domains
+    except Exception:
+        return 0.40
+
+
+def _relevance_score(query: str, title: str, snippet: str) -> float:
+    """Token-overlap relevance score between query and result content (0-1).
+    Title matches are weighted 2× snippet matches. Score is normalised so
+    a perfect-overlap result returns 1.0."""
+    q_tokens = {t for t in re.findall(r"[a-z0-9]+", query.lower()) if t not in _STOP_WORDS and len(t) > 2}
+    if not q_tokens:
+        return 0.5  # no signal — neutral
+
+    haystack_title   = set(re.findall(r"[a-z0-9]+", title.lower()))
+    haystack_snippet = set(re.findall(r"[a-z0-9]+", snippet.lower()))
+
+    title_hits   = len(q_tokens & haystack_title)
+    snippet_hits = len(q_tokens & haystack_snippet)
+    # Weighted: title 2×, snippet 1×, normalised by query token count
+    raw = (title_hits * 2 + snippet_hits) / (len(q_tokens) * 3)
+    return min(raw, 1.0)
+
+
+def _answers_query_llm(query: str, title: str, snippet: str) -> bool:
+    """Fast LLM YES/NO gate: does this snippet actually answer the query?
+    Only called on borderline results (0.25 ≤ combined_score ≤ 0.55).
+    Times out quickly — if the LLM is slow, we pass the result through."""
+    try:
+        answer = _llm_complete([
+            {"role": "system", "content": (
+                "You are an epistemic filter. Answer only YES or NO. "
+                "Does the following text usefully answer or address the research query? "
+                "Be strict — low-quality SEO pages, navigation menus, and off-topic results should be NO."
+            )},
+            {"role": "user", "content": f"Query: {query}\n\nTitle: {title}\nText: {snippet[:400]}"},
+        ], max_tokens=5, timeout=12.0)
+        return "YES" in answer.upper()
+    except Exception:
+        return True  # fail-open — don't discard on timeout
+
+
+def _epistemic_filter(query: str, results: list[dict], threshold: float = 0.35) -> list[dict]:
+    """Score and filter search results before synthesis.
+
+    Each result gets a composite score:
+        combined = 0.55 * relevance + 0.45 * trust
+
+    Borderline results (threshold ≤ combined < 0.55) are sent through
+    a cheap LLM YES/NO gate. Clear passes (≥0.55) skip the LLM.
+    Clear fails (<threshold) are dropped immediately.
+
+    Returns filtered results sorted best-first, each annotated with
+    '_epistemic' metadata: {relevance, trust, combined, passed_llm}.
+    """
+    if not results:
+        return results
+
+    scored: list[tuple[float, dict]] = []
+    for r in results:
+        title   = r.get("title", "")
+        snippet = r.get("snippet", r.get("body", ""))
+        url     = r.get("url", "")
+
+        rel   = _relevance_score(query, title, snippet)
+        trust = _source_trust_score(url)
+        combined = 0.55 * rel + 0.45 * trust
+
+        passed_llm: bool | None = None
+
+        if combined < threshold:
+            # Clearly irrelevant — drop
+            continue
+        elif combined < 0.55:
+            # Borderline — ask the LLM
+            passed_llm = _answers_query_llm(query, title, snippet)
+            if not passed_llm:
+                continue
+
+        scored.append((combined, {
+            **r,
+            "_epistemic": {
+                "relevance": round(rel, 3),
+                "trust":     round(trust, 3),
+                "combined":  round(combined, 3),
+                "passed_llm": passed_llm,
+            },
+        }))
+
+    # Sort best-first, strip internal scores from output (keep metadata)
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [r for _, r in scored]
+
+
 def _llm_complete(messages: list, max_tokens: int = 2000, timeout: float = 120.0, extra_headers: dict = None) -> str:
     """Synchronous LLM call — handles both plain-JSON and SSE responses.
 
@@ -740,24 +896,33 @@ def research_stream() -> Response:
 
 
 def _research_normal(topic: str):
-    yield _sse_event({"type": "step", "index": 0, "total": 2, "label": f'Searching the web for "{topic}"', "status": "active"})
-    results = _ddg_search(topic, max_results=6)
+    yield _sse_event({"type": "step", "index": 0, "total": 3, "label": f'Searching the web for "{topic}"', "status": "active"})
+    raw_results = _ddg_search(topic, max_results=8)
     yield _sse_event({"type": "step_done", "index": 0})
-    yield _sse_event({"type": "search_result", "query": topic, "results": results})
 
-    yield _sse_event({"type": "step", "index": 1, "total": 2, "label": "Synthesizing findings", "status": "active"})
+    # ── Epistemic filter ──────────────────────────────────────────────────────
+    yield _sse_event({"type": "step", "index": 1, "total": 3, "label": "Scoring & filtering sources", "status": "active"})
+    results = _epistemic_filter(topic, raw_results)
+    dropped = len(raw_results) - len(results)
+    yield _sse_event({"type": "step_done", "index": 1})
+    yield _sse_event({
+        "type": "search_result", "query": topic, "results": results,
+        "epistemic": {"total_raw": len(raw_results), "passed": len(results), "dropped": dropped},
+    })
+
+    yield _sse_event({"type": "step", "index": 2, "total": 3, "label": "Synthesizing findings", "status": "active"})
 
     snippets = "\n\n".join(
-        f"[{i+1}] **{r['title']}**\n{r['snippet']}\nSource: {r['url']}"
+        f"[{i+1}] **{r['title']}** (relevance: {r.get('_epistemic', {}).get('relevance', '?')}, trust: {r.get('_epistemic', {}).get('trust', '?')})\n{r['snippet']}\nSource: {r['url']}"
         for i, r in enumerate(results)
-    ) if results else "No web results found — answer from general knowledge."
+    ) if results else "No sufficiently relevant web results found — answer from general knowledge."
 
     report = _llm_complete([
         {"role": "system", "content": "You are a research assistant. Write a comprehensive, well-structured markdown report based on the provided search results. Use ## headings, bullet points, and inline citations like [1]. End with a ## Sources section listing each URL."},
-        {"role": "user", "content": f"Research topic: {topic}\n\nSearch results:\n{snippets}\n\nWrite a complete markdown report."},
+        {"role": "user", "content": f"Research topic: {topic}\n\nSearch results (epistemically filtered, highest relevance first):\n{snippets}\n\nWrite a complete markdown report."},
     ], max_tokens=2000)
 
-    yield _sse_event({"type": "step_done", "index": 1})
+    yield _sse_event({"type": "step_done", "index": 2})
     yield _sse_event({"type": "content", "text": report, "title": topic})
     yield _sse_event({"type": "done"})
 
@@ -766,7 +931,7 @@ def _research_deep(topic: str):
     import re as _re
 
     # Step 0: Plan
-    yield _sse_event({"type": "step", "index": 0, "total": 5, "label": "Planning research questions", "status": "active"})
+    yield _sse_event({"type": "step", "index": 0, "total": 6, "label": "Planning research questions", "status": "active"})
     plan_resp = _llm_complete([
         {"role": "system", "content": "You are a research planner. Output exactly 3 specific research sub-questions as a numbered list (1. 2. 3.) with no other text."},
         {"role": "user",   "content": f"Break this into 3 targeted sub-questions for deep research: {topic}"},
@@ -775,7 +940,7 @@ def _research_deep(topic: str):
 
     questions = _re.findall(r'\d+\.\s*(.+)', plan_resp)
     questions  = [q.strip() for q in questions if q.strip()][:3] or [topic]
-    total      = 1 + len(questions) + 1  # plan + per-search + synthesize
+    total      = 1 + len(questions) + 1 + 1  # plan + per-search + filter step + synthesize
 
     yield _sse_event({"type": "plan", "questions": questions, "total": total})
 
@@ -783,31 +948,50 @@ def _research_deep(topic: str):
     all_results: list[dict] = []
     for i, q in enumerate(questions):
         yield _sse_event({"type": "step", "index": i + 1, "total": total, "label": f"Searching: {q[:70]}", "status": "active"})
-        results = _ddg_search(q, max_results=5)
-        all_results.append({"question": q, "results": results})
+        raw = _ddg_search(q, max_results=6)
+        filtered = _epistemic_filter(q, raw)
+        all_results.append({"question": q, "results": filtered, "raw_count": len(raw)})
         yield _sse_event({"type": "step_done", "index": i + 1})
-        yield _sse_event({"type": "search_result", "query": q, "results": results})
+        yield _sse_event({
+            "type": "search_result", "query": q, "results": filtered,
+            "epistemic": {"total_raw": len(raw), "passed": len(filtered), "dropped": len(raw) - len(filtered)},
+        })
+
+    # Epistemic summary step
+    filter_idx = 1 + len(questions)
+    yield _sse_event({"type": "step", "index": filter_idx, "total": total, "label": "Epistemic cross-check complete", "status": "active"})
+    total_raw     = sum(r["raw_count"] for r in all_results)
+    total_passed  = sum(len(r["results"]) for r in all_results)
+    yield _sse_event({"type": "step_done", "index": filter_idx})
+    yield _sse_event({
+        "type": "epistemic_summary",
+        "total_raw": total_raw, "passed": total_passed, "dropped": total_raw - total_passed,
+        "pass_rate": round(total_passed / max(total_raw, 1), 2),
+    })
 
     # Final: Synthesize
-    synth_idx = 1 + len(questions)
+    synth_idx = filter_idx + 1
     yield _sse_event({"type": "step", "index": synth_idx, "total": total, "label": "Synthesizing comprehensive report", "status": "active"})
 
     ctx_parts: list[str] = []
     for item in all_results:
         ctx_parts.append(f"### {item['question']}")
         for j, r in enumerate(item["results"]):
-            ctx_parts.append(f"[{j+1}] **{r['title']}**: {r['snippet']} ({r['url']})")
-    context = "\n\n".join(ctx_parts) if ctx_parts else "No results."
+            ep = r.get("_epistemic", {})
+            ctx_parts.append(
+                f"[{j+1}] **{r['title']}** (rel={ep.get('relevance','?')} trust={ep.get('trust','?')}): "
+                f"{r['snippet']} ({r['url']})"
+            )
+    context = "\n\n".join(ctx_parts) if ctx_parts else "No sufficiently relevant results."
 
     report = _llm_complete([
-        {"role": "system", "content": "You are an expert research synthesizer. Write a deeply detailed markdown report using ## headings. Include analysis beyond just summaries, inline citations [1][2], and a ## Sources section at the end."},
-        {"role": "user",   "content": f"Topic: {topic}\n\nResearch findings:\n{context}\n\nWrite a comprehensive deep research report."},
+        {"role": "system", "content": "You are an expert research synthesizer. Write a deeply detailed markdown report using ## headings. Include analysis beyond just summaries, inline citations [1][2], and a ## Sources section at the end. Prioritise higher-scored sources."},
+        {"role": "user",   "content": f"Topic: {topic}\n\nResearch findings (epistemically filtered, highest relevance first per section):\n{context}\n\nWrite a comprehensive deep research report."},
     ], max_tokens=3000, timeout=180.0)
 
     yield _sse_event({"type": "step_done", "index": synth_idx})
     yield _sse_event({"type": "content", "text": report, "title": topic})
     yield _sse_event({"type": "done"})
-
 
 
 @app.route("/chat", methods=["POST"])

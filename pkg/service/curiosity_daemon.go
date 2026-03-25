@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/thynaptic/oricli-go/pkg/cognition"
 	"github.com/thynaptic/oricli-go/pkg/memory"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
 	"github.com/thynaptic/oricli-go/pkg/vdi"
@@ -351,6 +352,31 @@ func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string, depth i
 			Action:       "scraping",
 		})
 	}
+
+	// ── Epistemic quality gate ────────────────────────────────────────────
+	// Evaluate retrieved text before burning LLM tokens on extraction.
+	// Bail early on clearly irrelevant or untrustworthy content.
+	sourceURL := ""
+	if d.SearXNG != nil {
+		// Best-effort: use the topic query as a proxy; real URL unavailable
+		// at this call site.  Wire a real URL when SearXNG results expose it.
+		sourceURL = ""
+	}
+	epistemicResult := cognition.EpistemicFilter(topic, rawText, sourceURL)
+	if !epistemicResult.Pass {
+		log.Printf("[CuriosityDaemon] epistemic drop %q: %s", topic, epistemicResult.Reason)
+		if d.WSHub != nil {
+			d.WSHub.BroadcastEvent("curiosity_sync", CuriosityEvent{
+				TargetEntity: topic,
+				Intent:       string(intent),
+				Action:       "filtered",
+				Findings:     epistemicResult.Reason,
+			})
+		}
+		return
+	}
+	log.Printf("[CuriosityDaemon] epistemic pass %q (rel=%.2f trust=%.2f combined=%.2f)",
+		topic, epistemicResult.Relevance, epistemicResult.Trust, epistemicResult.Combined)
 
 	// Fact extraction with 90s deadline
 	extractionPrompt := buildExtractionPrompt(topic, intent, rawText)
