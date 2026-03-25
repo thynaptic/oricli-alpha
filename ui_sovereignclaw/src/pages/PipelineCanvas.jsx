@@ -289,7 +289,7 @@ function PipelineCanvasInner() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', height: '100%', background: 'var(--color-sc-bg)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flex: 1, height: '100%', width: '100%', background: 'var(--color-sc-bg)', overflow: 'hidden' }}>
 
       {/* ── Left sidebar: pipeline list + workflow palette ── */}
       {sidebarOpen && (
@@ -551,10 +551,13 @@ function PipelineCanvasInner() {
 }
 
 // Wrap with ReactFlowProvider so useReactFlow() works inside PipelineCanvasInner
+// The provider must forward flex sizing so the inner layout fills the viewport
 export default function PipelineCanvas() {
   return (
     <ReactFlowProvider>
-      <PipelineCanvasInner />
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', height: '100%', width: '100%' }}>
+        <PipelineCanvasInner />
+      </div>
     </ReactFlowProvider>
   );
 }
