@@ -272,7 +272,7 @@ function AutocompleteDropdown({ items, index, x, y, onSelect, onHover }) {
       ref={listRef}
       style={{
         position: 'fixed', left: x, top: y, zIndex: 2000,
-        background: '#13171f',
+        background: 'var(--color-sc-surface2)',
         border: '1px solid rgba(255,255,255,0.1)',
         borderRadius: 9, overflow: 'hidden auto',
         minWidth: 240, maxWidth: 380, maxHeight: 220,
@@ -478,13 +478,13 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
 
 
   return (
-    <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#0d1117', position: 'relative' }}>
+    <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: 'var(--color-sc-bg)', position: 'relative' }}>
       {/* ── Gutter ── */}
       <div
         ref={gutterRef}
         style={{
           flexShrink: 0, width: 52, overflowY: 'hidden', overflowX: 'hidden',
-          background: '#0a0d12', borderRight: '1px solid rgba(255,255,255,0.05)',
+          background: 'var(--color-sc-surface)', borderRight: '1px solid rgba(255,255,255,0.05)',
           userSelect: 'none', paddingTop: PAD_V, paddingBottom: PAD_V,
         }}
       >
@@ -618,13 +618,13 @@ function DiagnosticsPanel({ diagnostics, compiled, vars, onJumpToLine }) {
     <div style={{
       borderBottom: '1px solid rgba(255,255,255,0.07)',
       overflowY: 'auto', maxHeight: 260,
-      background: '#090c10',
+      background: 'var(--color-sc-bg)',
     }}>
       {/* Header bar (always visible) */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)',
-        background: '#0a0d12', flexShrink: 0,
+        background: 'var(--color-sc-surface)', flexShrink: 0,
       }}>
         <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#3d4f5c' }}>
           PROBLEMS
@@ -708,7 +708,7 @@ function RunLog({ entries, onClear }) {
 
   return (
     <div style={{
-      flex: 1, overflowY: 'auto', padding: '12px 16px', background: '#0a0e13',
+      flex: 1, overflowY: 'auto', padding: '12px 16px', background: 'var(--color-sc-surface)',
       borderTop: '1px solid rgba(255,255,255,0.07)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
@@ -787,7 +787,7 @@ function InlineEditBar({ editState, source, onApply, onClose }) {
 
   const boxStyle = {
     position: 'fixed', left: editState.x, top: editState.y, zIndex: 3000,
-    background: '#13171f', border: '1px solid rgba(168,156,247,0.35)',
+    background: 'var(--color-sc-surface2)', border: '1px solid rgba(168,156,247,0.35)',
     borderRadius: 10, width: 420, maxWidth: 'calc(100vw - 32px)',
     boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
     fontFamily: "'JetBrains Mono', monospace",
@@ -797,7 +797,7 @@ function InlineEditBar({ editState, source, onApply, onClose }) {
   return (
     <div style={boxStyle} onMouseDown={e => e.stopPropagation()}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: '#0d1117' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'var(--color-sc-bg)' }}>
         <Wand2 size={12} style={{ color: '#a89cf7' }} />
         <span style={{ fontSize: 11, color: '#a89cf7', fontWeight: 700 }}>Inline Edit</span>
         <span style={{ fontSize: 10, color: '#37474f', flex: 1 }}>
@@ -938,13 +938,13 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      borderTop: '1px solid rgba(168,156,247,0.2)', background: '#090d13',
+      borderTop: '1px solid rgba(168,156,247,0.2)', background: 'var(--color-sc-bg)',
     }}>
       {/* Panel header */}
       <div style={{
         flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8,
         padding: '7px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)',
-        background: '#0a0e13',
+        background: 'var(--color-sc-surface)',
       }}>
         <Sparkles size={12} style={{ color: '#a89cf7' }} />
         <span style={{ fontSize: 11, fontWeight: 800, color: '#a89cf7', fontFamily: "var(--font-grotesk, sans-serif)", letterSpacing: '0.04em' }}>
@@ -978,7 +978,7 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
                 <pre
                   style={{
                     margin: 0, padding: '10px 12px',
-                    background: '#0d1117', borderRadius: '10px 10px 10px 3px',
+                    background: 'var(--color-sc-bg)', borderRadius: '10px 10px 10px 3px',
                     border: '1px solid rgba(255,255,255,0.07)',
                     fontSize: 12, lineHeight: 1.65, color: '#abb2bf',
                     fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
@@ -1016,7 +1016,7 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
           <div style={{ alignSelf: 'flex-start', maxWidth: '95%' }}>
             <pre style={{
               margin: 0, padding: '10px 12px',
-              background: '#0d1117', borderRadius: 10,
+              background: 'var(--color-sc-bg)', borderRadius: 10,
               border: '1px solid rgba(168,156,247,0.15)',
               fontSize: 12, lineHeight: 1.65, color: '#abb2bf',
               fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
@@ -1041,7 +1041,7 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
       <div style={{
         flexShrink: 0, padding: '8px 12px',
         borderTop: '1px solid rgba(255,255,255,0.06)',
-        background: '#09100f',
+        background: 'var(--color-sc-bg)',
         display: 'flex', flexDirection: 'column', gap: 6,
       }}>
         {/* Quick-fix chip — shown when diagnostics exist */}
@@ -1334,13 +1334,13 @@ export default function OriStudioPage() {
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      background: '#0d1117', color: '#e1e4e8',
+      background: 'var(--color-sc-bg)', color: '#e1e4e8',
     }}>
       {/* ── Toolbar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
         borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0,
-        background: '#0a0e13',
+        background: 'var(--color-sc-surface)',
       }}>
         <Code2 size={15} style={{ color: '#a89cf7' }} />
         <span style={{ fontFamily: "var(--font-grotesk, sans-serif)", fontWeight: 800, fontSize: 13, color: '#e1e4e8', letterSpacing: '0.02em' }}>
@@ -1384,7 +1384,7 @@ export default function OriStudioPage() {
           {loadOpen && (
             <div style={{
               position: 'absolute', top: '100%', right: 0, marginTop: 4,
-              background: '#161b22', border: '1px solid rgba(255,255,255,0.1)',
+              background: 'var(--color-sc-surface2)', border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: 9, minWidth: 210, zIndex: 100, boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
               overflow: 'hidden',
             }}>
@@ -1461,7 +1461,7 @@ export default function OriStudioPage() {
           {/* Editor header bar */}
           <div style={{
             padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)',
-            display: 'flex', alignItems: 'center', gap: 8, background: '#0a0e13',
+            display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-sc-surface)',
             fontSize: 11, color: '#546e7a', flexShrink: 0,
           }}>
             <span style={{ fontFamily: 'monospace' }}>workflow.ori</span>
@@ -1491,7 +1491,7 @@ export default function OriStudioPage() {
           {/* ── Status bar ── */}
           <div style={{
             flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12,
-            padding: '3px 14px', background: '#07090e',
+            padding: '3px 14px', background: 'var(--color-sc-bg)',
             borderTop: '1px solid rgba(255,255,255,0.05)',
             fontSize: 10, fontFamily: 'monospace', color: '#3d4f5c',
             userSelect: 'none',
@@ -1527,7 +1527,7 @@ export default function OriStudioPage() {
           {vars.length > 0 && (
             <div style={{
               padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)',
-              background: '#0d1117',
+              background: 'var(--color-sc-bg)',
             }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#546e7a', marginBottom: 7 }}>
                 Runtime Variables
@@ -1552,7 +1552,7 @@ export default function OriStudioPage() {
           {/* Quick-ref syntax card */}
           {!runLog.length && !vibeOpen && (
             <div style={{
-              flex: 1, overflowY: 'auto', padding: '14px 16px', background: '#0d1117',
+              flex: 1, overflowY: 'auto', padding: '14px 16px', background: 'var(--color-sc-bg)',
             }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#546e7a', marginBottom: 12 }}>
                 ORI Syntax Reference
@@ -1597,7 +1597,7 @@ function SyntaxRef() {
         {label}
       </div>
       <pre style={{
-        margin: 0, padding: '8px 12px', background: '#0a0e13',
+        margin: 0, padding: '8px 12px', background: 'var(--color-sc-surface)',
         borderRadius: 7, border: '1px solid rgba(255,255,255,0.05)',
         fontFamily: 'monospace', fontSize: 11, lineHeight: 1.7, color: '#90a4ae',
         whiteSpace: 'pre-wrap', overflow: 'auto',

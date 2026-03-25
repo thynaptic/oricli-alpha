@@ -140,7 +140,7 @@ export function NavRail({ onOpenSettings }) {
               transition: 'background 0.15s, color 0.15s',
               position: 'relative',
             }}
-            onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'var(--color-sc-text)'; } }}
+            onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(128,128,128,0.12)'; e.currentTarget.style.color = 'var(--color-sc-text)'; } }}
             onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-sc-text-muted)'; } }}
           >
             {active && (
@@ -203,7 +203,7 @@ export function NavRail({ onOpenSettings }) {
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
           background: 'transparent', color: 'var(--color-sc-text-muted)', transition: 'background 0.15s, color 0.15s',
         }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'var(--color-sc-text)'; }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(128,128,128,0.12)'; e.currentTarget.style.color = 'var(--color-sc-text)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-sc-text-muted)'; }}
       >
         <Settings size={17} strokeWidth={1.7} />

@@ -39,9 +39,37 @@ export default function App() {
   const theme      = useSCStore(s => s.theme);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Apply theme attribute to root element — all CSS vars cascade from here
+  // Apply theme: set CSS vars directly on documentElement.style (inline = highest priority)
+  // Beats @layer theme in Tailwind v4 compiled CSS and all component inline styles
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme ?? 'dark');
+    const root = document.documentElement;
+    root.setAttribute('data-theme', theme ?? 'dark');
+    if (theme === 'light') {
+      const vars = {
+        '--color-sc-bg':         '#F5F0EC',
+        '--color-sc-surface':    '#EDE8E3',
+        '--color-sc-surface2':   '#E5DFD9',
+        '--color-sc-border':     '#D4CDC5',
+        '--color-sc-border2':    '#C5BDB4',
+        '--color-sc-gold':       '#C4001E',
+        '--color-sc-gold-glow':  '#E5003A',
+        '--color-sc-text':       '#1A1214',
+        '--color-sc-text-muted': '#6B5F68',
+        '--color-sc-text-dim':   '#9E9099',
+        '--color-sc-success':    '#059669',
+        '--color-sc-danger':     '#DC2626',
+        '--color-sc-blue':       '#1D4ED8',
+      };
+      Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+    } else {
+      // Remove inline overrides — CSS @theme defaults take back over
+      [
+        '--color-sc-bg', '--color-sc-surface', '--color-sc-surface2',
+        '--color-sc-border', '--color-sc-border2', '--color-sc-gold',
+        '--color-sc-gold-glow', '--color-sc-text', '--color-sc-text-muted',
+        '--color-sc-text-dim', '--color-sc-success', '--color-sc-danger', '--color-sc-blue',
+      ].forEach(k => root.style.removeProperty(k));
+    }
   }, [theme]);
 
   // ERI → live CSS color shifts (poll + SSE live value)

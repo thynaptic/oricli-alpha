@@ -172,7 +172,7 @@ const markdownComponents = {
       <div style={{ position: 'relative', margin: '12px 0' }}>
         <CopyButton text={code} />
         <SyntaxHighlighter language={lang} style={atomDark}
-          customStyle={{ borderRadius: 8, fontSize: 13, margin: 0, background: '#0C0C1A', padding: '14px 16px' }}
+          customStyle={{ borderRadius: 8, fontSize: 13, margin: 0, background: 'var(--color-sc-surface)', padding: '14px 16px' }}
           showLineNumbers={code.split('\n').length > 4}
         >{code}</SyntaxHighlighter>
       </div>
@@ -562,13 +562,13 @@ function ChatInput({ value, onChange, onSend, onAbort, isStreaming, disabled }) 
             style={{
               width: 34, height: 34, borderRadius: 9, border: 'none',
               cursor: uploading ? 'not-allowed' : 'pointer',
-              background: 'rgba(255,255,255,0.05)',
+              background: 'rgba(128,128,128,0.1)',
               color: uploading ? 'var(--color-sc-gold)' : 'var(--color-sc-text-dim)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'background 0.15s, color 0.15s',
             }}
             onMouseEnter={e => { if (!uploading) e.currentTarget.style.background = 'rgba(196,164,74,0.1)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(128,128,128,0.1)'; }}
           >
             {uploading
               ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
@@ -634,7 +634,7 @@ function AgentSwitcher() {
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '4px 10px 4px 8px', borderRadius: 20,
-          background: activeChatAgent ? 'rgba(196,164,74,0.12)' : 'rgba(255,255,255,0.05)',
+          background: activeChatAgent ? 'rgba(196,164,74,0.12)' : 'rgba(128,128,128,0.1)',
           border: `1px solid ${activeChatAgent ? 'rgba(196,164,74,0.35)' : 'var(--color-sc-border)'}`,
           cursor: 'pointer', transition: 'all 0.15s', fontSize: 12,
           color: activeChatAgent ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)',
@@ -685,7 +685,7 @@ function AgentSwitcher() {
               color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', fontSize: 13,
               textAlign: 'left', transition: 'background 0.12s',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(128,128,128,0.1)'}
             onMouseLeave={e => e.currentTarget.style.background = !activeChatAgent ? 'rgba(196,164,74,0.08)' : 'transparent'}
           >
             <span style={{ fontSize: 16 }}>✨</span>
@@ -714,7 +714,7 @@ function AgentSwitcher() {
                         color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', fontSize: 13,
                         textAlign: 'left', transition: 'background 0.12s',
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(128,128,128,0.1)'}
                       onMouseLeave={e => e.currentTarget.style.background = isActive ? 'rgba(196,164,74,0.08)' : 'transparent'}
                     >
                       <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{ag.emoji}</span>
