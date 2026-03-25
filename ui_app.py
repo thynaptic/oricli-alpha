@@ -3437,7 +3437,7 @@ class _BM25Rag:
         if self._dirty:
             return True
         try:
-            return _RAG_PATH.stat().st_mtime != self._mtime
+            return _LOCAL_RAG_PATH.stat().st_mtime != self._mtime
         except OSError:
             return True
 
@@ -3460,7 +3460,7 @@ class _BM25Rag:
         self._avg_len = total_len / max(len(index), 1)
         self._dirty   = False
         try:
-            self._mtime = _RAG_PATH.stat().st_mtime
+            self._mtime = _LOCAL_RAG_PATH.stat().st_mtime
         except OSError:
             self._mtime = 0.0
 
