@@ -928,7 +928,11 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
           onApply(live);
         },
         onDone: full => {
-          const clean = full.replace(/^```ori\n?/i, '').replace(/\n?```$/, '').trim();
+          // Strip any preamble before the workflow keyword (model sometimes generates
+          // arrow-syntax annotations like ("Name" → "subtitle") before the block)
+          const wIdx = full.indexOf('workflow ');
+          const trimmed = wIdx > 0 ? full.slice(wIdx) : full;
+          const clean = trimmed.replace(/^```ori\n?/i, '').replace(/\n?```$/, '').trim();
           // Final clean apply to editor
           onApply(clean);
           setStreaming('');
