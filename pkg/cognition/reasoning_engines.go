@@ -480,6 +480,7 @@ func (e *SovereignEngine) runReAct(ctx context.Context, stimulus, composite stri
 				"What do you need to know next? Reply with EXACTLY ONE of:\n"+
 				"  SEARCH: <query>      (to search the web)\n"+
 				"  MEMORY: <query>      (to recall from memory)\n"+
+				"  VISION: <url_or_path>  (to analyse an image)\n"+
 				"  ANSWER: <your answer>  (if you have enough to answer)\n",
 			truncate(stimulus, 200), trace.String(),
 		)
@@ -519,6 +520,23 @@ func (e *SovereignEngine) runReAct(ctx context.Context, stimulus, composite stri
 				for _, f := range frags {
 					observation += truncate(f.Content, 200) + "\n"
 				}
+			}
+		case hasPrefix(thought, "VISION:") && e.VisionRef != nil:
+			target := strings.TrimSpace(strings.TrimPrefix(thought, "VISION:"))
+			input := VisionInput{}
+			if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
+				input.URL = target
+			} else {
+				input.FilePath = target
+			}
+			vResult, vErr := e.VisionRef.Analyze(input)
+			if vErr == nil && vResult.Description != "" {
+				observation = fmt.Sprintf("[Vision — %s]\n%s", vResult.Model, vResult.Description)
+				if len(vResult.Tags) > 0 {
+					observation += fmt.Sprintf("\nTags: %s", strings.Join(vResult.Tags, ", "))
+				}
+			} else if vErr != nil {
+				observation = fmt.Sprintf("(vision error: %v)", vErr)
 			}
 		}
 

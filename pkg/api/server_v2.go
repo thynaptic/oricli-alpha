@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/thynaptic/oricli-go/pkg/cache"
 	"github.com/thynaptic/oricli-go/pkg/cognition"
+	"github.com/thynaptic/oricli-go/pkg/connectors/runpod"
 	"github.com/thynaptic/oricli-go/pkg/core/auth"
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/model"
@@ -174,6 +176,16 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	adapter := &memoryBankAdapter{mb: mb}
 	agent.SovEngine.MemoryBankRef = adapter
 	agent.SovEngine.CertaintyUpdaterRef = adapter
+	// VisionRef: route to RunPod GPU pod when enabled, fall back to local Ollama stub.
+	if os.Getenv("RUNPOD_VISION_ENABLED") == "true" {
+		apiKey := os.Getenv("RUNPOD_API_KEY")
+		if apiKey == "" {
+			apiKey = os.Getenv("OricliAlpha_Key")
+		}
+		agent.SovEngine.VisionRef = service.NewRunPodVisionManager(runpod.NewClient(apiKey))
+	} else {
+		agent.SovEngine.VisionRef = &visionAdapter{ollamaURL: ollamaBaseURL()}
+	}
 
 	s.setupRoutes()
 
@@ -255,6 +267,9 @@ func (s *ServerV2) setupRoutes() {
 		protected.GET("/documents", s.handleListDocuments)
 
 		protected.POST("/feedback", s.handleReactionFeedback)
+
+		// Vision — image analysis via moondream (CPU-safe, local Ollama)
+		protected.POST("/vision/analyze", s.handleVisionAnalyze)
 
 		// Sovereign Identity — active .ori profile editor
 		protected.GET("/sovereign/identity", s.handleGetSovereignIdentity)
@@ -1637,6 +1652,8 @@ func provenanceCertainty(prov service.Provenance) float64 {
 		return 0.90
 	case service.ProvenanceWebVerified:
 		return 0.85
+	case service.ProvenanceSeen: // image-derived — reliable but vision models hallucinate details
+		return 0.70
 	case service.ProvenanceContrastive:
 		return 0.75
 	case service.ProvenanceConversation:
@@ -1795,4 +1812,189 @@ func (a *memoryBankAdapter) BumpBelief(ctx context.Context, fragID string, axis 
 func truncateStr(s string, n int) string {
 if len(s) <= n { return s }
 return s[:n] + "…"
+}
+
+// ─── Vision Adapter ───────────────────────────────────────────────────────────
+
+// ollamaBaseURL returns the Ollama API base URL from env or default.
+func ollamaBaseURL() string {
+if u := os.Getenv("OLLAMA_URL"); u != "" {
+return u
+}
+return "http://127.0.0.1:11434"
+}
+
+// visionAdapter implements cognition.VisionAnalyzer using moondream via Ollama.
+// CPU-safe: moondream is 1.7GB and runs on EPYC in ~5-8s per image.
+type visionAdapter struct {
+ollamaURL string
+}
+
+func (v *visionAdapter) Analyze(input cognition.VisionInput) (cognition.VisionResult, error) {
+// Resolve image to base64
+var b64 string
+switch {
+case input.Base64 != "":
+b64 = input.Base64
+case input.FilePath != "":
+data, err := os.ReadFile(input.FilePath)
+if err != nil {
+return cognition.VisionResult{}, fmt.Errorf("vision: read file: %w", err)
+}
+b64 = base64.StdEncoding.EncodeToString(data)
+case input.URL != "":
+resp, err := http.Get(input.URL) //nolint:gosec — URL provided by authenticated caller
+if err != nil {
+return cognition.VisionResult{}, fmt.Errorf("vision: fetch url: %w", err)
+}
+defer resp.Body.Close()
+data, err := io.ReadAll(resp.Body)
+if err != nil {
+return cognition.VisionResult{}, fmt.Errorf("vision: read url body: %w", err)
+}
+b64 = base64.StdEncoding.EncodeToString(data)
+default:
+return cognition.VisionResult{}, fmt.Errorf("vision: no image source provided")
+}
+
+prompt := input.Prompt
+if prompt == "" {
+prompt = cognition.DefaultVisionPrompt
+}
+
+// Call Ollama /api/generate with images array
+reqBody, _ := json.Marshal(map[string]any{
+"model":       "moondream:latest",
+"prompt":      prompt,
+"images":      []string{b64},
+"stream":      false,
+"num_predict": 256,
+"options": map[string]any{
+"temperature": 0.1,
+"num_ctx":     4096,
+},
+})
+
+ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+defer cancel()
+
+req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
+v.ollamaURL+"/api/generate", strings.NewReader(string(reqBody)))
+req.Header.Set("Content-Type", "application/json")
+
+httpResp, err := http.DefaultClient.Do(req)
+if err != nil {
+return cognition.VisionResult{}, fmt.Errorf("vision: ollama call: %w", err)
+}
+defer httpResp.Body.Close()
+
+var ollamaResp struct {
+Response string `json:"response"`
+Done     bool   `json:"done"`
+}
+if err := json.NewDecoder(httpResp.Body).Decode(&ollamaResp); err != nil {
+return cognition.VisionResult{}, fmt.Errorf("vision: decode response: %w", err)
+}
+
+description := strings.TrimSpace(ollamaResp.Response)
+tags := extractVisionTags(description)
+
+return cognition.VisionResult{
+Description: description,
+Tags:        tags,
+Model:       "moondream:latest",
+RawResponse: ollamaResp.Response,
+}, nil
+}
+
+// extractVisionTags derives a small set of concept tags from a description
+// by pulling capitalised nouns and key technical terms (heuristic, no LLM call).
+func extractVisionTags(description string) []string {
+words := strings.Fields(description)
+seen := map[string]bool{}
+var tags []string
+for _, w := range words {
+w = strings.Trim(w, ".,;:!?\"'()")
+if len(w) < 4 {
+continue
+}
+lower := strings.ToLower(w)
+if seen[lower] {
+continue
+}
+// Keep words that start with a capital (proper nouns / concepts) or are technical
+if w[0] >= 'A' && w[0] <= 'Z' {
+seen[lower] = true
+tags = append(tags, lower)
+}
+if len(tags) >= 8 {
+break
+}
+}
+return tags
+}
+
+// handleVisionAnalyze handles POST /v1/vision/analyze.
+// Accepts image_url, image_base64, or image_path + optional prompt.
+// Optionally writes result to MemoryBank with ProvenanceSeen tier.
+func (s *ServerV2) handleVisionAnalyze(c *gin.Context) {
+var req struct {
+ImageURL    string `json:"image_url"`
+ImageBase64 string `json:"image_base64"`
+ImagePath   string `json:"image_path"`
+Prompt      string `json:"prompt"`
+SaveMemory  bool   `json:"save_memory"`
+}
+if err := c.ShouldBindJSON(&req); err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+return
+}
+
+va := s.Agent.SovEngine.VisionRef
+if va == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "vision module not available"})
+return
+}
+
+result, err := va.Analyze(cognition.VisionInput{
+URL:      req.ImageURL,
+FilePath: req.ImagePath,
+Base64:   req.ImageBase64,
+Prompt:   req.Prompt,
+})
+if err != nil {
+log.Printf("[Vision] Analysis error: %v", err)
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+
+resp := gin.H{
+"description": result.Description,
+"tags":        result.Tags,
+"model":       result.Model,
+}
+
+// Optional memory write-back with ProvenanceSeen tier
+if req.SaveMemory && s.MemoryBank != nil && s.MemoryBank.IsEnabled() {
+topic := "visual_input"
+if len(result.Tags) > 0 {
+topic = result.Tags[0]
+}
+source := req.ImageURL
+if source == "" {
+source = req.ImagePath
+}
+s.MemoryBank.Write(service.MemoryFragment{
+Content:    result.Description,
+Source:     "vision",
+Topic:      topic,
+Importance: 0.65,
+Provenance: service.ProvenanceSeen,
+Volatility: service.VolatilityCurrent,
+})
+resp["memory_saved"] = true
+resp["memory_topic"] = topic
+}
+
+c.JSON(http.StatusOK, resp)
 }
