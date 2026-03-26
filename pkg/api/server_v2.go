@@ -549,6 +549,28 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		return
 	}
 
+	// SELF-DISCOVER plan persistence: if a new plan was discovered this request,
+	// write it to MemoryBank as ProvenanceSolved so DreamDaemon can consolidate
+	// effective reasoning structures into the Living Constitution.
+	if !isStudioContext && s.MemoryBank != nil && s.MemoryBank.IsEnabled() {
+		fp := cognition.GetLastDiscoveredFingerprint()
+		if fp != "" {
+			go func(fingerprint, query string) {
+				plan, ok := cognition.GetCachedPlan(fingerprint)
+				if !ok {
+					return
+				}
+				s.MemoryBank.Write(service.MemoryFragment{
+					Content:    fmt.Sprintf("SELF-DISCOVER plan for [%s]: %s", fingerprint, plan.RawJSON),
+					Source:     "self_discover",
+					Topic:      "reasoning_plan:" + fingerprint,
+					Importance: 0.8,
+					Provenance: service.ProvenanceSolved,
+				})
+			}(fp, lastMsg)
+		}
+	}
+
 	// Merge client-provided system message (if any) with the sovereign trace
 	// so Ollama sees a single authoritative system prompt.
 	clientSystem := ""

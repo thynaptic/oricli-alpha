@@ -18,10 +18,11 @@ const (
 	ModeReAct                            // ReAct — Think→Act→Observe loop (max 3 hops)
 	ModeDebate                           // Multi-Agent Debate — Advocate+Skeptic+Contrarian→Judge synthesis
 	ModeCausal                           // Causal Reasoning — WHY/WHAT-IF/HOW causal chain extraction
+	ModeDiscover                         // SELF-DISCOVER — LLM self-composes optimal reasoning plan (arXiv:2402.03620)
 )
 
 func (m ReasoningMode) String() string {
-	return [...]string{"Standard", "CBR", "PAL", "Active", "LeastToMost", "SelfRefine", "ReAct", "Debate", "Causal"}[m]
+	return [...]string{"Standard", "CBR", "PAL", "Active", "LeastToMost", "SelfRefine", "ReAct", "Debate", "Causal", "Discover"}[m]
 }
 
 var (
@@ -52,6 +53,13 @@ func ClassifyReasoningMode(stimulus string, budget AdaptiveBudget) ReasoningMode
 	// PAL wins for anything math/logic — Python beats LLM prediction every time
 	if reMath.MatchString(s) {
 		return ModePAL
+	}
+
+	// SELF-DISCOVER: highest complexity queries get dynamic module composition.
+	// Above 0.70 the keyword router picks the wrong single mode too often.
+	// The 2 meta-calls are worth it — paper shows +32% over CoT at this tier.
+	if budget.Complexity >= 0.70 {
+		return ModeDiscover
 	}
 
 	// Causal: why/how-does/what-if — dedicated causal chain extraction

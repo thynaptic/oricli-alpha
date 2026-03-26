@@ -408,6 +408,11 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 			modeEnrichedComposite = enriched
 			modeHandled = true
 		}
+	case ModeDiscover:
+		if enriched, err := e.runSelfDiscover(ctx, stimulus, ""); err == nil {
+			modeEnrichedComposite = enriched
+			modeHandled = true
+		}
 	}
 
 	// --- Step 7: Subconscious & Stochastic Prep ---
@@ -444,7 +449,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		topic   string
 	}
 	// Skip parallel web search for modes that already did targeted search (Active, ReAct)
-	skipWebSearch := mode == ModeActive || mode == ModeReAct || mode == ModeDebate || mode == ModeCausal
+	skipWebSearch := mode == ModeActive || mode == ModeReAct || mode == ModeDebate || mode == ModeCausal || mode == ModeDiscover
 	webCh := make(chan webResult, 1)
 	if !skipWebSearch && e.SearXNG != nil && e.SearXNG.IsAvailable() {
 		if needsSearch, sq := DetectUncertainty(stimulus); needsSearch {
