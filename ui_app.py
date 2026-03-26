@@ -3230,6 +3230,28 @@ Runtime variables are prompted before each run.
 
 ## Parallel
 `parallel { step: ... \n  step: ... }` — steps run simultaneously, outputs concatenated.
+
+## CRITICAL RULES
+- Every step MUST use: step[label]: TYPE "value"   — NO function calls, NO parentheses
+- Only the step types listed above are valid (web, summarize, transform, etc.)
+- There is NO fetch_data(), NO filter(), NO analysis() — use step[label]: web / transform / extract
+- ALL workflow content is INSIDE the workflow { } block — nothing outside it
+- Variables use = not : for defaults: var limit = "5"
+
+## Complete working example
+```
+workflow "Research Brief" {
+  description: "Research a topic and produce a concise brief"
+  var topic
+
+  step[search]:  web       "{{topic}} latest developments {{date}}"
+  step[filter]:  transform "Keep only the 5 most relevant findings from the above"
+  step[brief]:   summarize "Summarise the filtered findings in 3 bullet points"
+  step[report]:  template  "# {{topic}} Brief\n\n{{output}}\n\nGenerated {{datetime}}"
+
+  output → canvas
+}
+```
 """
 
 
@@ -3248,6 +3270,42 @@ def _ori_ai_system() -> str:
         "- When fixing diagnostics, address every listed error and warning\n"
         "- A valid workflow ALWAYS starts with: workflow \"Name\" {\n"
     )
+
+
+def _extract_workflow(text: str) -> str:
+    """Extract and return only the workflow block from generated ORI DSL output.
+
+    Strips:
+    - Prompt artifacts echoed by the model ("Output ONLY", "Fix every...", etc.)
+    - Content outside the workflow { } block
+    - Trailing markdown fences
+    """
+    import re
+    text = text.strip()
+
+    # Find the first `workflow "..." {` and its matching closing brace
+    start = text.find('workflow ')
+    if start == -1:
+        # No workflow found — return stripped text as-is (editor handles validation)
+        return text
+
+    # Walk forward counting braces to find the matching closing }
+    depth = 0
+    end = -1
+    for i, ch in enumerate(text[start:], start):
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+
+    if end == -1:
+        # Unclosed block — return from workflow start, trust the editor to flag it
+        return text[start:].strip()
+
+    return text[start:end].strip()
 
 
 @app.route("/ori/ai-assist", methods=["POST"])
@@ -3304,6 +3362,7 @@ def ori_ai_assist():
     def _stream():
         """Stream tokens directly from backbone → avoids 524 (no silent wait)."""
         import json as _json
+        import re as _re
         payload = {
             "model": "oricli-cognitive",
             "stream": True,
@@ -3316,6 +3375,7 @@ def ori_ai_assist():
         # Immediate keepalive so Cloudflare sees bytes before it times out
         yield ": keepalive\n\n"
         try:
+            full_buf = ""
             with _client().stream(
                 "POST",
                 f"{API_BASE}/v1/chat/completions",
@@ -3323,9 +3383,9 @@ def ori_ai_assist():
                 headers=_build_headers(extra={"X-Code-Context": "true"}),
             ) as resp:
                 resp.raise_for_status()
-                fence_buf = ""       # accumulate to detect/strip opening fence
                 fence_stripped = False
-                open_fence_re = __import__('re').compile(r'^```\w*\n')
+                open_fence_re = _re.compile(r'^```\w*\n')
+                fence_buf = ""
                 for raw_line in resp.iter_lines():
                     if not raw_line.startswith("data:"):
                         continue
@@ -3344,11 +3404,22 @@ def ori_ai_assist():
                         if len(fence_buf) >= 12 or '\n' in fence_buf:
                             fence_stripped = True
                             fence_buf = open_fence_re.sub("", fence_buf, count=1)
-                            if fence_buf:
-                                yield f"data: {_json.dumps({'text': fence_buf})}\n\n"
-                        # else keep buffering
-                        continue
-                    yield f"data: {_json.dumps({'text': delta})}\n\n"
+                            delta = fence_buf
+                            fence_buf = ""
+                        else:
+                            continue
+                    full_buf += delta
+
+            # Post-process: for DSL modes, extract only the workflow block and
+            # strip any prompt artifacts (instructions, "Output ONLY", etc.)
+            # that the model may have echoed back.
+            if mode in ("generate", "edit", "fix"):
+                full_buf = _extract_workflow(full_buf)
+
+            # Stream the cleaned result as a single chunk
+            if full_buf:
+                yield f"data: {_json.dumps({'text': full_buf})}\n\n"
+
         except Exception as exc:
             yield f"data: {_json.dumps({'error': str(exc)})}\n\n"
         yield "data: [DONE]\n\n"
