@@ -19,10 +19,11 @@ const (
 	ModeDebate                           // Multi-Agent Debate — Advocate+Skeptic+Contrarian→Judge synthesis
 	ModeCausal                           // Causal Reasoning — WHY/WHAT-IF/HOW causal chain extraction
 	ModeDiscover                         // SELF-DISCOVER — LLM self-composes optimal reasoning plan (arXiv:2402.03620)
+	ModeConsistency                      // Self-Consistency — N parallel samples + consensus vote (arXiv:2310.01798)
 )
 
 func (m ReasoningMode) String() string {
-	return [...]string{"Standard", "CBR", "PAL", "Active", "LeastToMost", "SelfRefine", "ReAct", "Debate", "Causal", "Discover"}[m]
+	return [...]string{"Standard", "CBR", "PAL", "Active", "LeastToMost", "SelfRefine", "ReAct", "Debate", "Causal", "Discover", "Consistency"}[m]
 }
 
 var (
@@ -91,6 +92,13 @@ func ClassifyReasoningMode(stimulus string, budget AdaptiveBudget) ReasoningMode
 	// (lower bar — CBR is free if no solved case found, just falls through)
 	if budget.Complexity > 0.45 {
 		return ModeCBR
+	}
+
+	// Self-Consistency: medium complexity factual/reasoning queries — N parallel samples
+	// outperform self-correction at equivalent compute budget (arXiv:2310.01798, ICLR 2024).
+	// Fires below CBR threshold where a past solution is unlikely to exist.
+	if budget.Complexity >= 0.30 {
+		return ModeConsistency
 	}
 
 	// Active prompting upgrade: if DetectUncertainty would fire, use Active mode

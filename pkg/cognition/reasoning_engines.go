@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -218,6 +219,32 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 		return e.runStandard(ctx, stimulus, composite)
 	}
 
+	// ── Grounding Gate (arXiv:2310.01798) ────────────────────────────────────
+	// Per "LLMs Cannot Self-Correct Reasoning Yet": intrinsic self-correction (same
+	// model verifying itself) degrades performance. Correction only helps when the
+	// verifier has an *external* signal. Gate the loop on a MemoryBank hit; without
+	// one, skip straight to standard — ExploiterLeague provides the adversarial audit.
+	var groundingContext string
+	if e.MemoryBankRef != nil {
+		frags, _ := e.MemoryBankRef.QuerySimilar(ctx, stimulus, 3)
+		if len(frags) == 0 {
+			// No external grounding available — intrinsic correction would degrade; bail.
+			return e.runStandard(ctx, stimulus, composite)
+		}
+		var gb strings.Builder
+		gb.WriteString("### EXTERNAL GROUNDING SIGNAL\n")
+		gb.WriteString("The following verified memory fragments are relevant to this question.\n")
+		gb.WriteString("Use them as external ground truth when evaluating the candidate response:\n\n")
+		for i, f := range frags {
+			gb.WriteString(fmt.Sprintf("[%d] (importance=%.2f) %s\n", i+1, f.Importance, truncate(f.Content, 200)))
+		}
+		gb.WriteString("### END GROUNDING SIGNAL")
+		groundingContext = gb.String()
+	} else {
+		// No memory bank wired — skip verifier to avoid degradation
+		return e.runStandard(ctx, stimulus, composite)
+	}
+
 	const maxGeneratorCalls = 2
 	var candidate string
 
@@ -238,11 +265,13 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 			return e.runStandard(ctx, stimulus, composite)
 		}
 
-		// ── Verifier: classify the candidate ─────────────────────────────
-		// Returns one of: CORRECT | MINOR_FIX: <issue> | CRITICAL_FLAW: <reason> | ADMIT_FAILURE
+		// ── Verifier: classify the candidate (grounded) ──────────────────────
+		// The grounding context is external KB signal — this converts intrinsic
+		// self-correction (unreliable) into externally-grounded verification (reliable).
 		verifierPrompt := fmt.Sprintf(
 			"You are a rigorous verifier. Evaluate this response for factual accuracy, "+
 				"logical soundness, and completeness.\n\n"+
+				"%s\n\n"+
 				"QUESTION: %s\n\nCANDIDATE RESPONSE: %s\n\n"+
 				"Reply with EXACTLY ONE of:\n"+
 				"  CORRECT\n"+
@@ -250,7 +279,7 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 				"  CRITICAL_FLAW: <one-line description of the fundamental error>\n"+
 				"  ADMIT_FAILURE (only if the question is unanswerable with available knowledge)\n\n"+
 				"Verdict:",
-			truncate(stimulus, 250), truncate(candidate, 500),
+			groundingContext, truncate(stimulus, 250), truncate(candidate, 500),
 		)
 
 		verResult, verErr := e.GenService.Generate(verifierPrompt, map[string]interface{}{
@@ -666,4 +695,120 @@ if len(s) <= n {
 return s
 }
 return s[:n] + "…"
+}
+
+// ─── ModeConsistency: Self-Consistency — N parallel samples + consensus ───────
+//
+// Per arXiv:2310.01798 (ICLR 2024): self-consistency (majority vote across
+// independent samples) outperforms self-correction at equivalent compute budget.
+// The key insight: N independent generations sample different reasoning paths;
+// the answer that emerges most often is the most likely correct one.
+//
+// Implementation:
+//   - 3 parallel goroutines each generate an independent candidate (temp=0.6)
+//   - Consensus extractor finds the plurality answer via overlap scoring
+//   - Tie → longest / most complete candidate wins
+//   - Falls back to runStandard on GenService failure
+//
+// Extra LLM calls: 3 parallel (same cost as 3 sequential but ~3x faster on CPU)
+// The model is small (gemma3:1b), so parallel goroutines don't compete badly.
+
+const consistencyN = 3
+
+func (e *SovereignEngine) runConsistency(ctx context.Context, stimulus, composite string) (string, error) {
+if e.GenService == nil {
+return e.runStandard(ctx, stimulus, composite)
+}
+
+type result struct {
+text string
+err  error
+}
+results := make([]result, consistencyN)
+var wg sync.WaitGroup
+
+for i := 0; i < consistencyN; i++ {
+wg.Add(1)
+go func(idx int) {
+defer wg.Done()
+// Each candidate uses a slightly different temperature to sample
+// different reasoning paths — core of self-consistency diversity.
+temp := 0.5 + float64(idx)*0.1 // 0.5, 0.6, 0.7
+r, err := e.GenService.Generate(stimulus, map[string]interface{}{
+"num_ctx":     4096,
+"num_predict": 512,
+"temperature": temp,
+"system":      composite,
+})
+if err != nil || ctx.Err() != nil {
+results[idx] = result{err: err}
+return
+}
+text, _ := r["response"].(string)
+results[idx] = result{text: strings.TrimSpace(text)}
+}(i)
+}
+wg.Wait()
+
+// Collect valid candidates
+var candidates []string
+for _, r := range results {
+if r.err == nil && r.text != "" {
+candidates = append(candidates, r.text)
+}
+}
+if len(candidates) == 0 {
+return e.runStandard(ctx, stimulus, composite)
+}
+if len(candidates) == 1 {
+return candidates[0], nil
+}
+
+// Consensus: score each candidate by token overlap against all others.
+// The plurality answer — most shared content — is the most consistent.
+best := candidates[0]
+bestScore := 0
+for i, a := range candidates {
+score := 0
+aWords := tokenSet(a)
+for j, b := range candidates {
+if i == j {
+continue
+}
+score += overlapScore(aWords, tokenSet(b))
+}
+if score > bestScore || (score == bestScore && len(a) > len(best)) {
+bestScore = score
+best = a
+}
+}
+return best, nil
+}
+
+// tokenSet returns a deduplicated set of lowercase words from s (stops at 200 words).
+func tokenSet(s string) map[string]struct{} {
+set := make(map[string]struct{})
+words := strings.Fields(strings.ToLower(s))
+if len(words) > 200 {
+words = words[:200]
+}
+for _, w := range words {
+// Strip common punctuation so "answer." and "answer" match
+w = strings.Trim(w, ".,!?;:\"'()")
+if len(w) > 2 {
+set[w] = struct{}{}
+}
+}
+return set
+}
+
+// overlapScore counts words in set a that appear in set b.
+func overlapScore(a, b map[string]struct{}) int {
+score := 0
+for w := range a {
+if _, ok := b[w]; ok {
+score++
+}
+}
+return score
 }
