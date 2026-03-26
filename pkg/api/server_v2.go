@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1647,30 +1648,107 @@ func provenanceCertainty(prov service.Provenance) float64 {
 	}
 }
 
-func (a *memoryBankAdapter) QuerySimilar(ctx context.Context, query string, topN int) ([]cognition.MemFrag, error) {
-	frags, err := a.mb.QuerySimilar(ctx, query, topN)
+func (a *memoryBankAdapter) QuerySimilarWeighted(ctx context.Context, query string, topN int, weights cognition.BeliefWeights) ([]cognition.MemFrag, error) {
+	// Oversample 3× from PB so the re-ranker has a meaningful candidate pool.
+	// PB pre-sorts by cosine+provenance; we then re-rank by the caller's weight vector.
+	oversample := topN * 3
+	if oversample < 9 {
+		oversample = 9
+	}
+	frags, err := a.mb.QuerySimilar(ctx, query, oversample)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]cognition.MemFrag, len(frags))
+
+	// Build MemFrag slice with full Belief axes populated.
+	candidates := make([]cognition.MemFrag, len(frags))
 	for i, f := range frags {
 		mf := cognition.MemFrag{
-			ID:          f.ID,
-			Content:     f.Content,
-			Source:      f.Source,
-			Topic:       f.Topic,
-			Importance:  f.Importance,
-			CausalScore: f.CausalScore,
-			AccessCount: f.AccessCount,
-			Volatility:  string(f.Volatility),
-			CreatedAt:   f.CreatedAt,
-			// Seed Belief.Factual with provenance floor; ComputeBelief adds access bonus + Recency
-			Belief: cognition.Belief{Factual: provenanceCertainty(f.Provenance)},
+			ID:            f.ID,
+			Content:       f.Content,
+			Source:        f.Source,
+			Topic:         f.Topic,
+			Importance:    f.Importance,
+			CausalScore:   f.CausalScore,
+			AccessCount:   f.AccessCount,
+			Volatility:    string(f.Volatility),
+			CreatedAt:     f.CreatedAt,
+			SemanticScore: f.SemanticScore,
+			Belief:        cognition.Belief{Factual: provenanceCertainty(f.Provenance)},
 		}
 		mf.Belief = cognition.ComputeBelief(mf)
-		out[i] = mf
+		candidates[i] = mf
 	}
+
+	// Re-rank by caller's multi-objective weight vector.
+	nw := weights.Normalize()
+	type scored struct {
+		frag  cognition.MemFrag
+		score float64
+	}
+	ranked := make([]scored, len(candidates))
+	for i, c := range candidates {
+		ranked[i] = scored{frag: c, score: nw.WeightedScore(c)}
+	}
+	// Insertion sort — candidate pool is small (≤27), no need for stdlib sort import.
+	for i := 1; i < len(ranked); i++ {
+		for j := i; j > 0 && ranked[j].score > ranked[j-1].score; j-- {
+			ranked[j], ranked[j-1] = ranked[j-1], ranked[j]
+		}
+	}
+
+	// Trim to topN.
+	if topN > len(ranked) {
+		topN = len(ranked)
+	}
+	out := make([]cognition.MemFrag, topN)
+	for i := range out {
+		out[i] = ranked[i].frag
+	}
+
+	// ── Retrieval audit log (benchmark observability) ─────────────────────────
+	// One DEBUG line per retrieval: weights label + top-3 frag scores.
+	// Allows per-mode retrieval quality analysis without extra infrastructure.
+	if topN > 0 {
+		label := beliefWeightsLabel(weights)
+		n := 3
+		if n > topN {
+			n = topN
+		}
+		var sb strings.Builder
+		for i := 0; i < n; i++ {
+			f := out[i]
+			fmt.Fprintf(&sb, "(F:%.2f C:%.2f R:%.2f s:%.2f) ",
+				f.Belief.Factual, f.Belief.Causal, f.Belief.Recency, ranked[i].score)
+		}
+		log.Printf("[MemRetrieval] mode=%s top%d=%s", label, n, strings.TrimSpace(sb.String()))
+	}
+
 	return out, nil
+}
+
+// beliefWeightsLabel returns a human-readable label for a BeliefWeights vector
+// by matching against the known presets. Falls back to "custom".
+func beliefWeightsLabel(w cognition.BeliefWeights) string {
+	type preset struct {
+		name string
+		w    cognition.BeliefWeights
+	}
+	presets := []preset{
+		{"aletheia", cognition.WeightsAletheia},
+		{"fivewhy", cognition.WeightsFiveWhy},
+		{"react", cognition.WeightsReAct},
+		{"cbr", cognition.WeightsCBR},
+		{"standard", cognition.WeightsStandard},
+	}
+	for _, p := range presets {
+		if math.Abs(p.w.Factual-w.Factual) < 0.01 &&
+			math.Abs(p.w.Causal-w.Causal) < 0.01 &&
+			math.Abs(p.w.Recency-w.Recency) < 0.01 {
+			return p.name
+		}
+	}
+	return fmt.Sprintf("custom(F:%.2f C:%.2f R:%.2f S:%.2f)", w.Factual, w.Causal, w.Recency, w.Semantic)
 }
 
 func (a *memoryBankAdapter) QuerySolved(ctx context.Context, topic string, limit int) ([]cognition.MemFrag, error) {

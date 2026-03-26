@@ -93,9 +93,80 @@ type sovereignContextKey struct{}
 // MemoryQuerier is satisfied by *service.MemoryBank.
 // Defined here to avoid import cycles (service → cognition, not reverse).
 type MemoryQuerier interface {
-	QuerySimilar(ctx context.Context, query string, topN int) ([]MemFrag, error)
+	// QuerySimilarWeighted fetches topN memories re-ranked by the caller's
+	// BeliefWeights vector. Each reasoning mode passes its own weight preset
+	// so retrieval is optimised for its epistemic trade-off.
+	QuerySimilarWeighted(ctx context.Context, query string, topN int, weights BeliefWeights) ([]MemFrag, error)
 	QuerySolved(ctx context.Context, topic string, limit int) ([]MemFrag, error)
 }
+
+// BeliefWeights expresses a reasoning mode's multi-objective trade-off preferences
+// for memory retrieval. Weights are automatically normalised to sum to 1.0.
+//
+// Each axis corresponds to a Belief dimension plus raw semantic similarity:
+//
+//	Factual  — weight on evidence quality (provenance + corroboration signal)
+//	Causal   — weight on mechanistic depth (5-WHY chain confidence)
+//	Recency  — weight on temporal freshness (age vs. volatility half-life)
+//	Semantic — weight on raw cosine similarity to the query
+//
+// Use the package-level presets (WeightsAletheia, WeightsFiveWhy, etc.) rather
+// than constructing ad-hoc weights — presets are tuned to each reasoning mode.
+type BeliefWeights struct {
+	Factual  float64
+	Causal   float64
+	Recency  float64
+	Semantic float64
+}
+
+// Normalize returns a copy of w with all four weights scaled so they sum to 1.0.
+// No-op if the sum is already ~1.0 (within 0.001).
+func (w BeliefWeights) Normalize() BeliefWeights {
+	sum := w.Factual + w.Causal + w.Recency + w.Semantic
+	if sum < 0.001 {
+		return BeliefWeights{0.25, 0.25, 0.25, 0.25} // degenerate → equal weights
+	}
+	if math.Abs(sum-1.0) < 0.001 {
+		return w
+	}
+	return BeliefWeights{
+		Factual:  w.Factual / sum,
+		Causal:   w.Causal / sum,
+		Recency:  w.Recency / sum,
+		Semantic: w.Semantic / sum,
+	}
+}
+
+// WeightedScore returns a single [0, 1] score for a MemFrag under these weights.
+func (w BeliefWeights) WeightedScore(f MemFrag) float64 {
+	nw := w.Normalize()
+	return nw.Factual*f.Belief.Factual +
+		nw.Causal*f.Belief.Causal +
+		nw.Recency*f.Belief.Recency +
+		nw.Semantic*f.SemanticScore
+}
+
+// ── Mode-specific weight presets ─────────────────────────────────────────────
+// Tuned to each reasoning mode's epistemic priority.
+
+// WeightsAletheia is used by the Aletheia grounding verifier.
+// Factual-heavy: we need evidence-backed memories, not mechanistic depth.
+var WeightsAletheia = BeliefWeights{Factual: 0.60, Causal: 0.20, Recency: 0.10, Semantic: 0.10}
+
+// WeightsFiveWhy is used by the 5-WHY cross-domain search.
+// Causal-heavy: we need memories that encode mechanisms, not just facts.
+var WeightsFiveWhy = BeliefWeights{Factual: 0.20, Causal: 0.60, Recency: 0.10, Semantic: 0.10}
+
+// WeightsReAct is used by the ReAct tool loop.
+// Recency-heavy: tool decisions need current context, not historical facts.
+var WeightsReAct = BeliefWeights{Factual: 0.20, Causal: 0.10, Recency: 0.50, Semantic: 0.20}
+
+// WeightsCBR is used by Case-Based Reasoning.
+// Factual + semantic: we need verified solved cases that closely match the query.
+var WeightsCBR = BeliefWeights{Factual: 0.55, Causal: 0.15, Recency: 0.10, Semantic: 0.20}
+
+// WeightsStandard is the balanced fallback for general memory recall.
+var WeightsStandard = BeliefWeights{Factual: 0.35, Causal: 0.20, Recency: 0.20, Semantic: 0.25}
 
 // Belief is a three-axis epistemic confidence vector attached to every MemFrag.
 //
@@ -132,16 +203,17 @@ func (b Belief) Score() float64 {
 
 // MemFrag is a minimal memory record crossing the cognition/service interface boundary.
 type MemFrag struct {
-	ID          string
-	Content     string
-	Source      string
-	Topic       string
-	Importance  float64
-	AccessCount int
-	Volatility  string    // "stable" | "current" | "ephemeral"
-	CreatedAt   time.Time // used to compute Belief.Recency
-	CausalScore float64   // persisted via PB causal_score field; 0.50 neutral default
-	Belief      Belief    // computed by ComputeBelief — do not set manually
+	ID           string
+	Content      string
+	Source       string
+	Topic        string
+	Importance   float64
+	AccessCount  int
+	Volatility   string    // "stable" | "current" | "ephemeral"
+	CreatedAt    time.Time // used to compute Belief.Recency
+	CausalScore  float64   // persisted via PB causal_score field; 0.50 neutral default
+	SemanticScore float64  // cosine similarity to the query; populated by adapter
+	Belief       Belief    // computed by ComputeBelief — do not set manually
 }
 
 // CertaintyUpdater is satisfied by the MemoryBank adapter in server_v2.

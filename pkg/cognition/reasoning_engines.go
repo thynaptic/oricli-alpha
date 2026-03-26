@@ -101,7 +101,7 @@ func (e *SovereignEngine) runActive(ctx context.Context, stimulus, composite str
 			}
 		case "memory":
 			if e.MemoryBankRef != nil {
-				frags, err := e.MemoryBankRef.QuerySimilar(ctx, stimulus, 3)
+				frags, err := e.MemoryBankRef.QuerySimilarWeighted(ctx, stimulus, 3, WeightsStandard)
 				if err == nil && len(frags) > 0 {
 					fills.WriteString(fmt.Sprintf("**Gap: %s** → Memory recall:\n", gap.What))
 					for _, f := range frags {
@@ -227,7 +227,7 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 	var groundingContext string
 	var frags []MemFrag
 	if e.MemoryBankRef != nil {
-		frags, _ = e.MemoryBankRef.QuerySimilar(ctx, stimulus, 3)
+		frags, _ = e.MemoryBankRef.QuerySimilarWeighted(ctx, stimulus, 3, WeightsAletheia)
 		if len(frags) == 0 {
 			// No external grounding available — intrinsic correction would degrade; bail.
 			return e.runStandard(ctx, stimulus, composite)
@@ -394,7 +394,7 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 				// Constraint: search by mechanism vocabulary, not original problem vocabulary.
 				crossDomainHint := ""
 				if e.MemoryBankRef != nil && mechanism != "" {
-					hits, _ := e.MemoryBankRef.QuerySimilar(ctx, mechanism, 2)
+					hits, _ := e.MemoryBankRef.QuerySimilarWeighted(ctx, mechanism, 2, WeightsFiveWhy)
 					var hb strings.Builder
 					causalHitIDs := make([]string, 0, 2)
 					for _, h := range hits {
@@ -514,7 +514,7 @@ func (e *SovereignEngine) runReAct(ctx context.Context, stimulus, composite stri
 			}
 		case hasPrefix(thought, "MEMORY:") && e.MemoryBankRef != nil:
 			query := strings.TrimSpace(strings.TrimPrefix(thought, "MEMORY:"))
-			frags, memErr := e.MemoryBankRef.QuerySimilar(ctx, query, 3)
+			frags, memErr := e.MemoryBankRef.QuerySimilarWeighted(ctx, query, 3, WeightsReAct)
 			if memErr == nil {
 				for _, f := range frags {
 					observation += truncate(f.Content, 200) + "\n"

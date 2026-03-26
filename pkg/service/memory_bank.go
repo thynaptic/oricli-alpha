@@ -112,6 +112,7 @@ type MemoryFragment struct {
 	SessionID    string
 	Importance   float64    // 0.0–1.0 — maps to Belief.Factual axis
 	CausalScore  float64    // 0.0–1.0 — maps to Belief.Causal axis; 0.50 neutral default
+	SemanticScore float64   // cosine similarity to the query; set by QuerySimilar, used by adapter re-ranker
 	AccessCount  int
 	LastAccessed time.Time
 	CreatedAt    time.Time  // used for Belief.Recency computation
@@ -406,6 +407,8 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 		if base == 0 {
 			base = float32(frag.Importance)
 		}
+		// Expose raw cosine for adapter-layer multi-objective re-ranking.
+		frag.SemanticScore = float64(base)
 
 		// Provenance multiplier — penalises deep synthetic lineage
 		weight, ok := provenanceWeight[prov]
