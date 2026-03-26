@@ -315,6 +315,10 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		return
 	}
 
+	// Studio requests (ORI Studio vibe chat) must NOT pollute general memory — DSL workflow
+	// responses written to MemoryBank would bleed into identity/capability RAG recalls.
+	isStudioContext := c.GetHeader("X-Ori-Context") == "studio"
+
 	modelName := req.Model
 	if strings.HasPrefix(modelName, "oricli") || modelName == "default" || modelName == "" {
 		modelName = ""
@@ -767,7 +771,8 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 
 	// Conversation write-back: persist this exchange to PocketBase long-term memory.
 	// Only when both sides have meaningful content. Fires in background, never blocks.
-	if s.MemoryBank != nil && s.MemoryBank.IsEnabled() &&
+	// Skip for studio context — DSL workflow responses must not pollute general RAG.
+	if !isStudioContext && s.MemoryBank != nil && s.MemoryBank.IsEnabled() &&
 		len(lastMsg) > 50 && len(responseText) > 50 {
 		go func() {
 			// Strip HTML tags before storing — prevents <span class="ori-kw"> and similar
@@ -803,7 +808,8 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 
 	// Signal detection: scan user message for learning signals (corrections, explicit teaches).
 	// Fires async — never blocks the response. Sub-millisecond on cache hit.
-	if s.SignalProcessor != nil && len(lastMsg) > 10 {
+	// Skip for studio context — DSL prompts would be misclassified as behavioral teaches.
+	if !isStudioContext && s.SignalProcessor != nil && len(lastMsg) > 10 {
 		go func(msg string) {
 			sig := s.SignalProcessor.Detect(msg)
 			s.SignalProcessor.Process(sig)

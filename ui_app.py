@@ -3383,7 +3383,7 @@ def ori_ai_assist():
                 "POST",
                 f"{API_BASE}/v1/chat/completions",
                 json=payload,
-                headers=_build_headers(extra={"X-Code-Context": "true"}),
+                headers=_build_headers(extra={"X-Code-Context": "true", "X-Ori-Context": "studio"}),
             ) as resp:
                 resp.raise_for_status()
                 fence_stripped = False
