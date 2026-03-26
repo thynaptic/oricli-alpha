@@ -110,10 +110,11 @@ type MemoryFragment struct {
 	Source       string     // "conversation" | "curiosity" | "summary"
 	Topic        string
 	SessionID    string
-	Importance   float64    // 0.0–1.0
+	Importance   float64    // 0.0–1.0 — maps to Belief.Factual axis
+	CausalScore  float64    // 0.0–1.0 — maps to Belief.Causal axis; 0.50 neutral default
 	AccessCount  int
 	LastAccessed time.Time
-	CreatedAt    time.Time  // used for age-decay certainty computation
+	CreatedAt    time.Time  // used for Belief.Recency computation
 	// Epistemic hygiene
 	Provenance   Provenance // origin quality — controls RAG weight
 	Volatility   Volatility // decay class — controls Recycle half-life
@@ -374,6 +375,11 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 			createdAt = time.Now().Add(-24 * time.Hour)
 		}
 
+		causalScore := floatField(item, "causal_score")
+		if causalScore == 0 {
+			causalScore = 0.50 // neutral default for memories without causal signal yet
+		}
+
 		frag := MemoryFragment{
 			ID:           stringField(item, "id"),
 			Content:      stringField(item, "content"),
@@ -381,6 +387,7 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 			Topic:        stringField(item, "topic"),
 			SessionID:    stringField(item, "session_id"),
 			Importance:   floatField(item, "importance"),
+			CausalScore:  causalScore,
 			AccessCount:  intField(item, "access_count"),
 			CreatedAt:    createdAt,
 			Provenance:   prov,
@@ -486,6 +493,36 @@ func (m *MemoryBank) BumpImportance(ctx context.Context, fragID string, delta fl
 	}
 	_ = m.adminClient.UpdateRecord(ctx, "memories", fragID, map[string]any{
 		"importance": newVal,
+	})
+}
+
+// BumpCausalScore adjusts a memory fragment's causal_score axis by delta.
+// Fired by the CertaintyUpdater adapter when 5-WHY extracts a successful mechanism.
+// Clamps to [0.01, 0.99]. Uses the same read-modify-write pattern as BumpImportance.
+func (m *MemoryBank) BumpCausalScore(ctx context.Context, fragID string, delta float64) {
+	if !m.enabled || fragID == "" {
+		return
+	}
+	result, err := m.adminClient.QueryRecords(ctx, "memories",
+		fmt.Sprintf(`id = "%s"`, fragID), "", 1)
+	if err != nil || result == nil || len(result.Items) == 0 {
+		return
+	}
+	current := floatField(result.Items[0], "causal_score")
+	if current == 0 {
+		current = 0.50 // neutral baseline for memories that predate this field
+	}
+	newVal := current + delta
+	if newVal < 0.01 {
+		newVal = 0.01
+	} else if newVal > 0.99 {
+		newVal = 0.99
+	}
+	if math.Abs(newVal-current) < 0.001 {
+		return
+	}
+	_ = m.adminClient.UpdateRecord(ctx, "memories", fragID, map[string]any{
+		"causal_score": newVal,
 	})
 }
 

@@ -237,17 +237,17 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 		gb.WriteString("The following memory fragments are relevant. Only those marked 'verified' are ground truth.\n\n")
 		validCount := 0
 		for i, f := range frags {
-			// Noise gate: discard fragments below certainty threshold.
-			// U=1 (unverified) = Certainty < 0.40 per AI-Supervisor §3.1.
-			if f.Certainty < 0.40 {
+			// Noise gate: discard fragments below combined belief threshold.
+			// U=1 (unverified) in AI-Supervisor §3.1 terms = Score() < 0.40.
+			if f.Belief.Score() < 0.40 {
 				continue
 			}
 			certLabel := "unverified"
-			if f.Certainty >= 0.80 {
-				certLabel = "verified" // U=0
+			if f.Belief.Factual >= 0.80 {
+				certLabel = "verified" // U=0: strong factual grounding
 			}
-			gb.WriteString(fmt.Sprintf("[%d] (certainty=%.2f/%s) %s\n",
-				i+1, f.Certainty, certLabel, truncate(f.Content, 200)))
+			gb.WriteString(fmt.Sprintf("[%d] (factual=%.2f/causal=%.2f/%s) %s\n",
+				i+1, f.Belief.Factual, f.Belief.Causal, certLabel, truncate(f.Content, 200)))
 			validCount++
 		}
 		gb.WriteString("### END GROUNDING SIGNAL")
@@ -261,17 +261,17 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 		return e.runStandard(ctx, stimulus, composite)
 	}
 
-	// Collect frag IDs for certainty mutation after verdict.
-	// CORRECT → bump (+0.03), ADMIT_FAILURE → drop (-0.05).
+	// Collect frag IDs for factual belief mutation after Aletheia verdict.
+	// CORRECT → bump Factual (+0.03), ADMIT_FAILURE → drop Factual (-0.05).
 	groundingFragIDs := make([]string, 0, len(frags))
 	for _, f := range frags {
-		if f.Certainty >= 0.40 && f.ID != "" {
+		if f.Belief.Score() >= 0.40 && f.ID != "" {
 			groundingFragIDs = append(groundingFragIDs, f.ID)
 		}
 	}
 
-	// bumpGrounding fires async certainty updates so they never block generation.
-	bumpGrounding := func(delta float64) {
+	// bumpGrounding fires async belief updates so they never block generation.
+	bumpGrounding := func(axis string, delta float64) {
 		if e.CertaintyUpdaterRef == nil || len(groundingFragIDs) == 0 {
 			return
 		}
@@ -279,7 +279,7 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 			bCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 			defer cancel()
 			for _, id := range groundingFragIDs {
-				e.CertaintyUpdaterRef.BumpCertainty(bCtx, id, delta)
+				e.CertaintyUpdaterRef.BumpBelief(bCtx, id, axis, delta)
 			}
 		}()
 	}
@@ -339,12 +339,12 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 		switch {
 		case strings.HasPrefix(verdictUpper, aletheiaCorrect):
 			// ✓ Correct — grounding frags were reliable: reinforce them.
-			bumpGrounding(+0.03)
+		bumpGrounding("factual", +0.03)
 			return candidate, nil
 
 		case strings.HasPrefix(verdictUpper, aletheiaFail):
 			// Agent admits insufficient knowledge — grounding frags weren't enough: mild drop.
-			bumpGrounding(-0.05)
+		bumpGrounding("factual", -0.05)
 			enriched := composite + "\n\n### EPISTEMIC LIMITATION\n" +
 				"After careful verification, the available knowledge is insufficient to answer this with confidence. " +
 				"Be transparent about what is known, what is uncertain, and what would be needed to answer definitively. " +
@@ -396,12 +396,25 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 				if e.MemoryBankRef != nil && mechanism != "" {
 					hits, _ := e.MemoryBankRef.QuerySimilar(ctx, mechanism, 2)
 					var hb strings.Builder
+					causalHitIDs := make([]string, 0, 2)
 					for _, h := range hits {
-						if h.Certainty >= 0.50 { // only include somewhat-verified cross-domain hits
+						if h.Belief.Causal >= 0.50 { // cross-domain: filter on Causal axis
 							hb.WriteString(fmt.Sprintf("- %s\n", truncate(h.Content, 150)))
+							if h.ID != "" {
+								causalHitIDs = append(causalHitIDs, h.ID)
+							}
 						}
 					}
 					crossDomainHint = hb.String()
+					if e.CertaintyUpdaterRef != nil && len(causalHitIDs) > 0 {
+						go func(ids []string) {
+							bCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+							defer cancel()
+							for _, id := range ids {
+								e.CertaintyUpdaterRef.BumpBelief(bCtx, id, "causal", +0.04)
+							}
+						}(causalHitIDs)
+					}
 				}
 
 				recovery := fmt.Sprintf(

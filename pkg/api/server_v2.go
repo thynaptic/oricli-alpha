@@ -1625,8 +1625,9 @@ type memoryBankAdapter struct {
 mb *service.MemoryBank
 }
 
-// provenanceCertainty maps service provenance tiers to AI-Supervisor certainty scores.
+// provenanceCertainty maps service provenance tiers to AI-Supervisor factual confidence floors.
 // Gold/Solved/UserStated are empirically verified (U=0); Synthetic tiers are unverified (U=1).
+// This sets the Belief.Factual floor before access-bonus reinforcement is applied.
 func provenanceCertainty(prov service.Provenance) float64 {
 	switch prov {
 	case service.ProvenanceGold:
@@ -1647,59 +1648,70 @@ func provenanceCertainty(prov service.Provenance) float64 {
 }
 
 func (a *memoryBankAdapter) QuerySimilar(ctx context.Context, query string, topN int) ([]cognition.MemFrag, error) {
-frags, err := a.mb.QuerySimilar(ctx, query, topN)
-if err != nil {
-return nil, err
-}
-out := make([]cognition.MemFrag, len(frags))
-for i, f := range frags {
-	prov := provenanceCertainty(f.Provenance)
-	mf := cognition.MemFrag{
-		ID:          f.ID,
-		Content:     f.Content,
-		Source:      f.Source,
-		Topic:       f.Topic,
-		Importance:  f.Importance,
-		AccessCount: f.AccessCount,
-		Volatility:  string(f.Volatility),
-		CreatedAt:   f.CreatedAt,
-		Certainty:   prov, // provenance floor, then dynamic formula refines it
+	frags, err := a.mb.QuerySimilar(ctx, query, topN)
+	if err != nil {
+		return nil, err
 	}
-	mf.Certainty = cognition.ComputeDynamicCertainty(mf)
-	out[i] = mf
-}
-return out, nil
+	out := make([]cognition.MemFrag, len(frags))
+	for i, f := range frags {
+		mf := cognition.MemFrag{
+			ID:          f.ID,
+			Content:     f.Content,
+			Source:      f.Source,
+			Topic:       f.Topic,
+			Importance:  f.Importance,
+			CausalScore: f.CausalScore,
+			AccessCount: f.AccessCount,
+			Volatility:  string(f.Volatility),
+			CreatedAt:   f.CreatedAt,
+			// Seed Belief.Factual with provenance floor; ComputeBelief adds access bonus + Recency
+			Belief: cognition.Belief{Factual: provenanceCertainty(f.Provenance)},
+		}
+		mf.Belief = cognition.ComputeBelief(mf)
+		out[i] = mf
+	}
+	return out, nil
 }
 
 func (a *memoryBankAdapter) QuerySolved(ctx context.Context, topic string, limit int) ([]cognition.MemFrag, error) {
-frags, err := a.mb.QuerySolved(ctx, topic, limit)
-if err != nil {
-return nil, err
-}
-out := make([]cognition.MemFrag, len(frags))
-for i, f := range frags {
-	prov := provenanceCertainty(f.Provenance)
-	mf := cognition.MemFrag{
-		ID:          f.ID,
-		Content:     f.Content,
-		Source:      f.Source,
-		Topic:       f.Topic,
-		Importance:  f.Importance,
-		AccessCount: f.AccessCount,
-		Volatility:  string(f.Volatility),
-		CreatedAt:   f.CreatedAt,
-		Certainty:   prov,
+	frags, err := a.mb.QuerySolved(ctx, topic, limit)
+	if err != nil {
+		return nil, err
 	}
-	mf.Certainty = cognition.ComputeDynamicCertainty(mf)
-	out[i] = mf
-}
-return out, nil
+	out := make([]cognition.MemFrag, len(frags))
+	for i, f := range frags {
+		mf := cognition.MemFrag{
+			ID:          f.ID,
+			Content:     f.Content,
+			Source:      f.Source,
+			Topic:       f.Topic,
+			Importance:  f.Importance,
+			CausalScore: f.CausalScore,
+			AccessCount: f.AccessCount,
+			Volatility:  string(f.Volatility),
+			CreatedAt:   f.CreatedAt,
+			Belief:      cognition.Belief{Factual: provenanceCertainty(f.Provenance)},
+		}
+		mf.Belief = cognition.ComputeBelief(mf)
+		out[i] = mf
+	}
+	return out, nil
 }
 
-// BumpCertainty implements cognition.CertaintyUpdater.
-// Fires async so it never blocks the generation path.
-func (a *memoryBankAdapter) BumpCertainty(ctx context.Context, fragID string, delta float64) {
-	a.mb.BumpImportance(ctx, fragID, delta)
+// BumpBelief implements cognition.CertaintyUpdater.
+// Routes axis-specific belief mutations to the correct PB field.
+// "factual"  → importance field (evidence quality, corroboration signal)
+// "causal"   → causal_score field (mechanism depth, 5-WHY signal)
+// "recency"  → no-op (always computed from age, never stored)
+// Fires async via goroutine in Aletheia/5-WHY so it never blocks the generation path.
+func (a *memoryBankAdapter) BumpBelief(ctx context.Context, fragID string, axis string, delta float64) {
+	switch axis {
+	case "factual":
+		a.mb.BumpImportance(ctx, fragID, delta)
+	case "causal":
+		a.mb.BumpCausalScore(ctx, fragID, delta)
+	// "recency" is intentionally a no-op — computed at query time from age
+	}
 }
 
 func truncateStr(s string, n int) string {

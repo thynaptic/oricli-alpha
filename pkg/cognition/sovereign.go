@@ -97,6 +97,39 @@ type MemoryQuerier interface {
 	QuerySolved(ctx context.Context, topic string, limit int) ([]MemFrag, error)
 }
 
+// Belief is a three-axis epistemic confidence vector attached to every MemFrag.
+//
+//   Factual  — evidence quality: provenance tier + corroboration signal + access reinforcement
+//              "Is this claim backed by reliable evidence?"
+//   Causal   — mechanistic depth: 5-WHY chain confidence, cross-domain bridge strength
+//              "Do we understand *why* this is true?"
+//   Recency  — temporal freshness: computed from age vs. volatility half-life
+//              "Is this information still current?"
+//
+// Score() produces a single weighted scalar for backward-compatible noise gating.
+// Individual axes can be queried by reasoning modes that care about specific dimensions.
+type Belief struct {
+	Factual float64 // 0.05–0.98 — set by adapter from provenance + importance
+	Causal  float64 // 0.05–0.98 — 0.50 neutral default; bumped by 5-WHY success
+	Recency float64 // 0.05–0.98 — always computed from age, never persisted
+}
+
+// Score returns a weighted scalar certainty for backward-compatible noise gating.
+//
+//   Score = clamp(0.50×Factual + 0.30×Causal + 0.20×Recency, 0.05, 0.98)
+//
+// Weights reflect epistemic priority: factual evidence > causal depth > recency.
+func (b Belief) Score() float64 {
+	s := 0.50*b.Factual + 0.30*b.Causal + 0.20*b.Recency
+	if s < 0.05 {
+		return 0.05
+	}
+	if s > 0.98 {
+		return 0.98
+	}
+	return s
+}
+
 // MemFrag is a minimal memory record crossing the cognition/service interface boundary.
 type MemFrag struct {
 	ID          string
@@ -106,16 +139,18 @@ type MemFrag struct {
 	Importance  float64
 	AccessCount int
 	Volatility  string    // "stable" | "current" | "ephemeral"
-	CreatedAt   time.Time // used for age-decay component of dynamic certainty
-	Certainty   float64   // computed by ComputeDynamicCertainty — do not set manually
-	// U=0 (verified) in AI-Supervisor terms is Certainty ≥ 0.80; U=1 (unverified) is Certainty < 0.80
+	CreatedAt   time.Time // used to compute Belief.Recency
+	CausalScore float64   // persisted via PB causal_score field; 0.50 neutral default
+	Belief      Belief    // computed by ComputeBelief — do not set manually
 }
 
 // CertaintyUpdater is satisfied by the MemoryBank adapter in server_v2.
-// Defined here to avoid import cycles. Enables Aletheia + consensus to mutate
-// fragment importance based on verification outcomes.
+// Defined here to avoid import cycles. Enables Aletheia + 5-WHY to mutate
+// per-axis belief scores based on verification outcomes.
 type CertaintyUpdater interface {
-	BumpCertainty(ctx context.Context, fragID string, delta float64)
+	// BumpBelief adjusts the named axis ("factual" | "causal") by delta.
+	// "recency" is always computed from age and is never bumped directly.
+	BumpBelief(ctx context.Context, fragID string, axis string, delta float64)
 }
 
 // halfLifeDays returns the decay half-life in days for a volatility class.
@@ -131,48 +166,62 @@ func halfLifeDays(volatility string) float64 {
 	}
 }
 
-// ComputeDynamicCertainty computes a live certainty score from multiple signals:
+// computeRecency returns a [0.05, 0.98] freshness score based on age vs. half-life.
 //
-//   certainty = clamp(provBase + accessBonus - agePenalty, 0.05, 0.98)
+//   Within half-life : 0.95 (fresh)
+//   At 2× half-life  : ~0.50
+//   At 3× half-life  : 0.05 (effectively stale)
 //
-// provBase:    the provenance-tier floor (set by adapter from provenance)
-// accessBonus: repeated retrieval = reinforcement signal (max +0.10)
-// agePenalty:  volatility-adjusted age decay (max -0.30)
-//
-// This implements the four evolution signals from the AI-Supervisor certainty model:
-//   - Repeated success   → accessBonus accumulates
-//   - Age/staleness      → agePenalty grows with time past half-life
-//   - Corroboration/CORRECT bumps    → increase frag.Importance → raises provBase next query
-//   - Contradiction/ADMIT drops      → decrease frag.Importance → lowers provBase next query
-func ComputeDynamicCertainty(frag MemFrag) float64 {
-	base := frag.Certainty // provenance floor set by adapter
-	if base == 0 {
-		base = 0.50 // unverified default (U=1)
+// Recency is always computed at query time — it is never stored.
+func computeRecency(frag MemFrag) float64 {
+	if frag.CreatedAt.IsZero() {
+		return 0.70 // unknown age → moderate recency
 	}
-
-	// Access bonus: each retrieval is a weak reinforcement signal
-	accessBonus := math.Min(float64(frag.AccessCount)*0.015, 0.10)
-
-	// Age penalty: decay past one half-life, capped at -0.30
-	agePenalty := 0.0
-	if !frag.CreatedAt.IsZero() {
-		halfLife := halfLifeDays(frag.Volatility)
-		ageDays := time.Since(frag.CreatedAt).Hours() / 24
-		if ageDays > halfLife {
-			// Linear decay starting at half-life, max penalty at 3× half-life
-			overdue := ageDays - halfLife
-			agePenalty = math.Min(overdue/(halfLife*2), 0.30)
-		}
+	halfLife := halfLifeDays(frag.Volatility)
+	ageDays := time.Since(frag.CreatedAt).Hours() / 24
+	if ageDays <= halfLife {
+		return 0.95 // fresh
 	}
-
-	result := base + accessBonus - agePenalty
-	if result < 0.05 {
+	overdue := ageDays - halfLife
+	penalty := math.Min(overdue/(halfLife*2), 0.90)
+	r := 0.95 - penalty
+	if r < 0.05 {
 		return 0.05
 	}
-	if result > 0.98 {
-		return 0.98
+	return r
+}
+
+// ComputeBelief populates all three Belief axes for a MemFrag.
+//
+//   Factual  = provenance floor (set externally) + access reinforcement bonus
+//   Causal   = CausalScore from PB (0.50 neutral if not yet set)
+//   Recency  = computed from age vs. volatility half-life
+//
+// Call this in the adapter after setting the provenance floor on Belief.Factual
+// and CausalScore from the PB record.
+func ComputeBelief(frag MemFrag) Belief {
+	// Factual: provenance floor already in frag.Belief.Factual; add access bonus.
+	factualFloor := frag.Belief.Factual
+	if factualFloor == 0 {
+		factualFloor = 0.50 // unverified default (U=1 in AI-Supervisor terms)
 	}
-	return result
+	accessBonus := math.Min(float64(frag.AccessCount)*0.015, 0.10)
+	factual := factualFloor + accessBonus
+	if factual > 0.98 {
+		factual = 0.98
+	}
+
+	// Causal: from PB causal_score field; default neutral if unset.
+	causal := frag.CausalScore
+	if causal == 0 {
+		causal = 0.50
+	}
+
+	return Belief{
+		Factual: factual,
+		Causal:  causal,
+		Recency: computeRecency(frag),
+	}
 }
 
 // WebSearcher is satisfied by *service.SearXNGSearcher.
