@@ -161,6 +161,26 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	s.ResponseCache = cache.New(".memory", service.NewEmbedder())
 
 	s.setupRoutes()
+
+	// Pre-warm Ollama model in the background so the first user request
+	// doesn't pay the cold-load penalty (~60-90s on CPU-only VPS).
+	go func() {
+		time.Sleep(5 * time.Second) // let backbone fully initialize first
+		log.Printf("[ServerV2] Pre-warming Ollama model...")
+		warmCtx, warmCancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer warmCancel()
+		warmMsgs := []map[string]string{{"role": "user", "content": "hi"}}
+		ch, err := s.Agent.GenService.ChatStream(warmCtx, warmMsgs, map[string]interface{}{
+			"options": map[string]interface{}{"num_predict": 3, "num_ctx": 4096},
+		})
+		if err != nil {
+			log.Printf("[ServerV2] Model warmup failed: %v", err)
+			return
+		}
+		for range ch { /* drain */ }
+		log.Printf("[ServerV2] Model warmup complete — first request will be fast")
+	}()
+
 	return s
 }
 
