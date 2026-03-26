@@ -882,6 +882,8 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
   const [input,     setInput]     = useState('');
   const [busy,      setBusy]      = useState(false);
   const [streaming, setStreaming] = useState('');
+  // Track previous source for undo after auto-apply
+  const prevSourceRef = useRef(null);
   const endRef   = useRef(null);
   const inputRef = useRef(null);
 
@@ -900,7 +902,6 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
     const hasSource = source.trim() !== '';
     const hasDiags  = diagnostics.length > 0;
 
-    // Auto-detect fix intent OR explicit override
     const isFix = overrideMode === 'fix' || (hasDiags && FIX_RE.test(userText));
 
     let mode, instruction;
@@ -914,23 +915,48 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
         : userText;
     }
 
+    // Snapshot current source so the user can undo
+    prevSourceRef.current = source;
+
     await streamAiAssist(
       { mode, instruction, source: hasSource ? source : '', diagnostics: hasDiags ? diagnostics : [] },
       {
-        onChunk: (_, full) => setStreaming(full),
+        // Live preview: stream directly into the editor as tokens arrive
+        onChunk: (_, full) => {
+          const live = full.replace(/^```ori\n?/i, '');
+          setStreaming(full);
+          onApply(live);
+        },
         onDone: full => {
           const clean = full.replace(/^```ori\n?/i, '').replace(/\n?```$/, '').trim();
-          setMessages(prev => [...prev, { role: 'ori', text: clean, isCode: true }]);
+          // Final clean apply to editor
+          onApply(clean);
           setStreaming('');
           setBusy(false);
+          // Show confirmation in chat with undo
+          setMessages(prev => [...prev, {
+            role: 'ori',
+            text: clean,
+            isCode: true,
+            isApplied: true,
+          }]);
         },
         onError: err => {
+          // Revert editor to snapshot on error
+          if (prevSourceRef.current !== null) onApply(prevSourceRef.current);
           setMessages(prev => [...prev, { role: 'ori', text: `⚠ ${err}`, isError: true }]);
           setStreaming('');
           setBusy(false);
         },
       }
     );
+  }
+
+  function handleUndo(originalText) {
+    onApply(originalText);
+    setMessages(prev => prev.map(m =>
+      m.isApplied ? { ...m, isApplied: false, isReverted: true } : m
+    ));
   }
 
   const FONT = "'JetBrains Mono', 'Fira Code', monospace";
@@ -975,26 +1001,33 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
               </div>
             ) : m.isCode ? (
               <div style={{ width: '100%' }}>
-                <pre
-                  style={{
-                    margin: 0, padding: '10px 12px',
-                    background: 'var(--color-sc-bg)', borderRadius: '10px 10px 10px 3px',
-                    border: '1px solid rgba(255,255,255,0.07)',
-                    fontSize: 12, lineHeight: 1.65, color: '#abb2bf',
-                    fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                    overflowX: 'auto', tabSize: 2, MozTabSize: 2,
-                  }}
-                  dangerouslySetInnerHTML={{ __html: highlight(m.text) }}
-                />
-                <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
-                  <button onClick={() => onApply(m.text)} style={{ ...greenBtn, fontSize: 10, padding: '3px 10px' }}>
-                    <Check size={10} /> Apply to Editor
-                  </button>
+                {/* Applied confirmation bar — replaces old "Apply to Editor" button */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '6px 10px',
+                  background: m.isReverted
+                    ? 'rgba(255,183,77,0.08)'
+                    : 'rgba(105,240,174,0.07)',
+                  border: `1px solid ${m.isReverted ? 'rgba(255,183,77,0.25)' : 'rgba(105,240,174,0.2)'}`,
+                  borderRadius: 8, marginBottom: 4,
+                }}>
+                  <Check size={11} style={{ color: m.isReverted ? '#ffb74d' : '#69f0ae', flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: m.isReverted ? '#ffb74d' : '#69f0ae', flex: 1, fontFamily: "var(--font-inter, sans-serif)" }}>
+                    {m.isReverted ? 'Reverted to previous' : 'Applied to editor'}
+                  </span>
+                  {!m.isReverted && (
+                    <button
+                      onClick={() => handleUndo(prevSourceRef.current)}
+                      style={{ ...ghostBtn, fontSize: 10, padding: '2px 8px' }}
+                    >
+                      <RotateCcw size={9} /> Undo
+                    </button>
+                  )}
                   <button
                     onClick={() => navigator.clipboard?.writeText(m.text)}
-                    style={{ ...ghostBtn, fontSize: 10, padding: '3px 8px' }}
+                    style={{ ...ghostBtn, fontSize: 10, padding: '2px 8px' }}
                   >
-                    <Copy size={10} /> Copy
+                    <Copy size={9} /> Copy
                   </button>
                 </div>
               </div>
@@ -1014,17 +1047,20 @@ function VibeCodingPanel({ source, diagnostics = [], onApply, onClose }) {
         {/* Live streaming */}
         {streaming && (
           <div style={{ alignSelf: 'flex-start', maxWidth: '95%' }}>
-            <pre style={{
-              margin: 0, padding: '10px 12px',
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '8px 12px',
               background: 'var(--color-sc-bg)', borderRadius: 10,
               border: '1px solid rgba(168,156,247,0.15)',
-              fontSize: 12, lineHeight: 1.65, color: '#abb2bf',
-              fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-              tabSize: 2, MozTabSize: 2,
+              fontSize: 11, color: 'var(--color-sc-gold)',
+              fontFamily: "var(--font-inter, sans-serif)",
             }}>
-              <span dangerouslySetInnerHTML={{ __html: highlight(streaming) }} />
-              <span style={{ color: 'var(--color-sc-gold)' }}>▊</span>
-            </pre>
+              <Loader size={11} style={{ animation: 'ori-spin 1s linear infinite', flexShrink: 0 }} />
+              Writing to editor…
+              <span style={{ color: '#37474f', marginLeft: 4 }}>
+                {streaming.split('\n').length} lines
+              </span>
+            </div>
           </div>
         )}
 
