@@ -336,3 +336,213 @@ func parseNumberedList(text string) []string {
 	}
 	return out
 }
+
+// ─── ModeDebate: Multi-Agent Debate ──────────────────────────────────────────
+//
+// AlphaStar analog: Multi-Agent League Training — multiple agents with different
+// objectives compete, producing a consensus that beats any single perspective.
+//
+// Four roles fire sequentially (CPU constraint — 3 LLM calls + 1 synthesis):
+//   Advocate  — builds the strongest case FOR the proposition
+//   Skeptic   — attacks the proposition's weakest points
+//   Contrarian — proposes an alternative framing entirely
+//   Judge     — synthesizes all three into a balanced verdict
+//
+// Fires when: reDebate matches AND complexity > 0.65
+// Extra LLM calls: 3 (Advocate+Skeptic+Contrarian) + 1 (Judge) = 4 total, capped at 96 tokens each
+
+func (e *SovereignEngine) runDebate(ctx context.Context, stimulus, composite string) (string, error) {
+if e.GenService == nil {
+return e.runStandard(ctx, stimulus, composite)
+}
+
+type roleResult struct {
+role, view string
+}
+
+roles := []struct {
+name, instruction string
+}{
+{"Advocate", "Build the strongest argument IN FAVOUR of the user's question/position. Be direct. ≤3 sentences."},
+{"Skeptic", "Identify the 2 most significant weaknesses or risks in the user's question/position. Be specific. ≤3 sentences."},
+{"Contrarian", "Propose a completely different framing or alternative perspective that neither defends nor attacks, but recontextualises the question. ≤3 sentences."},
+}
+
+results := make([]roleResult, 0, len(roles))
+for _, role := range roles {
+prompt := fmt.Sprintf(
+"You are the %s in a structured debate.\n\nTOPIC: %s\n\nYour role: %s\n\nResponse:",
+role.name, truncateRE(stimulus, 400), role.instruction,
+)
+res, err := e.GenService.Generate(prompt, map[string]interface{}{
+"num_predict": 96,
+"num_ctx":     1024,
+"temperature": 0.6,
+})
+if err != nil {
+continue
+}
+if text, ok := res["response"].(string); ok && strings.TrimSpace(text) != "" {
+results = append(results, roleResult{role.name, strings.TrimSpace(text)})
+}
+// Respect context cancellation between roles
+select {
+case <-ctx.Done():
+return e.runStandard(ctx, stimulus, composite)
+default:
+}
+}
+
+if len(results) == 0 {
+return e.runStandard(ctx, stimulus, composite)
+}
+
+// Build the Judge's brief
+var brief strings.Builder
+for _, r := range results {
+brief.WriteString(fmt.Sprintf("[%s]: %s\n\n", r.role, r.view))
+}
+
+judgePrompt := fmt.Sprintf(
+"You are the Judge. Three perspectives have been presented on the following topic.\n\n"+
+"TOPIC: %s\n\n%s\n"+
+"Synthesize these into a balanced, honest verdict that acknowledges the strongest points from each side. "+
+"Be direct and conclusive. ≤4 sentences.",
+truncateRE(stimulus, 400), brief.String(),
+)
+
+judgeRes, err := e.GenService.Generate(judgePrompt, map[string]interface{}{
+"num_predict": 128,
+"num_ctx":     2048,
+"temperature": 0.4,
+})
+if err != nil {
+return e.runStandard(ctx, stimulus, composite)
+}
+
+verdict, _ := judgeRes["response"].(string)
+verdict = strings.TrimSpace(verdict)
+if verdict == "" {
+return e.runStandard(ctx, stimulus, composite)
+}
+
+// Inject debate findings into composite as context — final response still goes
+// through the standard LLM call to maintain voice + constitutional compliance.
+var sb strings.Builder
+sb.WriteString(composite)
+sb.WriteString("\n\n### MULTI-AGENT DEBATE FINDINGS\n")
+for _, r := range results {
+sb.WriteString(fmt.Sprintf("**%s**: %s\n\n", r.role, r.view))
+}
+sb.WriteString(fmt.Sprintf("**Judge's Synthesis**: %s\n", verdict))
+sb.WriteString("Use this debate context to give a balanced, well-reasoned response.\n")
+sb.WriteString("### END DEBATE")
+
+return sb.String(), nil
+}
+
+// ─── ModeCausal: Causal Reasoning ────────────────────────────────────────────
+//
+// AlphaStar analog: Temporal Reasoning (LSTM) + relational graph traversal.
+// Handles WHY / WHAT-IF / HOW-DOES queries by explicitly extracting a causal
+// chain rather than letting the LLM guess the mechanism.
+//
+// Pipeline:
+//   1. Detect causal query type (WHY / WHAT-IF / HOW)
+//   2. Extract causal entities from the stimulus
+//   3. Query WorkingMemoryGraph for known causal edges involving those entities
+//   4. Ask SLM to produce a causal chain (cause → mechanism → effect)
+//   5. Inject chain + graph edges into composite
+//
+// Extra LLM calls: 1 (causal chain extraction, 96 token cap)
+
+var reCausalType = regexp.MustCompile(`(?i)^(why|what (causes?|caused|happens? if|would happen|if)|how does?|what.?if|root cause|reason (for|why)|effect of|impact of)`)
+
+func (e *SovereignEngine) runCausal(ctx context.Context, stimulus, composite string) (string, error) {
+if e.GenService == nil {
+return e.runStandard(ctx, stimulus, composite)
+}
+
+// Classify the causal query type for the prompt framing
+queryType := "WHY"
+sl := strings.ToLower(strings.TrimSpace(stimulus))
+switch {
+case strings.HasPrefix(sl, "what if") || strings.HasPrefix(sl, "what would happen") || strings.Contains(sl, "hypothetically"):
+queryType = "WHAT-IF"
+case strings.HasPrefix(sl, "how does") || strings.HasPrefix(sl, "how do") || strings.HasPrefix(sl, "how is"):
+queryType = "HOW"
+}
+
+// Pull any known causal relationships from the graph for grounding
+var graphContext string
+if e.Graph != nil && len(e.Graph.Relationships) > 0 {
+var causalEdges []string
+for _, rel := range e.Graph.Relationships {
+rt := strings.ToLower(rel.Type)
+if strings.Contains(rt, "caus") || strings.Contains(rt, "leads") ||
+strings.Contains(rt, "result") || strings.Contains(rt, "trigger") ||
+strings.Contains(rt, "effect") || strings.Contains(rt, "depend") {
+if src, ok := e.Graph.Entities[rel.SourceID]; ok {
+if tgt, ok2 := e.Graph.Entities[rel.TargetID]; ok2 {
+causalEdges = append(causalEdges, fmt.Sprintf("%s →[%s]→ %s", src.Label, rel.Type, tgt.Label))
+}
+}
+}
+if len(causalEdges) >= 6 {
+break
+}
+}
+if len(causalEdges) > 0 {
+graphContext = "Known causal edges from memory:\n" + strings.Join(causalEdges, "\n") + "\n\n"
+}
+}
+
+// Ask SLM to extract a structured causal chain
+chainPrompt := fmt.Sprintf(
+"You are a causal reasoning engine. This is a %s query.\n\n%sQUESTION: %s\n\n"+
+"Extract the causal chain in this format:\n"+
+"CAUSE: <root cause or condition>\n"+
+"MECHANISM: <how cause leads to effect>\n"+
+"EFFECT: <the outcome>\n"+
+"UNCERTAINTY: <any key unknowns or assumptions>\n\n"+
+"Be precise and concise. One chain only.",
+queryType, graphContext, truncateRE(stimulus, 400),
+)
+
+res, err := e.GenService.Generate(chainPrompt, map[string]interface{}{
+"num_predict": 120,
+"num_ctx":     2048,
+"temperature": 0.2,
+})
+if err != nil || ctx.Err() != nil {
+return e.runStandard(ctx, stimulus, composite)
+}
+
+chain, _ := res["response"].(string)
+chain = strings.TrimSpace(chain)
+if chain == "" || (!strings.Contains(chain, "CAUSE:") && !strings.Contains(chain, "MECHANISM:")) {
+return e.runStandard(ctx, stimulus, composite)
+}
+
+var sb strings.Builder
+sb.WriteString(composite)
+sb.WriteString("\n\n### CAUSAL REASONING CHAIN\n")
+sb.WriteString(fmt.Sprintf("Query type: %s\n\n", queryType))
+if graphContext != "" {
+sb.WriteString(graphContext)
+}
+sb.WriteString(chain)
+sb.WriteString("\n\nUse this causal chain to answer the user's question with mechanistic precision.\n")
+sb.WriteString("### END CAUSAL CHAIN")
+
+return sb.String(), nil
+}
+
+// truncateRE is a package-local truncation helper for reasoning engines.
+// Avoids shadowing the existing truncate() in pal.go.
+func truncateRE(s string, n int) string {
+if len(s) <= n {
+return s
+}
+return s[:n] + "…"
+}

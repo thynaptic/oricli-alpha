@@ -16,10 +16,12 @@ const (
 	ModeLeastToMost                      // Least-to-Most — ordered chained decomposition
 	ModeSelfRefine                       // Self-Refine — critique + single regeneration pass
 	ModeReAct                            // ReAct — Think→Act→Observe loop (max 3 hops)
+	ModeDebate                           // Multi-Agent Debate — Advocate+Skeptic+Contrarian→Judge synthesis
+	ModeCausal                           // Causal Reasoning — WHY/WHAT-IF/HOW causal chain extraction
 )
 
 func (m ReasoningMode) String() string {
-	return [...]string{"Standard", "CBR", "PAL", "Active", "LeastToMost", "SelfRefine", "ReAct"}[m]
+	return [...]string{"Standard", "CBR", "PAL", "Active", "LeastToMost", "SelfRefine", "ReAct", "Debate", "Causal"}[m]
 }
 
 var (
@@ -34,6 +36,12 @@ var (
 
 	// SelfRefine triggers: open-ended complex generation
 	reSelfRefine = regexp.MustCompile(`(?i)(write.*essay|draft.*proposal|design.*system|create.*plan|comprehensive|detailed.*analysis|full.*report)`)
+
+	// Debate: contested opinions, should/better/vs comparisons, ethical dilemmas
+	reDebate = regexp.MustCompile(`(?i)(should (we|i|they|you)|is it (better|worse|right|wrong|ethical)|pros and cons|argue (for|against)|debate|what.*think about|opinion on|defend.*position|is.*good idea|best approach|versus|trade.?off|which is better)`)
+
+	// Causal: why/how/what-if chains, root cause analysis
+	reCausal = regexp.MustCompile(`(?i)(why (does|did|is|are|would|do)|what (causes|caused|led to|results in|happens if|would happen)|how does.*work|root cause|because of|as a result|consequence of|what if|hypothetically|impact of|effect of|reason (for|why))`)
 )
 
 // ClassifyReasoningMode returns the optimal ReasoningMode for the given stimulus.
@@ -44,6 +52,16 @@ func ClassifyReasoningMode(stimulus string, budget AdaptiveBudget) ReasoningMode
 	// PAL wins for anything math/logic — Python beats LLM prediction every time
 	if reMath.MatchString(s) {
 		return ModePAL
+	}
+
+	// Causal: why/how-does/what-if — dedicated causal chain extraction
+	if reCausal.MatchString(s) && budget.Complexity > 0.3 {
+		return ModeCausal
+	}
+
+	// Debate: contested "should/better/vs" with high complexity → 4-agent synthesis
+	if reDebate.MatchString(s) && budget.Complexity > 0.65 {
+		return ModeDebate
 	}
 
 	// ReAct for multi-source research (needs iterative tool use)

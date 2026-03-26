@@ -62,7 +62,7 @@ var (
 	reCompareRP   = regexp.MustCompile(`(?i)(compare|vs\.?|versus|difference between|which is better|pros and cons|trade.?off)`)
 	reBuild     = regexp.MustCompile(`(?i)(build|create|implement|write.*code|generate.*code|make.*app|set up|scaffold|develop|write a.*function|write a.*class)`)
 	reDiagnose  = regexp.MustCompile(`(?i)(why (is|isn'?t|doesn'?t|won'?t|can'?t)|debug|fix|error|broken|not working|issue|problem|fail|crash|wrong)`)
-	reDebate    = regexp.MustCompile(`(?i)(argue|debate|both sides|pros and cons|should i|is it worth|do you think|what'?s your (opinion|take|view)|convince me)`)
+	reDebateRP    = regexp.MustCompile(`(?i)(argue|debate|both sides|pros and cons|should i|is it worth|do you think|what'?s your (opinion|take|view)|convince me)`)
 	reSummarise = regexp.MustCompile(`(?i)(summar(y|ize|ise)|tldr|tl;dr|in short|brief(ly)?|overview|recap|highlights)`)
 	reCreate    = regexp.MustCompile(`(?i)(write (a|an|the)|draft|compose|generate (a|an)|create (a|an))`)
 
@@ -99,7 +99,7 @@ func classifyAction(s string) ActionType {
 		return ActionBuild
 	case reCompareRP.MatchString(s):
 		return ActionCompareRP
-	case reDebate.MatchString(s):
+	case reDebateRP.MatchString(s):
 		return ActionDebate
 	case reSummarise.MatchString(s):
 		return ActionSummarise
