@@ -127,6 +127,19 @@ const ORI_CSS = `
 @keyframes ori-spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
 /* hide scrollbar on highlight overlay div (WebKit) */
 [data-ori-highlight]::-webkit-scrollbar { display: none; }
+/* textarea selection — must be explicit because color:transparent kills the default highlight */
+.ori-editor-ta {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+.ori-editor-ta::selection {
+  background: rgba(168, 156, 247, 0.35);
+  color: transparent;        /* keep text invisible so the highlight overlay stays visible */
+}
+.ori-editor-ta::-moz-selection {
+  background: rgba(168, 156, 247, 0.35);
+  color: transparent;
+}
 `;
 
 function injectOriCSS() {
@@ -537,6 +550,7 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
         <textarea
           ref={taRef}
           value={value}
+          className="ori-editor-ta"
           onInput={onInput}
           onChange={() => {}}      /* controlled via onInput */
           onScroll={syncScroll}
@@ -559,6 +573,8 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
             outline: 'none',
             resize: 'none',
             overflowY: 'auto',
+            userSelect: 'text',
+            WebkitUserSelect: 'text',
             zIndex: 1,
           }}
         />
