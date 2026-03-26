@@ -322,6 +322,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// responses written to MemoryBank would bleed into identity/capability RAG recalls.
 	isStudioContext := c.GetHeader("X-Ori-Context") == "studio"
 
+	// Session ID used by BeliefStateTracker (fog-of-war) and downstream session scoping.
+	sessionID := c.GetHeader("X-Session-ID")
+
 	modelName := req.Model
 	if strings.HasPrefix(modelName, "oricli") || modelName == "default" || modelName == "" {
 		modelName = ""
@@ -537,6 +540,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		}
 	}
 
+	// Set per-request session ID so BeliefStateTracker can maintain per-session fog-of-war state.
+	s.Agent.SovEngine.CurrentSessionID = sessionID
+
 	sovTrace, err := s.Agent.SovEngine.ProcessInference(ctx, lastMsg)
 	if err != nil {
 		sseError("sovereign engine failure")
@@ -743,7 +749,6 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// so the UI can patch the last assistant message in-place with the revised text.
 	// This also generates an RFAL DPO pair for every violation (learning signal).
 	// Zero impact on the happy path (CLEAR critique → goroutine exits silently).
-	sessionID := c.GetHeader("X-Session-ID")
 	go func(query, response, sid string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -770,6 +775,13 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			"original_preview": response[:min(120, len(response))],
 		})
 	}(lastMsg, responseText, sessionID)
+
+	// ExploiterLeague — 3 async specialists audit every response post-stream (AlphaStar League).
+	// FactChecker, LogicAuditor, ClarityProbe each fire a ≤128-token LLM probe.
+	// Medium/High findings land on the LeagueBlackboard for DreamDaemon consolidation.
+	if !isStudioContext {
+		cognition.RunLeague(s.Agent.GenService, lastMsg, responseText)
+	}
 
 	if s.Agent.SovEngine.Voice != nil {
 		go s.Agent.SovEngine.Voice.Synthesize(responseText, s.Agent.SovEngine.Resonance.Current.ERI, 0.5, s.Agent.SovEngine.Resonance.Current.MusicalKey)
@@ -1394,8 +1406,25 @@ Provenance: service.ProvenanceUserStated, // user explicitly rated — highest t
 Volatility: service.VolatilityStable,
 }
 
-if s.MemoryBank != nil {
-s.MemoryBank.Write(frag)
+// 📌 Gold bookmark: pin reaction elevates the Q→A pair to ProvenanceGold tier.
+	// Gold memories are never recycled, get 1.6x RAG weight, DreamDaemon consolidates them first.
+	isPin := req.Reaction == "📌" || req.Reaction == "pin" || req.Reaction == "bookmark"
+	if isPin && req.IsPositive && s.MemoryBank != nil && s.MemoryBank.IsEnabled() && len(req.MsgPreview) > 20 {
+		goldFrag := service.MemoryFragment{
+			ID:         "gold-" + req.MessageID,
+			Content:    "GOLD: " + req.MsgPreview,
+			Source:     "user_bookmark",
+			Topic:      "gold:" + topic,
+			SessionID:  req.SessionID,
+			Importance: 1.0,
+			Provenance: service.ProvenanceGold,
+			Volatility: service.VolatilityStable,
+		}
+		s.MemoryBank.Write(goldFrag)
+	}
+
+	if s.MemoryBank != nil {
+	s.MemoryBank.Write(frag)
 }
 
 	// Contrastive pair: store ACCEPTED/REJECTED alongside the standard feedback fragment.

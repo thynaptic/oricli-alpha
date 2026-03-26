@@ -63,6 +63,27 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 		sections = append(sections, "### USER FEEDBACK OVERRIDE:\n**CRITICAL: USER REQUESTED LOGICAL/ANALYTICAL RESPONSE.** Remove emotional language. Focus on objective facts.")
 	}
 
+	// 9. ResponsePlanner — hierarchical action space (AlphaStar L1/L2/L3 decision)
+	// Decides format and depth BEFORE generation so the LLM follows structure, not invents it.
+	plan := PlanResponse(stimulus)
+	sections = append(sections, plan.FormatDirective())
+
+	// 10. Relational Context — entity relationship map from WorkingMemoryGraph (AlphaStar self-attention)
+	if e.Graph != nil {
+		if relCtx := BuildRelationalContext(stimulus, e.Graph); relCtx != "" {
+			sections = append(sections, relCtx)
+		}
+	}
+
+	// 11. Belief State — per-session fog-of-war model (AlphaStar LSTM belief state)
+	if e.BeliefTracker != nil {
+		bs := e.BeliefTracker.Get(e.CurrentSessionID)
+		bs.Update(stimulus)
+		if bsBlock := bs.FormatForComposite(); bsBlock != "" {
+			sections = append(sections, bsBlock)
+		}
+	}
+
 	return strings.Join(sections, "\n\n")
 }
 

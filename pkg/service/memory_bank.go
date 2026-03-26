@@ -45,6 +45,7 @@ const (
 	ProvenanceSyntheticL2  Provenance = "synthetic_l2+" // derived from another synthetic memory
 	ProvenanceContrastive  Provenance = "contrastive"   // ACCEPTED/REJECTED pair from emoji/correction feedback
 	ProvenanceSolved       Provenance = "solved"         // verified good response — used by CBR to adapt past solutions
+	ProvenanceGold         Provenance = "gold"           // 📌-bookmarked: highest trust, never recycled, DreamDaemon priority
 )
 
 // RAG weight multiplier per provenance level.
@@ -52,6 +53,7 @@ const (
 var provenanceWeight = map[Provenance]float32{
 	ProvenanceUserStated:   1.5,
 	ProvenanceSolved:       1.4,
+	ProvenanceGold:         1.6,
 	ProvenanceContrastive:  1.3,
 	ProvenanceWebVerified:  1.2,
 	ProvenanceConversation: 0.9,
@@ -539,10 +541,10 @@ func FormatRAGContext(frags []MemoryFragment, maxChars int) string {
 // retentionScore computes a decay-adjusted importance score.
 // Uses per-record volatility class for the half-life instead of a hardcoded 180 days.
 // Formula: importance × log(1 + access_count) × e^(-age_days / halfLife)
-// user_stated anchors always return +Inf so they are never pruned.
+// user_stated anchors always return +Inf so they are never pruned. Gold memories are also immortal.
 func retentionScore(importance float64, accessCount int, created time.Time, prov Provenance, vol Volatility) float64 {
-	if prov == ProvenanceUserStated {
-		return math.Inf(1) // anchors are immortal
+	if prov == ProvenanceUserStated || prov == ProvenanceGold {
+		return math.Inf(1) // anchors and gold bookmarks are immortal
 	}
 	halfLife := vol.halfLifeDays()
 	if halfLife == 0 {

@@ -176,6 +176,10 @@ type SovereignEngine struct {
 	// GenService exposes the generation backend directly to reasoning mode engines
 	// (PAL, LeastToMost, SelfRefine, ReAct). Set alongside Generator in NewSovereignEngine.
 	GenService    GenerationService
+	// BeliefTracker maintains per-session belief state (AlphaStar LSTM fog-of-war).
+	BeliefTracker    *BeliefStateTracker
+	// CurrentSessionID is set per-request in server_v2 so BeliefTracker can key by session.
+	CurrentSessionID string
 	Voice        *voice.VoicePiperService
 	Reform       interface{}
 	Curiosity    interface{}
@@ -245,6 +249,7 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 	engine.Generator = NewGeneratorOrchestrator(engine)
 	engine.Generator.GenService = genService // Initialize the GenService correctly
 	engine.GenService = genService           // Direct access for reasoning mode engines
+	engine.BeliefTracker = NewBeliefStateTracker()
 	engine.Vision = vdi.NewVisionGroundingService(genService)
 	engine.ToT = NewToTEngine(engine.Generator)
 	engine.Audit = NewAuditEngine(engine)

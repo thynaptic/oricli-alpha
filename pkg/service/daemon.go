@@ -269,9 +269,100 @@ func (d *DreamDaemon) ConsolidateExperience() {
 	}
 
 	log.Println("[DreamDaemon] Consolidation complete. ORI's behavioral model evolved.")
+
+	// ── ExploiterLeague Blackboard Integration ────────────────────────────────
+	// Drain the league blackboard and distill medium/high findings into reform proposals.
+	// These are additional behavioral lessons that come from adversarial self-critique,
+	// not just positive imprint signals — gives the model a balanced learning signal.
+	d.consolidateLeagueFindings()
 }
 
-// parseLessonList extracts numbered or bulleted lines from SLM output.
+// consolidateLeagueFindings reads the ExploiterLeague blackboard JSON and distills
+// medium/high findings into behavioral reform proposals for the Living Constitution.
+// Uses a file-bridge to avoid the cognition→service import cycle.
+func (d *DreamDaemon) consolidateLeagueFindings() {
+	data, err := os.ReadFile(".oricli/league_blackboard.json")
+	if err != nil || len(data) < 10 {
+		return
+	}
+
+	var board struct {
+		Findings []struct {
+			Specialist string `json:"specialist"`
+			Finding    string `json:"finding"`
+			Severity   string `json:"severity"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal(data, &board); err != nil || len(board.Findings) == 0 {
+		return
+	}
+
+	// Filter to medium/high findings only
+	var relevant []string
+	for _, f := range board.Findings {
+		if f.Severity == "medium" || f.Severity == "high" {
+			relevant = append(relevant, fmt.Sprintf("[%s/%s] %s", f.Specialist, f.Severity, f.Finding))
+		}
+		if len(relevant) >= 10 {
+			break
+		}
+	}
+	if len(relevant) == 0 {
+		return
+	}
+
+	log.Printf("[DreamDaemon] ExploiterLeague: %d findings to consolidate.", len(relevant))
+
+	if d.GenService == nil {
+		return
+	}
+
+	digest := strings.Join(relevant, "\n")
+	prompt := fmt.Sprintf(
+		"You are a self-improvement coach. These adversarial audit findings flagged quality issues in AI responses. "+
+			"Extract 2-3 concise improvement rules from them. Each rule ≤15 words. Return only a numbered list.\n\nFindings:\n%s\n\nRules:",
+		digest,
+	)
+
+	result, err := d.GenService.Generate(prompt, map[string]interface{}{
+		"num_ctx":     4096,
+		"num_predict": 128,
+		"temperature": 0.3,
+	})
+	if err != nil {
+		return
+	}
+
+	responseText, _ := result["response"].(string)
+	lessons := parseLessonList(responseText)
+	if len(lessons) == 0 {
+		return
+	}
+
+	for _, lesson := range lessons {
+		if d.MemoryBank != nil {
+			d.MemoryBank.Write(MemoryFragment{
+				Content:    "League reform: " + lesson,
+				Source:     "league_blackboard",
+				Topic:      "adversarial_lesson",
+				Importance: 0.8,
+				Provenance: ProvenanceContrastive,
+				Volatility: VolatilityStable,
+			})
+		}
+	}
+
+	if d.Constitution != nil {
+		d.Constitution.MergeLessons(lessons, nil, nil)
+		_ = d.Constitution.Save()
+	}
+
+	// Clear blackboard after successful consolidation
+	_ = os.WriteFile(".oricli/league_blackboard.json", []byte(`{"findings":[]}`), 0o644)
+	log.Printf("[DreamDaemon] ExploiterLeague: %d reform rules written to Living Constitution.", len(lessons))
+}
+
+
 func parseLessonList(text string) []string {
 	var lessons []string
 	for _, line := range strings.Split(text, "\n") {

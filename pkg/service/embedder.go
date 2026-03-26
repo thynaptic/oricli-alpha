@@ -30,6 +30,13 @@ func SetChatModelActive(active bool) {
 	}
 }
 
+// IsChatModelIdle returns true when no chat generation is in flight.
+// Used by the semantic cache to decide whether it's safe to call Embed()
+// without risking eviction of the active chat model.
+func IsChatModelIdle() bool {
+	return chatModelActive.Load() == 0
+}
+
 // Embedder generates float32 vectors via Ollama's /api/embeddings endpoint.
 // Default model: nomic-embed-text (50MB, already pulled, 768-dim vectors).
 // All methods fail silently — callers treat nil/empty as "no embedding available".
