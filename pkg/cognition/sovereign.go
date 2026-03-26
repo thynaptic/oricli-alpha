@@ -97,6 +97,13 @@ type WebSearcher interface {
 	IsAvailable() bool
 }
 
+// ConstitutionProvider is satisfied by *service.LivingConstitution.
+// Defined here to avoid import cycles between cognition and service.
+type ConstitutionProvider interface {
+	Inject() string
+	HasRules() bool
+}
+
 type SovereignEngine struct {
 	Subconscious *SubconsciousField
 	Sentiment    *AffectiveState
@@ -144,6 +151,9 @@ type SovereignEngine struct {
 	// SearXNG is an intent-aware web search interface. Injected from server_v2
 	// to avoid import cycles (service ↔ cognition). Set via InjectSearXNG().
 	SearXNG      WebSearcher
+	// Constitution is the Living Constitution behavioral layer.
+	// Injected from server_v2 to avoid import cycles. Set via InjectConstitution().
+	Constitution ConstitutionProvider
 	Voice        *voice.VoicePiperService
 	Reform       interface{}
 	Curiosity    interface{}
@@ -374,6 +384,12 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 
 	// --- Step 9: Final Composite Instruction Assembly (runs in parallel with web lookup) ---
 	composite := e.Builder.BuildCompositePrompt(e, stimulus)
+
+	// Inject Living Constitution — learned behavioral preferences from The Imprint.
+	// Placed at the top of composite so it colors the entire system prompt.
+	if e.Constitution != nil && e.Constitution.HasRules() {
+		composite = e.Constitution.Inject() + "\n\n" + composite
+	}
 
 	// Collect web context result (channel already buffered — never blocks if goroutine done)
 	wr := <-webCh

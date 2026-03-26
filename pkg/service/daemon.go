@@ -140,6 +140,9 @@ type DreamDaemon struct {
 	Gosh          *GoshModule
 	Ghost         *GhostClusterService
 	Orchestrator  *GoOrchestrator
+	GenService    *GenerationService
+	MemoryBank    *MemoryBank
+	Constitution  *LivingConstitution
 	lastActivity  int64
 }
 
@@ -175,43 +178,122 @@ func (d *DreamDaemon) Run() {
 func (d *DreamDaemon) ConsolidateExperience() {
 	log.Println("[DreamDaemon] Offline Consolidation Initiated.")
 
-	now := float64(time.Now().Unix()) + 1.0 // Buffer
-	yesterday := now - 86401.0
-	
-	records, err := d.Memory.QueryTemporal(yesterday, now)
-	if err != nil {
-		log.Printf("[DreamDaemon] Failed to fetch recent experiences: %v", err)
-		return
-	}
-
-	var trainingData []string
-	for _, rec := range records {
-		// rec.Data is map[string]interface{}
-		if trace, ok := rec.Data["gosh_trace"].(string); ok {
-			trainingData = append(trainingData, trace)
-		}
-	}
-
-	if len(trainingData) < 1 {
-		log.Println("[DreamDaemon] No new Gosh traces found. Foraging for knowledge instead.")
+	if d.MemoryBank == nil || !d.MemoryBank.IsEnabled() {
+		log.Println("[DreamDaemon] MemoryBank unavailable — skipping consolidation.")
 		d.forageForKnowledge()
 		return
 	}
 
-	log.Printf("[DreamDaemon] Consolidating %d new high-quality experiences.", len(trainingData))
+	// Pull feedback + correction + teach signals from the last 24 hours.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	ctx := context.Background()
-	cluster, err := d.Ghost.Provision(ctx, "dream-consolidation", "NVIDIA RTX 5090", 1)
-	if err != nil {
-		log.Printf("[DreamDaemon] Failed to provision consolidation hardware: %v", err)
+	feedbackFrags, err := d.MemoryBank.QueryBySource(ctx, []string{"feedback", "correction", "teach", "contrastive"}, 30)
+	if err != nil || len(feedbackFrags) == 0 {
+		log.Println("[DreamDaemon] No Imprint signals found. Foraging for knowledge instead.")
+		d.forageForKnowledge()
 		return
 	}
-	defer d.Ghost.Vanish(cluster)
 
-	log.Println("[DreamDaemon] System evolution in progress on Ghost Cluster...")
-	time.Sleep(5 * time.Second) 
+	log.Printf("[DreamDaemon] Consolidating %d Imprint signals into behavioral lessons.", len(feedbackFrags))
 
-	log.Println("[DreamDaemon] Consolidation SUCCESS. System intelligence evolved.")
+	// Build a compact signal digest for the SLM — keep it short to stay within 512 token budget.
+	var sigLines []string
+	for i, f := range feedbackFrags {
+		if i >= 15 { // cap at 15 signals to stay within num_predict budget
+			break
+		}
+		preview := f.Content
+		if len(preview) > 120 {
+			preview = preview[:120] + "…"
+		}
+		sigLines = append(sigLines, fmt.Sprintf("- [%s] %s", f.Source, preview))
+	}
+	digest := strings.Join(sigLines, "\n")
+
+	if d.GenService == nil {
+		log.Println("[DreamDaemon] No GenService — cannot distill lessons.")
+		return
+	}
+
+	prompt := fmt.Sprintf(
+		"You are a behavioral analyst. Based on these user interaction signals, extract 3-5 concise behavioral rules or preferences. "+
+			"Each rule must be ≤15 words and actionable (e.g., 'Prefer direct answers over long explanations'). "+
+			"Return only a numbered list.\n\nSignals:\n%s\n\nRules:", digest)
+
+	result, err := d.GenService.Generate(prompt, map[string]interface{}{
+		"num_ctx":     4096,
+		"num_predict": 256,
+		"temperature": 0.3,
+	})
+	if err != nil {
+		log.Printf("[DreamDaemon] SLM distillation failed: %v", err)
+		return
+	}
+
+	responseText, _ := result["response"].(string)
+	if responseText == "" {
+		log.Println("[DreamDaemon] Empty distillation response.")
+		return
+	}
+
+	// Parse numbered list into individual lessons.
+	lessons := parseLessonList(responseText)
+	if len(lessons) == 0 {
+		log.Println("[DreamDaemon] Could not parse lessons from response.")
+		return
+	}
+
+	log.Printf("[DreamDaemon] Distilled %d behavioral lessons.", len(lessons))
+
+	// Write each lesson to MemoryBank as a durable ProvenanceUserStated fragment.
+	for _, lesson := range lessons {
+		d.MemoryBank.Write(MemoryFragment{
+			Content:    "Learned preference: " + lesson,
+			Source:     "dream_consolidation",
+			Topic:      "behavioral_lesson",
+			Importance: 0.85,
+			Provenance: ProvenanceUserStated,
+			Volatility: VolatilityStable,
+		})
+	}
+
+	// Update the Living Constitution with the new lessons.
+	if d.Constitution != nil {
+		d.Constitution.MergeLessons(lessons, nil, nil)
+		if err := d.Constitution.Save(); err != nil {
+			log.Printf("[DreamDaemon] Failed to save Living Constitution: %v", err)
+		} else {
+			log.Println("[DreamDaemon] Living Constitution updated.")
+		}
+	}
+
+	log.Println("[DreamDaemon] Consolidation complete. ORI's behavioral model evolved.")
+}
+
+// parseLessonList extracts numbered or bulleted lines from SLM output.
+func parseLessonList(text string) []string {
+	var lessons []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Strip leading number/bullet: "1. ", "- ", "• "
+		for _, prefix := range []string{"1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.", "-", "•", "*"} {
+			if strings.HasPrefix(line, prefix) {
+				line = strings.TrimSpace(line[len(prefix):])
+				break
+			}
+		}
+		if len(line) > 10 && len(line) < 200 {
+			lessons = append(lessons, line)
+		}
+		if len(lessons) >= 5 {
+			break
+		}
+	}
+	return lessons
 }
 
 func (d *DreamDaemon) forageForKnowledge() {

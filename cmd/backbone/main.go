@@ -225,6 +225,11 @@ func main() {
 	apiServer.DocumentIngestor = docIngestor
 	log.Println("[Boot] Document Ingestor wired.")
 
+	// Wire The Imprint learning loop into DreamDaemon now that MemoryBank + Constitution exist.
+	dream.GenService = genService
+	dream.MemoryBank = apiServer.MemoryBank
+	dream.Constitution = apiServer.Constitution
+
 	// Seed Oricli's self-knowledge (idempotent — skips if already present).
 	go service.SeedIdentity(apiServer.MemoryBank)
 	log.Println("[Boot] Identity seed queued.")

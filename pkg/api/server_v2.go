@@ -52,6 +52,8 @@ type ServerV2 struct {
 	DocumentIngestor *service.DocumentIngestor
 	Skills           *service.SkillManager
 	ResponseCache    *cache.ResponseCache
+	SignalProcessor  *service.SignalProcessor
+	Constitution     *service.LivingConstitution
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -159,6 +161,12 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	// Bootstrap semantic response cache — L1 (hash) + L2 (chromem-go vectors).
 	// Cache misses fall through to LLM normally. Zero impact on latency on miss.
 	s.ResponseCache = cache.New(".memory", service.NewEmbedder())
+
+	// Bootstrap Living Constitution and Signal Processor for The Imprint learning loop.
+	lc := service.NewLivingConstitution()
+	s.Constitution = lc
+	s.SignalProcessor = service.NewSignalProcessor(mb, lc)
+	agent.SovEngine.Constitution = lc
 
 	s.setupRoutes()
 
@@ -786,6 +794,15 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			})
 		}()
 	}
+
+	// Signal detection: scan user message for learning signals (corrections, explicit teaches).
+	// Fires async — never blocks the response. Sub-millisecond on cache hit.
+	if s.SignalProcessor != nil && len(lastMsg) > 10 {
+		go func(msg string) {
+			sig := s.SignalProcessor.Detect(msg)
+			s.SignalProcessor.Process(sig)
+		}(lastMsg)
+	}
 }
 
 func (s *ServerV2) handleTelegramWebhook(c *gin.Context) {
@@ -1352,6 +1369,12 @@ Volatility: service.VolatilityStable,
 if s.MemoryBank != nil {
 s.MemoryBank.Write(frag)
 }
+
+	// Contrastive pair: store ACCEPTED/REJECTED alongside the standard feedback fragment.
+	// This gives RAG a paired view of what worked and what didn't on each topic.
+	if s.SignalProcessor != nil {
+		go s.SignalProcessor.ProcessContrastivePair(req.IsPositive, topic, req.MsgPreview)
+	}
 
 c.JSON(http.StatusOK, gin.H{
 "ok":          true,

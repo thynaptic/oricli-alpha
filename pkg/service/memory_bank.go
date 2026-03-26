@@ -43,12 +43,14 @@ const (
 	ProvenanceConversation Provenance = "conversation"  // inferred from chat exchange
 	ProvenanceSyntheticL1  Provenance = "synthetic_l1"  // curiosity: summarised from web results
 	ProvenanceSyntheticL2  Provenance = "synthetic_l2+" // derived from another synthetic memory
+	ProvenanceContrastive  Provenance = "contrastive"   // ACCEPTED/REJECTED pair from emoji/correction feedback
 )
 
 // RAG weight multiplier per provenance level.
 // user_stated anchors always bypass normal ranking and inject first.
 var provenanceWeight = map[Provenance]float32{
 	ProvenanceUserStated:   1.5,
+	ProvenanceContrastive:  1.3,
 	ProvenanceWebVerified:  1.2,
 	ProvenanceConversation: 0.9,
 	ProvenanceSyntheticL1:  0.85,
@@ -549,6 +551,43 @@ func retentionScore(importance float64, accessCount int, created time.Time, prov
 }
 
 // Recycle prunes the bottom 10% of memories by retention score when
+// QueryBySource fetches the most recent MemoryFragments matching any of the given source values.
+// Used by DreamDaemon to pull learning signals for consolidation.
+func (m *MemoryBank) QueryBySource(ctx context.Context, sources []string, limit int) ([]MemoryFragment, error) {
+	if !m.enabled || len(sources) == 0 {
+		return nil, nil
+	}
+
+	var parts []string
+	for _, s := range sources {
+		safe := strings.ReplaceAll(s, `"`, `'`)
+		parts = append(parts, fmt.Sprintf(`source = "%s"`, safe))
+	}
+	filter := strings.Join(parts, " || ")
+
+	result, err := m.adminClient.QueryRecords(ctx, "memories", filter, "-created", limit)
+	if err != nil {
+		return nil, err
+	}
+
+	frags := make([]MemoryFragment, 0, len(result.Items))
+	for _, item := range result.Items {
+		prov := Provenance(stringField(item, "provenance"))
+		if prov == "" {
+			prov = ProvenanceConversation
+		}
+		frags = append(frags, MemoryFragment{
+			ID:         stringField(item, "id"),
+			Content:    stringField(item, "content"),
+			Source:     stringField(item, "source"),
+			Topic:      stringField(item, "topic"),
+			Importance: floatField(item, "importance"),
+			Provenance: prov,
+		})
+	}
+	return frags, nil
+}
+
 // the total record count exceeds PB_MEMORY_MAX_RECORDS. Runs async.
 // Rules:
 //   - user_stated (anchor) memories are never pruned
