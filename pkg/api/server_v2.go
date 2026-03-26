@@ -812,7 +812,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// FactChecker, LogicAuditor, ClarityProbe each fire a ≤128-token LLM probe.
 	// Medium/High findings land on the LeagueBlackboard for DreamDaemon consolidation.
 	if !isStudioContext {
-		cognition.RunLeague(s.Agent.GenService, lastMsg, responseText)
+		cognition.RunLeagueWithConsensus(s.Agent.GenService, lastMsg, responseText)
 	}
 
 	if s.Agent.SovEngine.Voice != nil {
@@ -1615,10 +1615,33 @@ return out
 
 // ─── MemoryBank adapter (cognition.MemoryQuerier) ─────────────────────────────
 // Bridges *service.MemoryBank to the cognition.MemoryQuerier interface without
-// creating an import cycle. Converts service.MemoryFragment → cognition.MemoryFragment.
+// creating an import cycle. Converts service.MemoryFragment → cognition.MemFrag.
+// Certainty is derived from provenance tier per AI-Supervisor uncertainty model
+// (arXiv:2603.24402): U=0 (verified, Certainty≥0.80) vs U=1 (unverified, <0.80).
 
 type memoryBankAdapter struct {
 mb *service.MemoryBank
+}
+
+// provenanceCertainty maps service provenance tiers to AI-Supervisor certainty scores.
+// Gold/Solved/UserStated are empirically verified (U=0); Synthetic tiers are unverified (U=1).
+func provenanceCertainty(prov service.Provenance) float64 {
+	switch prov {
+	case service.ProvenanceGold:
+		return 0.95
+	case service.ProvenanceSolved, service.ProvenanceUserStated:
+		return 0.90
+	case service.ProvenanceWebVerified:
+		return 0.85
+	case service.ProvenanceContrastive:
+		return 0.75
+	case service.ProvenanceConversation:
+		return 0.65
+	case service.ProvenanceSyntheticL1:
+		return 0.55
+	default: // SyntheticL2+, unknown
+		return 0.45
+	}
 }
 
 func (a *memoryBankAdapter) QuerySimilar(ctx context.Context, query string, topN int) ([]cognition.MemFrag, error) {
@@ -1628,7 +1651,14 @@ return nil, err
 }
 out := make([]cognition.MemFrag, len(frags))
 for i, f := range frags {
-out[i] = cognition.MemFrag{ID: f.ID, Content: f.Content, Source: f.Source, Topic: f.Topic, Importance: f.Importance}
+out[i] = cognition.MemFrag{
+	ID:        f.ID,
+	Content:   f.Content,
+	Source:    f.Source,
+	Topic:     f.Topic,
+	Importance: f.Importance,
+	Certainty: provenanceCertainty(f.Provenance),
+}
 }
 return out, nil
 }
@@ -1640,7 +1670,14 @@ return nil, err
 }
 out := make([]cognition.MemFrag, len(frags))
 for i, f := range frags {
-out[i] = cognition.MemFrag{ID: f.ID, Content: f.Content, Source: f.Source, Topic: f.Topic, Importance: f.Importance}
+out[i] = cognition.MemFrag{
+	ID:        f.ID,
+	Content:   f.Content,
+	Source:    f.Source,
+	Topic:     f.Topic,
+	Importance: f.Importance,
+	Certainty: provenanceCertainty(f.Provenance),
+}
 }
 return out, nil
 }

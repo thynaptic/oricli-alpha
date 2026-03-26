@@ -288,20 +288,39 @@ func (d *DreamDaemon) consolidateLeagueFindings() {
 
 	var board struct {
 		Findings []struct {
-			Specialist string `json:"specialist"`
-			Finding    string `json:"finding"`
-			Severity   string `json:"severity"`
+			Specialist   string `json:"specialist"`
+			Finding      string `json:"finding"`
+			Severity     string `json:"severity"`
+			Corroborated bool   `json:"corroborated"`
 		} `json:"findings"`
 	}
 	if err := json.Unmarshal(data, &board); err != nil || len(board.Findings) == 0 {
 		return
 	}
 
-	// Filter to medium/high findings only
-	var relevant []string
+	// Corroborated findings (≥2 specialists agreed, U=0 per AI-Supervisor §3.2) are
+	// always included. Lone findings are filtered to medium/high severity only.
+	type rankedFinding struct {
+		text     string
+		priority int // 2=corroborated, 1=high, 0=medium
+	}
+	var relevant []rankedFinding
 	for _, f := range board.Findings {
-		if f.Severity == "medium" || f.Severity == "high" {
-			relevant = append(relevant, fmt.Sprintf("[%s/%s] %s", f.Specialist, f.Severity, f.Finding))
+		if f.Corroborated {
+			relevant = append(relevant, rankedFinding{
+				text:     fmt.Sprintf("[%s/CORROBORATED] %s", f.Specialist, f.Finding),
+				priority: 2,
+			})
+		} else if f.Severity == "high" {
+			relevant = append(relevant, rankedFinding{
+				text:     fmt.Sprintf("[%s/high] %s", f.Specialist, f.Finding),
+				priority: 1,
+			})
+		} else if f.Severity == "medium" {
+			relevant = append(relevant, rankedFinding{
+				text:     fmt.Sprintf("[%s/medium] %s", f.Specialist, f.Finding),
+				priority: 0,
+			})
 		}
 		if len(relevant) >= 10 {
 			break
@@ -311,13 +330,30 @@ func (d *DreamDaemon) consolidateLeagueFindings() {
 		return
 	}
 
-	log.Printf("[DreamDaemon] ExploiterLeague: %d findings to consolidate.", len(relevant))
+	// Sort: corroborated first, then high, then medium
+	for i := 1; i < len(relevant); i++ {
+		for j := i; j > 0 && relevant[j].priority > relevant[j-1].priority; j-- {
+			relevant[j], relevant[j-1] = relevant[j-1], relevant[j]
+		}
+	}
+
+	// Count corroborated for log
+	corroboratedCount := 0
+	var relevantTexts []string
+	for _, r := range relevant {
+		relevantTexts = append(relevantTexts, r.text)
+		if r.priority == 2 {
+			corroboratedCount++
+		}
+	}
+
+	log.Printf("[DreamDaemon] ExploiterLeague: %d findings (%d corroborated) to consolidate.", len(relevant), corroboratedCount)
 
 	if d.GenService == nil {
 		return
 	}
 
-	digest := strings.Join(relevant, "\n")
+	digest := strings.Join(relevantTexts, "\n")
 	prompt := fmt.Sprintf(
 		"You are a self-improvement coach. These adversarial audit findings flagged quality issues in AI responses. "+
 			"Extract 2-3 concise improvement rules from them. Each rule ≤15 words. Return only a numbered list.\n\nFindings:\n%s\n\nRules:",
@@ -341,11 +377,16 @@ func (d *DreamDaemon) consolidateLeagueFindings() {
 
 	for _, lesson := range lessons {
 		if d.MemoryBank != nil {
+			// Corroborated-sourced lessons get higher importance (U=0 → verified)
+			imp := 0.80
+			if corroboratedCount > 0 {
+				imp = 0.90 // Certainty=0.90 tier — treated as verified per AI-Supervisor §3.2
+			}
 			d.MemoryBank.Write(MemoryFragment{
 				Content:    "League reform: " + lesson,
 				Source:     "league_blackboard",
 				Topic:      "adversarial_lesson",
-				Importance: 0.8,
+				Importance: imp,
 				Provenance: ProvenanceContrastive,
 				Volatility: VolatilityStable,
 			})

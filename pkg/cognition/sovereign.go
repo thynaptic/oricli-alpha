@@ -103,6 +103,8 @@ type MemFrag struct {
 	Source     string
 	Topic      string
 	Importance float64
+	Certainty  float64 // 0.0=rejected, 0.5=unverified (default), 0.85=corroborated, 0.95=constitution-committed
+	// U=0 (verified) in AI-Supervisor terms is Certainty ≥ 0.80; U=1 (unverified) is Certainty < 0.80
 }
 
 // WebSearcher is satisfied by *service.SearXNGSearcher.

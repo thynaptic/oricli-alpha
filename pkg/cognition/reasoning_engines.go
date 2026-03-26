@@ -233,12 +233,27 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 		}
 		var gb strings.Builder
 		gb.WriteString("### EXTERNAL GROUNDING SIGNAL\n")
-		gb.WriteString("The following verified memory fragments are relevant to this question.\n")
-		gb.WriteString("Use them as external ground truth when evaluating the candidate response:\n\n")
+		gb.WriteString("The following memory fragments are relevant. Only those marked 'verified' are ground truth.\n\n")
+		validCount := 0
 		for i, f := range frags {
-			gb.WriteString(fmt.Sprintf("[%d] (importance=%.2f) %s\n", i+1, f.Importance, truncate(f.Content, 200)))
+			// Noise gate: discard fragments below certainty threshold.
+			// U=1 (unverified) = Certainty < 0.40 per AI-Supervisor §3.1.
+			if f.Certainty < 0.40 {
+				continue
+			}
+			certLabel := "unverified"
+			if f.Certainty >= 0.80 {
+				certLabel = "verified" // U=0
+			}
+			gb.WriteString(fmt.Sprintf("[%d] (certainty=%.2f/%s) %s\n",
+				i+1, f.Certainty, certLabel, truncate(f.Content, 200)))
+			validCount++
 		}
 		gb.WriteString("### END GROUNDING SIGNAL")
+		if validCount == 0 {
+			// All fragments below certainty threshold — no reliable grounding.
+			return e.runStandard(ctx, stimulus, composite)
+		}
 		groundingContext = gb.String()
 	} else {
 		// No memory bank wired — skip verifier to avoid degradation
@@ -341,18 +356,45 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 			return candidate, nil
 
 		case strings.HasPrefix(verdictUpper, aletheiaCritical):
-			// Critical flaw — restart Generator with the flaw injected as negative guidance
-			// Only restart if we haven't hit maxGeneratorCalls
+			// 5-WHY Root Cause + Cross-Domain Recovery (arXiv:2603.24402, §3.3)
+			// Instead of naive "don't do this again" guidance, we:
+			//   1. Run a 5-WHY causal chain to extract the abstract mechanism μ(g)
+			//   2. Query MemoryBank with μ(g) for cross-domain solutions
+			//   3. Inject directed recovery guidance (mechanism + cross-domain hints)
+			// This implements Equations 5-6 from the paper.
 			if attempt < maxGeneratorCalls-1 {
 				reason := extractVerdictDetail(verdict, aletheiaCritical)
-				composite = composite + fmt.Sprintf(
-					"\n\n### GENERATOR RESTART SIGNAL\n"+
-						"Your previous attempt had a critical flaw: %s\n"+
-						"Do NOT repeat this error. Approach the problem from a fundamentally different angle.\n"+
-						"### END RESTART SIGNAL",
-					reason,
+				mechanism := e.runFiveWhy(ctx, stimulus, reason)
+
+				// Cross-domain search: query MemoryBank using the abstract mechanism.
+				// Constraint: search by mechanism vocabulary, not original problem vocabulary.
+				crossDomainHint := ""
+				if e.MemoryBankRef != nil && mechanism != "" {
+					hits, _ := e.MemoryBankRef.QuerySimilar(ctx, mechanism, 2)
+					var hb strings.Builder
+					for _, h := range hits {
+						if h.Certainty >= 0.50 { // only include somewhat-verified cross-domain hits
+							hb.WriteString(fmt.Sprintf("- %s\n", truncate(h.Content, 150)))
+						}
+					}
+					crossDomainHint = hb.String()
+				}
+
+				recovery := fmt.Sprintf(
+					"\n\n### DIRECTED RECOVERY (5-WHY + Cross-Domain)\n"+
+						"Critical flaw detected: %s\n"+
+						"Root mechanism (5-WHY analysis): %s\n",
+					reason, mechanism,
 				)
-				// candidate will be replaced on next loop iteration
+				if crossDomainHint != "" {
+					recovery += fmt.Sprintf(
+						"Cross-domain insights addressing this mechanism:\n%s\n",
+						crossDomainHint,
+					)
+				}
+				recovery += "Approach the problem from a fundamentally different angle using the above.\n" +
+					"### END DIRECTED RECOVERY"
+				composite = composite + recovery
 				continue
 			}
 			// Exhausted restarts — ship last candidate with uncertainty note
@@ -811,4 +853,58 @@ score++
 }
 }
 return score
+}
+
+// ─── 5-WHY Root Cause Extractor ──────────────────────────────────────────────
+//
+// Implements Equation 5 from arXiv:2603.24402 (AI-Supervisor §3.3):
+// Traces a gap through a causal chain to extract the abstract mechanism μ(g):
+//
+//   g → c1 → c2 → c3 → c4 → μ(g)
+//        (each step: "WHY does c_{i-1} occur?")
+//
+// Each step produces a more abstract/fundamental cause anchored in knowledge
+// (e.g., "safety methods fail" → "Lagrangian multiplier assumes stationarity"
+//         → μ(g) = "optimization under non-stationarity").
+//
+// Used by the Aletheia CRITICAL_FLAW branch to extract a mechanism that can
+// then be searched cross-domain (not just the surface-level flaw).
+//
+// Max 5 WHY steps, ~32 tokens each. Total: ~160 extra tokens on CRITICAL_FLAW path.
+// Fires only when Aletheia has already paid the verifier cost — no new gating needed.
+
+func (e *SovereignEngine) runFiveWhy(ctx context.Context, stimulus, initialFlaw string) string {
+if e.GenService == nil || initialFlaw == "" {
+return initialFlaw
+}
+
+cause := initialFlaw
+for i := 0; i < 5; i++ {
+if ctx.Err() != nil {
+break
+}
+whyPrompt := fmt.Sprintf(
+"Original question: %q\nCurrent identified issue: %q\n\n"+
+"Ask: WHY does this issue fundamentally occur? Answer in ONE sentence identifying "+
+"the deeper, more abstract root cause (e.g., a mathematical limitation, "+
+"an assumption violation, a structural gap). Be specific but abstract.",
+truncate(stimulus, 100), truncate(cause, 150),
+)
+result, err := e.GenService.Generate(whyPrompt, map[string]interface{}{
+"num_ctx":     512,
+"num_predict": 32,
+"temperature": 0.1,
+})
+if err != nil {
+break
+}
+newCause, _ := result["response"].(string)
+newCause = strings.TrimSpace(newCause)
+// Stop if model starts repeating or returns empty
+if newCause == "" || strings.EqualFold(newCause, cause) {
+break
+}
+cause = newCause
+}
+return cause
 }
