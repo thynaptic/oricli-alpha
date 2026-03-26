@@ -534,7 +534,8 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	}
 
 	// --- Step 10: Introspective Audit & Trace Generation ---
-	fmt.Printf("[SovereignEngine] Pipeline v3.0.0 Complete. Router: %s, Health: %s\n", reasoningMethod, e.CurrentHealth.GetSummary())
+	fmt.Printf("[SovereignEngine] Pipeline v3.3.0 Complete. Router: %s, Complexity: %.2f, NumPredict: %d, Health: %s\n",
+		reasoningMethod, budget.Complexity, budget.ScaledNumPredict(), e.CurrentHealth.GetSummary())
 
 	// 10.1 Real-Time WebSocket Synchronization (Push)
 	if e.WSHub != nil {

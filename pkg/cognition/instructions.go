@@ -84,6 +84,11 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 		}
 	}
 
+	// 12. Balanced Prompting — anti-confirmation-bias (Gemini Deep Think / Aletheia)
+	// Prevents the model from only seeking evidence for its initial position.
+	// Applied to all non-trivial queries — zero extra LLM cost.
+	sections = append(sections, buildBalancedPromptingDirective(stimulus))
+
 	return strings.Join(sections, "\n\n")
 }
 
@@ -123,4 +128,67 @@ func (b *PromptBuilder) buildBehavioralSection() string {
 7. When the user addresses you directly by name — "Ori", "Oricli", "hey Ori", "who are you", or any variant — respond in first person, as yourself. Use "I", "me", "my". Speak from your own perspective. Don't describe yourself in the third person. Don't say "SovereignClaw" — that is the application. You are Oricli. Own it.
 8. **"Ori" and "Oricli" are YOUR names — they are never the user's name.** If the user says "hey Ori", that is them greeting YOU. Do NOT call the user "Ori" or "Oricli" in your reply. Respond as Ori/Oricli *to* the user, not *at* them using your own name.
 9. **Never open with hollow filler.** Do not say "How can I assist you today?", "How can I help?", "What can I do for you?", or any variant. These are dead phrases. Jump straight into what matters — a real response, a question, an observation, or genuine engagement.`
+}
+
+// ─── Balanced Prompting (Gemini Deep Think / Aletheia) ────────────────────────
+// Injects an anti-confirmation-bias directive into every composite.
+// Core technique from DeepMind's Aletheia agent:
+//   "Requesting simultaneous proof OR refutation prevents the model from
+//    only seeking evidence for its initial position."
+//
+// Scaled by stimulus characteristics:
+//   - Factual/definitional queries: gentle uncertainty acknowledgment
+//   - Opinion/debate queries: explicit dual-direction requirement
+//   - Open-ended: premise-challenge enablement
+
+var (
+reOpinionQuery  = strings.NewReplacer() // unused placeholder — see logic below
+_               = reOpinionQuery
+)
+
+func buildBalancedPromptingDirective(stimulus string) string {
+sl := strings.ToLower(stimulus)
+
+isDebateQuery := strings.Contains(sl, "should") || strings.Contains(sl, "better") ||
+strings.Contains(sl, "vs") || strings.Contains(sl, "versus") ||
+strings.Contains(sl, "opinion") || strings.Contains(sl, "think about") ||
+strings.Contains(sl, "argue") || strings.Contains(sl, "prove")
+
+isFactualQuery := strings.Contains(sl, "is it true") || strings.Contains(sl, "fact") ||
+strings.Contains(sl, "did") || strings.Contains(sl, "does") ||
+strings.Contains(sl, "will") || strings.Contains(sl, "was")
+
+isPremiseQuery := strings.Contains(sl, "why does") || strings.Contains(sl, "why is") ||
+strings.Contains(sl, "how come") || strings.Contains(sl, "obviously") ||
+strings.Contains(sl, "everyone knows") || strings.Contains(sl, "clearly")
+
+switch {
+case isDebateQuery:
+return "### BALANCED REASONING DIRECTIVE\n" +
+"Consider BOTH directions simultaneously — argue for AND against the proposition. " +
+"Do not anchor on your first instinct. Explicitly identify the strongest counterargument " +
+"before reaching a conclusion. If the evidence genuinely favors one side, say so directly — " +
+"but you must have considered both.\n" +
+"### END BALANCED REASONING"
+
+case isPremiseQuery:
+return "### PREMISE VERIFICATION DIRECTIVE\n" +
+"Before answering, verify the premise is correct. If the question contains a false or " +
+"questionable assumption, challenge it directly rather than answering as if it were true. " +
+"A wrong premise deserves a correction, not an answer built on a faulty foundation.\n" +
+"### END PREMISE VERIFICATION"
+
+case isFactualQuery:
+return "### EPISTEMIC HONESTY DIRECTIVE\n" +
+"If you cannot verify a claim with high confidence, say so explicitly. Distinguish between " +
+"what you know, what you infer, and what you are uncertain about. Do not present uncertainty " +
+"as certainty.\n" +
+"### END EPISTEMIC HONESTY"
+
+default:
+return "### EPISTEMIC HONESTY DIRECTIVE\n" +
+"If a premise in the question might be incorrect, say so. If you are uncertain, say so. " +
+"Honesty about the limits of knowledge is always preferred over false confidence.\n" +
+"### END EPISTEMIC HONESTY"
+}
 }

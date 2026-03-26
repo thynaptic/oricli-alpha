@@ -88,6 +88,11 @@ var atomicModules = []AtomicModule{
 		Description: "Translate numeric or logical operations into executable code and run them to get a verified answer rather than predicting the result.",
 		Mode:        ModePAL,
 	},
+	{
+		Name:        "Cross-Domain Bridging",
+		Description: "Identify tools, theorems, or frameworks from fields unrelated to the problem domain that share structural similarity. Apply those foreign techniques to break deadlocks that domain-specific approaches cannot resolve.",
+		Mode:        ModeStandard, // enrichment only — no dedicated engine, injects as instruction
+	},
 }
 
 // moduleDescriptionBlock returns the formatted module list for SELECT prompts.

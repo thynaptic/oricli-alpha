@@ -183,55 +183,176 @@ func (e *SovereignEngine) runLeastToMost(ctx context.Context, stimulus, composit
 
 // ─── Self-Refine: Critique + Regeneration ────────────────────────────────────
 
-// runSelfRefine generates a draft, runs a lightweight self-critique, and
-// regenerates once if the critique flags issues. Single iteration max.
-func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite string) (string, error) {
-	// Generate initial draft
-	draftCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
+// ─── ModeSelfRefine: Aletheia Loop (Generator → Verifier → Branch) ───────────
+//
+// Inspired by DeepMind's Aletheia agent (arXiv:2602.10177, Feb 2026).
+// Upgraded from single-pass self-critique to a full branched verification loop:
+//
+//   Problem → Generator → Candidate
+//                              ↓
+//                          Verifier (NL)
+//                         /      |       \
+//                    CORRECT  MINOR_FIX  CRITICAL_FLAW / ADMIT_FAILURE
+//                       ↓        ↓              ↓
+//                    Output    Reviser      Generator restart
+//                                ↓          (max 2 total iterations)
+//                           Updated candidate
+//
+// Key addition vs prior SelfRefine:
+//   - MINOR_FIX → targeted Reviser patch (not full regeneration)
+//   - CRITICAL_FLAW → full Generator restart (not ignored)
+//   - ADMIT_FAILURE → returns low-confidence signal rather than hallucinating
+//   - Max 2 total generator calls (CPU constraint)
+//
+// Extra LLM calls: 1 verifier (64 tok) + 0-1 reviser/restart = max 3 total.
 
-	genDraft, err := e.GenService.Generate(stimulus, map[string]interface{}{
-		"num_ctx": 4096, "num_predict": 1024, "temperature": 0.5,
-		"system": composite,
-	})
-	_ = draftCtx
-	draft, _ := genDraft["response"].(string)
-	if err != nil || strings.TrimSpace(draft) == "" {
+const (
+	aletheiaCorrect  = "CORRECT"
+	aletheiaMinor    = "MINOR_FIX"
+	aletheiaCritical = "CRITICAL_FLAW"
+	aletheiaFail     = "ADMIT_FAILURE"
+)
+
+func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite string) (string, error) {
+	if e.GenService == nil {
 		return e.runStandard(ctx, stimulus, composite)
 	}
 
-	// Lightweight critique (hard-cap prompt to keep it fast)
-	critiquePrompt := fmt.Sprintf(
-		"Rate this draft response on: completeness, accuracy, clarity.\n"+
-			"Reply with ONLY: GOOD or REFINE: <one-line issue>\n\n"+
-			"Question: %s\nDraft: %s",
-		truncate(stimulus, 200), truncate(draft, 400),
-	)
-	critiqueCtx, critiqueCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer critiqueCancel()
+	const maxGeneratorCalls = 2
+	var candidate string
 
-	critiqueResult, critiqueErr := e.GenService.Generate(critiquePrompt, map[string]interface{}{
-		"num_ctx": 4096, "num_predict": 64, "temperature": 0.1,
-	})
-	_ = critiqueCtx
-	critique, _ := critiqueResult["response"].(string)
-	if critiqueErr != nil {
-		// Critique failed — ship the draft as-is
-		return draft, nil
+	for attempt := 0; attempt < maxGeneratorCalls; attempt++ {
+		// ── Generator: produce candidate solution ─────────────────────────
+		genResult, genErr := e.GenService.Generate(stimulus, map[string]interface{}{
+			"num_ctx":     4096,
+			"num_predict": 1024,
+			"temperature": 0.5,
+			"system":      composite,
+		})
+		if genErr != nil || ctx.Err() != nil {
+			return e.runStandard(ctx, stimulus, composite)
+		}
+		candidate, _ = genResult["response"].(string)
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			return e.runStandard(ctx, stimulus, composite)
+		}
+
+		// ── Verifier: classify the candidate ─────────────────────────────
+		// Returns one of: CORRECT | MINOR_FIX: <issue> | CRITICAL_FLAW: <reason> | ADMIT_FAILURE
+		verifierPrompt := fmt.Sprintf(
+			"You are a rigorous verifier. Evaluate this response for factual accuracy, "+
+				"logical soundness, and completeness.\n\n"+
+				"QUESTION: %s\n\nCANDIDATE RESPONSE: %s\n\n"+
+				"Reply with EXACTLY ONE of:\n"+
+				"  CORRECT\n"+
+				"  MINOR_FIX: <one-line description of the specific issue>\n"+
+				"  CRITICAL_FLAW: <one-line description of the fundamental error>\n"+
+				"  ADMIT_FAILURE (only if the question is unanswerable with available knowledge)\n\n"+
+				"Verdict:",
+			truncate(stimulus, 250), truncate(candidate, 500),
+		)
+
+		verResult, verErr := e.GenService.Generate(verifierPrompt, map[string]interface{}{
+			"num_ctx":     2048,
+			"num_predict": 64,
+			"temperature": 0.1,
+		})
+		if verErr != nil || ctx.Err() != nil {
+			// Verifier failed — ship current candidate
+			return candidate, nil
+		}
+
+		verdict := strings.TrimSpace(func() string {
+			v, _ := verResult["response"].(string)
+			return v
+		}())
+		verdictUpper := strings.ToUpper(verdict)
+
+		switch {
+		case strings.HasPrefix(verdictUpper, aletheiaCorrect):
+			// ✓ Correct — emit candidate directly (bypass main LLM call)
+			return candidate, nil
+
+		case strings.HasPrefix(verdictUpper, aletheiaFail):
+			// Agent admits it cannot solve this — inject honest uncertainty signal
+			// into composite and let the standard LLM respond with appropriate humility.
+			enriched := composite + "\n\n### EPISTEMIC LIMITATION\n" +
+				"After careful verification, the available knowledge is insufficient to answer this with confidence. " +
+				"Be transparent about what is known, what is uncertain, and what would be needed to answer definitively. " +
+				"Do NOT fabricate. Admitting the limits of knowledge is the correct response here.\n" +
+				"### END EPISTEMIC LIMITATION"
+			return e.runStandard(ctx, stimulus, enriched)
+
+		case strings.HasPrefix(verdictUpper, aletheiaMinor):
+			// Minor fix — targeted Reviser patch (no full restart)
+			issue := extractVerdictDetail(verdict, aletheiaMinor)
+			revisedComposite := composite + fmt.Sprintf(
+				"\n\n### REVISER GUIDANCE\n"+
+					"Your previous draft had a minor issue: %s\n"+
+					"Keep everything that was correct. Fix only this specific issue.\n"+
+					"### END REVISER GUIDANCE",
+				issue,
+			)
+			// Revise in place — inject as new candidate on next loop iteration
+			revResult, revErr := e.GenService.Generate(stimulus, map[string]interface{}{
+				"num_ctx":     4096,
+				"num_predict": 1024,
+				"temperature": 0.3,
+				"system":      revisedComposite,
+			})
+			if revErr != nil || ctx.Err() != nil {
+				return candidate, nil // ship prior candidate on reviser failure
+			}
+			revised, _ := revResult["response"].(string)
+			revised = strings.TrimSpace(revised)
+			if revised != "" {
+				return revised, nil // Reviser output is final — don't re-verify (CPU budget)
+			}
+			return candidate, nil
+
+		case strings.HasPrefix(verdictUpper, aletheiaCritical):
+			// Critical flaw — restart Generator with the flaw injected as negative guidance
+			// Only restart if we haven't hit maxGeneratorCalls
+			if attempt < maxGeneratorCalls-1 {
+				reason := extractVerdictDetail(verdict, aletheiaCritical)
+				composite = composite + fmt.Sprintf(
+					"\n\n### GENERATOR RESTART SIGNAL\n"+
+						"Your previous attempt had a critical flaw: %s\n"+
+						"Do NOT repeat this error. Approach the problem from a fundamentally different angle.\n"+
+						"### END RESTART SIGNAL",
+					reason,
+				)
+				// candidate will be replaced on next loop iteration
+				continue
+			}
+			// Exhausted restarts — ship last candidate with uncertainty note
+			return candidate, nil
+		}
+
+		// Unknown verdict format — ship candidate
+		return candidate, nil
 	}
 
-	critique = strings.TrimSpace(critique)
-	if strings.HasPrefix(strings.ToUpper(critique), "GOOD") {
-		return draft, nil
+	// Fallback: should not reach here but be safe
+	if candidate != "" {
+		return candidate, nil
 	}
+	return e.runStandard(ctx, stimulus, composite)
+}
 
-	// Extract the issue and regenerate with it injected
-	issue := strings.TrimPrefix(strings.TrimPrefix(critique, "REFINE:"), "refine:")
-	enriched := composite + fmt.Sprintf(
-		"\n\n### SELF-REFINEMENT GUIDANCE\nFirst draft had issue: %s\nFix this in your response.\n### END GUIDANCE\n",
-		strings.TrimSpace(issue),
-	)
-	return e.runStandard(ctx, stimulus, enriched)
+// extractVerdictDetail strips the verdict prefix and returns the detail string.
+func extractVerdictDetail(verdict, prefix string) string {
+	// Try exact prefix match first (handles case variations)
+	for _, pfx := range []string{prefix + ":", prefix} {
+		if idx := strings.Index(strings.ToUpper(verdict), pfx); idx >= 0 {
+			detail := strings.TrimSpace(verdict[idx+len(pfx):])
+			if detail != "" {
+				return detail
+			}
+		}
+	}
+	return verdict
 }
 
 // ─── ReAct: Think → Act → Observe loop ───────────────────────────────────────

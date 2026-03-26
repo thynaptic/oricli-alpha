@@ -669,6 +669,16 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			"num_predict": 4096,
 			"num_ctx":     16384,
 		}
+	} else {
+		// Inference-time compute scaling (Gemini Deep Think law): scale num_predict
+		// with query complexity so high-complexity queries get deeper reasoning depth.
+		// Complexity is computed once in DetermineBudget — free, < 1ms.
+		budget := cognition.DetermineBudget(lastMsg)
+		scaledPredict := budget.ScaledNumPredict()
+		streamOpts["options"] = map[string]interface{}{
+			"num_predict": scaledPredict,
+			"num_ctx":     4096,
+		}
 	}
 
 	// Inject Code Constitution into system prompt now that canvas/code mode is resolved.

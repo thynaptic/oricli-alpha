@@ -16,6 +16,23 @@ type AdaptiveBudget struct {
 	Complexity         float64
 	ExplorationBenefit float64
 	RequiresMCTS       bool
+	NumPredict         int // dynamic inference-time compute scaling (Gemini Deep Think law)
+}
+
+// ScaledNumPredict returns the appropriate num_predict token budget for this
+// complexity level. Implements the Gemini Deep Think inference-time scaling law:
+// more compute at higher complexity → higher quality, scaling holds beyond Olympiad level.
+func (b AdaptiveBudget) ScaledNumPredict() int {
+	switch {
+	case b.Complexity >= 0.80:
+		return 2048 // PhD / research level — maximum reasoning depth
+	case b.Complexity >= 0.60:
+		return 1536 // Complex multi-step
+	case b.Complexity >= 0.40:
+		return 1024 // Standard reasoning
+	default:
+		return 512 // Conversational / simple factual
+	}
 }
 
 // DetermineBudget analyzes the query and returns an optimized MCTS setup.

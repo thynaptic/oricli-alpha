@@ -56,9 +56,9 @@ func ClassifyReasoningMode(stimulus string, budget AdaptiveBudget) ReasoningMode
 	}
 
 	// SELF-DISCOVER: highest complexity queries get dynamic module composition.
-	// Above 0.70 the keyword router picks the wrong single mode too often.
-	// The 2 meta-calls are worth it — paper shows +32% over CoT at this tier.
-	if budget.Complexity >= 0.70 {
+	// Lowered threshold 0.70→0.60 per Gemini Deep Think inference-time scaling law:
+	// more compute at high complexity = higher quality, scaling continues beyond Olympiad level.
+	if budget.Complexity >= 0.60 {
 		return ModeDiscover
 	}
 
