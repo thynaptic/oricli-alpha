@@ -401,11 +401,28 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		)
 	}
 
-	// Add Constitutional Prompt — SCAI principles + infrastructure boundaries
+	// Constitutional injection — SCAI always; Ops/RunPod only when relevant.
+	// Ops constitution: inject when user issued a !command or mentions system/service ops.
+	// RunPod constitution: inject when user mentions compute/gpu/runpod/training.
 	composite += "\n\n" + e.SCAI.Constitution.GetSystemPrompt()
-	composite += "\n\n" + reform.NewOpsConstitution().GetSystemPrompt()
-	composite += "\n\n" + reform.NewRunPodConstitution().GetSystemPrompt()
-	
+	stimulusLower := strings.ToLower(stimulus)
+	if strings.Contains(stimulus, "!") || strings.Contains(stimulusLower, "service") ||
+		strings.Contains(stimulusLower, "system") || strings.Contains(stimulusLower, "command") {
+		composite += "\n\n" + reform.NewOpsConstitution().GetSystemPrompt()
+	}
+	if strings.Contains(stimulusLower, "runpod") || strings.Contains(stimulusLower, "gpu") ||
+		strings.Contains(stimulusLower, "compute") || strings.Contains(stimulusLower, "train") ||
+		strings.Contains(stimulusLower, "pod") {
+		composite += "\n\n" + reform.NewRunPodConstitution().GetSystemPrompt()
+	}
+
+	// Hard-cap composite to prevent system-prompt bloat from overwhelming the LLM context window.
+	// CPU-inference cost scales with prefill length — keep it tight for conversational turns.
+	const maxCompositeChars = 3000
+	if len(composite) > maxCompositeChars {
+		composite = composite[:maxCompositeChars] + "\n... [trace truncated for performance]"
+	}
+
 	// --- Step 10: Introspective Audit & Trace Generation ---
 	fmt.Printf("[SovereignEngine] Pipeline v2.9.1 Complete. Router: %s, Health: %s\n", reasoningMethod, e.CurrentHealth.GetSummary())
 
@@ -422,10 +439,10 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	refinementGuidance := ""
 	if refinement.ResponseType != safety.TypeFull { refinementGuidance = "### REFINEMENT GUIDANCE:\n" + refinement.Guidance }
 
-	finalTrace := fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s", 
-		composite, e.CurrentHealth.GetDirectives(), slangDirectives, refinementGuidance, aside, whisper)
-	
-	return fmt.Sprintf("%s\n\n%s", finalTrace, stimulus), nil
+	// Note: stimulus is NOT appended here — it lives in the messages array as role:user.
+	// Duplicating it in the system prompt wastes context tokens on CPU inference.
+	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s",
+		composite, e.CurrentHealth.GetDirectives(), slangDirectives, refinementGuidance, aside, whisper), nil
 }
 
 // SelfAlign implements the SCAI Critique-Revision loop with contextual severity scaling.

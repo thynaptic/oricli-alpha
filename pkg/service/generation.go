@@ -156,7 +156,9 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
 	}
-	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": s.NumThreads, "num_ctx": 32768, "num_predict": 2048}}
+	// num_ctx MUST match ChatStream (4096) so Ollama never reallocates the KV cache.
+	// A mismatch causes a full model reload (~20-60s) on the next chat request.
+	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": s.NumThreads, "num_ctx": 4096, "num_predict": 512}}
 
 	if temp, ok := options["temperature"].(float64); ok {
 		payload["options"].(map[string]interface{})["temperature"] = temp
@@ -206,7 +208,7 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 		ollamaMessages[i] = m
 	}
 
-	payload := map[string]interface{}{"model": model, "messages": ollamaMessages, "stream": false, "think": false, "options": map[string]interface{}{"num_thread": s.NumThreads, "num_ctx": 4096, "num_predict": 1024}}
+	payload := map[string]interface{}{"model": model, "messages": ollamaMessages, "stream": false, "think": false, "options": map[string]interface{}{"num_thread": s.NumThreads, "num_ctx": 4096, "num_predict": 512}}
 
 	if temp, ok := options["temperature"].(float64); ok {
 		payload["options"].(map[string]interface{})["temperature"] = temp
