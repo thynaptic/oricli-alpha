@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -271,10 +272,12 @@ func (d *DreamDaemon) ConsolidateExperience() {
 	log.Println("[DreamDaemon] Consolidation complete. ORI's behavioral model evolved.")
 
 	// ── ExploiterLeague Blackboard Integration ────────────────────────────────
-	// Drain the league blackboard and distill medium/high findings into reform proposals.
-	// These are additional behavioral lessons that come from adversarial self-critique,
-	// not just positive imprint signals — gives the model a balanced learning signal.
 	d.consolidateLeagueFindings()
+
+	// ── Dynamic Certainty Age Decay ───────────────────────────────────────────
+	// Decay importance of stale non-immortal memories per volatility class.
+	// Runs after consolidation so the decay doesn't affect just-written lessons.
+	d.decayCertainty()
 }
 
 // consolidateLeagueFindings reads the ExploiterLeague blackboard JSON and distills
@@ -655,4 +658,84 @@ func (d *ToolDaemon) triggerTraining(currentCount int) {
 	} else {
 		log.Printf("[ToolDaemon] Tool training failed: %v\nOutput: %s", err, string(output))
 	}
+}
+
+// ─── Dynamic Certainty Age Decay ─────────────────────────────────────────────
+//
+// Runs each DreamDaemon consolidation cycle. Applies a small importance
+// decay to non-immortal memories that have aged past their volatility half-life.
+//
+// Decay formula (mirrors cognition.ComputeDynamicCertainty's age_penalty):
+//   decay_factor = exp(-overdue_days / halfLife)
+//   new_importance = importance × decay_factor
+//
+// Only fires when overdue > 0 and delta > 0.02 to avoid noisy writes.
+// ProvenanceGold and ProvenanceUserStated are immortal — never decayed.
+// Cap: 50 records per cycle to stay within idle-time budget.
+func (d *DreamDaemon) decayCertainty() {
+if d.MemoryBank == nil || !d.MemoryBank.IsEnabled() {
+return
+}
+
+ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+defer cancel()
+
+// Query oldest non-immortal memories first (most likely to need decay).
+result, err := d.MemoryBank.adminClient.QueryRecords(
+ctx, "memories",
+`provenance != "user_stated" && provenance != "gold" && importance > 0.1`,
+"created", // oldest first
+50,
+)
+if err != nil || result == nil || len(result.Items) == 0 {
+return
+}
+
+decayed := 0
+for _, item := range result.Items {
+id := stringField(item, "id")
+if id == "" {
+continue
+}
+importance := floatField(item, "importance")
+vol := Volatility(stringField(item, "topic_volatility"))
+if vol == "" {
+vol = InferVolatility(stringField(item, "topic"))
+}
+
+var created time.Time
+if ts := stringField(item, "created"); ts != "" {
+created, _ = time.Parse(time.RFC3339, ts)
+}
+if created.IsZero() {
+continue
+}
+
+halfLife := vol.halfLifeDays()
+ageDays := time.Since(created).Hours() / 24
+if ageDays <= halfLife {
+continue // not yet past half-life — no decay
+}
+
+overdue := ageDays - halfLife
+// Gentle exponential decay: e^(-overdue/halfLife)
+decayFactor := math.Exp(-overdue / halfLife)
+newImportance := importance * decayFactor
+
+if importance-newImportance < 0.02 {
+continue // change too small to bother writing
+}
+if newImportance < 0.01 {
+newImportance = 0.01
+}
+
+_ = d.MemoryBank.adminClient.UpdateRecord(ctx, "memories", id, map[string]any{
+"importance": newImportance,
+})
+decayed++
+}
+
+if decayed > 0 {
+log.Printf("[DreamDaemon] Certainty decay: %d memories aged down.", decayed)
+}
 }

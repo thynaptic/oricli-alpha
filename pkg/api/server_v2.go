@@ -170,7 +170,9 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	agent.SovEngine.Constitution = lc
 
 	// Inject MemoryBank into SovereignEngine via adapter (avoids cognition→service import cycle).
-	agent.SovEngine.MemoryBankRef = &memoryBankAdapter{mb: mb}
+	adapter := &memoryBankAdapter{mb: mb}
+	agent.SovEngine.MemoryBankRef = adapter
+	agent.SovEngine.CertaintyUpdaterRef = adapter
 
 	s.setupRoutes()
 
@@ -1651,14 +1653,20 @@ return nil, err
 }
 out := make([]cognition.MemFrag, len(frags))
 for i, f := range frags {
-out[i] = cognition.MemFrag{
-	ID:        f.ID,
-	Content:   f.Content,
-	Source:    f.Source,
-	Topic:     f.Topic,
-	Importance: f.Importance,
-	Certainty: provenanceCertainty(f.Provenance),
-}
+	prov := provenanceCertainty(f.Provenance)
+	mf := cognition.MemFrag{
+		ID:          f.ID,
+		Content:     f.Content,
+		Source:      f.Source,
+		Topic:       f.Topic,
+		Importance:  f.Importance,
+		AccessCount: f.AccessCount,
+		Volatility:  string(f.Volatility),
+		CreatedAt:   f.CreatedAt,
+		Certainty:   prov, // provenance floor, then dynamic formula refines it
+	}
+	mf.Certainty = cognition.ComputeDynamicCertainty(mf)
+	out[i] = mf
 }
 return out, nil
 }
@@ -1670,16 +1678,28 @@ return nil, err
 }
 out := make([]cognition.MemFrag, len(frags))
 for i, f := range frags {
-out[i] = cognition.MemFrag{
-	ID:        f.ID,
-	Content:   f.Content,
-	Source:    f.Source,
-	Topic:     f.Topic,
-	Importance: f.Importance,
-	Certainty: provenanceCertainty(f.Provenance),
-}
+	prov := provenanceCertainty(f.Provenance)
+	mf := cognition.MemFrag{
+		ID:          f.ID,
+		Content:     f.Content,
+		Source:      f.Source,
+		Topic:       f.Topic,
+		Importance:  f.Importance,
+		AccessCount: f.AccessCount,
+		Volatility:  string(f.Volatility),
+		CreatedAt:   f.CreatedAt,
+		Certainty:   prov,
+	}
+	mf.Certainty = cognition.ComputeDynamicCertainty(mf)
+	out[i] = mf
 }
 return out, nil
+}
+
+// BumpCertainty implements cognition.CertaintyUpdater.
+// Fires async so it never blocks the generation path.
+func (a *memoryBankAdapter) BumpCertainty(ctx context.Context, fragID string, delta float64) {
+	a.mb.BumpImportance(ctx, fragID, delta)
 }
 
 func truncateStr(s string, n int) string {

@@ -113,6 +113,7 @@ type MemoryFragment struct {
 	Importance   float64    // 0.0–1.0
 	AccessCount  int
 	LastAccessed time.Time
+	CreatedAt    time.Time  // used for age-decay certainty computation
 	// Epistemic hygiene
 	Provenance   Provenance // origin quality — controls RAG weight
 	Volatility   Volatility // decay class — controls Recycle half-life
@@ -364,6 +365,15 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 		}
 		lineage := intField(item, "lineage_depth")
 
+		// Parse created timestamp for age-decay certainty computation
+		var createdAt time.Time
+		if ts := stringField(item, "created"); ts != "" {
+			createdAt, _ = time.Parse(time.RFC3339, ts)
+		}
+		if createdAt.IsZero() {
+			createdAt = time.Now().Add(-24 * time.Hour)
+		}
+
 		frag := MemoryFragment{
 			ID:           stringField(item, "id"),
 			Content:      stringField(item, "content"),
@@ -372,6 +382,7 @@ func (m *MemoryBank) QuerySimilar(ctx context.Context, query string, topN int) (
 			SessionID:    stringField(item, "session_id"),
 			Importance:   floatField(item, "importance"),
 			AccessCount:  intField(item, "access_count"),
+			CreatedAt:    createdAt,
 			Provenance:   prov,
 			Volatility:   Volatility(stringField(item, "topic_volatility")),
 			LineageDepth: lineage,
@@ -448,6 +459,34 @@ func (m *MemoryBank) QuerySimilarStrings(ctx context.Context, query string, topN
 		out[i] = f.Content
 	}
 	return out, nil
+}
+
+// BumpImportance adjusts a memory fragment's importance by delta (positive = reinforce,
+// negative = contradict/decay). Clamps to [0.01, 0.99]. Non-blocking — fires async.
+// Called by the CertaintyUpdater adapter when Aletheia verdicts come in.
+func (m *MemoryBank) BumpImportance(ctx context.Context, fragID string, delta float64) {
+	if !m.enabled || fragID == "" {
+		return
+	}
+	// Read current importance
+	result, err := m.adminClient.QueryRecords(ctx, "memories",
+		fmt.Sprintf(`id = "%s"`, fragID), "", 1)
+	if err != nil || result == nil || len(result.Items) == 0 {
+		return
+	}
+	current := floatField(result.Items[0], "importance")
+	newVal := current + delta
+	if newVal < 0.01 {
+		newVal = 0.01
+	} else if newVal > 0.99 {
+		newVal = 0.99
+	}
+	if math.Abs(newVal-current) < 0.001 {
+		return // no meaningful change
+	}
+	_ = m.adminClient.UpdateRecord(ctx, "memories", fragID, map[string]any{
+		"importance": newVal,
+	})
 }
 
 // extractQueryKeywords splits a query into meaningful keywords for PocketBase

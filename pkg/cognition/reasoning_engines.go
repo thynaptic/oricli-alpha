@@ -225,8 +225,9 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 	// verifier has an *external* signal. Gate the loop on a MemoryBank hit; without
 	// one, skip straight to standard — ExploiterLeague provides the adversarial audit.
 	var groundingContext string
+	var frags []MemFrag
 	if e.MemoryBankRef != nil {
-		frags, _ := e.MemoryBankRef.QuerySimilar(ctx, stimulus, 3)
+		frags, _ = e.MemoryBankRef.QuerySimilar(ctx, stimulus, 3)
 		if len(frags) == 0 {
 			// No external grounding available — intrinsic correction would degrade; bail.
 			return e.runStandard(ctx, stimulus, composite)
@@ -260,8 +261,30 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 		return e.runStandard(ctx, stimulus, composite)
 	}
 
-	const maxGeneratorCalls = 2
+	// Collect frag IDs for certainty mutation after verdict.
+	// CORRECT → bump (+0.03), ADMIT_FAILURE → drop (-0.05).
+	groundingFragIDs := make([]string, 0, len(frags))
+	for _, f := range frags {
+		if f.Certainty >= 0.40 && f.ID != "" {
+			groundingFragIDs = append(groundingFragIDs, f.ID)
+		}
+	}
+
+	// bumpGrounding fires async certainty updates so they never block generation.
+	bumpGrounding := func(delta float64) {
+		if e.CertaintyUpdaterRef == nil || len(groundingFragIDs) == 0 {
+			return
+		}
+		go func() {
+			bCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			for _, id := range groundingFragIDs {
+				e.CertaintyUpdaterRef.BumpCertainty(bCtx, id, delta)
+			}
+		}()
+	}
 	var candidate string
+	const maxGeneratorCalls = 2
 
 	for attempt := 0; attempt < maxGeneratorCalls; attempt++ {
 		// ── Generator: produce candidate solution ─────────────────────────
@@ -315,12 +338,13 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 
 		switch {
 		case strings.HasPrefix(verdictUpper, aletheiaCorrect):
-			// ✓ Correct — emit candidate directly (bypass main LLM call)
+			// ✓ Correct — grounding frags were reliable: reinforce them.
+			bumpGrounding(+0.03)
 			return candidate, nil
 
 		case strings.HasPrefix(verdictUpper, aletheiaFail):
-			// Agent admits it cannot solve this — inject honest uncertainty signal
-			// into composite and let the standard LLM respond with appropriate humility.
+			// Agent admits insufficient knowledge — grounding frags weren't enough: mild drop.
+			bumpGrounding(-0.05)
 			enriched := composite + "\n\n### EPISTEMIC LIMITATION\n" +
 				"After careful verification, the available knowledge is insufficient to answer this with confidence. " +
 				"Be transparent about what is known, what is uncertain, and what would be needed to answer definitively. " +

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -98,13 +99,80 @@ type MemoryQuerier interface {
 
 // MemFrag is a minimal memory record crossing the cognition/service interface boundary.
 type MemFrag struct {
-	ID         string
-	Content    string
-	Source     string
-	Topic      string
-	Importance float64
-	Certainty  float64 // 0.0=rejected, 0.5=unverified (default), 0.85=corroborated, 0.95=constitution-committed
+	ID          string
+	Content     string
+	Source      string
+	Topic       string
+	Importance  float64
+	AccessCount int
+	Volatility  string    // "stable" | "current" | "ephemeral"
+	CreatedAt   time.Time // used for age-decay component of dynamic certainty
+	Certainty   float64   // computed by ComputeDynamicCertainty — do not set manually
 	// U=0 (verified) in AI-Supervisor terms is Certainty ≥ 0.80; U=1 (unverified) is Certainty < 0.80
+}
+
+// CertaintyUpdater is satisfied by the MemoryBank adapter in server_v2.
+// Defined here to avoid import cycles. Enables Aletheia + consensus to mutate
+// fragment importance based on verification outcomes.
+type CertaintyUpdater interface {
+	BumpCertainty(ctx context.Context, fragID string, delta float64)
+}
+
+// halfLifeDays returns the decay half-life in days for a volatility class.
+// Mirrors service.Volatility.halfLifeDays() without importing service.
+func halfLifeDays(volatility string) float64 {
+	switch volatility {
+	case "ephemeral":
+		return 7
+	case "current":
+		return 30
+	default: // "stable" or empty
+		return 180
+	}
+}
+
+// ComputeDynamicCertainty computes a live certainty score from multiple signals:
+//
+//   certainty = clamp(provBase + accessBonus - agePenalty, 0.05, 0.98)
+//
+// provBase:    the provenance-tier floor (set by adapter from provenance)
+// accessBonus: repeated retrieval = reinforcement signal (max +0.10)
+// agePenalty:  volatility-adjusted age decay (max -0.30)
+//
+// This implements the four evolution signals from the AI-Supervisor certainty model:
+//   - Repeated success   → accessBonus accumulates
+//   - Age/staleness      → agePenalty grows with time past half-life
+//   - Corroboration/CORRECT bumps    → increase frag.Importance → raises provBase next query
+//   - Contradiction/ADMIT drops      → decrease frag.Importance → lowers provBase next query
+func ComputeDynamicCertainty(frag MemFrag) float64 {
+	base := frag.Certainty // provenance floor set by adapter
+	if base == 0 {
+		base = 0.50 // unverified default (U=1)
+	}
+
+	// Access bonus: each retrieval is a weak reinforcement signal
+	accessBonus := math.Min(float64(frag.AccessCount)*0.015, 0.10)
+
+	// Age penalty: decay past one half-life, capped at -0.30
+	agePenalty := 0.0
+	if !frag.CreatedAt.IsZero() {
+		halfLife := halfLifeDays(frag.Volatility)
+		ageDays := time.Since(frag.CreatedAt).Hours() / 24
+		if ageDays > halfLife {
+			// Linear decay starting at half-life, max penalty at 3× half-life
+			overdue := ageDays - halfLife
+			agePenalty = math.Min(overdue/(halfLife*2), 0.30)
+		}
+	}
+
+	result := base + accessBonus - agePenalty
+	if result < 0.05 {
+		return 0.05
+	}
+	if result > 0.98 {
+		return 0.98
+	}
+	return result
 }
 
 // WebSearcher is satisfied by *service.SearXNGSearcher.
@@ -175,6 +243,9 @@ type SovereignEngine struct {
 	// MemoryBankRef enables CBR and Active mode to query past solved cases and memory.
 	// Injected from server_v2 to avoid import cycles.
 	MemoryBankRef MemoryQuerier
+	// CertaintyUpdaterRef enables Aletheia + consensus to mutate fragment importance
+	// based on verification outcomes (CORRECT→bump, ADMIT_FAILURE→drop).
+	CertaintyUpdaterRef CertaintyUpdater
 	// GenService exposes the generation backend directly to reasoning mode engines
 	// (PAL, LeastToMost, SelfRefine, ReAct). Set alongside Generator in NewSovereignEngine.
 	GenService    GenerationService
