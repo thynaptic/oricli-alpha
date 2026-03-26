@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -769,19 +770,24 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	if s.MemoryBank != nil && s.MemoryBank.IsEnabled() &&
 		len(lastMsg) > 50 && len(responseText) > 50 {
 		go func() {
+			// Strip HTML tags before storing — prevents <span class="ori-kw"> and similar
+			// UI syntax-highlighted content from polluting RAG recall.
+			cleanMsg := stripHTML(lastMsg)
+			cleanResp := stripHTML(responseText)
+
 			// Extract a short topic from the user's message (first 5 words)
-			words := strings.Fields(lastMsg)
+			words := strings.Fields(cleanMsg)
 			if len(words) > 5 {
 				words = words[:5]
 			}
 			topic := strings.Join(words, " ")
 
 			// Combine user + assistant turn, cap response at 400 chars
-			resp := responseText
+			resp := cleanResp
 			if len(resp) > 400 {
 				resp = resp[:400] + "…"
 			}
-			combined := fmt.Sprintf("User: %s\n\nOricli: %s", lastMsg, resp)
+			combined := fmt.Sprintf("User: %s\n\nOricli: %s", cleanMsg, resp)
 
 			s.MemoryBank.Write(service.MemoryFragment{
 				Content:      combined,
@@ -1470,6 +1476,21 @@ func (s *ServerV2) handlePutSovereignIdentity(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true, "saved": req.Name + ".ori"})
+}
+
+// reHTML strips HTML tags and decodes common entities.
+// Used to sanitize content before writing to MemoryBank so highlighted
+// UI output (e.g. <span class="ori-kw">workflow</span>) never poisons RAG.
+var reHTMLTag = regexp.MustCompile(`<[^>]+>`)
+
+func stripHTML(s string) string {
+	s = reHTMLTag.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "&amp;", "&")
+	s = strings.ReplaceAll(s, "&lt;", "<")
+	s = strings.ReplaceAll(s, "&gt;", ">")
+	s = strings.ReplaceAll(s, "&quot;", `"`)
+	s = strings.ReplaceAll(s, "&#39;", "'")
+	return s
 }
 
 // extractFeedbackKeywords pulls the top-5 meaningful words from a message preview.

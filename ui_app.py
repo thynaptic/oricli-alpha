@@ -3240,10 +3240,13 @@ def _ori_ai_system() -> str:
         + _ORI_SYNTAX_KNOWLEDGE
         + "\nOutput rules:\n"
         "- generate/edit/fix modes: output ONLY .ori source code — no markdown fences, no explanations\n"
+        "- NEVER output Go code, Python code, or any programming language — ONLY the ORI DSL shown above\n"
+        "- NEVER output HTML tags, CSS class names, or any markup\n"
         "- explain mode: be concise and technical\n"
         "- Use meaningful step labels: step[research], step[brief], step[report]\n"
         "- Chain steps via {{output}} rather than repeating queries\n"
         "- When fixing diagnostics, address every listed error and warning\n"
+        "- A valid workflow ALWAYS starts with: workflow \"Name\" {\n"
     )
 
 
