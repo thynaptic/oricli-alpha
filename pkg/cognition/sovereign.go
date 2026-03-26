@@ -89,6 +89,22 @@ type EventBroadcaster interface {
 type sovereignContextKey struct{}
 
 // --- Pillar 5: Sovereign Engine (The Synthesis) ---
+// MemoryQuerier is satisfied by *service.MemoryBank.
+// Defined here to avoid import cycles (service → cognition, not reverse).
+type MemoryQuerier interface {
+	QuerySimilar(ctx context.Context, query string, topN int) ([]MemFrag, error)
+	QuerySolved(ctx context.Context, topic string, limit int) ([]MemFrag, error)
+}
+
+// MemFrag is a minimal memory record crossing the cognition/service interface boundary.
+type MemFrag struct {
+	ID         string
+	Content    string
+	Source     string
+	Topic      string
+	Importance float64
+}
+
 // WebSearcher is satisfied by *service.SearXNGSearcher.
 // Defined here to avoid import cycles between cognition and service.
 type WebSearcher interface {
@@ -154,6 +170,12 @@ type SovereignEngine struct {
 	// Constitution is the Living Constitution behavioral layer.
 	// Injected from server_v2 to avoid import cycles. Set via InjectConstitution().
 	Constitution ConstitutionProvider
+	// MemoryBankRef enables CBR and Active mode to query past solved cases and memory.
+	// Injected from server_v2 to avoid import cycles.
+	MemoryBankRef MemoryQuerier
+	// GenService exposes the generation backend directly to reasoning mode engines
+	// (PAL, LeastToMost, SelfRefine, ReAct). Set alongside Generator in NewSovereignEngine.
+	GenService    GenerationService
 	Voice        *voice.VoicePiperService
 	Reform       interface{}
 	Curiosity    interface{}
@@ -222,6 +244,7 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 	
 	engine.Generator = NewGeneratorOrchestrator(engine)
 	engine.Generator.GenService = genService // Initialize the GenService correctly
+	engine.GenService = genService           // Direct access for reasoning mode engines
 	engine.Vision = vdi.NewVisionGroundingService(genService)
 	engine.ToT = NewToTEngine(engine.Generator)
 	engine.Audit = NewAuditEngine(engine)
@@ -324,9 +347,53 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	}
 
 	// --- Step 6: Reasoning Router ---
+	// Classify the stimulus into a ReasoningMode and dispatch to the appropriate engine.
+	// Each engine receives the composite prompt and may enrich it before generation.
+	// All non-Standard modes fall back to Standard on failure — never surfaces mode errors.
 	reasoningMethod := "Standard"
 	budget := DetermineBudget(stimulus)
-	if budget.RequiresMCTS { reasoningMethod = "MCTS" } else if isLogical { reasoningMethod = "ToT" }
+	mode := ClassifyReasoningMode(stimulus, budget)
+	reasoningMethod = mode.String()
+
+	// Modes that return a final composite (not a complete response) fall through to
+	// the standard LLM call below. Modes that do their own generation return early.
+	// NOTE: runPAL, runLeastToMost, runSelfRefine, runReAct call runStandard internally
+	//       and return the final composite — the actual LLM call happens at Step 10.
+	var modeEnrichedComposite string
+	var modeHandled bool
+
+	switch mode {
+	case ModeCBR:
+		if enriched, err := e.runCBR(ctx, stimulus, ""); err == nil {
+			modeEnrichedComposite = enriched
+			modeHandled = true
+		}
+	case ModePAL:
+		if enriched, err := e.runPAL(ctx, stimulus, ""); err == nil {
+			modeEnrichedComposite = enriched
+			modeHandled = true
+		}
+	case ModeActive:
+		if enriched, err := e.runActive(ctx, stimulus, ""); err == nil {
+			modeEnrichedComposite = enriched
+			modeHandled = true
+		}
+	case ModeLeastToMost:
+		if enriched, err := e.runLeastToMost(ctx, stimulus, ""); err == nil {
+			modeEnrichedComposite = enriched
+			modeHandled = true
+		}
+	case ModeSelfRefine:
+		if enriched, err := e.runSelfRefine(ctx, stimulus, ""); err == nil {
+			modeEnrichedComposite = enriched
+			modeHandled = true
+		}
+	case ModeReAct:
+		if enriched, err := e.runReAct(ctx, stimulus, ""); err == nil {
+			modeEnrichedComposite = enriched
+			modeHandled = true
+		}
+	}
 
 	// --- Step 7: Subconscious & Stochastic Prep ---
 	e.Subconscious.FieldVector[0] += 0.01 
@@ -361,8 +428,10 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		intent  searchintent.SearchIntent
 		topic   string
 	}
+	// Skip parallel web search for modes that already did targeted search (Active, ReAct)
+	skipWebSearch := mode == ModeActive || mode == ModeReAct
 	webCh := make(chan webResult, 1)
-	if e.SearXNG != nil && e.SearXNG.IsAvailable() {
+	if !skipWebSearch && e.SearXNG != nil && e.SearXNG.IsAvailable() {
 		if needsSearch, sq := DetectUncertainty(stimulus); needsSearch {
 			go func() {
 				rawCtx, err := e.SearXNG.SearchWithIntentFast(sq)
@@ -379,7 +448,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 			webCh <- webResult{} // no search needed — unblock immediately
 		}
 	} else {
-		webCh <- webResult{} // SearXNG unavailable — unblock immediately
+		webCh <- webResult{} // SearXNG unavailable or mode already searched — unblock immediately
 	}
 
 	// --- Step 9: Final Composite Instruction Assembly (runs in parallel with web lookup) ---
@@ -389,6 +458,11 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	// Placed at the top of composite so it colors the entire system prompt.
 	if e.Constitution != nil && e.Constitution.HasRules() {
 		composite = e.Constitution.Inject() + "\n\n" + composite
+	}
+
+	// Inject reasoning mode enrichment (CBR adapted solutions, PAL results, gap fills, etc.)
+	if modeHandled && modeEnrichedComposite != "" {
+		composite += modeEnrichedComposite
 	}
 
 	// Collect web context result (channel already buffered — never blocks if goroutine done)
@@ -440,7 +514,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	}
 
 	// --- Step 10: Introspective Audit & Trace Generation ---
-	fmt.Printf("[SovereignEngine] Pipeline v2.9.1 Complete. Router: %s, Health: %s\n", reasoningMethod, e.CurrentHealth.GetSummary())
+	fmt.Printf("[SovereignEngine] Pipeline v3.0.0 Complete. Router: %s, Health: %s\n", reasoningMethod, e.CurrentHealth.GetSummary())
 
 	// 10.1 Real-Time WebSocket Synchronization (Push)
 	if e.WSHub != nil {

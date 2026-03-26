@@ -44,12 +44,14 @@ const (
 	ProvenanceSyntheticL1  Provenance = "synthetic_l1"  // curiosity: summarised from web results
 	ProvenanceSyntheticL2  Provenance = "synthetic_l2+" // derived from another synthetic memory
 	ProvenanceContrastive  Provenance = "contrastive"   // ACCEPTED/REJECTED pair from emoji/correction feedback
+	ProvenanceSolved       Provenance = "solved"         // verified good response — used by CBR to adapt past solutions
 )
 
 // RAG weight multiplier per provenance level.
 // user_stated anchors always bypass normal ranking and inject first.
 var provenanceWeight = map[Provenance]float32{
 	ProvenanceUserStated:   1.5,
+	ProvenanceSolved:       1.4,
 	ProvenanceContrastive:  1.3,
 	ProvenanceWebVerified:  1.2,
 	ProvenanceConversation: 0.9,
@@ -588,7 +590,66 @@ func (m *MemoryBank) QueryBySource(ctx context.Context, sources []string, limit 
 	return frags, nil
 }
 
-// the total record count exceeds PB_MEMORY_MAX_RECORDS. Runs async.
+// QuerySolved fetches solved-case fragments ranked by similarity to the given topic.
+// Used by CBR engine to find past successful responses to adapt for the current query.
+func (m *MemoryBank) QuerySolved(ctx context.Context, topic string, limit int) ([]MemoryFragment, error) {
+	if !m.enabled {
+		return nil, nil
+	}
+	filter := fmt.Sprintf(`provenance = "%s"`, string(ProvenanceSolved))
+	result, err := m.adminClient.QueryRecords(ctx, "memories", filter, "-importance", limit*3)
+	if err != nil {
+		return nil, err
+	}
+
+	// Re-rank by topic keyword overlap (lightweight — no embedding call)
+	topicWords := extractQueryKeywords(topic, 8)
+	type scored struct {
+		frag  MemoryFragment
+		score int
+	}
+	var candidates []scored
+	for _, item := range result.Items {
+		content := strings.ToLower(stringField(item, "content"))
+		s := 0
+		for _, w := range topicWords {
+			if strings.Contains(content, w) {
+				s++
+			}
+		}
+		if s > 0 {
+			candidates = append(candidates, scored{
+				frag: MemoryFragment{
+					ID:         stringField(item, "id"),
+					Content:    stringField(item, "content"),
+					Source:     stringField(item, "source"),
+					Topic:      stringField(item, "topic"),
+					Importance: floatField(item, "importance"),
+					Provenance: ProvenanceSolved,
+				},
+				score: s,
+			})
+		}
+	}
+
+	// Sort descending by keyword overlap
+	for i := 1; i < len(candidates); i++ {
+		for j := i; j > 0 && candidates[j].score > candidates[j-1].score; j-- {
+			candidates[j], candidates[j-1] = candidates[j-1], candidates[j]
+		}
+	}
+
+	out := make([]MemoryFragment, 0, limit)
+	for i, c := range candidates {
+		if i >= limit {
+			break
+		}
+		out = append(out, c.frag)
+	}
+	return out, nil
+}
+
+
 // Rules:
 //   - user_stated (anchor) memories are never pruned
 //   - Decay half-life is per-record based on topic_volatility field

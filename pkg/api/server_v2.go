@@ -169,6 +169,9 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	s.SignalProcessor = service.NewSignalProcessor(mb, lc)
 	agent.SovEngine.Constitution = lc
 
+	// Inject MemoryBank into SovereignEngine via adapter (avoids cognition→service import cycle).
+	agent.SovEngine.MemoryBankRef = &memoryBankAdapter{mb: mb}
+
 	s.setupRoutes()
 
 	// Pre-warm Ollama model in the background so the first user request
@@ -746,6 +749,19 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		defer cancel()
 		corrected, violated := s.Agent.SovEngine.SelfAlign(ctx, query, response)
 		if !violated {
+			// Clean response — write as ProvenanceSolved for CBR future use.
+			// This teaches Oricli what a good answer looks like for this class of problem.
+			if s.MemoryBank != nil && s.MemoryBank.IsEnabled() && len(query) > 20 && len(response) > 50 {
+				words := strings.Fields(query)
+				if len(words) > 5 { words = words[:5] }
+				go s.MemoryBank.Write(service.MemoryFragment{
+					Content:    fmt.Sprintf("Q: %s\n\nA: %s", query, truncateStr(response, 600)),
+					Source:     "solved",
+					Topic:      strings.Join(words, " "),
+					Importance: 0.75,
+					Provenance: service.ProvenanceSolved,
+				})
+			}
 			return
 		}
 		s.Agent.SovEngine.WSHub.BroadcastEvent("scai_correction", map[string]interface{}{
@@ -1534,4 +1550,41 @@ if i >= 5 { break }
 out = append(out, r.w)
 }
 return out
+}
+
+// ─── MemoryBank adapter (cognition.MemoryQuerier) ─────────────────────────────
+// Bridges *service.MemoryBank to the cognition.MemoryQuerier interface without
+// creating an import cycle. Converts service.MemoryFragment → cognition.MemoryFragment.
+
+type memoryBankAdapter struct {
+mb *service.MemoryBank
+}
+
+func (a *memoryBankAdapter) QuerySimilar(ctx context.Context, query string, topN int) ([]cognition.MemFrag, error) {
+frags, err := a.mb.QuerySimilar(ctx, query, topN)
+if err != nil {
+return nil, err
+}
+out := make([]cognition.MemFrag, len(frags))
+for i, f := range frags {
+out[i] = cognition.MemFrag{ID: f.ID, Content: f.Content, Source: f.Source, Topic: f.Topic, Importance: f.Importance}
+}
+return out, nil
+}
+
+func (a *memoryBankAdapter) QuerySolved(ctx context.Context, topic string, limit int) ([]cognition.MemFrag, error) {
+frags, err := a.mb.QuerySolved(ctx, topic, limit)
+if err != nil {
+return nil, err
+}
+out := make([]cognition.MemFrag, len(frags))
+for i, f := range frags {
+out[i] = cognition.MemFrag{ID: f.ID, Content: f.Content, Source: f.Source, Topic: f.Topic, Importance: f.Importance}
+}
+return out, nil
+}
+
+func truncateStr(s string, n int) string {
+if len(s) <= n { return s }
+return s[:n] + "…"
 }
