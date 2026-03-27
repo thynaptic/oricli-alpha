@@ -551,8 +551,11 @@ export function AgentsPage() {
   const activeSkill    = useSCStore(s => s.activeSkill);
   const setActiveSkill = useSCStore(s => s.setActiveSkill);
 
-  const pendingAgentPrompt    = useSCStore(s => s.pendingAgentPrompt);
+  const pendingAgentPrompt      = useSCStore(s => s.pendingAgentPrompt);
   const clearPendingAgentPrompt = useSCStore(s => s.clearPendingAgentPrompt);
+  const pendingAgentIntentId      = useSCStore(s => s.pendingAgentIntentId);
+  const clearPendingAgentIntentId = useSCStore(s => s.clearPendingAgentIntentId);
+  const updateCreationIntent      = useSCStore(s => s.updateCreationIntent);
 
   const [tab, setTab] = useState('agents');
   const [view, setView] = useState('list');
@@ -562,15 +565,18 @@ export function AgentsPage() {
   const [drawerType, setDrawerType] = useState(null);
   const [vibeOpen, setVibeOpen] = useState(false);
   const [vibePrompt, setVibePrompt] = useState(null);
+  const [vibeIntentId, setVibeIntentId] = useState(null);
 
   // Auto-open Vibe Studio when navigated from chat with a pending prompt
   useEffect(() => {
     if (pendingAgentPrompt) {
       setVibePrompt(pendingAgentPrompt);
+      setVibeIntentId(pendingAgentIntentId);
       setVibeOpen(true);
       clearPendingAgentPrompt();
+      clearPendingAgentIntentId();
     }
-  }, [pendingAgentPrompt, clearPendingAgentPrompt]);
+  }, [pendingAgentPrompt, pendingAgentIntentId, clearPendingAgentPrompt, clearPendingAgentIntentId]);
 
   const toggleRule = id => setActiveRules(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
@@ -733,10 +739,17 @@ export function AgentsPage() {
         {/* Vibe Studio side drawer */}
         {vibeOpen && (
           <AgentVibePanel
-            onClose={() => { setVibeOpen(false); setVibePrompt(null); }}
+            onClose={() => { setVibeOpen(false); setVibePrompt(null); setVibeIntentId(null); }}
             skillPool={allSkillPool}
             rulePool={[...RULE_POOL, ...customRules]}
-            onAgentCreated={data => { addAgent(data); setTab('agents'); }}
+            onAgentCreated={data => {
+              addAgent(data);
+              setTab('agents');
+              if (vibeIntentId) {
+                updateCreationIntent(vibeIntentId, { action: 'created', resultName: data.name });
+                setVibeIntentId(null);
+              }
+            }}
             onSkillCreated={data => addCustomSkill(data)}
             onRuleCreated={data => addCustomRule(data)}
             initialPrompt={vibePrompt}

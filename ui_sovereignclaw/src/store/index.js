@@ -376,6 +376,33 @@ export const useSCStore = create(
   pendingWorkflowPrompt: null,
   setPendingWorkflowPrompt(text) { set({ pendingWorkflowPrompt: text }); },
   clearPendingWorkflowPrompt() { set({ pendingWorkflowPrompt: null }); },
+
+  // Intent ID threading — links routing card → creation callback
+  pendingAgentIntentId: null,
+  setPendingAgentIntentId(id) { set({ pendingAgentIntentId: id }); },
+  clearPendingAgentIntentId() { set({ pendingAgentIntentId: null }); },
+
+  pendingWorkflowIntentId: null,
+  setPendingWorkflowIntentId(id) { set({ pendingWorkflowIntentId: id }); },
+  clearPendingWorkflowIntentId() { set({ pendingWorkflowIntentId: null }); },
+
+  // Creation intent memory — powers "you've built X agents like this before"
+  creationIntents: [],
+  logCreationIntent({ type, subject, action = 'routed' }) {
+    const id = `ci-${Date.now()}`;
+    set(s => ({
+      creationIntents: [
+        { id, type, subject, action, timestamp: Date.now(), resultId: null, resultName: null },
+        ...s.creationIntents,
+      ].slice(0, 500), // cap at 500 entries
+    }));
+    return id;
+  },
+  updateCreationIntent(id, patch) {
+    set(s => ({
+      creationIntents: s.creationIntents.map(x => x.id === id ? { ...x, ...patch } : x),
+    }));
+  },
   setCanvasChatHistory(docId, messages) {
     set(state => ({ canvasChatHistories: { ...state.canvasChatHistories, [docId]: messages } }));
   },

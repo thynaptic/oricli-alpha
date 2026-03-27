@@ -773,24 +773,64 @@ function detectCreateIntent(text) {
   return m ? m[1].replace(/[.!?]+$/, '').trim() : null;
 }
 
+// Score similarity between a subject string and an item's name+description
+function subjectOverlap(subject, name = '', description = '') {
+  const words = subject.toLowerCase().split(/\W+/).filter(w => w.length > 3);
+  const haystack = `${name} ${description}`.toLowerCase();
+  const hits = words.filter(w => haystack.includes(w));
+  return hits.length / Math.max(words.length, 1);
+}
+
 // ── Routing card — surfaces agent/workflow creation intent ─────────────────
 function RoutingCard({ msg }) {
-  const setActivePage            = useSCStore(s => s.setActivePage);
-  const setPendingAgentPrompt    = useSCStore(s => s.setPendingAgentPrompt);
-  const setPendingWorkflowPrompt = useSCStore(s => s.setPendingWorkflowPrompt);
-  const isAgent = msg.targetPage === 'agents';
+  const setActivePage              = useSCStore(s => s.setActivePage);
+  const setPendingAgentPrompt      = useSCStore(s => s.setPendingAgentPrompt);
+  const setPendingWorkflowPrompt   = useSCStore(s => s.setPendingWorkflowPrompt);
+  const setPendingAgentIntentId    = useSCStore(s => s.setPendingAgentIntentId);
+  const setPendingWorkflowIntentId = useSCStore(s => s.setPendingWorkflowIntentId);
+  const logCreationIntent          = useSCStore(s => s.logCreationIntent);
+  const creationIntents            = useSCStore(s => s.creationIntents);
+  const agents                     = useSCStore(s => s.agents);
+  const setActiveAgentId           = useSCStore(s => s.setActiveAgentId);
 
-  function navigate() {
+  const isAgent = msg.targetPage === 'agents';
+  const intentIdRef = useRef(null);
+
+  // Log intent exactly once on mount
+  useEffect(() => {
+    intentIdRef.current = logCreationIntent({ type: isAgent ? 'agent' : 'workflow', subject: msg.subject });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Find similar existing agents (store) or past workflow intents
+  const similar = isAgent
+    ? agents.filter(a => subjectOverlap(msg.subject, a.name, a.description || a.systemPrompt) >= 0.25).slice(0, 4)
+    : creationIntents
+        .filter(ci => ci.type === 'workflow' && ci.action === 'created' && subjectOverlap(msg.subject, ci.subject) >= 0.25)
+        .slice(0, 4);
+
+  function buildNew() {
+    const intentId = intentIdRef.current;
     if (isAgent) {
       setPendingAgentPrompt(msg.fullText);
+      setPendingAgentIntentId(intentId);
+      setActivePage('agents');
     } else {
       setPendingWorkflowPrompt(msg.fullText);
+      setPendingWorkflowIntentId(intentId);
+      setActivePage('workflows');
     }
-    setActivePage(msg.targetPage);
   }
 
+  function useExistingAgent(agent) {
+    setActiveAgentId(agent.id);
+    setActivePage('agents');
+  }
+
+  const totalPast = creationIntents.filter(ci => ci.type === (isAgent ? 'agent' : 'workflow')).length;
+
   return (
-    <div style={{ margin: '4px 0 4px 44px', maxWidth: 460 }}>
+    <div style={{ margin: '4px 0 4px 44px', maxWidth: 480 }}>
       <div style={{
         border: '1px solid rgba(196,164,74,0.28)',
         borderRadius: 10,
@@ -800,14 +840,47 @@ function RoutingCard({ msg }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
           {isAgent ? <Bot size={15} color="var(--color-sc-gold)" /> : <Workflow size={15} color="var(--color-sc-gold)" />}
           <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--color-sc-gold)' }}>
-            {isAgent ? 'Set up in Vibe Studio?' : 'Set up in Workflows?'}
+            {isAgent ? 'Agent creation detected' : 'Workflow creation detected'}
           </span>
+          {totalPast > 0 && (
+            <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--color-sc-text-dim)' }}>
+              {totalPast} {isAgent ? 'agent' : 'workflow'}{totalPast !== 1 ? 's' : ''} built so far
+            </span>
+          )}
         </div>
+
         <p style={{ margin: '0 0 10px', fontSize: 12.5, color: 'var(--color-sc-text-dim)', lineHeight: 1.45 }}>
           {msg.subject}
         </p>
+
+        {similar.length > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--color-sc-text-dim)', marginBottom: 5, fontWeight: 600 }}>
+              {isAgent
+                ? `You've built ${similar.length} similar agent${similar.length > 1 ? 's' : ''} — use one or build fresh?`
+                : `You've created ${similar.length} similar workflow${similar.length > 1 ? 's' : ''} — use one or build fresh?`
+              }
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {similar.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => isAgent ? useExistingAgent(item) : setActivePage('workflows')}
+                  style={{
+                    padding: '3px 9px', borderRadius: 5, fontSize: 11,
+                    background: 'rgba(196,164,74,0.12)', color: 'var(--color-sc-gold)',
+                    border: '1px solid rgba(196,164,74,0.3)', cursor: 'pointer', fontWeight: 600,
+                  }}
+                >
+                  {item.emoji ? `${item.emoji} ` : ''}{isAgent ? item.name : item.subject}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <button
-          onClick={navigate}
+          onClick={buildNew}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
             padding: '5px 12px', borderRadius: 6,
@@ -816,7 +889,7 @@ function RoutingCard({ msg }) {
           }}
         >
           <ArrowRight size={11} />
-          {isAgent ? 'Open Vibe Studio' : 'Open Workflows'}
+          {similar.length > 0 ? 'Build new' : (isAgent ? 'Open Vibe Studio' : 'Open Workflows')}
         </button>
       </div>
     </div>

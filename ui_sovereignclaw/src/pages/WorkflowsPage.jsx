@@ -1372,7 +1372,8 @@ function WorkflowsTab({ creating, setCreating }) {
   const [editingWf, setEditingWf] = useState(null);
   const [pendingDocRun, setPendingDocRun] = useState(null);
   const [pendingVarsRun, setPendingVarsRun] = useState(null); // { wf, vars[] }
-  const [wfPrompt, setWfPrompt]   = useState(null);
+  const [wfPrompt, setWfPrompt]     = useState(null);
+  const [wfIntentId, setWfIntentId] = useState(null);
 
   // bgRuns lives in global store — survives page navigation
   const bgRuns               = useSCStore(s => s.bgRuns);
@@ -1388,15 +1389,20 @@ function WorkflowsTab({ creating, setCreating }) {
 
   const pendingWorkflowPrompt      = useSCStore(s => s.pendingWorkflowPrompt);
   const clearPendingWorkflowPrompt = useSCStore(s => s.clearPendingWorkflowPrompt);
+  const pendingWorkflowIntentId      = useSCStore(s => s.pendingWorkflowIntentId);
+  const clearPendingWorkflowIntentId = useSCStore(s => s.clearPendingWorkflowIntentId);
+  const updateCreationIntent         = useSCStore(s => s.updateCreationIntent);
 
   // Auto-open creator when navigated from chat with a pending prompt
   useEffect(() => {
     if (pendingWorkflowPrompt) {
       setWfPrompt(pendingWorkflowPrompt);
+      setWfIntentId(pendingWorkflowIntentId);
       setCreating(true);
       clearPendingWorkflowPrompt();
+      clearPendingWorkflowIntentId();
     }
-  }, [pendingWorkflowPrompt, clearPendingWorkflowPrompt, setCreating]);
+  }, [pendingWorkflowPrompt, pendingWorkflowIntentId, clearPendingWorkflowPrompt, clearPendingWorkflowIntentId, setCreating]);
 
   async function refresh() {
     try {
@@ -1473,7 +1479,12 @@ function WorkflowsTab({ creating, setCreating }) {
     setWorkflows(prev => prev.filter(w => w.id !== id));
   }
 
-  function handleSave() {
+  function handleSave(wf) {
+    if (wfIntentId && wf?.name) {
+      updateCreationIntent(wfIntentId, { action: 'created', resultName: wf.name, resultId: wf.id });
+      setWfIntentId(null);
+    }
+    setWfPrompt(null);
     setCreating(false);
     setEditingWf(null);
     refresh();
