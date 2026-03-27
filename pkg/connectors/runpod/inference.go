@@ -88,7 +88,7 @@ func (c *Client) CreatePrimaryPod(gpuTypeID, modelID string, awq, community bool
 	}
 
 	dockerArgs := fmt.Sprintf(
-		"--model %s --port %d --host 0.0.0.0 --trust-remote-code --max-model-len 8192 --tensor-parallel-size 1",
+		"--model %s --port %d --host 0.0.0.0 --trust-remote-code --max-model-len 32768 --tensor-parallel-size 1",
 		modelID, primaryPort,
 	)
 	if awq {
