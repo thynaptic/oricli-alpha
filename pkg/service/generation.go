@@ -262,17 +262,18 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 	if s.PrimaryMgr != nil && s.PrimaryMgr.IsEnabled() && os.Getenv("RUNPOD_PRIMARY") == "true" {
 		podState := s.PrimaryMgr.PodState()
 		podModel := s.PrimaryMgr.PodModelName()
+		wasWaiting := podState == StateOff || podState == StateWarming
 
 		out := make(chan string, 64)
 		go func() {
 			defer close(out)
 
-			// Callout if the pod is cold or still warming up.
+			// Escalation callout if the pod is cold or still warming up.
 			if podState == StateOff {
 				if podModel != "" {
 					out <- podCalloutWithModel(podModel)
 				} else {
-					out <- podCallout("spinning")
+					out <- podCallout("escalation")
 				}
 			} else if podState == StateWarming {
 				out <- podCallout("warming")
@@ -291,6 +292,12 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 				}
 				return
 			}
+
+			// Success handoff — only when the user actually waited for the pod.
+			if wasWaiting {
+				out <- podHandoff(s.PrimaryMgr.PodModelName())
+			}
+
 			for tok := range ch {
 				out <- tok
 			}
