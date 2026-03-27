@@ -20,7 +20,7 @@ func shareBaseURL() string {
 	if u := os.Getenv("SHARE_BASE_URL"); u != "" {
 		return strings.TrimRight(u, "/")
 	}
-	return "https://sovereignclaw.thynaptic.com"
+	return "https://oristudio.thynaptic.com"
 }
 
 // handleCreateShare saves a canvas document and returns a permanent share URL.
