@@ -189,6 +189,22 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 
 	s.setupRoutes()
 
+	// Seed API key from env — allows scripts/benchmark tools to auth without
+	// a database round-trip to generate keys. Set ORICLI_SEED_API_KEY=glm.<prefix>.<secret>
+	// in .env or the systemd service file. The key is registered (or re-registered)
+	// every startup so it survives DB wipes.
+	if seedKey := os.Getenv("ORICLI_SEED_API_KEY"); seedKey != "" {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if _, err := s.auth.RegisterAPIKey(ctx, seedKey, "default", []string{"chat", "read", "write"}, nil); err != nil {
+				log.Printf("[ServerV2] seed key register error (may already exist): %v", err)
+			} else {
+				log.Printf("[ServerV2] seed API key registered")
+			}
+		}()
+	}
+
 	// Pre-warm Ollama model in the background so the first user request
 	// doesn't pay the cold-load penalty (~60-90s on CPU-only VPS).
 	go func() {
