@@ -257,14 +257,45 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 	}
 
 	// RUNPOD_PRIMARY mode: route ALL tiers through the vLLM pod.
-	// Ollama is pure fallback when the pod is unavailable.
+	// Emits a personality callout if the pod is cold, then blocks on Ensure.
+	// If the pod never comes up, falls back to Ollama in the same channel.
 	if s.PrimaryMgr != nil && s.PrimaryMgr.IsEnabled() && os.Getenv("RUNPOD_PRIMARY") == "true" {
-		ch, err := s.PrimaryMgr.ChatStream(ctx, messages, options)
-		if err != nil {
-			log.Printf("[GenerationService] PrimaryMgr unavailable (%v) — falling back to Ollama", err)
-		} else {
-			return ch, nil
-		}
+		podState := s.PrimaryMgr.PodState()
+		podModel := s.PrimaryMgr.PodModelName()
+
+		out := make(chan string, 64)
+		go func() {
+			defer close(out)
+
+			// Callout if the pod is cold or still warming up.
+			if podState == StateOff {
+				if podModel != "" {
+					out <- podCalloutWithModel(podModel)
+				} else {
+					out <- podCallout("spinning")
+				}
+			} else if podState == StateWarming {
+				out <- podCallout("warming")
+			}
+
+			ch, err := s.PrimaryMgr.ChatStream(ctx, messages, options)
+			if err != nil {
+				log.Printf("[GenerationService] PrimaryMgr unavailable (%v) — falling back to Ollama", err)
+				out <- podCallout("fallback")
+				// Pipe Ollama into the same channel so the user gets a real response.
+				ollamaCh, oErr := s.ollamaChatStream(ctx, messages, model, options)
+				if oErr == nil {
+					for tok := range ollamaCh {
+						out <- tok
+					}
+				}
+				return
+			}
+			for tok := range ch {
+				out <- tok
+			}
+		}()
+		return out, nil
 	}
 
 	// Route code/research tiers to KoboldCpp RunPod when enabled (legacy path).
@@ -283,6 +314,12 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 
 	// ── Ollama path ──────────────────────────────────────────────────────────
 
+	return s.ollamaChatStream(ctx, messages, model, options)
+}
+
+// ollamaChatStream is the raw Ollama streaming path, extracted so it can be
+// called directly as a fallback from the RunPod routing block.
+func (s *GenerationService) ollamaChatStream(ctx context.Context, messages []map[string]string, model string, options map[string]interface{}) (<-chan string, error) {
 	ollamaMessages := make([]map[string]interface{}, len(messages))
 	for i, msg := range messages {
 		ollamaMessages[i] = map[string]interface{}{

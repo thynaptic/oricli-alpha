@@ -654,6 +654,9 @@ func (m *PrimaryInferenceManager) WarmOnStart() {
 }
 
 // ChatStream streams a chat response from the vLLM pod.
+// ChatStream streams a chat response from the vLLM pod.
+// Blocks until the pod is ready (Ensure), then streams tokens.
+// Callouts and Ollama fallback are handled by the caller (GenerationService).
 func (m *PrimaryInferenceManager) ChatStream(ctx context.Context, messages []map[string]string, options map[string]interface{}) (<-chan string, error) {
 	endpoint, err := m.Ensure(ctx)
 	if err != nil {
@@ -735,6 +738,23 @@ func (m *PrimaryInferenceManager) ChatStream(ctx context.Context, messages []map
 // IsEnabled returns true when a RunPod API key is configured.
 func (m *PrimaryInferenceManager) IsEnabled() bool {
 	return m != nil && m.client != nil
+}
+
+// PodState returns the current lifecycle state.
+func (m *PrimaryInferenceManager) PodState() RunPodState {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.state
+}
+
+// PodModelName returns the name of the model loaded in the current pod (empty if off).
+func (m *PrimaryInferenceManager) PodModelName() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.pod != nil {
+		return m.pod.ModelName
+	}
+	return ""
 }
 
 // Status returns a human-readable pod state string.
