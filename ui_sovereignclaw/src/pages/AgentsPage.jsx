@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useSCStore } from '../store';
 import {
   Bot, Shield, ToggleLeft, ToggleRight, ChevronRight, X, Plus,
-  Trash2, Edit3, FileCode2, Check, Cpu, Zap, ArrowLeft, Copy, Wrench,
+  Trash2, Edit3, FileCode2, Check, Cpu, Zap, ArrowLeft, Copy, Wrench, Wand2,
 } from 'lucide-react';
+import AgentVibePanel from '../components/AgentVibePanel';
 
 // ─── Static pool data ────────────────────────────────────────────────────────
 
@@ -556,6 +557,7 @@ export function AgentsPage() {
   const [activeRules, setActiveRules] = useState(new Set(['global_safety', 'response_format', 'code_quality']));
   const [drawerItem, setDrawerItem] = useState(null);
   const [drawerType, setDrawerType] = useState(null);
+  const [vibeOpen, setVibeOpen] = useState(false);
 
   const toggleRule = id => setActiveRules(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
@@ -637,7 +639,23 @@ export function AgentsPage() {
               Build sovereign agents, skills, and rules — all exported as native <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>.ori</code> profiles loaded by MCI.
             </p>
           </div>
-          {headerAction}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {/* Vibe Studio button — always visible */}
+            <button
+              onClick={() => setVibeOpen(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px',
+                borderRadius: 9,
+                background: vibeOpen ? 'rgba(196,164,74,0.22)' : 'rgba(196,164,74,0.08)',
+                border: `1px solid ${vibeOpen ? 'rgba(196,164,74,0.5)' : 'rgba(196,164,74,0.2)'}`,
+                color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                fontFamily: 'var(--font-grotesk)', transition: 'background 0.15s',
+              }}
+            >
+              <Wand2 size={14} /> Vibe Studio
+            </button>
+            {headerAction}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
           <Tab id="agents" label="Agents" count={agents.length} />
@@ -646,8 +664,9 @@ export function AgentsPage() {
         </div>
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
+      {/* Content + Vibe Panel side-by-side */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
 
         {/* Agents */}
         {tab === 'agents' && (agents.length === 0
@@ -696,7 +715,20 @@ export function AgentsPage() {
             </div>
           </div>
         )}
-      </div>
+        </div>{/* end content scroll area */}
+
+        {/* Vibe Studio side drawer */}
+        {vibeOpen && (
+          <AgentVibePanel
+            onClose={() => setVibeOpen(false)}
+            skillPool={allSkillPool}
+            rulePool={[...RULE_POOL, ...customRules]}
+            onAgentCreated={data => { addAgent(data); setTab('agents'); }}
+            onSkillCreated={data => addCustomSkill(data)}
+            onRuleCreated={data => addCustomRule(data)}
+          />
+        )}
+      </div>{/* end content+panel row */}
 
       {drawerItem && <ProfileDrawer item={drawerItem} type={drawerType} onClose={() => setDrawerItem(null)} />}
     </div>

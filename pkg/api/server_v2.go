@@ -274,6 +274,9 @@ func (s *ServerV2) setupRoutes() {
 		// Canvas shares — create a permanent public share link
 		protected.POST("/share", s.handleCreateShare)
 
+		// Agent Vibe Studio — natural language agent creation
+		protected.POST("/agents/vibe", s.handleAgentVibe)
+
 		// Vision — image analysis via moondream (CPU-safe, local Ollama)
 		protected.POST("/vision/analyze", s.handleVisionAnalyze)
 
