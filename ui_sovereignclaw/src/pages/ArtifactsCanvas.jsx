@@ -740,6 +740,21 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
             <button onClick={download} title="Download" style={{ padding: '5px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: 'transparent', color: 'var(--color-sc-text-muted)', display: 'flex' }}>
               <Download size={13} />
             </button>
+            {displayDoc?.type === 'html' && displayDoc?.content && (
+              <button
+                onClick={() => {
+                  const blob = new Blob([displayDoc.content], { type: 'text/html' });
+                  const url = URL.createObjectURL(blob);
+                  const tab = window.open(url, '_blank');
+                  // Revoke after tab has had time to load
+                  if (tab) setTimeout(() => URL.revokeObjectURL(url), 10000);
+                }}
+                title="Open design in new tab"
+                style={{ padding: '5px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: 'transparent', color: 'var(--color-sc-text-muted)', display: 'flex' }}
+              >
+                <ExternalLink size={13} />
+              </button>
+            )}
           </div>
         )}
       </div>
