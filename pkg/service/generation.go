@@ -162,6 +162,31 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
 	}
+
+	// When RUNPOD_PRIMARY=true and the pod is warm, route Generate through the 32B
+	// vLLM pod. This ensures PAL code generation, SelfDiscover reasoning steps, and
+	// any other Generate callers benefit from the full model — not just ChatStream.
+	if s.PrimaryMgr != nil && s.PrimaryMgr.IsEnabled() &&
+		os.Getenv("RUNPOD_PRIMARY") == "true" && s.PrimaryMgr.PodState() == StateWarm {
+		msgs := []map[string]string{{"role": "user", "content": prompt}}
+		if sys, ok := options["system"].(string); ok && sys != "" {
+			msgs = append([]map[string]string{{"role": "system", "content": sys}}, msgs...)
+		}
+		genCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		ch, err := s.PrimaryMgr.ChatStream(genCtx, msgs, options)
+		if err == nil {
+			var sb strings.Builder
+			for tok := range ch {
+				sb.WriteString(tok)
+			}
+			if text := strings.TrimSpace(sb.String()); text != "" {
+				return map[string]interface{}{"success": true, "response": text, "text": text, "model": model, "method": "runpod_primary", "confidence": 0.97}, nil
+			}
+		}
+		log.Printf("[GenerationService] Generate: RunPod fallback to Ollama (%v)", err)
+	}
+
 	// num_ctx MUST match ChatStream (4096) so Ollama never reallocates the KV cache.
 	// A mismatch causes a full model reload (~20-60s) on the next chat request.
 	payload := map[string]interface{}{"model": model, "prompt": prompt, "stream": false, "options": map[string]interface{}{"num_thread": s.NumThreads, "num_ctx": 4096, "num_predict": 512}}
@@ -176,7 +201,7 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 	if imgs, ok := options["images"].([]string); ok && len(imgs) > 0 {
 		payload["images"] = imgs
 	}
-	
+
 	if rawOpts, ok := options["options"].(map[string]interface{}); ok {
 		for k, v := range rawOpts {
 			payload["options"].(map[string]interface{})[k] = v
