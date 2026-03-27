@@ -102,6 +102,20 @@ Public share links for Canvas artifacts (served at `/share/:id`).
 | `content` | text | Stored artifact content |
 | `language` | text | Optional language (e.g., `html`, `js`) |
 
+### `sovereign_goals`
+GoalService DAG objectives with full lifecycle tracking.
+
+| Field | Type | Description |
+|---|---|---|
+| `goal_id` | text | Goal identifier |
+| `goal` | text | Goal description text |
+| `priority` | number | Priority weight |
+| `status` | text | Lifecycle state (`pending` \| `active` \| `done` \| `failed`) |
+| `depends_on` | json | Array of dependency goal IDs |
+| `retry_count` | number | Retry counter for failed goals |
+| `progress` | number | Completion percentage (0–100) |
+| `metadata` | json | Arbitrary extra fields |
+
 ---
 
 ## RAG Injection
@@ -189,6 +203,7 @@ Monthly cap guard
 [pb-bootstrap] created collection "spend_ledger"
 [pb-bootstrap] created collection "conversation_summaries"
 [pb-bootstrap] created collection "canvas_shares"
+[pb-bootstrap] created collection "sovereign_goals"
 [pb-bootstrap] Created Oricli analyst account: oricli@thynaptic.com
 ```
 

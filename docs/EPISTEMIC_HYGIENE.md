@@ -54,15 +54,20 @@ Every memory record carries a `provenance` field that declares the **origin qual
 | `web_verified` | Retrieved directly from a live URL with timestamp | ×1.2 | Yes |
 | `seen` | Image-derived description (vision inference) | ×1.0 | Yes |
 | `conversation` | Inferred from a chat exchange | ×0.9 | Yes |
+| `contrastive` | ACCEPTED/REJECTED emoji feedback pair (DPO) | ×1.3 | Yes |
+| `solved` | Verified good response committed by CBR pipeline | ×1.4 | Yes |
+| `gold` | 📌-bookmarked anchor (highest trust tier) | ×1.6 | **Never** |
 | `synthetic_l1` | Curiosity summary of web results (one-hop from real data) | ×0.85 | Yes |
 | `synthetic_l2+` | Derived from another synthetic memory | ×0.6 / lineage_depth | Yes |
 
-### Anchor Memories (`user_stated`)
+### Anchor Memories (`user_stated` and `gold`)
 
-`user_stated` memories are **immortal anchors**:
+`user_stated` and `gold` memories are **immortal anchors**:
 - `retentionScore()` returns `+Inf` — excluded from all recycle passes
 - RAG scoring adds `+10.0` to their cosine score — they always surface first regardless of topic match quality
 - Capped at 2 anchors per RAG context window to prevent anchor flooding
+
+📌 **Gold anchors** are bookmarked by the user via the memory browser. They share the same immortal retention behavior as `user_stated` but carry a higher RAG weight (×1.6 vs ×1.5).
 
 These are the ground-truth bedrock of Oricli's world model. If you tell her something directly, it persists forever and outweighs any amount of synthetic learning.
 
@@ -170,7 +175,7 @@ The three epistemic hygiene fields are present on both `memories` and `knowledge
 
 | Field | Type | Values |
 |---|---|---|
-| `provenance` | text | `user_stated` \| `web_verified` \| `seen` \| `conversation` \| `synthetic_l1` \| `synthetic_l2+` |
+| `provenance` | text | `user_stated` \| `web_verified` \| `seen` \| `conversation` \| `contrastive` \| `solved` \| `gold` \| `synthetic_l1` \| `synthetic_l2+` |
 | `topic_volatility` | text | `stable` \| `current` \| `ephemeral` |
 | `lineage_depth` | number | `0` (ground truth) → `1` (synthetic_l1) → `2+` (synthetic chain) |
 

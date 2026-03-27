@@ -203,8 +203,26 @@ External content (SearXNG results, Colly scrapes, `/ingest/web` payloads) is sca
 | Variable | Purpose |
 |---|---|
 | `ORICLI_ALERT_WEBHOOK` | Webhook URL for security alerts (Telegram-compatible JSON POST) |
-| `MAVAIA_REQUIRE_AUTH` | `true`/`false` — enable/disable API key auth |
-| `MAVAIA_API_KEY` | Bearer token for protected routes |
+| `SOVEREIGN_ADMIN_KEY` | Admin-tier session key (full access, 1-hour TTL) |
+| `SOVEREIGN_EXEC_KEY` | Exec-tier session key (execution access, 1-hour TTL) |
+| `ORICLI_ALERT_WEBHOOK` | Webhook URL for canary/security alerts (Telegram-compatible JSON POST) — already listed above |
+
+> **Note:** The legacy `MAVAIA_REQUIRE_AUTH` / `MAVAIA_API_KEY` env var names are **not used**. Auth is handled by the SovereignAuth system (`pkg/sovereign/auth.go`) — see §SovereignAuth below.
+
+### SovereignAuth
+
+The sovereign auth layer (`pkg/sovereign/auth.go`) implements a two-tier session system independent of standard Bearer tokens:
+
+| Tier | Key Env Var | Permissions |
+|---|---|---|
+| **Admin** | `SOVEREIGN_ADMIN_KEY` | Full API access including introspection and shutdown |
+| **Exec** | `SOVEREIGN_EXEC_KEY` | Execution-tier access (chat, tools, agents) |
+
+**Session lifecycle:**
+- Sessions are created via `/admin <key>` or `/exec <key>` commands
+- TTL: **1 hour** per session
+- Lockout: **3 failed attempts** triggers a **5-minute cooldown** on that IP
+- Key comparison uses `subtle.ConstantTimeCompare` to prevent timing attacks
 
 ---
 

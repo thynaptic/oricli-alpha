@@ -150,6 +150,8 @@ Cold  →  PocketBase                        ~2ms reads, survives reboots
 | `knowledge_fragments` | oricli (analyst) | CuriosityDaemon research findings — one entry per forged topic |
 | `spend_ledger` | admin | RunPod monthly spend per service — restored on daemon startup |
 | `conversation_summaries` | admin | Compressed session summaries for long-horizon RAG |
+| `sovereign_goals` | admin | GoalService DAG objectives with lifecycle fields (priority, status, depends_on, retry_count, progress) |
+| `canvas_shares` | admin | Shareable canvas artifacts — HTML/markdown/code with expiry metadata |
 
 ### 7.3 Oricli's Identity
 
@@ -205,7 +207,7 @@ retention_score = importance × log(1 + access_count) × e^(-age_days / half_lif
 
 A self-learning system that writes its own memories can develop a synthetic data feedback loop — reasoning increasingly within its own fiction. Three interlocking mechanisms prevent this:
 
-**Provenance** — every memory record carries a `provenance` field declaring origin quality. `user_stated` memories are immortal anchors; `synthetic_l1` (curiosity findings) and `synthetic_l2+` (derived from another synthetic record) carry reduced RAG weights.
+**Provenance** — every memory record carries a `provenance` field declaring origin quality. `user_stated` and `gold` memories are immortal anchors (never recycled, +Inf retention score). Newer provenance tiers include `contrastive` (×1.3, DPO feedback pairs), `solved` (×1.4, CBR-verified clean responses), and `gold` (×1.6, 📌-bookmarked). `synthetic_l1` (curiosity findings) and `synthetic_l2+` (derived from another synthetic record) carry reduced RAG weights. See `docs/EPISTEMIC_HYGIENE.md` for the full provenance tier table.
 
 **Volatility-aware decay** — `topic_volatility` controls the decay half-life: 7 days for ephemeral topics (prices, news), 30 days for current tech, 180 days for stable fundamentals.
 

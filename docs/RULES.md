@@ -62,6 +62,19 @@ Current builtin rules under `oricli_core/rules/`:
 - `global_resources.ori`
   - Defines hints like `max_heavy_modules_per_request` and `planner_max_depth_hint`.
 
+- `code_quality.ori`
+  - Language-specific code standards for Go and Python.
+  - Requires `gofmt`, `go vet`, `golangci-lint` compliance; bans `panic()` in library code; requires typed tests.
+  - Python: enforces `black`/`ruff`, bans broad `except:`, requires type annotations on all public functions.
+
+- `response_format.ori`
+  - Output discipline and formatting standards for all responses.
+  - Requires leading with the answer first; enforces language tags on code blocks; prefers lists/tables over prose paragraphs; caps response length and prohibits filler phrases.
+
+- `sanctuary_protocols.ori`
+  - Global constraints and routing for the Princess Puppy Sanctuary.
+  - Denies certain personal phrases; requires a breathing reminder in every message; tags high-severity distress with `[EMERGENCY_TRIGGER]`.
+
 ### Integration points (v1)
 
 - **Shell sandbox** (`ShellSandboxServiceModule`):

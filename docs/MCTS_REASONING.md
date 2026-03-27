@@ -1,7 +1,8 @@
 # MCTS Reasoning & Strategic Planning
 
-**Location:** `pkg/cognition/`  
-**Entry point:** `MCTSEngine.SearchV2(ctx, draftAnswer) → MCTSResult`
+**Location:** `pkg/cognition/mcts.go`, `pkg/cognition/adaptive.go`, `pkg/core/reasoning/mcts.go`  
+**Entry point:** `MCTSEngine.SearchV2(ctx, draftAnswer) → MCTSResult`  
+**Adaptive budgeting:** `adaptive.go` — `DetermineBudget()`, `AnalyzeComplexity()`, `AdaptiveBudget.ScaledNumPredict()`
 
 Oricli-Alpha's MCTS engine is a compiled Go implementation. It treats each candidate answer as a tree node, explores branches via LLM callbacks, and selects the path that maximizes a dual-eval score (primary + adversarial). The engine is the cognitive backbone for complex reasoning, multi-step problem solving, and long-horizon planning.
 
@@ -32,6 +33,7 @@ The engine extends MCTS into autonomous goal execution through the Strategic Orc
 SearchV2(ctx, draftAnswer)
      │
      ├─ DetermineBudget()           Analyze query complexity & exploration benefit
+     │    └─ defined in pkg/cognition/adaptive.go — returns AdaptiveBudget
      ├─ ApplyToConfig()             Update Iterations, Depth, and UCB1C
      ├─ build root ThoughtNode
      │
@@ -39,11 +41,13 @@ SearchV2(ctx, draftAnswer)
      └─ [MaxConcurrency == 1]       → sequential loop
           │
           └─ for each iteration:
-               CheckConvergence()       Terminate if confidence > 0.95
-               selectAndMaybeExpand()   UCB1 / PUCT + RAVE + VirtualVisits
-               evaluateNode()           transposition check → VN pre-screen → LLM dual-eval
+               convergence check        Exit if best-node confidence > ConvergenceThreshold (field, not method)
+               selectAndMaybeExpand()   UCB1 / PUCT + RAVE + VirtualVisits + transposition table
+               evaluateNode()           VN pre-screen → LLM dual-eval → RAVE table update
                backpropagate()          update visits, cumulative score, RAVE table
 ```
+
+> **Note:** `CheckConvergence()` is not a method in the codebase. The convergence threshold is the `ConvergenceThreshold` field on `MCTSConfig`. Termination is handled inline per-iteration in `SearchV2`.
 
 ---
 
