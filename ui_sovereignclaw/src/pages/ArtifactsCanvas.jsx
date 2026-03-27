@@ -174,11 +174,33 @@ function MarkdownRenderer({ content }) {
 }
 
 function HtmlRenderer({ content }) {
+  const iframeRef = useRef(null);
+  const lastContent = useRef(null);
+
+  useEffect(() => {
+    if (!content || content === lastContent.current) return;
+    lastContent.current = content;
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    // Write directly into the existing document — no full reload, no white flash.
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(content);
+        doc.close();
+      }
+    } catch {
+      // Cross-origin fallback (shouldn't happen with srcdoc, but just in case)
+      iframe.srcdoc = content;
+    }
+  }, [content]);
+
   return (
     <iframe
-      srcDoc={content}
+      ref={iframeRef}
       sandbox="allow-scripts"
-      style={{ flex: 1, border: 'none', background: '#fff', width: '100%', height: '100%', display: 'block' }}
+      style={{ flex: 1, border: 'none', background: 'transparent', width: '100%', height: '100%', display: 'block' }}
       title="HTML preview"
     />
   );
