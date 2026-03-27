@@ -486,7 +486,7 @@ func NewPrimaryInferenceManager() *PrimaryInferenceManager {
 		}
 	}
 	idleMin := parseFloatEnv("RUNPOD_IDLE_TIMEOUT_MIN", 30)
-	return &PrimaryInferenceManager{
+	m := &PrimaryInferenceManager{
 		client:        runpod.NewClient(key),
 		minVRAM:       minVRAM,
 		maxHourly:     parseFloatEnv("RUNPOD_MAX_HOURLY", 0.50),
@@ -495,6 +495,83 @@ func NewPrimaryInferenceManager() *PrimaryInferenceManager {
 		maxMonthly:    parseFloatEnv("RUNPOD_MAX_MONTHLY", 40.0),
 		state:         StateOff,
 	}
+	// Attempt to reconnect to a pod that survived a service restart.
+	m.tryRestorePod()
+	return m
+}
+
+// ── Pod state persistence ─────────────────────────────────────────────────
+// Survives service restarts: if a pod was warm when the service last exited,
+// we reconnect to it rather than spinning up a brand-new one.
+
+const podStateFile = "/home/mike/Mavaia/.oricli/primary_pod_state.json"
+
+type savedPodState struct {
+	PodID       string  `json:"pod_id"`
+	EndpointURL string  `json:"endpoint_url"`
+	ModelID     string  `json:"model_id"`
+	ModelName   string  `json:"model_name"`
+	HourlyRate  float64 `json:"hourly_rate"`
+	GPUTypeID   string  `json:"gpu_type_id"`
+}
+
+func (m *PrimaryInferenceManager) savePodState(pod *runpod.PrimaryPod) {
+	s := savedPodState{
+		PodID:       pod.PodID,
+		EndpointURL: pod.EndpointURL,
+		ModelID:     pod.ModelID,
+		ModelName:   pod.ModelName,
+		HourlyRate:  pod.HourlyRate,
+		GPUTypeID:   pod.GPUTypeID,
+	}
+	data, _ := json.Marshal(s)
+	_ = os.WriteFile(podStateFile, data, 0600)
+}
+
+func (m *PrimaryInferenceManager) clearPodState() {
+	_ = os.Remove(podStateFile)
+}
+
+// tryRestorePod checks if a previously-saved pod is still live on RunPod.
+// If the /v1/models endpoint responds, we restore to StateWarm immediately.
+func (m *PrimaryInferenceManager) tryRestorePod() {
+	data, err := os.ReadFile(podStateFile)
+	if err != nil {
+		return // no saved state
+	}
+	var s savedPodState
+	if err := json.Unmarshal(data, &s); err != nil || s.PodID == "" {
+		return
+	}
+
+	// Quick liveness check — 10s timeout is plenty for a warm pod.
+	hc := &http.Client{Timeout: 10 * time.Second}
+	resp, err := hc.Get(s.EndpointURL + "/models")
+	if err != nil || resp.StatusCode != 200 {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		log.Printf("[PrimaryMgr] Saved pod %s is not responding — will spin up fresh", s.PodID)
+		m.clearPodState()
+		return
+	}
+	resp.Body.Close()
+
+	pod := &runpod.PrimaryPod{
+		PodID:       s.PodID,
+		EndpointURL: s.EndpointURL,
+		ModelID:     s.ModelID,
+		ModelName:   s.ModelName,
+		HourlyRate:  s.HourlyRate,
+		GPUTypeID:   s.GPUTypeID,
+		StartedAt:   time.Now(), // approximate; spend tracking restarts from 0
+	}
+	m.pod = pod
+	m.state = StateWarm
+	m.lastActive = time.Now()
+	log.Printf("[PrimaryMgr] Reconnected to existing pod %s (%s) — skipping spin-up", pod.PodID, pod.ModelName)
+	go m.trackSpend(pod)
+	go m.idleWatcher()
 }
 
 // Ensure guarantees a warm vLLM pod is available; call before every request.
@@ -560,6 +637,7 @@ func (m *PrimaryInferenceManager) spinUp(ctx context.Context) (string, error) {
 	m.lastActive = time.Now()
 	m.mu.Unlock()
 
+	m.savePodState(pod)
 	log.Printf("[PrimaryMgr] pod %s WARM — endpoint: %s", pod.PodID, pod.EndpointURL)
 	go m.trackSpend(pod)
 	go m.idleWatcher()
@@ -623,6 +701,7 @@ func (m *PrimaryInferenceManager) idleWatcher() {
 		m.state = StateOff
 		m.pod = nil
 		m.mu.Unlock()
+		m.clearPodState()
 		log.Printf("[PrimaryMgr] idle timeout (%s) — terminating pod %s", idle.Round(time.Second), pod.PodID)
 		_ = m.client.TerminatePod(pod.PodID)
 		return
