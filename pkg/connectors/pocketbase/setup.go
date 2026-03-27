@@ -17,6 +17,7 @@ func Bootstrap(ctx context.Context, c *Client) error {
 		spendLedgerSchema(),
 		conversationSummariesSchema(),
 		sovereignGoalsSchema(),
+		canvasSharesSchema(),
 	}
 
 	for _, schema := range collections {
@@ -247,4 +248,19 @@ log.Printf("[pb-migrate] %s: epistemic fields OK", coll)
 }
 }
 return nil
+}
+
+// canvasSharesSchema stores shared canvas documents accessible via public URL.
+func canvasSharesSchema() CollectionSchema {
+return CollectionSchema{
+Name: "canvas_shares",
+Type: "base",
+Schema: []FieldSchema{
+{Name: "share_id",  Type: "text", Required: true},
+{Name: "title",     Type: "text"},
+{Name: "doc_type",  Type: "text", Required: true},
+{Name: "content",   Type: "text", Required: true, Options: map[string]any{"max": 2000000}},
+{Name: "language",  Type: "text"},
+},
+}
 }

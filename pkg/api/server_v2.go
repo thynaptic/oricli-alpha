@@ -229,6 +229,9 @@ func (s *ServerV2) authMiddleware() gin.HandlerFunc {
 }
 
 func (s *ServerV2) setupRoutes() {
+	// Public share route — no auth, serves HTML/code/markdown directly
+	s.Router.GET("/share/:id", s.handleGetShare)
+
 	v1 := s.Router.Group("/v1")
 
 	// Public
@@ -267,6 +270,9 @@ func (s *ServerV2) setupRoutes() {
 		protected.GET("/documents", s.handleListDocuments)
 
 		protected.POST("/feedback", s.handleReactionFeedback)
+
+		// Canvas shares — create a permanent public share link
+		protected.POST("/share", s.handleCreateShare)
 
 		// Vision — image analysis via moondream (CPU-safe, local Ollama)
 		protected.POST("/vision/analyze", s.handleVisionAnalyze)

@@ -8,7 +8,7 @@ import {
   Plus, X, Send, Square, Copy, Check, Edit3, Eye, History,
   Download, Trash2, Wand2, Minimize2, Maximize2, FileCode2,
   FileText, Table2, Code2, Globe, GitCommit, RotateCcw, ExternalLink,
-  RefreshCw, Pencil, ImageIcon, Loader2, AlertCircle,
+  RefreshCw, Pencil, ImageIcon, Loader2, AlertCircle, Share2,
 } from 'lucide-react';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -643,6 +643,7 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [previewSel, setPreviewSel] = useState({ text: '', rect: null });
   const [copied, setCopied] = useState(false);
+  const [shareState, setShareState] = useState('idle'); // 'idle' | 'sharing' | 'copied' | 'error'
   const editorRef = useRef(null);
   const previewRef = useRef(null);
 
@@ -741,6 +742,7 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
               <Download size={13} />
             </button>
             {displayDoc?.type === 'html' && displayDoc?.content && (
+              <>
               <button
                 onClick={() => {
                   const blob = new Blob([displayDoc.content], { type: 'text/html' });
@@ -754,6 +756,42 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
               >
                 <ExternalLink size={13} />
               </button>
+              {/* Share button — creates a permanent public URL */}
+              <button
+                onClick={async () => {
+                  if (shareState === 'sharing') return;
+                  setShareState('sharing');
+                  try {
+                    const res = await fetch('/v1/share', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('sc_api_key') || ''}` },
+                      body: JSON.stringify({
+                        title: displayDoc.title || 'Shared Design',
+                        content: displayDoc.content,
+                        doc_type: displayDoc.type || 'html',
+                        language: displayDoc.language || '',
+                      }),
+                    });
+                    if (!res.ok) throw new Error('Share failed');
+                    const { url } = await res.json();
+                    await navigator.clipboard.writeText(url);
+                    setShareState('copied');
+                    setTimeout(() => setShareState('idle'), 3000);
+                  } catch {
+                    setShareState('error');
+                    setTimeout(() => setShareState('idle'), 3000);
+                  }
+                }}
+                title={shareState === 'copied' ? 'Link copied!' : shareState === 'error' ? 'Share failed' : 'Share — get a permanent link'}
+                style={{ padding: '5px 8px', borderRadius: 6, border: 'none', cursor: shareState === 'sharing' ? 'default' : 'pointer', background: 'transparent', color: shareState === 'copied' ? 'var(--color-sc-accent)' : shareState === 'error' ? '#e05c5c' : 'var(--color-sc-text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                {shareState === 'sharing'
+                  ? <Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} />
+                  : <Share2 size={13} />}
+                {shareState === 'copied' && <span style={{ fontSize: 10, fontWeight: 600 }}>Copied!</span>}
+                {shareState === 'error' && <span style={{ fontSize: 10 }}>Failed</span>}
+              </button>
+              </>
             )}
           </div>
         )}

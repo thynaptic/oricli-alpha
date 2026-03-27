@@ -308,6 +308,16 @@ func (c *Client) DeleteRecord(ctx context.Context, collection, id string) error 
 		"/api/collections/"+collection+"/records/"+id, nil, nil)
 }
 
+// GetRecord fetches a single record by its PocketBase ID.
+func (c *Client) GetRecord(ctx context.Context, collection, id string) (map[string]any, error) {
+	var result map[string]any
+	if err := c.doJSON(ctx, http.MethodGet,
+		"/api/collections/"+collection+"/records/"+id, nil, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // ListRecordsResponse is the PocketBase list response envelope.
 type ListRecordsResponse struct {
 	Page       int              `json:"page"`
