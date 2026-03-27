@@ -245,6 +245,18 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 	useResearch := false
 	useCode := false
 
+	// ── Complexity routing — auto-escalate hard tasks to RunPod ──────────
+	// Runs before explicit tier checks so it can upgrade an unclassified
+	// request. Explicit model/tier overrides from the caller still win.
+	if IsComplexityRoutingEnabled() {
+		complexity := ClassifyComplexity(messages)
+		if complexity.Tier > TierLocal {
+			ApplyComplexityRouting(complexity, options)
+			log.Printf("[GenerationService] complexity=%s score=%.2f reasons=%v",
+				complexity.Tier, complexity.Score, complexity.Reasons)
+		}
+	}
+
 	// Explicit model override takes highest priority
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
@@ -254,6 +266,36 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 	} else if c, ok := options["use_code_model"].(bool); ok && c {
 		model = s.CodeModel
 		useCode = true
+	}
+
+	// Complexity router heavy escalation — treat as RunPod primary even if
+	// RUNPOD_PRIMARY=false. Lets specific hard tasks spin up the pod on demand.
+	escalate, _ := options["_escalate_to_runpod"].(bool)
+	if escalate && s.PrimaryMgr != nil && s.PrimaryMgr.IsEnabled() && os.Getenv("RUNPOD_PRIMARY") != "true" {
+		log.Printf("[GenerationService] complexity escalation → PrimaryMgr (RunPod)")
+		out := make(chan string, 64)
+		go func() {
+			defer close(out)
+			podState := s.PrimaryMgr.PodState()
+			if podState == StateOff || podState == StateWarming {
+				out <- podCallout("escalation")
+			}
+			ch, err := s.PrimaryMgr.ChatStream(ctx, messages, options)
+			if err != nil {
+				log.Printf("[GenerationService] escalation RunPod failed (%v) — falling back to Ollama", err)
+				out <- podCallout("fallback")
+				if ollamaCh, oErr := s.ollamaChatStream(ctx, messages, model, options); oErr == nil {
+					for tok := range ollamaCh {
+						out <- tok
+					}
+				}
+				return
+			}
+			for tok := range ch {
+				out <- tok
+			}
+		}()
+		return out, nil
 	}
 
 	// RUNPOD_PRIMARY mode: route ALL tiers through the vLLM pod.
