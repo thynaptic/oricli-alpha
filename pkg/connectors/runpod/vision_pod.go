@@ -1,38 +1,90 @@
 package runpod
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
 
 const (
-	OllamaImage      = "ollama/ollama:latest"
-	VisionModel      = "moondream:latest"
-	visionPort       = 11434
-	pullTimeout      = 8 * time.Minute  // model download on GPU pod: fast but non-trivial
-	visionReadyDelay = 10 * time.Second // poll interval while waiting for Ollama / pull
+	// vLLM OpenAI-compatible server — native CUDA, no GGUF wrapper, proper multimodal.
+	VLLMImage   = "vllm/vllm-openai:latest"
+	VisionModel = "llava-hf/llava-1.5-7b-hf" // 4GB, HuggingFace public, vLLM first-class
+	visionPort  = 8000
+
+	visionReadyDelay = 15 * time.Second
+	visionReadyMax   = 10 * time.Minute // vLLM + HF model download can take a few minutes
 )
 
-// VisionPod represents a RunPod pod running Ollama for GPU-accelerated image analysis.
+// VisionPod represents a RunPod pod running vLLM for GPU-accelerated image analysis.
 type VisionPod struct {
 	PodID      string
-	OllamaURL  string // https://{id}-11434.proxy.runpod.net
+	BaseURL    string // https://{id}-8000.proxy.runpod.net
 	GPUTypeID  string
 	HourlyRate float64
 	StartedAt  time.Time
 }
 
-// CreateVisionPod spins up an Ollama GPU pod on RunPod.
-// The pod uses the official ollama/ollama image on port 11434.
-// After creation, call WaitForVisionReady to ensure the model is pulled and ready.
-func (c *Client) CreateVisionPod(gpuTypeID string) (*VisionPod, error) {
+// TryCreateVisionPod attempts GPU candidates in descending VRAM-per-dollar order
+// until one is available. Prefers SECURE cloud, falls back to COMMUNITY.
+func (c *Client) TryCreateVisionPod(minVRAMGB int, maxHourly float64) (*VisionPod, error) {
+	gpus, err := c.GetGPUTypes()
+	if err != nil {
+		return nil, fmt.Errorf("TryCreateVisionPod: fetch GPUs: %w", err)
+	}
+
+	const storageOverhead = 0.02
+
+	type candidate struct {
+		gpu       GPUType
+		score     float64
+		community bool
+	}
+	var pool []candidate
+
+	for _, g := range gpus {
+		if g.MemoryInGb < minVRAMGB {
+			continue
+		}
+		if g.SecurePrice > 0 && g.SecurePrice+storageOverhead <= maxHourly {
+			score := math.Pow(float64(g.MemoryInGb), 1.5) / (g.SecurePrice + storageOverhead)
+			pool = append(pool, candidate{g, score, false})
+		} else if g.CommunityPrice > 0 && g.CommunityPrice+storageOverhead <= maxHourly {
+			score := math.Pow(float64(g.MemoryInGb), 1.5) / (g.CommunityPrice + storageOverhead)
+			pool = append(pool, candidate{g, score, true})
+		}
+	}
+	if len(pool) == 0 {
+		return nil, fmt.Errorf("no GPU available with ≥%d GB VRAM under $%.2f/hr", minVRAMGB, maxHourly)
+	}
+	sort.Slice(pool, func(i, j int) bool { return pool[i].score > pool[j].score })
+
+	var lastErr error
+	for _, cand := range pool {
+		pod, err := c.createVisionPod(cand.gpu.ID, cand.community)
+		if err == nil {
+			if cand.community {
+				pod.HourlyRate = cand.gpu.CommunityPrice
+			} else {
+				pod.HourlyRate = cand.gpu.SecurePrice
+			}
+			return pod, nil
+		}
+		lastErr = err
+	}
+	return nil, fmt.Errorf("all %d GPU candidates exhausted; last error: %w", len(pool), lastErr)
+}
+
+// createVisionPod spins up a vLLM pod on RunPod.
+// vLLM serves an OpenAI-compatible API at /v1/chat/completions with full vision support.
+func (c *Client) createVisionPod(gpuTypeID string, community bool) (*VisionPod, error) {
 	query := `
 	mutation CreatePod($input: PodFindAndDeployOnDemandInput!) {
 		podFindAndDeployOnDemand(input: $input) {
@@ -44,128 +96,128 @@ func (c *Client) CreateVisionPod(gpuTypeID string) (*VisionPod, error) {
 		}
 	}`
 
+	cloudType := "SECURE"
+	if community {
+		cloudType = "COMMUNITY"
+	}
+
+	// vLLM args: model from HF, tensor parallel 1 GPU, enforce eager for compat,
+	// trust remote code for llava tokenizer.
+	dockerArgs := fmt.Sprintf(
+		"--model %s --port %d --host 0.0.0.0 --tensor-parallel-size 1 --enforce-eager --trust-remote-code --max-model-len 4096",
+		VisionModel, visionPort,
+	)
+
 	variables := map[string]interface{}{
 		"input": map[string]interface{}{
 			"name":              "oricli-vision",
 			"gpuTypeId":         gpuTypeID,
 			"gpuCount":          1,
-			"cloudType":         "SECURE",
-			"volumeInGb":        10,
-			"containerDiskInGb": 15,
-			"volumeMountPath":   "/root/.ollama",
-			"imageName":         OllamaImage,
-			"ports":             fmt.Sprintf("%d/http,22/tcp", visionPort),
-			// No dockerArgs — ollama/ollama default entrypoint is `ollama serve`
+			"cloudType":         cloudType,
+			"volumeInGb":        20,
+			"containerDiskInGb": 30, // vLLM image (~8GB) + model (~4GB) + headroom
+			"volumeMountPath":   "/root/.cache/huggingface",
+			"imageName":         VLLMImage,
+			"ports":             fmt.Sprintf("%d/http", visionPort),
+			"dockerArgs":        dockerArgs,
+			"env": []map[string]string{
+				{"key": "HF_HUB_ENABLE_HF_TRANSFER", "value": "1"}, // fast HF downloads
+			},
 		},
 	}
 
 	result, err := c.Query(query, variables)
 	if err != nil {
-		return nil, fmt.Errorf("CreateVisionPod: %w", err)
+		return nil, fmt.Errorf("createVisionPod: %w", err)
 	}
 
 	data, _ := result["data"].(map[string]interface{})
 	podData, _ := data["podFindAndDeployOnDemand"].(map[string]interface{})
 	if podData == nil {
-		return nil, fmt.Errorf("CreateVisionPod: empty response — GPU type %s may be unavailable", gpuTypeID)
+		return nil, fmt.Errorf("createVisionPod: empty response — GPU type %s unavailable", gpuTypeID)
 	}
 
 	podID, _ := podData["id"].(string)
-	ollamaURL := fmt.Sprintf(proxyURLTemplate, podID, visionPort)
+	baseURL := fmt.Sprintf(proxyURLTemplate, podID, visionPort)
 
 	return &VisionPod{
 		PodID:     podID,
-		OllamaURL: ollamaURL,
+		BaseURL:   baseURL,
 		GPUTypeID: gpuTypeID,
 		StartedAt: time.Now(),
 	}, nil
 }
 
-// WaitForVisionReady waits until the Ollama server is up, then triggers a model pull
-// and waits for it to complete. Returns when moondream:latest is ready to serve.
+// WaitForVisionReady polls /v1/models until vLLM has loaded the model and is serving.
+// vLLM downloads the model from HuggingFace on first boot — allow up to visionReadyMax.
 func (c *Client) WaitForVisionReady(ctx context.Context, pod *VisionPod) error {
-	httpClient := &http.Client{Timeout: 10 * time.Second}
+	httpClient := &http.Client{Timeout: 12 * time.Second}
+	deadline := time.Now().Add(visionReadyMax)
 
-	// Phase 1: wait for Ollama HTTP server to respond
-	deadline := time.Now().Add(5 * time.Minute)
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
 		}
-		resp, err := httpClient.Get(pod.OllamaURL + "/api/tags")
+
+		resp, err := httpClient.Get(pod.BaseURL + "/v1/models")
 		if err == nil && resp.StatusCode == http.StatusOK {
+			// Verify the model is actually listed (not just server up)
+			var body struct {
+				Data []struct{ ID string `json:"id"` } `json:"data"`
+			}
+			if jsonErr := json.NewDecoder(resp.Body).Decode(&body); jsonErr == nil {
+				resp.Body.Close()
+				for _, m := range body.Data {
+					if strings.Contains(m.ID, "llava") || strings.Contains(m.ID, "vision") || m.ID == VisionModel {
+						return nil // model loaded and ready
+					}
+				}
+			} else {
+				resp.Body.Close()
+			}
+		} else if resp != nil {
 			resp.Body.Close()
-			break
 		}
-		if resp != nil {
-			resp.Body.Close()
-		}
+
 		time.Sleep(visionReadyDelay)
 	}
-	if time.Now().After(deadline) {
-		return fmt.Errorf("WaitForVisionReady: Ollama server did not come up within 5 minutes")
-	}
-
-	// Phase 2: pull the vision model (streaming response)
-	pullCtx, cancel := context.WithTimeout(ctx, pullTimeout)
-	defer cancel()
-
-	body, _ := json.Marshal(map[string]string{"model": VisionModel})
-	req, _ := http.NewRequestWithContext(pullCtx, http.MethodPost,
-		pod.OllamaURL+"/api/pull", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	pullClient := &http.Client{Timeout: pullTimeout}
-	resp, err := pullClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("WaitForVisionReady: pull request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Ollama streams pull progress as newline-delimited JSON.
-	// Wait for {"status":"success"} to confirm the model is ready.
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		var line struct {
-			Status string `json:"status"`
-			Error  string `json:"error"`
-		}
-		if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
-			continue
-		}
-		if line.Error != "" {
-			return fmt.Errorf("WaitForVisionReady: pull error: %s", line.Error)
-		}
-		if strings.Contains(line.Status, "success") {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("WaitForVisionReady: pull stream ended without success confirmation")
+	return fmt.Errorf("WaitForVisionReady: vLLM did not load model within %s", visionReadyMax)
 }
 
-// CallOllamaVision sends a vision inference request to the pod's Ollama API.
-// imageB64 is a raw base64-encoded image (no data: URI prefix).
-func CallOllamaVision(ctx context.Context, ollamaURL, imageB64, prompt string) (string, error) {
+// CallVisionInference sends a vision request to the vLLM pod via the OpenAI
+// chat completions endpoint. imageB64 is raw base64 (no data: URI prefix).
+func CallVisionInference(ctx context.Context, baseURL, imageB64, prompt string) (string, error) {
 	payload, _ := json.Marshal(map[string]any{
-		"model":       VisionModel,
-		"prompt":      prompt,
-		"images":      []string{imageB64},
-		"stream":      false,
-		"num_predict": 256,
-		"options": map[string]any{
-			"temperature": 0.1,
-			"num_ctx":     2048,
+		"model": VisionModel,
+		"messages": []map[string]any{
+			{
+				"role": "user",
+				"content": []map[string]any{
+					{
+						"type": "image_url",
+						"image_url": map[string]string{
+							// vLLM accepts base64 data URIs directly
+							"url": "data:image/jpeg;base64," + imageB64,
+						},
+					},
+					{
+						"type": "text",
+						"text": prompt,
+					},
+				},
+			},
 		},
+		"max_tokens":  300,
+		"temperature": 0.1,
 	})
 
 	reqCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
 	req, _ := http.NewRequestWithContext(reqCtx, http.MethodPost,
-		ollamaURL+"/api/generate", bytes.NewReader(payload))
+		baseURL+"/v1/chat/completions", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -179,16 +231,25 @@ func CallOllamaVision(ctx context.Context, ollamaURL, imageB64, prompt string) (
 		return "", fmt.Errorf("vision read response: %w", err)
 	}
 
-	var ollamaResp struct {
-		Response string `json:"response"`
-		Error    string `json:"error"`
+	var completion struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
 	}
-	if err := json.Unmarshal(raw, &ollamaResp); err != nil {
+	if err := json.Unmarshal(raw, &completion); err != nil {
 		return "", fmt.Errorf("vision decode response: %w", err)
 	}
-	if ollamaResp.Error != "" {
-		return "", fmt.Errorf("vision model error: %s", ollamaResp.Error)
+	if completion.Error != nil {
+		return "", fmt.Errorf("vision model error: %s", completion.Error.Message)
+	}
+	if len(completion.Choices) == 0 {
+		return "", fmt.Errorf("vision: empty response from model")
 	}
 
-	return strings.TrimSpace(ollamaResp.Response), nil
+	return strings.TrimSpace(completion.Choices[0].Message.Content), nil
 }

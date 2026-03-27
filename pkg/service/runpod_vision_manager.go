@@ -71,7 +71,7 @@ func (m *RunPodVisionManager) Analyze(input cognition.VisionInput) (cognition.Vi
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	ollamaURL, err := m.Ensure(ctx)
+	baseURL, err := m.Ensure(ctx)
 	if err != nil {
 		return cognition.VisionResult{}, fmt.Errorf("vision: pod not ready: %w", err)
 	}
@@ -91,7 +91,7 @@ func (m *RunPodVisionManager) Analyze(input cognition.VisionInput) (cognition.Vi
 		prompt = cognition.DefaultVisionPrompt
 	}
 
-	description, err := runpod.CallOllamaVision(ctx, ollamaURL, b64, prompt)
+	description, err := runpod.CallVisionInference(ctx, baseURL, b64, prompt)
 	if err != nil {
 		return cognition.VisionResult{}, fmt.Errorf("vision: inference: %w", err)
 	}
@@ -110,7 +110,7 @@ func (m *RunPodVisionManager) Ensure(ctx context.Context) (string, error) {
 	m.mu.Lock()
 
 	if m.state == StateWarm && m.pod != nil {
-		url := m.pod.OllamaURL
+		url := m.pod.BaseURL
 		m.mu.Unlock()
 		return url, nil
 	}
@@ -125,7 +125,7 @@ func (m *RunPodVisionManager) Ensure(ctx context.Context) (string, error) {
 			case <-time.After(5 * time.Second):
 				m.mu.Lock()
 				if m.state == StateWarm && m.pod != nil {
-					url := m.pod.OllamaURL
+					url := m.pod.BaseURL
 					m.mu.Unlock()
 					return url, nil
 				}
@@ -146,12 +146,13 @@ func (m *RunPodVisionManager) Ensure(ctx context.Context) (string, error) {
 
 	// RunPod Constitution pre-flight
 	if err := reform.NewRunPodConstitution().ValidateCreate(reform.RunPodCreateRequest{
-		Tier:         "vision",
-		GPUVRAM:      m.minVRAM,
-		HourlyRate:   m.maxHourly,
-		MonthlySpend: m.monthSpend,
-		MonthlyCap:   m.monthlyCap,
-		HasActivePod: false,
+		Tier:           "research", // vision uses GPU on par with research tier
+		GPUVRAM:        m.minVRAM,
+		HourlyRate:     m.maxHourly,
+		MonthlySpend:   m.monthSpend,
+		MonthlyCap:     m.monthlyCap,
+		HasActivePod:   false,
+		HasActiveTasks: true, // Ensure() is only called from user-request paths
 	}); err != nil {
 		m.mu.Unlock()
 		return "", fmt.Errorf("vision: constitution blocked: %w", err)
@@ -160,15 +161,7 @@ func (m *RunPodVisionManager) Ensure(ctx context.Context) (string, error) {
 	m.state = StateWarming
 	m.mu.Unlock()
 
-	gpu, err := m.client.SelectBestGPU(m.minVRAM, m.maxHourly)
-	if err != nil {
-		m.mu.Lock()
-		m.state = StateOff
-		m.mu.Unlock()
-		return "", fmt.Errorf("vision: GPU selection: %w", err)
-	}
-
-	pod, err := m.client.CreateVisionPod(gpu.ID)
+	pod, err := m.client.TryCreateVisionPod(m.minVRAM, m.maxHourly)
 	if err != nil {
 		m.mu.Lock()
 		m.state = StateOff
@@ -184,9 +177,6 @@ func (m *RunPodVisionManager) Ensure(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("vision: pod never became ready: %w", err)
 	}
 
-	hourly, _ := m.client.GetPodHourlyRate(gpu.ID)
-	pod.HourlyRate = hourly
-
 	m.mu.Lock()
 	m.pod = pod
 	m.state = StateWarm
@@ -195,7 +185,7 @@ func (m *RunPodVisionManager) Ensure(ctx context.Context) (string, error) {
 
 	go m.trackSpend()
 
-	return pod.OllamaURL, nil
+	return pod.BaseURL, nil
 }
 
 func (m *RunPodVisionManager) resetIdleTimer() {
