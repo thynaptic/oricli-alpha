@@ -367,6 +367,9 @@ type SovereignEngine struct {
 	// CertaintyUpdaterRef enables Aletheia + consensus to mutate fragment importance
 	// based on verification outcomes (CORRECT→bump, ADMIT_FAILURE→drop).
 	CertaintyUpdaterRef CertaintyUpdater
+	// VisionRef enables image analysis via moondream (CPU-safe, local Ollama).
+	// Wired from server_v2 visionAdapter. Nil-safe — vision is optional.
+	VisionRef    VisionAnalyzer
 	// GenService exposes the generation backend directly to reasoning mode engines
 	// (PAL, LeastToMost, SelfRefine, ReAct). Set alongside Generator in NewSovereignEngine.
 	GenService    GenerationService

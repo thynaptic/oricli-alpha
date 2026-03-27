@@ -8,6 +8,20 @@ Versions track `VERSION` file. Commits listed for traceability.
 
 ## [Unreleased]
 
+### Added
+- **Agent Vibe Studio** — Natural-language agent creation (phases 1–3), enabling fast agent scaffolding from plain-English specs. (`6993820`)
+- **Canvas share links** — Create public, permanent `/share/:id` links backed by PocketBase `canvas_shares`. (`8ac2819`)
+- **Canvas “Open HTML in new tab”** — One-click open for HTML artifacts from the canvas toolbar. (`5e91cc2`)
+- **RunPod vLLM primary inference** — Optional GPU-first routing for all tiers when `RUNPOD_PRIMARY=true`. (`68c9865`)
+- **Vision vLLM pod upgrade** — RunPod vision pod now uses Qwen2‑VL‑2B via vLLM; supports data-URI images and MIME detection. (`420bfd2`, `dd32627`)
+- **Pod spin-up callouts** — Personality callouts during RunPod warmup for better UX feedback. (`4846d4a`)
+- **Escalation + success callout tones** — Clearer UI tone shifts during high-stakes and completion states. (`3276402`)
+
+### Fixed
+- **Share URL domain** — Share links now use `oristudio.thynaptic.com`. (`26188a0`)
+- **Canvas iframe flash** — Eliminated flicker on live render updates. (`b1c2ba2`)
+- **Pod state persistence** — RunPod pod state now survives service restarts. (`fe206c5`)
+
 ---
 
 ## [2.1.0] — 2026-03-24

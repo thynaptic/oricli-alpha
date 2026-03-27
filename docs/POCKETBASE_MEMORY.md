@@ -50,7 +50,7 @@ Conversation fragments and research snippets. The primary RAG source.
 | `importance` | number | 0.0–1.0 weight for retention scoring |
 | `access_count` | number | How many times this memory was retrieved |
 | `last_accessed` | text | ISO8601 timestamp of last retrieval |
-| `provenance` | text | Origin quality: `user_stated` \| `web_verified` \| `conversation` \| `synthetic_l1` \| `synthetic_l2+` |
+| `provenance` | text | Origin quality: `user_stated` \| `web_verified` \| `seen` \| `conversation` \| `synthetic_l1` \| `synthetic_l2+` |
 | `topic_volatility` | text | Decay class: `stable` \| `current` \| `ephemeral` |
 | `lineage_depth` | number | Synthetic hops from ground truth (0=direct, 1=curiosity, 2+=derived) |
 | `embedding` | json | float32 vector for semantic search (nomic-embed-text, 768-dim) |
@@ -91,6 +91,17 @@ Compressed session summaries for long-horizon RAG.
 | `topics` | json | Array of extracted topic strings |
 | `embedding` | json | (Future) float32 vector |
 
+### `canvas_shares`
+Public share links for Canvas artifacts (served at `/share/:id`).
+
+| Field | Type | Description |
+|---|---|---|
+| `share_id` | text | Public share identifier |
+| `title` | text | Optional display title |
+| `doc_type` | text | `html` \| `markdown` \| `code` \| `text` |
+| `content` | text | Stored artifact content |
+| `language` | text | Optional language (e.g., `html`, `js`) |
+
 ---
 
 ## RAG Injection
@@ -107,7 +118,7 @@ ragCtx  := FormatRAGContext(frags, 1200)
 
 **Ranking pipeline:**
 1. Cosine similarity re-rank via `nomic-embed-text` embeddings (falls back to `importance` if no embedding yet)
-2. Provenance weight multiplied into score (`user_stated`=×1.5, `web_verified`=×1.2, `conversation`=×0.9, `synthetic_l1`=×0.85, `synthetic_l2+`=×0.6)
+2. Provenance weight multiplied into score (`user_stated`=×1.5, `web_verified`=×1.2, `seen`=×1.0, `conversation`=×0.9, `synthetic_l1`=×0.85, `synthetic_l2+`=×0.6)
 3. `user_stated` anchors receive an additional +10.0 — always surface first
 
 Access counts bumped asynchronously after each retrieval.
@@ -177,6 +188,7 @@ Monthly cap guard
 [pb-bootstrap] created collection "knowledge_fragments"
 [pb-bootstrap] created collection "spend_ledger"
 [pb-bootstrap] created collection "conversation_summaries"
+[pb-bootstrap] created collection "canvas_shares"
 [pb-bootstrap] Created Oricli analyst account: oricli@thynaptic.com
 ```
 

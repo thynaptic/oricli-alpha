@@ -61,6 +61,34 @@ OpenAI-compatible chat endpoint with Sovereign extensions.
 
 ---
 
+### `POST /v1/share`
+Create a permanent public share link for a Canvas document.
+
+**Body:**
+```json
+{
+  "title": "Shared Design",
+  "content": "<html>...</html>",
+  "doc_type": "html",
+  "language": "html"
+}
+```
+
+**Response:**
+```json
+{
+  "share_id": "abc123",
+  "url": "https://oristudio.thynaptic.com/share/abc123"
+}
+```
+
+---
+
+### `GET /share/:id`
+Public, no-auth share endpoint that serves the shared Canvas document directly.
+
+---
+
 ### `GET /v1/goals`
 List sovereign objectives tracked by the DAG Goal Executor.
 

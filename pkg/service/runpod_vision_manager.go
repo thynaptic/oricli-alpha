@@ -81,17 +81,20 @@ func (m *RunPodVisionManager) Analyze(input cognition.VisionInput) (cognition.Vi
 	m.resetIdleTimer()
 	m.mu.Unlock()
 
-	b64, err := resolveImageToBase64(input)
-	if err != nil {
-		return cognition.VisionResult{}, err
+	// Always resolve to base64 so the vLLM pod doesn't need to fetch external URLs
+	// (many image hosts block server-side requests with 403).
+	b64, mimeType, encErr := resolveImage(input)
+	if encErr != nil {
+		return cognition.VisionResult{}, encErr
 	}
+	imageArg := "data:" + mimeType + ";base64," + b64
 
 	prompt := input.Prompt
 	if prompt == "" {
 		prompt = cognition.DefaultVisionPrompt
 	}
 
-	description, err := runpod.CallVisionInference(ctx, baseURL, b64, prompt)
+	description, err := runpod.CallVisionInference(ctx, baseURL, imageArg, prompt)
 	if err != nil {
 		return cognition.VisionResult{}, fmt.Errorf("vision: inference: %w", err)
 	}
@@ -223,31 +226,31 @@ func (m *RunPodVisionManager) trackSpend() {
 	}
 }
 
-// resolveImageToBase64 converts any VisionInput source to a raw base64 string.
-func resolveImageToBase64(input cognition.VisionInput) (string, error) {
+// resolveImage converts any VisionInput source to base64 + detected MIME type.
+func resolveImage(input cognition.VisionInput) (b64, mimeType string, err error) {
+	var raw []byte
 	switch {
 	case input.Base64 != "":
-		return input.Base64, nil
+		return input.Base64, "image/jpeg", nil // caller already encoded; assume JPEG
 	case input.FilePath != "":
-		data, err := os.ReadFile(input.FilePath)
+		raw, err = os.ReadFile(input.FilePath)
 		if err != nil {
-			return "", fmt.Errorf("vision: read file: %w", err)
+			return "", "", fmt.Errorf("vision: read file: %w", err)
 		}
-		return base64.StdEncoding.EncodeToString(data), nil
 	case input.URL != "":
-		resp, err := http.Get(input.URL) //nolint:gosec — caller is authenticated
-		if err != nil {
-			return "", fmt.Errorf("vision: fetch url: %w", err)
+		resp, httpErr := http.Get(input.URL) //nolint:gosec — caller is authenticated
+		if httpErr != nil {
+			return "", "", fmt.Errorf("vision: fetch url: %w", httpErr)
 		}
 		defer resp.Body.Close()
-		data, err := io.ReadAll(resp.Body)
+		raw, err = io.ReadAll(resp.Body)
 		if err != nil {
-			return "", fmt.Errorf("vision: read url body: %w", err)
+			return "", "", fmt.Errorf("vision: read url body: %w", err)
 		}
-		return base64.StdEncoding.EncodeToString(data), nil
 	default:
-		return "", fmt.Errorf("vision: no image source provided")
+		return "", "", fmt.Errorf("vision: no image source provided")
 	}
+	return base64.StdEncoding.EncodeToString(raw), runpod.DetectMimeType(raw), nil
 }
 
 // extractTagsFromDescription is a lightweight heuristic tag extractor (no LLM call).

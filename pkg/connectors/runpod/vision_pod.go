@@ -16,7 +16,7 @@ import (
 const (
 	// vLLM OpenAI-compatible server — native CUDA, no GGUF wrapper, proper multimodal.
 	VLLMImage   = "vllm/vllm-openai:latest"
-	VisionModel = "llava-hf/llava-1.5-7b-hf" // 4GB, HuggingFace public, vLLM first-class
+	VisionModel = "Qwen/Qwen2-VL-2B-Instruct" // 2B, state-of-the-art open vision, handles base64
 	visionPort  = 8000
 
 	visionReadyDelay = 15 * time.Second
@@ -101,10 +101,10 @@ func (c *Client) createVisionPod(gpuTypeID string, community bool) (*VisionPod, 
 		cloudType = "COMMUNITY"
 	}
 
-	// vLLM args: model from HF, tensor parallel 1 GPU, enforce eager for compat,
-	// trust remote code for llava tokenizer.
+	// vLLM args: Qwen2-VL-2B, single GPU, limit 1 image per prompt,
+	// trust remote code for Qwen tokenizer/processor.
 	dockerArgs := fmt.Sprintf(
-		"--model %s --port %d --host 0.0.0.0 --tensor-parallel-size 1 --enforce-eager --trust-remote-code --max-model-len 4096",
+		"--model %s --port %d --host 0.0.0.0 --tensor-parallel-size 1 --trust-remote-code --max-model-len 4096 --limit-mm-per-prompt image=1",
 		VisionModel, visionPort,
 	)
 
@@ -170,8 +170,8 @@ func (c *Client) WaitForVisionReady(ctx context.Context, pod *VisionPod) error {
 			if jsonErr := json.NewDecoder(resp.Body).Decode(&body); jsonErr == nil {
 				resp.Body.Close()
 				for _, m := range body.Data {
-					if strings.Contains(m.ID, "llava") || strings.Contains(m.ID, "vision") || m.ID == VisionModel {
-						return nil // model loaded and ready
+					if strings.Contains(m.ID, "Qwen") || strings.Contains(m.ID, "llava") || m.ID == VisionModel {
+						return nil
 					}
 				}
 			} else {
@@ -187,8 +187,18 @@ func (c *Client) WaitForVisionReady(ctx context.Context, pod *VisionPod) error {
 }
 
 // CallVisionInference sends a vision request to the vLLM pod via the OpenAI
-// chat completions endpoint. imageB64 is raw base64 (no data: URI prefix).
-func CallVisionInference(ctx context.Context, baseURL, imageB64, prompt string) (string, error) {
+// chat completions endpoint.
+// imageURLOrBase64 can be either:
+//   - A public URL (passed directly to vLLM — most compatible path)
+//   - A base64 data URI ("data:image/png;base64,...")
+func CallVisionInference(ctx context.Context, baseURL, imageURLOrBase64, prompt string) (string, error) {
+	// Determine image_url value: pass public URLs directly, wrap base64 in data URI
+	imageURL := imageURLOrBase64
+	if !strings.HasPrefix(imageURLOrBase64, "http://") && !strings.HasPrefix(imageURLOrBase64, "https://") && !strings.HasPrefix(imageURLOrBase64, "data:") {
+		// raw base64 — wrap as JPEG data URI (caller must use DetectMimeType separately if needed)
+		imageURL = "data:image/jpeg;base64," + imageURLOrBase64
+	}
+
 	payload, _ := json.Marshal(map[string]any{
 		"model": VisionModel,
 		"messages": []map[string]any{
@@ -196,11 +206,8 @@ func CallVisionInference(ctx context.Context, baseURL, imageB64, prompt string) 
 				"role": "user",
 				"content": []map[string]any{
 					{
-						"type": "image_url",
-						"image_url": map[string]string{
-							// vLLM accepts base64 data URIs directly
-							"url": "data:image/jpeg;base64," + imageB64,
-						},
+						"type":      "image_url",
+						"image_url": map[string]string{"url": imageURL},
 					},
 					{
 						"type": "text",
@@ -252,4 +259,23 @@ func CallVisionInference(ctx context.Context, baseURL, imageB64, prompt string) 
 	}
 
 	return strings.TrimSpace(completion.Choices[0].Message.Content), nil
+}
+
+// DetectMimeType sniffs the first 16 bytes of image data to determine MIME type.
+func DetectMimeType(data []byte) string {
+	if len(data) < 4 {
+		return "image/jpeg"
+	}
+	switch {
+	case data[0] == 0xFF && data[1] == 0xD8:
+		return "image/jpeg"
+	case data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G':
+		return "image/png"
+	case data[0] == 'G' && data[1] == 'I' && data[2] == 'F':
+		return "image/gif"
+	case data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F':
+		return "image/webp"
+	default:
+		return "image/jpeg"
+	}
 }

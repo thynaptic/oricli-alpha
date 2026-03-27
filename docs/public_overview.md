@@ -57,7 +57,7 @@ Specialized Python capabilities (vision transcription, symbolic solvers, LoRA tr
 | **Hive Swarm** | 269+ micro-agents bid via Contract Net Protocol to handle queries |
 | **RAG Memory** | chromem-go vector store + Neo4j graph for hybrid retrieval |
 | **Web Ingestion** | Concurrent Go crawler → chunk → embed → index pipeline |
-| **Multi-Modal** | Image ingestion transcribed by Ollama vision model before indexing |
+| **Multi-Modal** | Image ingestion via RunPod vLLM vision pod (Qwen2‑VL‑2B); optional local fallback |
 | **Metacognition** | DBT/CBT-inspired sentinel detects and self-corrects cognitive loops |
 | **Adversarial Audit** | Red-team pass on all execution plans before they run |
 | **Dream Daemon** | Idle-time memory consolidation and novel insight synthesis |
@@ -70,7 +70,7 @@ Specialized Python capabilities (vision transcription, symbolic solvers, LoRA tr
 Measured on AMD EPYC 7543P (32 cores, 32GB RAM):
 
 - **Internal routing**: Sub-millisecond (Go channel-based Swarm Bus)
-- **API response (simple)**: < 5 seconds (local Ollama + Go reasoning)
+- **API response (simple)**: < 5 seconds (local Ollama + Go reasoning; optional RunPod vLLM primary for GPU tiers)
 - **Idle RAM**: ~60% reduction vs. Python-only stack
 - **Concurrency**: 32 cores fully utilized via goroutines — no GIL
 

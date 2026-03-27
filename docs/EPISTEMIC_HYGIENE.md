@@ -52,6 +52,7 @@ Every memory record carries a `provenance` field that declares the **origin qual
 |---|---|---|---|
 | `user_stated` | User explicitly stated this as fact | **×1.5 + anchor bonus** | **Never** |
 | `web_verified` | Retrieved directly from a live URL with timestamp | ×1.2 | Yes |
+| `seen` | Image-derived description (vision inference) | ×1.0 | Yes |
 | `conversation` | Inferred from a chat exchange | ×0.9 | Yes |
 | `synthetic_l1` | Curiosity summary of web results (one-hop from real data) | ×0.85 | Yes |
 | `synthetic_l2+` | Derived from another synthetic memory | ×0.6 / lineage_depth | Yes |
@@ -169,7 +170,7 @@ The three epistemic hygiene fields are present on both `memories` and `knowledge
 
 | Field | Type | Values |
 |---|---|---|
-| `provenance` | text | `user_stated` \| `web_verified` \| `conversation` \| `synthetic_l1` \| `synthetic_l2+` |
+| `provenance` | text | `user_stated` \| `web_verified` \| `seen` \| `conversation` \| `synthetic_l1` \| `synthetic_l2+` |
 | `topic_volatility` | text | `stable` \| `current` \| `ephemeral` |
 | `lineage_depth` | number | `0` (ground truth) → `1` (synthetic_l1) → `2+` (synthetic chain) |
 

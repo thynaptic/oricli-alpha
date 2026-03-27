@@ -40,6 +40,7 @@ type Provenance string
 const (
 	ProvenanceUserStated   Provenance = "user_stated"   // user explicitly stated this fact (anchor — never recycled)
 	ProvenanceWebVerified  Provenance = "web_verified"  // retrieved directly from a live URL with timestamp
+	ProvenanceSeen         Provenance = "seen"           // image-derived: moondream description of a visual input
 	ProvenanceConversation Provenance = "conversation"  // inferred from chat exchange
 	ProvenanceSyntheticL1  Provenance = "synthetic_l1"  // curiosity: summarised from web results
 	ProvenanceSyntheticL2  Provenance = "synthetic_l2+" // derived from another synthetic memory
@@ -56,6 +57,7 @@ var provenanceWeight = map[Provenance]float32{
 	ProvenanceGold:         1.6,
 	ProvenanceContrastive:  1.3,
 	ProvenanceWebVerified:  1.2,
+	ProvenanceSeen:         1.0, // image-derived: good signal but vision models can hallucinate details
 	ProvenanceConversation: 0.9,
 	ProvenanceSyntheticL1:  0.85,
 	ProvenanceSyntheticL2:  0.6,

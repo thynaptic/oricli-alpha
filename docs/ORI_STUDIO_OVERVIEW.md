@@ -43,6 +43,8 @@ The AI builds, modifies, and explains in context. The editor supports **ORI DSL*
 ### 3. **Canvas** — Artifact Generation
 Full-page generative output mode. Long-form code, landing pages, documentation, reports. Canvas renders the output with live streaming and syntax-aware display. Outputs are portable artifacts.
 
+**New:** HTML artifacts can be opened in a new tab, and any canvas artifact can be shared via a permanent public link (`/share/:id`) backed by PocketBase.
+
 ### 4. **Research** — Deep Knowledge Mode
 Routes queries to the heavyweight reasoning stack (deepseek-coder-v2:16b) for long-horizon tasks. Engages the Hive's web ingestion, RAG memory, and multi-step reasoning. Shows a visible "Researching" card only when deep-mode is active — not on casual queries.
 
@@ -56,6 +58,7 @@ Build, run, and monitor autonomous multi-step pipelines. Workflows are defined i
 Beyond the five core modes, ORI Studio exposes:
 
 - **Agents** — View, configure, and spawn Hive micro-agents
+- **Agent Vibe Studio** — Natural-language agent creation for rapid scaffolding (phases 1–3)
 - **Memory Browser** — Inspect Oricli's long-term memory graph (PocketBase + vector store)
 - **Goals** — Multi-day sovereign objectives — set once, executed autonomously across sessions
 - **Connections** — MCP (Model Context Protocol) integrations and external service bridges

@@ -20,7 +20,7 @@ This document defines the architectural and philosophical mandate for **Autonomo
 Sovereignty is not merely "offline" usage — it is the absolute ownership of the cognitive lifecycle, including the rules that govern it.
 
 ### 2.1 Perimeter Sovereignty
-Traditional AI relies on external APIs, creating a "leaky" cognitive perimeter. AGLI mandates that no data, metadata, or reasoning traces leave the sovereign boundary. All inference runs on the local backbone (AMD EPYC VPS) via Ollama with auto-calibrated thread allocation. The sovereign key system ensures the owner can always identify themselves and bypass safety softening — without exposing credentials to any third-party layer.
+Traditional AI relies on external APIs, creating a "leaky" cognitive perimeter. AGLI mandates that no data, metadata, or reasoning traces leave the sovereign boundary. All inference runs on the local backbone (AMD EPYC VPS) via Ollama by default, with an optional governed RunPod vLLM primary path for GPU-tier workloads. The sovereign key system ensures the owner can always identify themselves and bypass safety softening — without exposing credentials to any third-party layer.
 
 ### 2.2 Compile-Time Compute Economy
 We reject brute-force neural scaling. AGLI uses compiled Go orchestration to manage sparse, high-intensity neural compute. Symbolic logic, Markov inference, MCTS search, and ARC induction/transduction replace expensive LLM reasoning steps wherever possible. Auto-thread detection (`runtime.NumCPU()-2`) prevents scheduler contention and sustains 39+ tok/s on 8 vCPUs. When a task genuinely requires GPU-class compute, the system spins a governed remote compute session — budget-capped, constitutionally pre-cleared, and torn down on completion.
