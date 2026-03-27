@@ -185,14 +185,14 @@ function Message({ msg, skillPool, rulePool, onAccept, onTweak }) {
 }
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
-export default function AgentVibePanel({ onClose, skillPool, rulePool, onAgentCreated, onSkillCreated, onRuleCreated }) {
+export default function AgentVibePanel({ onClose, skillPool, rulePool, onAgentCreated, onSkillCreated, onRuleCreated, initialPrompt }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
       content: "Describe the agent you want — what it does, how it sounds, what it cares about. I'll handle the rest.",
     }
   ]);
-  const [input, setInput]       = useState('');
+  const [input, setInput]       = useState(initialPrompt || '');
   const [loading, setLoading]   = useState(false);
   const [accepted, setAccepted] = useState(null);
   const bottomRef = useRef(null);
@@ -204,6 +204,14 @@ export default function AgentVibePanel({ onClose, skillPool, rulePool, onAgentCr
 
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Auto-send if navigated from chat with a pre-filled prompt
+  useEffect(() => {
+    if (initialPrompt) {
+      send(initialPrompt);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function send(text) {

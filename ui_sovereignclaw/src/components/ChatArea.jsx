@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSCStore, streamChat, selectActiveSession } from '../store';
-import { Send, Square, Copy, Check, ChevronDown, X, Bot, Search, BookOpen, ListTodo, Workflow, FileText, BarChart2, Loader2, CheckCircle2, AlertCircle, FileCode2, ExternalLink, Paperclip } from 'lucide-react';
+import { Send, Square, Copy, Check, ChevronDown, X, Bot, Search, BookOpen, ListTodo, Workflow, FileText, BarChart2, Loader2, CheckCircle2, AlertCircle, FileCode2, ExternalLink, Paperclip, ArrowRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -291,6 +291,7 @@ function Message({ msg, onEdit }) {
 
   if (msg.role === 'dispatch') return <DispatchCard msg={msg} />;
   if (msg.role === 'task_plan') return <TaskPlanCard tasks={msg.tasks} />;
+  if (msg.role === 'routing') return <RoutingCard msg={msg} />;
 
   if (isUser) {
     return (
@@ -753,11 +754,73 @@ function AgentSwitcher() {
 const _TASK_RE = /\b(?:remind\s+me\s+to|add\s+(?:a\s+)?(?:task|todo|reminder)|create\s+(?:a\s+)?(?:task|todo|reminder)|note\s+that|note\s+to)\b/i;
 // Anchored to start of message — prevents "you make me feel alive" etc. from firing
 const _CREATE_RE = /^\s*(?:(?:hey|hi|ok|okay|so|alright|please|can\s+you|could\s+you|i\s+(?:want|need)\s+(?:you\s+to|to)?|let(?:'s|\s+us?))\s+)?(?:create|write|build|generate|make|draft|implement|code|develop)\s+(?:(?:a|an|the|me\s+a?n?\s+)?(.{10,}))/i;
+const _AGENT_RE  = /(?:need|want|create|make|build|design|set\s+up)\s+(?:an?\s+)?(?:agent|persona|bot|assistant)(?:\s+(?:that|to|which|for|who|named|called))?\s*(.{5,})/i;
+const _WORKFLOW_RE = /(?:need|want|create|make|build|design|set\s+up)\s+(?:an?\s+)?workflow(?:\s+(?:that|to|which|for))?\s*(.{5,})/i;
+
+// Returns { type: 'agent'|'workflow', subject } or null — checked BEFORE canvas intent
+function detectRoutingIntent(text) {
+  if (_TASK_RE.test(text)) return null;
+  const wm = _WORKFLOW_RE.exec(text);
+  if (wm) return { type: 'workflow', subject: wm[1].replace(/[.!?]+$/, '').trim() };
+  const am = _AGENT_RE.exec(text);
+  if (am) return { type: 'agent', subject: am[1].replace(/[.!?]+$/, '').trim() };
+  return null;
+}
 
 function detectCreateIntent(text) {
   if (_TASK_RE.test(text)) return null; // already handled by Task pattern
   const m = _CREATE_RE.exec(text);
   return m ? m[1].replace(/[.!?]+$/, '').trim() : null;
+}
+
+// ── Routing card — surfaces agent/workflow creation intent ─────────────────
+function RoutingCard({ msg }) {
+  const setActivePage            = useSCStore(s => s.setActivePage);
+  const setPendingAgentPrompt    = useSCStore(s => s.setPendingAgentPrompt);
+  const setPendingWorkflowPrompt = useSCStore(s => s.setPendingWorkflowPrompt);
+  const isAgent = msg.targetPage === 'agents';
+
+  function navigate() {
+    if (isAgent) {
+      setPendingAgentPrompt(msg.fullText);
+    } else {
+      setPendingWorkflowPrompt(msg.fullText);
+    }
+    setActivePage(msg.targetPage);
+  }
+
+  return (
+    <div style={{ margin: '4px 0 4px 44px', maxWidth: 460 }}>
+      <div style={{
+        border: '1px solid rgba(196,164,74,0.28)',
+        borderRadius: 10,
+        padding: '12px 14px',
+        background: 'rgba(196,164,74,0.07)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+          {isAgent ? <Bot size={15} color="var(--color-sc-gold)" /> : <Workflow size={15} color="var(--color-sc-gold)" />}
+          <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--color-sc-gold)' }}>
+            {isAgent ? 'Set up in Vibe Studio?' : 'Set up in Workflows?'}
+          </span>
+        </div>
+        <p style={{ margin: '0 0 10px', fontSize: 12.5, color: 'var(--color-sc-text-dim)', lineHeight: 1.45 }}>
+          {msg.subject}
+        </p>
+        <button
+          onClick={navigate}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '5px 12px', borderRadius: 6,
+            background: 'var(--color-sc-gold)', color: '#0D0D0D',
+            border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11.5,
+          }}
+        >
+          <ArrowRight size={11} />
+          {isAgent ? 'Open Vibe Studio' : 'Open Workflows'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function ChatArea() {
@@ -789,6 +852,20 @@ export function ChatArea() {
     const sessionId = activeSession.id;
     if (activeSession.messages.length === 0) {
       renameSession(sessionId, text.slice(0, 46) + (text.length > 46 ? '…' : ''));
+    }
+
+    // ── Agent / Workflow routing — surfaces a card, no LLM call ──────────────
+    const routingIntent = detectRoutingIntent(text);
+    if (routingIntent) {
+      appendMessage(sessionId, { role: 'user', content: text, id: Date.now() });
+      appendMessage(sessionId, {
+        role: 'routing',
+        id: `routing-${Date.now()}`,
+        targetPage: routingIntent.type === 'agent' ? 'agents' : 'workflows',
+        subject: routingIntent.subject,
+        fullText: text,
+      });
+      return;
     }
 
     // ── Canvas create shortcut — no LLM call needed ────────────────────────

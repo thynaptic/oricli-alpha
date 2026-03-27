@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSCStore } from '../store';
 import {
   Bot, Shield, ToggleLeft, ToggleRight, ChevronRight, X, Plus,
@@ -551,13 +551,26 @@ export function AgentsPage() {
   const activeSkill    = useSCStore(s => s.activeSkill);
   const setActiveSkill = useSCStore(s => s.setActiveSkill);
 
+  const pendingAgentPrompt    = useSCStore(s => s.pendingAgentPrompt);
+  const clearPendingAgentPrompt = useSCStore(s => s.clearPendingAgentPrompt);
+
   const [tab, setTab] = useState('agents');
-  const [view, setView] = useState('list'); // list | create-agent | edit-agent | create-skill | edit-skill | create-rule | edit-rule
+  const [view, setView] = useState('list');
   const [editTarget, setEditTarget] = useState(null);
   const [activeRules, setActiveRules] = useState(new Set(['global_safety', 'response_format', 'code_quality']));
   const [drawerItem, setDrawerItem] = useState(null);
   const [drawerType, setDrawerType] = useState(null);
   const [vibeOpen, setVibeOpen] = useState(false);
+  const [vibePrompt, setVibePrompt] = useState(null);
+
+  // Auto-open Vibe Studio when navigated from chat with a pending prompt
+  useEffect(() => {
+    if (pendingAgentPrompt) {
+      setVibePrompt(pendingAgentPrompt);
+      setVibeOpen(true);
+      clearPendingAgentPrompt();
+    }
+  }, [pendingAgentPrompt, clearPendingAgentPrompt]);
 
   const toggleRule = id => setActiveRules(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
@@ -720,12 +733,13 @@ export function AgentsPage() {
         {/* Vibe Studio side drawer */}
         {vibeOpen && (
           <AgentVibePanel
-            onClose={() => setVibeOpen(false)}
+            onClose={() => { setVibeOpen(false); setVibePrompt(null); }}
             skillPool={allSkillPool}
             rulePool={[...RULE_POOL, ...customRules]}
             onAgentCreated={data => { addAgent(data); setTab('agents'); }}
             onSkillCreated={data => addCustomSkill(data)}
             onRuleCreated={data => addCustomRule(data)}
+            initialPrompt={vibePrompt}
           />
         )}
       </div>{/* end content+panel row */}

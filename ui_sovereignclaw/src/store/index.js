@@ -368,6 +368,14 @@ export const useSCStore = create(
   pendingCanvasPrompt: null,
   setPendingCanvasPrompt(text) { set({ pendingCanvasPrompt: text }); },
   clearPendingCanvasPrompt() { set({ pendingCanvasPrompt: null }); },
+
+  pendingAgentPrompt: null,
+  setPendingAgentPrompt(text) { set({ pendingAgentPrompt: text }); },
+  clearPendingAgentPrompt() { set({ pendingAgentPrompt: null }); },
+
+  pendingWorkflowPrompt: null,
+  setPendingWorkflowPrompt(text) { set({ pendingWorkflowPrompt: text }); },
+  clearPendingWorkflowPrompt() { set({ pendingWorkflowPrompt: null }); },
   setCanvasChatHistory(docId, messages) {
     set(state => ({ canvasChatHistories: { ...state.canvasChatHistories, [docId]: messages } }));
   },

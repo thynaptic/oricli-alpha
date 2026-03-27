@@ -755,9 +755,9 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId, compac
 }
 
 // ─── WorkflowCreator ─────────────────────────────────────────────────────────
-function WorkflowCreator({ onSave, onCancel, initial, defaultProjectId }) {
+function WorkflowCreator({ onSave, onCancel, initial, defaultProjectId, pendingDescription }) {
   const [name, setName]               = useState(initial?.name || '');
-  const [desc, setDesc]               = useState(initial?.description || '');
+  const [desc, setDesc]               = useState(pendingDescription || initial?.description || '');
   const [agent, setAgent]             = useState(initial ? { id: initial.agentId, name: initial.agentName, emoji: initial.agentEmoji } : null);
   const [steps, setSteps]             = useState(initial?.steps?.length ? initial.steps : [{ id: crypto.randomUUID(), type: 'prompt', label: '', value: '' }]);
   const [sendToCanvas, setSendToCanvas] = useState(!!initial?.sendToCanvas);
@@ -1372,6 +1372,7 @@ function WorkflowsTab({ creating, setCreating }) {
   const [editingWf, setEditingWf] = useState(null);
   const [pendingDocRun, setPendingDocRun] = useState(null);
   const [pendingVarsRun, setPendingVarsRun] = useState(null); // { wf, vars[] }
+  const [wfPrompt, setWfPrompt]   = useState(null);
 
   // bgRuns lives in global store — survives page navigation
   const bgRuns               = useSCStore(s => s.bgRuns);
@@ -1384,6 +1385,18 @@ function WorkflowsTab({ creating, setCreating }) {
   const activeProjectId      = useSCStore(s => s.activeProjectId);
   const setActiveProject     = useSCStore(s => s.setActiveProject);
   const fetchProjects        = useSCStore(s => s.fetchProjects);
+
+  const pendingWorkflowPrompt      = useSCStore(s => s.pendingWorkflowPrompt);
+  const clearPendingWorkflowPrompt = useSCStore(s => s.clearPendingWorkflowPrompt);
+
+  // Auto-open creator when navigated from chat with a pending prompt
+  useEffect(() => {
+    if (pendingWorkflowPrompt) {
+      setWfPrompt(pendingWorkflowPrompt);
+      setCreating(true);
+      clearPendingWorkflowPrompt();
+    }
+  }, [pendingWorkflowPrompt, clearPendingWorkflowPrompt, setCreating]);
 
   async function refresh() {
     try {
@@ -1509,8 +1522,9 @@ function WorkflowsTab({ creating, setCreating }) {
             {creating && (
               <WorkflowCreator
                 onSave={handleSave}
-                onCancel={() => setCreating(false)}
+                onCancel={() => { setCreating(false); setWfPrompt(null); }}
                 defaultProjectId={isRealProject ? activeProjectId : null}
+                pendingDescription={wfPrompt}
               />
             )}
             {editingWf && (
