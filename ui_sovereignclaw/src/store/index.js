@@ -388,13 +388,13 @@ export const useSCStore = create(
 
   // Creation intent memory — powers "you've built X agents like this before"
   creationIntents: [],
-  logCreationIntent({ type, subject, action = 'routed' }) {
+  logCreationIntent({ type, subject, action = 'routed', origin_surface = 'chat', resolution_quality = null }) {
     const id = `ci-${Date.now()}`;
     set(s => ({
       creationIntents: [
-        { id, type, subject, action, timestamp: Date.now(), resultId: null, resultName: null },
+        { id, type, subject, action, origin_surface, resolution_quality, timestamp: Date.now(), resultId: null, resultName: null },
         ...s.creationIntents,
-      ].slice(0, 500), // cap at 500 entries
+      ].slice(0, 500),
     }));
     return id;
   },

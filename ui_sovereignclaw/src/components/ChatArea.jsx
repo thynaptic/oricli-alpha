@@ -789,6 +789,7 @@ function RoutingCard({ msg }) {
   const setPendingAgentIntentId    = useSCStore(s => s.setPendingAgentIntentId);
   const setPendingWorkflowIntentId = useSCStore(s => s.setPendingWorkflowIntentId);
   const logCreationIntent          = useSCStore(s => s.logCreationIntent);
+  const updateCreationIntent       = useSCStore(s => s.updateCreationIntent);
   const creationIntents            = useSCStore(s => s.creationIntents);
   const agents                     = useSCStore(s => s.agents);
   const setActiveAgentId           = useSCStore(s => s.setActiveAgentId);
@@ -796,9 +797,13 @@ function RoutingCard({ msg }) {
   const isAgent = msg.targetPage === 'agents';
   const intentIdRef = useRef(null);
 
-  // Log intent exactly once on mount
+  // Log intent exactly once on mount — always from chat surface
   useEffect(() => {
-    intentIdRef.current = logCreationIntent({ type: isAgent ? 'agent' : 'workflow', subject: msg.subject });
+    intentIdRef.current = logCreationIntent({
+      type: isAgent ? 'agent' : 'workflow',
+      subject: msg.subject,
+      origin_surface: 'chat',
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -823,8 +828,18 @@ function RoutingCard({ msg }) {
   }
 
   function useExistingAgent(agent) {
+    if (intentIdRef.current) {
+      updateCreationIntent(intentIdRef.current, { resolution_quality: 'reused', resultId: agent.id, resultName: agent.name });
+    }
     setActiveAgentId(agent.id);
     setActivePage('agents');
+  }
+
+  function useExistingWorkflow() {
+    if (intentIdRef.current) {
+      updateCreationIntent(intentIdRef.current, { resolution_quality: 'reused' });
+    }
+    setActivePage('workflows');
   }
 
   const totalPast = creationIntents.filter(ci => ci.type === (isAgent ? 'agent' : 'workflow')).length;
@@ -864,8 +879,8 @@ function RoutingCard({ msg }) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
               {similar.map(item => (
                 <button
-                  key={item.id}
-                  onClick={() => isAgent ? useExistingAgent(item) : setActivePage('workflows')}
+                  key={item.id || item.subject}
+                  onClick={() => isAgent ? useExistingAgent(item) : useExistingWorkflow()}
                   style={{
                     padding: '3px 9px', borderRadius: 5, fontSize: 11,
                     background: 'rgba(196,164,74,0.12)', color: 'var(--color-sc-gold)',

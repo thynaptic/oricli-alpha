@@ -556,6 +556,7 @@ export function AgentsPage() {
   const pendingAgentIntentId      = useSCStore(s => s.pendingAgentIntentId);
   const clearPendingAgentIntentId = useSCStore(s => s.clearPendingAgentIntentId);
   const updateCreationIntent      = useSCStore(s => s.updateCreationIntent);
+  const logCreationIntent         = useSCStore(s => s.logCreationIntent);
 
   const [tab, setTab] = useState('agents');
   const [view, setView] = useState('list');
@@ -661,7 +662,17 @@ export function AgentsPage() {
           <div style={{ display: 'flex', gap: 8 }}>
             {/* Vibe Studio button — always visible */}
             <button
-              onClick={() => setVibeOpen(v => !v)}
+              onClick={() => {
+                if (!vibeOpen) {
+                  // Manual open — log with agents surface, no subject
+                  const id = logCreationIntent({ type: 'agent', subject: '(direct)', origin_surface: 'agents' });
+                  setVibeIntentId(id);
+                } else if (vibeIntentId) {
+                  updateCreationIntent(vibeIntentId, { resolution_quality: 'abandoned' });
+                  setVibeIntentId(null);
+                }
+                setVibeOpen(v => !v);
+              }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px',
                 borderRadius: 9,
@@ -739,14 +750,19 @@ export function AgentsPage() {
         {/* Vibe Studio side drawer */}
         {vibeOpen && (
           <AgentVibePanel
-            onClose={() => { setVibeOpen(false); setVibePrompt(null); setVibeIntentId(null); }}
+            onClose={() => {
+              if (vibeIntentId) {
+                updateCreationIntent(vibeIntentId, { resolution_quality: 'abandoned' });
+              }
+              setVibeOpen(false); setVibePrompt(null); setVibeIntentId(null);
+            }}
             skillPool={allSkillPool}
             rulePool={[...RULE_POOL, ...customRules]}
             onAgentCreated={data => {
               addAgent(data);
               setTab('agents');
               if (vibeIntentId) {
-                updateCreationIntent(vibeIntentId, { action: 'created', resultName: data.name });
+                updateCreationIntent(vibeIntentId, { action: 'created', resolution_quality: 'completed', resultName: data.name });
                 setVibeIntentId(null);
               }
             }}

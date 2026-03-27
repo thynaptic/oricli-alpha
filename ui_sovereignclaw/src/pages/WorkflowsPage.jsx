@@ -1392,6 +1392,7 @@ function WorkflowsTab({ creating, setCreating }) {
   const pendingWorkflowIntentId      = useSCStore(s => s.pendingWorkflowIntentId);
   const clearPendingWorkflowIntentId = useSCStore(s => s.clearPendingWorkflowIntentId);
   const updateCreationIntent         = useSCStore(s => s.updateCreationIntent);
+  const logCreationIntent            = useSCStore(s => s.logCreationIntent);
 
   // Auto-open creator when navigated from chat with a pending prompt
   useEffect(() => {
@@ -1481,7 +1482,7 @@ function WorkflowsTab({ creating, setCreating }) {
 
   function handleSave(wf) {
     if (wfIntentId && wf?.name) {
-      updateCreationIntent(wfIntentId, { action: 'created', resultName: wf.name, resultId: wf.id });
+      updateCreationIntent(wfIntentId, { action: 'created', resolution_quality: 'completed', resultName: wf.name, resultId: wf.id });
       setWfIntentId(null);
     }
     setWfPrompt(null);
@@ -1514,7 +1515,11 @@ function WorkflowsTab({ creating, setCreating }) {
           workflows={workflows}
           activeProjectId={activeProjectId}
           onSelect={id => { setActiveProject(id); setCreating(false); setEditingWf(null); }}
-          onCreateWorkflow={() => setCreating(true)}
+          onCreateWorkflow={() => {
+            const id = logCreationIntent({ type: 'workflow', subject: '(direct)', origin_surface: 'workflows' });
+            setWfIntentId(id);
+            setCreating(true);
+          }}
         />
 
         {/* Main content */}
@@ -1533,7 +1538,13 @@ function WorkflowsTab({ creating, setCreating }) {
             {creating && (
               <WorkflowCreator
                 onSave={handleSave}
-                onCancel={() => { setCreating(false); setWfPrompt(null); }}
+                onCancel={() => {
+                  if (wfIntentId) {
+                    updateCreationIntent(wfIntentId, { resolution_quality: 'abandoned' });
+                    setWfIntentId(null);
+                  }
+                  setCreating(false); setWfPrompt(null);
+                }}
                 defaultProjectId={isRealProject ? activeProjectId : null}
                 pendingDescription={wfPrompt}
               />
