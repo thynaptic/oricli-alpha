@@ -25,7 +25,8 @@ type GenerationService struct {
 	NumThreads     int
 	HTTPClient     *http.Client
 	StreamClient   *http.Client
-	RunPodMgr      *RunPodManager // nil when disabled
+	RunPodMgr      *RunPodManager         // KoboldCpp-based (code/research tiers, legacy)
+	PrimaryMgr     *PrimaryInferenceManager // vLLM-based (all tiers, RUNPOD_PRIMARY=true)
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -81,6 +82,11 @@ func NewGenerationService() *GenerationService {
 		HTTPClient:    &http.Client{Timeout: 300 * time.Second, Transport: transport},
 		StreamClient:  &http.Client{Timeout: 0, Transport: transport},
 		RunPodMgr:     NewRunPodManager(),
+		PrimaryMgr:    NewPrimaryInferenceManager(),
+	}
+	if svc.PrimaryMgr != nil && os.Getenv("RUNPOD_PRIMARY") == "true" {
+		log.Printf("[GenerationService] RUNPOD_PRIMARY=true — all tiers will route through vLLM pod")
+		svc.PrimaryMgr.WarmOnStart()
 	}
 	return svc
 }
@@ -250,7 +256,18 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		useCode = true
 	}
 
-	// Route code/research tiers to RunPod when enabled — Ollama is fallback
+	// RUNPOD_PRIMARY mode: route ALL tiers through the vLLM pod.
+	// Ollama is pure fallback when the pod is unavailable.
+	if s.PrimaryMgr != nil && s.PrimaryMgr.IsEnabled() && os.Getenv("RUNPOD_PRIMARY") == "true" {
+		ch, err := s.PrimaryMgr.ChatStream(ctx, messages, options)
+		if err != nil {
+			log.Printf("[GenerationService] PrimaryMgr unavailable (%v) — falling back to Ollama", err)
+		} else {
+			return ch, nil
+		}
+	}
+
+	// Route code/research tiers to KoboldCpp RunPod when enabled (legacy path).
 	if (useResearch || useCode) && s.RunPodMgr != nil && s.RunPodMgr.IsEnabled() {
 		tier := "code"
 		if useResearch {

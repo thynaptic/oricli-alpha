@@ -435,3 +435,322 @@ func parseFloatEnv(key string, defaultVal float64) float64 {
 	}
 	return f
 }
+
+// ─────────────────────────────────────────────────────────────────
+// PrimaryInferenceManager
+// ─────────────────────────────────────────────────────────────────
+// Manages a single long-lived vLLM pod on RunPod that serves ALL
+// chat/code/research requests. Enabled when RUNPOD_PRIMARY=true.
+//
+// Lifecycle mirrors RunPodManager:
+//   off → warming → warm
+//
+// When RUNPOD_PRIMARY_WARM_ON_START=true the pod is spun up
+// proactively at API startup rather than on first request.
+// ─────────────────────────────────────────────────────────────────
+
+type PrimaryInferenceManager struct {
+	client      *runpod.Client
+	minVRAM     int
+	maxHourly   float64
+	modelOverride string
+	idleTimeout time.Duration
+	maxMonthly  float64
+
+	mu         sync.Mutex
+	state      RunPodState
+	pod        *runpod.PrimaryPod
+	lastActive time.Time
+
+	spendMu    sync.Mutex
+	monthSpend float64
+}
+
+// NewPrimaryInferenceManager creates a PrimaryInferenceManager from env vars.
+//
+//	RUNPOD_API_KEY          — required
+//	RUNPOD_MIN_VRAM         — minimum VRAM in GB (default: 14)
+//	RUNPOD_MAX_HOURLY       — max $/hr per pod (default: 0.50)
+//	RUNPOD_PRIMARY_MODEL    — HF model ID override (default: auto-select by VRAM)
+//	RUNPOD_IDLE_TIMEOUT_MIN — minutes before idle pod teardown (default: 30)
+//	RUNPOD_MAX_MONTHLY      — monthly spend cap (default: 40.0)
+func NewPrimaryInferenceManager() *PrimaryInferenceManager {
+	key := os.Getenv("RUNPOD_API_KEY")
+	if key == "" {
+		return nil
+	}
+	minVRAM := 14
+	if v := os.Getenv("RUNPOD_MIN_VRAM"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			minVRAM = n
+		}
+	}
+	idleMin := parseFloatEnv("RUNPOD_IDLE_TIMEOUT_MIN", 30)
+	return &PrimaryInferenceManager{
+		client:        runpod.NewClient(key),
+		minVRAM:       minVRAM,
+		maxHourly:     parseFloatEnv("RUNPOD_MAX_HOURLY", 0.50),
+		modelOverride: os.Getenv("RUNPOD_PRIMARY_MODEL"),
+		idleTimeout:   time.Duration(idleMin) * time.Minute,
+		maxMonthly:    parseFloatEnv("RUNPOD_MAX_MONTHLY", 40.0),
+		state:         StateOff,
+	}
+}
+
+// Ensure guarantees a warm vLLM pod is available; call before every request.
+func (m *PrimaryInferenceManager) Ensure(ctx context.Context) (string, error) {
+	m.mu.Lock()
+	state := m.state
+	m.mu.Unlock()
+
+	switch state {
+	case StateWarm:
+		m.mu.Lock()
+		m.lastActive = time.Now()
+		url := m.pod.EndpointURL
+		m.mu.Unlock()
+		return url, nil
+	case StateWarming:
+		return m.waitWarm(ctx)
+	case StateOff:
+		m.mu.Lock()
+		m.state = StateWarming
+		m.mu.Unlock()
+		go func() {
+			spinCtx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+			defer cancel()
+			if _, err := m.spinUp(spinCtx); err != nil {
+				log.Printf("[PrimaryMgr] spinUp failed: %v", err)
+				m.mu.Lock()
+				m.state = StateOff
+				m.mu.Unlock()
+			}
+		}()
+		return m.waitWarm(ctx)
+	}
+	return "", fmt.Errorf("PrimaryInferenceManager: unknown state")
+}
+
+func (m *PrimaryInferenceManager) spinUp(ctx context.Context) (string, error) {
+	m.spendMu.Lock()
+	spend := m.monthSpend
+	m.spendMu.Unlock()
+	if spend >= m.maxMonthly {
+		return "", fmt.Errorf("[PrimaryMgr] monthly cap $%.2f reached", m.maxMonthly)
+	}
+
+	log.Printf("[PrimaryMgr] selecting GPU (≥%dGB VRAM, max $%.2f/hr)...", m.minVRAM, m.maxHourly)
+	pod, err := m.client.TryCreatePrimaryPod(m.minVRAM, m.maxHourly, m.modelOverride)
+	if err != nil {
+		return "", fmt.Errorf("pod creation failed: %w", err)
+	}
+	pod.HourlyRate = pod.HourlyRate
+	log.Printf("[PrimaryMgr] pod %s created (model: %s $%.3f/hr) — waiting for vLLM...", pod.PodID, pod.ModelName, pod.HourlyRate)
+
+	waitCtx, cancel := context.WithTimeout(ctx, 12*time.Minute)
+	defer cancel()
+	if err := m.client.WaitForPrimaryReady(waitCtx, pod); err != nil {
+		_ = m.client.TerminatePod(pod.PodID)
+		return "", fmt.Errorf("pod %s never became ready: %w", pod.PodID, err)
+	}
+
+	m.mu.Lock()
+	m.pod = pod
+	m.state = StateWarm
+	m.lastActive = time.Now()
+	m.mu.Unlock()
+
+	log.Printf("[PrimaryMgr] pod %s WARM — endpoint: %s", pod.PodID, pod.EndpointURL)
+	go m.trackSpend(pod)
+	go m.idleWatcher()
+
+	return pod.EndpointURL, nil
+}
+
+func (m *PrimaryInferenceManager) waitWarm(ctx context.Context) (string, error) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-t.C:
+			m.mu.Lock()
+			s, pod := m.state, m.pod
+			m.mu.Unlock()
+			if s == StateWarm && pod != nil {
+				return pod.EndpointURL, nil
+			}
+			if s == StateOff {
+				return "", fmt.Errorf("pod spin-up failed")
+			}
+		}
+	}
+}
+
+func (m *PrimaryInferenceManager) trackSpend(pod *runpod.PrimaryPod) {
+	t := time.NewTicker(1 * time.Minute)
+	defer t.Stop()
+	for {
+		m.mu.Lock()
+		if m.state != StateWarm || m.pod == nil || m.pod.PodID != pod.PodID {
+			m.mu.Unlock()
+			return
+		}
+		m.mu.Unlock()
+		m.spendMu.Lock()
+		m.monthSpend += pod.HourlyRate / 60
+		m.spendMu.Unlock()
+		<-t.C
+	}
+}
+
+func (m *PrimaryInferenceManager) idleWatcher() {
+	t := time.NewTicker(1 * time.Minute)
+	defer t.Stop()
+	for range t.C {
+		m.mu.Lock()
+		if m.state != StateWarm {
+			m.mu.Unlock()
+			return
+		}
+		idle := time.Since(m.lastActive)
+		if idle < m.idleTimeout {
+			m.mu.Unlock()
+			continue
+		}
+		pod := m.pod
+		m.state = StateOff
+		m.pod = nil
+		m.mu.Unlock()
+		log.Printf("[PrimaryMgr] idle timeout (%s) — terminating pod %s", idle.Round(time.Second), pod.PodID)
+		_ = m.client.TerminatePod(pod.PodID)
+		return
+	}
+}
+
+// WarmOnStart spins up the pod proactively at server startup.
+func (m *PrimaryInferenceManager) WarmOnStart() {
+	if os.Getenv("RUNPOD_PRIMARY_WARM_ON_START") != "true" {
+		return
+	}
+	m.mu.Lock()
+	if m.state != StateOff {
+		m.mu.Unlock()
+		return
+	}
+	m.state = StateWarming
+	m.mu.Unlock()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		defer cancel()
+		if _, err := m.spinUp(ctx); err != nil {
+			log.Printf("[PrimaryMgr] WarmOnStart failed: %v", err)
+			m.mu.Lock()
+			m.state = StateOff
+			m.mu.Unlock()
+		}
+	}()
+}
+
+// ChatStream streams a chat response from the vLLM pod.
+func (m *PrimaryInferenceManager) ChatStream(ctx context.Context, messages []map[string]string, options map[string]interface{}) (<-chan string, error) {
+	endpoint, err := m.Ensure(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ollamaMessages := make([]map[string]interface{}, len(messages))
+	for i, msg := range messages {
+		ollamaMessages[i] = map[string]interface{}{"role": msg["role"], "content": msg["content"]}
+	}
+
+	m.mu.Lock()
+	modelID := ""
+	if m.pod != nil {
+		modelID = m.pod.ModelID
+	}
+	m.mu.Unlock()
+
+	payload := map[string]interface{}{
+		"model":    modelID,
+		"messages": ollamaMessages,
+		"stream":   true,
+	}
+	if t, ok := options["temperature"].(float64); ok {
+		payload["temperature"] = t
+	}
+	if maxTok, ok := options["max_tokens"].(int); ok {
+		payload["max_tokens"] = maxTok
+	}
+
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("PrimaryMgr chat request: %w", err)
+	}
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("PrimaryMgr: vLLM returned HTTP %d", resp.StatusCode)
+	}
+
+	out := make(chan string, 32)
+	go func() {
+		defer close(out)
+		defer resp.Body.Close()
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if len(line) < 6 || line[:6] != "data: " {
+				continue
+			}
+			raw := line[6:]
+			if raw == "[DONE]" {
+				break
+			}
+			var chunk struct {
+				Choices []struct {
+					Delta struct {
+						Content string `json:"content"`
+					} `json:"delta"`
+				} `json:"choices"`
+			}
+			if err := json.Unmarshal([]byte(raw), &chunk); err != nil {
+				continue
+			}
+			if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
+				out <- chunk.Choices[0].Delta.Content
+			}
+		}
+	}()
+	return out, nil
+}
+
+// IsEnabled returns true when a RunPod API key is configured.
+func (m *PrimaryInferenceManager) IsEnabled() bool {
+	return m != nil && m.client != nil
+}
+
+// Status returns a human-readable pod state string.
+func (m *PrimaryInferenceManager) Status() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	switch m.state {
+	case StateOff:
+		return "off"
+	case StateWarming:
+		return "warming"
+	case StateWarm:
+		if m.pod != nil {
+			return fmt.Sprintf("warm (%s)", m.pod.ModelName)
+		}
+		return "warm"
+	}
+	return "unknown"
+}
