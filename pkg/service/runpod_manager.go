@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -762,8 +763,12 @@ func (m *PrimaryInferenceManager) ChatStream(ctx context.Context, messages []map
 	if t, ok := options["temperature"].(float64); ok {
 		payload["temperature"] = t
 	}
-	if maxTok, ok := options["max_tokens"].(int); ok {
-		payload["max_tokens"] = maxTok
+	// max_tokens arrives as float64 from JSON unmarshal — accept both
+	switch v := options["max_tokens"].(type) {
+	case int:
+		payload["max_tokens"] = v
+	case float64:
+		payload["max_tokens"] = int(v)
 	}
 
 	body, _ := json.Marshal(payload)
@@ -778,8 +783,9 @@ func (m *PrimaryInferenceManager) ChatStream(ctx context.Context, messages []map
 		return nil, fmt.Errorf("PrimaryMgr chat request: %w", err)
 	}
 	if resp.StatusCode != 200 {
+		errBody, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("PrimaryMgr: vLLM returned HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("PrimaryMgr: vLLM returned HTTP %d: %s", resp.StatusCode, string(errBody))
 	}
 
 	out := make(chan string, 32)
