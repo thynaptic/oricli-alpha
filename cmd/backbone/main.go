@@ -151,6 +151,31 @@ func main() {
 	sovEngine.Curiosity = curiosity
 	go curiosity.Run(context.Background())
 	log.Println("[Boot] Curiosity Daemon (Epistemic Foraging) loop engaged.")
+
+	// Initialize World Traveler + Benchmark Gap Detector
+	costGovernor := service.NewCostGovernor(nil)
+	curiosity.Governor = costGovernor
+	if os.Getenv("WORLD_TRAVELER_USE_RUNPOD") == "true" {
+		curiosity.UseRunPodSynthesis = true
+		log.Println("[Boot] RunPod synthesis enabled for CuriosityDaemon.")
+	}
+	benchGap := service.NewBenchmarkGapDetector(curiosity)
+	worldTraveler := service.NewWorldTravelerDaemon(curiosity, costGovernor)
+	if worldTraveler != nil {
+		go worldTraveler.Run(context.Background())
+		// Seed gaps from any prior benchmark results at boot
+		go func() {
+			n, err := benchGap.IngestLatestResults(context.Background(), "arc_results")
+			if err != nil {
+				log.Printf("[Boot] BenchmarkGap ingest error: %v", err)
+			} else if n > 0 {
+				log.Printf("[Boot] BenchmarkGap injected %d gap seeds from last benchmark run.", n)
+			}
+		}()
+		log.Println("[Boot] World Traveler Daemon engaged.")
+	} else {
+		_ = benchGap // available for manual use; not started automatically
+	}
 	
 	// Initialize VDI (Virtual Device Interface)
 	log.Println("[Boot] Initializing Sovereign VDI...")

@@ -57,6 +57,12 @@ type CuriosityDaemon struct {
 	Searcher    *CollySearcher
 	SearXNG     *SearXNGSearcher
 	MemoryBank  *MemoryBank // PocketBase long-term memory (optional)
+	Governor    *CostGovernor // optional spend guard for RunPod synthesis
+
+	// RunPod synthesis: when true, forageTopic uses an LLM synthesis pass
+	// instead of pure TF-IDF extraction — produces richer knowledge fragments.
+	// Respects Governor budget. Env: WORLD_TRAVELER_USE_RUNPOD=true
+	UseRunPodSynthesis bool
 
 	// Seed queue — populated by conversation traffic, consumed during idle bursts
 	seedMu   sync.Mutex
@@ -125,6 +131,25 @@ func (d *CuriosityDaemon) AddSeed(topic, source string) {
 		return
 	}
 	d.seenKeys[key] = struct{}{}
+	d.seeds = append(d.seeds, CuriositySeed{
+		Topic:   topic,
+		Source:  source,
+		AddedAt: time.Now(),
+	})
+}
+
+// AddSeedForce injects a topic into the research queue even if it was previously
+// seen. Used by BenchmarkGapDetector so known weaknesses are re-studied on each
+// benchmark cycle rather than silently dropped by the dedup filter.
+func (d *CuriosityDaemon) AddSeedForce(topic, source string) {
+	key := strings.ToLower(strings.TrimSpace(topic))
+	if key == "" || len(key) < 4 {
+		return
+	}
+	d.seedMu.Lock()
+	defer d.seedMu.Unlock()
+	// Remove from seenKeys so novelty cap doesn't apply on re-injection
+	delete(d.seenKeys, key)
 	d.seeds = append(d.seeds, CuriositySeed{
 		Topic:   topic,
 		Source:  source,
@@ -382,6 +407,45 @@ func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string, depth i
 	// Selects the highest-scoring sentences by cosine similarity to the
 	// topic query, preserving document order. Deterministic, <5ms.
 	factSummary := cognition.ExtractFacts(topic, rawText, intent)
+
+	// ── RunPod synthesis upgrade (optional) ──────────────────────────────
+	// When WORLD_TRAVELER_USE_RUNPOD=true and budget allows, replace the
+	// TF-IDF summary with a richer LLM-synthesized knowledge fragment.
+	// Falls back to TF-IDF output if synthesis fails or budget is exceeded.
+	if d.UseRunPodSynthesis && d.Gen != nil {
+		estimatedCost := EstimateRunPodCost(1)
+		canSynth := d.Governor == nil || d.Governor.CanSpend(estimatedCost)
+		if canSynth {
+			synthPrompt := fmt.Sprintf(
+				"You are a knowledge synthesis engine. Given raw search results about \"%s\", "+
+					"produce a precise, factual 3-5 sentence summary that captures the most important "+
+					"concepts, mechanisms, and relationships. Do not hallucinate. Stay grounded in the text.\n\n"+
+					"Source text:\n%s\n\nSynthesis:",
+				topic, rawText,
+			)
+			synthCtxTimeout, synthCancel := context.WithTimeout(ctx, 20*time.Second)
+			_ = synthCtxTimeout
+			res, err := d.Gen.Generate(synthPrompt, map[string]interface{}{
+				"options": map[string]interface{}{
+					"num_predict": 250,
+					"num_ctx":     3072,
+					"temperature": 0.2,
+				},
+			})
+			synthCancel()
+			if err == nil {
+				if synthText, ok := res["text"].(string); ok && len(strings.TrimSpace(synthText)) > 30 {
+					factSummary = strings.TrimSpace(synthText)
+					if d.Governor != nil {
+						d.Governor.RecordSpend(estimatedCost, "synthesis:"+topic)
+					}
+					log.Printf("[CuriosityDaemon] RunPod synthesis applied for %q", topic)
+				}
+			} else {
+				log.Printf("[CuriosityDaemon] RunPod synthesis fallback (TF-IDF) for %q: %v", topic, err)
+			}
+		}
+	}
 
 	// Find or create entity in graph and commit
 	gaps := d.Graph.FindGaps()
