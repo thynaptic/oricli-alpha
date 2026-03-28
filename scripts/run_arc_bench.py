@@ -229,33 +229,59 @@ def call_api(prompt: str, api_url: str, model: str, api_key: str = "", temperatu
     headers = {"Content-Type": "application/json", "User-Agent": "oricli-arc-bench/1.0"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    try:
-        req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
-        content_parts = []
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            for raw_line in resp:
-                line = raw_line.decode("utf-8", errors="replace").strip()
-                if not line.startswith("data:"):
-                    continue
-                payload_str = line[5:].strip()
-                if payload_str == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(payload_str)
-                    delta = chunk.get("choices", [{}])[0].get("delta", {})
-                    if delta.get("content"):
-                        content_parts.append(delta["content"])
-                except Exception:
-                    continue
-        return "".join(content_parts).strip()
-    except Exception as e:
-        return f"ERROR: {e}"
+
+    # Retry with backoff — handles RunPod cold-start delays and transient drops
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
+            content_parts = []
+            # 300s timeout — RunPod pod may need ~2min to warm on first task
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8", errors="replace").strip()
+                    if not line.startswith("data:"):
+                        continue
+                    payload_str = line[5:].strip()
+                    if payload_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(payload_str)
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        if delta.get("content"):
+                            content_parts.append(delta["content"])
+                    except Exception:
+                        continue
+            return "".join(content_parts).strip()
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait = 10 * (attempt + 1)  # 10s, 20s backoff
+                time.sleep(wait)
+            else:
+                return f"ERROR: {e}"
 
 # ── scoring ───────────────────────────────────────────────────────────────────
 
+def strip_personality_callouts(text: str) -> str:
+    """Strip ORI's pod warmup/escalation callout lines from response text.
+    These are italicized personality messages that prefix the real output
+    when the complexity router spins up or falls back to a pod.
+    e.g. '*Running on local inference while the pod spins up...*'
+    """
+    lines = text.split("\n")
+    out = []
+    for line in lines:
+        stripped = line.strip()
+        # Personality callouts are wrapped in asterisks (markdown italic)
+        if stripped.startswith("*") and stripped.endswith("*") and len(stripped) > 4:
+            continue
+        out.append(line)
+    return "\n".join(out).strip()
+
+
 def score_arc_agi(response: str, expected: list) -> tuple[bool, str]:
-    """Exact grid match after stripping markdown fences."""
-    text = response.strip()
+    """Exact grid match after stripping markdown fences and callout messages."""
+    text = strip_personality_callouts(response.strip())
     # strip ```json ... ``` fences
     text = re.sub(r"```[a-z]*\n?", "", text).strip()
     try:
@@ -276,7 +302,7 @@ def score_arc_agi(response: str, expected: list) -> tuple[bool, str]:
 
 def score_ai2_arc(response: str, expected: str) -> tuple[bool, str]:
     """Extract first capital letter A-D from response."""
-    text = response.strip()
+    text = strip_personality_callouts(response.strip())
     match = re.search(r"\b([A-D])\b", text)
     if match:
         predicted = match.group(1)
@@ -317,9 +343,11 @@ def run_arc_agi_bench(tasks: list, api_url: str, model: str, api_key: str, label
             if USE_RICH:
                 progress.update(task_id=task_prog, advance=1,
                                  description=f"[cyan]ARC-AGI[/] {i+1}/{len(tasks)} ✓{correct}")
-            elif (i + 1) % 10 == 0:
+            else:
                 pct = correct / (i + 1) * 100
-                print(f"  [{i+1}/{len(tasks)}] running acc: {pct:.1f}%")
+                status = "✓" if ok else "✗"
+                print(f"  [{i+1}/{len(tasks)}] {status} {task_id[:20]:<20} running acc: {pct:.1f}% ({correct}/{i+1})")
+                import sys; sys.stdout.flush()
 
     if USE_RICH:
         with Progress(SpinnerColumn(), TextColumn("{task.description}"),
@@ -368,9 +396,11 @@ def run_ai2_arc_bench(questions: list, api_url: str, model: str, api_key: str, l
             if USE_RICH:
                 progress.update(task_id=task_prog, advance=1,
                                  description=f"[green]AI2-ARC[/] {i+1}/{len(questions)} ✓{correct}")
-            elif (i + 1) % 20 == 0:
+            else:
                 pct = correct / (i + 1) * 100
-                print(f"  [{i+1}/{len(questions)}] running acc: {pct:.1f}%")
+                status = "✓" if ok else "✗"
+                print(f"  [{i+1}/{len(questions)}] {status} {q['id'][:20]:<20} running acc: {pct:.1f}% ({correct}/{i+1})")
+                import sys; sys.stdout.flush()
 
     if USE_RICH:
         with Progress(SpinnerColumn(), TextColumn("{task.description}"),

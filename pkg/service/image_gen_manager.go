@@ -41,15 +41,18 @@ type ImageGenResponse struct {
 	} `json:"data"`
 }
 
-// ImageGenManager manages a Stable Diffusion WebUI (A1111) pod on RunPod.
-// Same lazy spin-up / idle auto-terminate pattern as RunPodManager.
+// ImageGenManager manages Stable Diffusion image generation via either:
+//   - RunPod serverless endpoint (preferred): set RUNPOD_IMAGEGEN_ENDPOINT_ID
+//   - RunPod on-demand pod (fallback): lazy spin-up / idle auto-terminate
 type ImageGenManager struct {
 	client      *runpod.Client
 	enabled     bool
+	apiKey      string
+	endpointID  string // serverless endpoint ID — if set, skips pod lifecycle entirely
 	maxHourly   float64
 	monthlyCap  float64
 	idleTimeout time.Duration
-	minVRAM     int // image gen needs at least 8GB VRAM
+	minVRAM     int
 
 	mu          sync.Mutex
 	state       ImageGenState
@@ -85,6 +88,8 @@ func NewImageGenManager() *ImageGenManager {
 	mgr := &ImageGenManager{
 		client:      runpod.NewClient(apiKey),
 		enabled:     enabled && apiKey != "",
+		apiKey:      apiKey,
+		endpointID:  os.Getenv("RUNPOD_IMAGEGEN_ENDPOINT_ID"),
 		maxHourly:   maxHourly,
 		monthlyCap:  monthlyCap,
 		idleTimeout: time.Duration(idleMin) * time.Minute,
@@ -94,8 +99,13 @@ func NewImageGenManager() *ImageGenManager {
 	}
 
 	if mgr.enabled {
-		log.Printf("[ImageGenMgr] enabled — max $%.2f/hr, cap $%.2f/mo, idle %v, minVRAM %dGB",
-			maxHourly, monthlyCap, mgr.idleTimeout, minVRAM)
+		if mgr.endpointID != "" {
+			log.Printf("[ImageGenMgr] serverless mode — endpoint: %s", mgr.endpointID)
+		} else {
+			log.Printf("[ImageGenMgr] pod mode — max $%.2f/hr, cap $%.2f/mo, idle %v, minVRAM %dGB",
+				maxHourly, monthlyCap, mgr.idleTimeout, minVRAM)
+			mgr.tryRestoreImgPod()
+		}
 	} else {
 		log.Printf("[ImageGenMgr] disabled (set RUNPOD_IMAGEGEN_ENABLED=true to activate)")
 	}
@@ -127,9 +137,81 @@ func (m *ImageGenManager) Status() string {
 	return "unknown"
 }
 
-// GenerateImage spins up the A1111 pod (if needed) and calls /sdapi/v1/txt2img.
+// GenerateImage runs SD inference via serverless endpoint (preferred) or on-demand pod.
 // Returns the base64-encoded PNG.
 func (m *ImageGenManager) GenerateImage(ctx context.Context, req ImageGenRequest) (string, error) {
+	if m.endpointID != "" {
+		return m.generateServerless(ctx, req)
+	}
+	return m.generateViaPod(ctx, req)
+}
+
+// generateServerless submits to a RunPod serverless SD worker via /runsync.
+func (m *ImageGenManager) generateServerless(ctx context.Context, req ImageGenRequest) (string, error) {
+	width, height := parseSizeString(req.Size)
+	steps := req.Steps
+	if steps == 0 {
+		steps = 20
+	}
+
+	payload := map[string]interface{}{
+		"input": map[string]interface{}{
+			"prompt":               req.Prompt,
+			"negative_prompt":      req.NegativePrompt,
+			"width":                width,
+			"height":               height,
+			"num_inference_steps":  steps,
+			"guidance_scale":       7,
+			"num_images":           1,
+			"scheduler":            "EulerAncestralDiscreteScheduler",
+		},
+	}
+	body, _ := json.Marshal(payload)
+
+	url := fmt.Sprintf("https://api.runpod.ai/v2/%s/runsync?wait=90000", m.endpointID)
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+m.apiKey)
+
+	client := &http.Client{Timeout: 95 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("serverless request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("serverless returned HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		Status string `json:"status"`
+		Error  string `json:"error"`
+		Output struct {
+			Images []string `json:"images"`
+			Image  string   `json:"image"` // some workers use singular "image"
+		} `json:"output"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", fmt.Errorf("serverless response parse: %w", err)
+	}
+	if result.Error != "" {
+		return "", fmt.Errorf("serverless worker error: %s", result.Error)
+	}
+	if len(result.Output.Images) > 0 {
+		return result.Output.Images[0], nil
+	}
+	if result.Output.Image != "" {
+		return result.Output.Image, nil
+	}
+	return "", fmt.Errorf("serverless worker returned no images (status: %s)", result.Status)
+}
+
+func (m *ImageGenManager) generateViaPod(ctx context.Context, req ImageGenRequest) (string, error) {
 	endpoint, err := m.ensure(ctx)
 	if err != nil {
 		return "", err
@@ -241,8 +323,8 @@ func (m *ImageGenManager) spinUpImg(ctx context.Context) (string, error) {
 	pod.HourlyRate = gpu.SecurePrice
 	log.Printf("[ImageGenMgr] pod %s created — waiting for A1111 to load (~2 min)...", pod.PodID)
 
-	// A1111 takes 2-4 min on first boot
-	waitCtx, cancel := context.WithTimeout(ctx, 6*time.Minute)
+	// A1111 takes 3-12 min on cold boot (image pull + model load)
+	waitCtx, cancel := context.WithTimeout(ctx, 12*time.Minute)
 	defer cancel()
 	if err := m.client.WaitForImageReady(waitCtx, pod); err != nil {
 		_ = m.client.TerminatePod(pod.PodID)
@@ -253,10 +335,68 @@ func (m *ImageGenManager) spinUpImg(ctx context.Context) (string, error) {
 	m.pod = pod
 	m.mu.Unlock()
 
+	m.saveImgPodState(pod)
 	log.Printf("[ImageGenMgr] pod %s warm — endpoint: %s", pod.PodID, pod.EndpointURL)
 	go m.trackImgSpend(pod)
 
 	return pod.EndpointURL, nil
+}
+
+const imageGenStateFile = ".oricli/imagegen_pod_state.json"
+
+type imageGenPodState struct {
+	PodID       string    `json:"pod_id"`
+	EndpointURL string    `json:"endpoint_url"`
+	GPUTypeID   string    `json:"gpu_type_id"`
+	StartedAt   time.Time `json:"started_at"`
+}
+
+func (m *ImageGenManager) saveImgPodState(pod *runpod.ImageGenPod) {
+	s := imageGenPodState{
+		PodID:       pod.PodID,
+		EndpointURL: pod.EndpointURL,
+		GPUTypeID:   pod.GPUTypeID,
+		StartedAt:   pod.StartedAt,
+	}
+	b, _ := json.Marshal(s)
+	_ = os.WriteFile(imageGenStateFile, b, 0600)
+}
+
+func (m *ImageGenManager) clearImgPodState() {
+	_ = os.Remove(imageGenStateFile)
+}
+
+// tryRestoreImgPod checks for a saved pod state and reconnects if A1111 is still responding.
+func (m *ImageGenManager) tryRestoreImgPod() {
+	b, err := os.ReadFile(imageGenStateFile)
+	if err != nil {
+		return
+	}
+	var s imageGenPodState
+	if err := json.Unmarshal(b, &s); err != nil || s.PodID == "" {
+		return
+	}
+	healthURL := s.EndpointURL + "/sdapi/v1/options"
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(healthURL)
+	if err != nil || resp.StatusCode >= 400 {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		log.Printf("[ImageGenMgr] saved pod %s not responding — will spin fresh", s.PodID)
+		m.clearImgPodState()
+		return
+	}
+	resp.Body.Close()
+	m.pod = &runpod.ImageGenPod{
+		PodID:       s.PodID,
+		EndpointURL: s.EndpointURL,
+		GPUTypeID:   s.GPUTypeID,
+		StartedAt:   s.StartedAt,
+	}
+	m.state = ImgStateWarm
+	m.resetImgIdle()
+	log.Printf("[ImageGenMgr] reconnected to saved pod %s — endpoint: %s", s.PodID, s.EndpointURL)
 }
 
 func (m *ImageGenManager) waitImgWarm(ctx context.Context) (string, error) {
@@ -303,6 +443,7 @@ func (m *ImageGenManager) Shutdown() {
 	}
 	if m.pod != nil {
 		podID := m.pod.PodID
+		m.clearImgPodState()
 		go func() {
 			if err := m.client.TerminatePod(podID); err != nil {
 				log.Printf("[ImageGenMgr] terminate pod %s error: %v", podID, err)

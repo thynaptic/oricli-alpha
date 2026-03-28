@@ -283,18 +283,48 @@ def embeddings() -> Response:
         return jsonify({"error": {"message": str(exc), "type": "server_error", "code": 502}}), 502
 
 
+_image_jobs: dict[str, dict] = {}  # job_id → {status, data, error}
+_image_jobs_lock = threading.Lock()
+
+
+def _run_image_job(job_id: str, payload: dict, target: str) -> None:
+    """Background thread: hit Go backend (can take minutes), store result."""
+    try:
+        resp = httpx.post(target, json=payload, headers=_build_headers(), timeout=600.0)
+        data = resp.json()
+        with _image_jobs_lock:
+            if data.get("warming"):
+                _image_jobs[job_id] = {"status": "warming", "error": "GPU is warming up (~60–120s). Try again shortly."}
+            elif data.get("error"):
+                _image_jobs[job_id] = {"status": "error", "error": data["error"]}
+            else:
+                _image_jobs[job_id] = {"status": "done", "data": data.get("data", [])}
+    except Exception as exc:  # noqa: BLE001
+        with _image_jobs_lock:
+            _image_jobs[job_id] = {"status": "error", "error": str(exc)}
+
+
 @app.route("/images/generations", methods=["POST"])
 def image_generations() -> Response:
-    """Proxy to RunPod image generation endpoint."""
+    """Start async image gen job — returns job_id immediately (avoids Cloudflare 524)."""
     payload = request.get_json(silent=True) or {}
     target = f"{API_BASE}/v1/images/generations"
-    try:
-        resp = _forward_with_retry("POST", target, json_body=payload)
-        return Response(
-            resp.content, status=resp.status_code, content_type=resp.headers.get("content-type", "application/json")
-        )
-    except Exception as exc:  # noqa: BLE001
-        return jsonify({"error": {"message": str(exc), "type": "server_error", "code": 502}}), 502
+    job_id = str(uuid.uuid4())
+    with _image_jobs_lock:
+        _image_jobs[job_id] = {"status": "pending"}
+    t = threading.Thread(target=_run_image_job, args=(job_id, payload, target), daemon=True)
+    t.start()
+    return jsonify({"job_id": job_id, "status": "pending"}), 202
+
+
+@app.route("/images/status/<job_id>", methods=["GET"])
+def image_status(job_id: str) -> Response:
+    """Poll for image gen result."""
+    with _image_jobs_lock:
+        job = _image_jobs.get(job_id)
+    if job is None:
+        return jsonify({"status": "not_found"}), 404
+    return jsonify(job), 200
 
 
 def _strip_artifact_xml(text: str) -> str:

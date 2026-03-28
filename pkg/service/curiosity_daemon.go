@@ -617,6 +617,10 @@ var topicStopWords = map[string]bool{
 	"page": true, "text": true, "here": true, "there": true, "what": true, "how": true,
 	"which": true, "who": true, "help": true, "please": true, "thanks": true, "okay": true,
 	"chat": true, "code": true, "file": true, "data": true, "type": true, "user": true,
+	// ARC / benchmark prompt words
+	"output": true, "input": true, "example": true, "respond": true, "response": true,
+	"answer": true, "question": true, "task": true, "grid": true, "pattern": true,
+	"color": true, "colour": true, "row": true, "column": true, "matrix": true,
 }
 
 // isWorthyTopic returns true only if a candidate topic is substantive enough

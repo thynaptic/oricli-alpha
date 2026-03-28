@@ -494,7 +494,7 @@ function ImageGenPanel({ onInsertToCanvas }) {
   const [steps, setSteps] = useState(20);
   const [showNeg, setShowNeg] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [warming, setWarming] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
   const [result, setResult] = useState(null); // base64 PNG
   const [error, setError] = useState(null);
 
@@ -503,25 +503,45 @@ function ImageGenPanel({ onInsertToCanvas }) {
     setLoading(true);
     setError(null);
     setResult(null);
+    setStatusMsg('Queuing…');
     try {
+      // POST returns immediately with a job_id — no Cloudflare 524
       const r = await fetch('/images/generations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompt.trim(), negative_prompt: negPrompt.trim(), size, steps: Number(steps) }),
       });
-      const data = await r.json();
-      if (data.warming) {
-        setWarming(true);
-        setError('GPU is warming up (~60–120s). Try again shortly.');
-      } else if (data.error) {
-        setError(data.error);
-      } else if (data.data?.[0]?.b64_json) {
-        setResult(data.data[0].b64_json);
-        setWarming(false);
-      }
+      const { job_id } = await r.json();
+      if (!job_id) { setError('Failed to queue job'); setLoading(false); return; }
+
+      // Poll /images/status/<job_id> every 5s until done
+      setStatusMsg('GPU warming up / generating…');
+      const poll = async () => {
+        try {
+          const s = await fetch(`/images/status/${job_id}`);
+          const job = await s.json();
+          if (job.status === 'done') {
+            setResult(job.data?.[0]?.b64_json || null);
+            setStatusMsg('');
+            setLoading(false);
+          } else if (job.status === 'error') {
+            setError(job.error || 'Generation failed');
+            setStatusMsg('');
+            setLoading(false);
+          } else if (job.status === 'warming') {
+            setStatusMsg('GPU warming up (~60–120s)…');
+            setTimeout(poll, 8000);
+          } else {
+            setTimeout(poll, 5000);
+          }
+        } catch (e) {
+          setError(e.message);
+          setLoading(false);
+        }
+      };
+      setTimeout(poll, 5000);
     } catch (e) {
       setError(e.message);
-    } finally {
       setLoading(false);
     }
   }
@@ -585,7 +605,7 @@ function ImageGenPanel({ onInsertToCanvas }) {
         {loading && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: 'var(--color-sc-text-muted)' }}>
             <Loader2 size={32} style={{ animation: 'spin 1.2s linear infinite', color: 'var(--color-sc-gold)' }} />
-            <div style={{ fontSize: 13 }}>{warming ? 'GPU warming up (~60–120s)…' : 'Generating image…'}</div>
+            <div style={{ fontSize: 13 }}>{statusMsg || 'Generating image…'}</div>
           </div>
         )}
         {error && !loading && (
