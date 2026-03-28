@@ -89,20 +89,30 @@ func ClassifyComplexity(messages []map[string]string) ComplexityResult {
 		}
 	}
 
-	// Concatenate all message content for analysis
-	var sb strings.Builder
+	// Concatenate all message content for token length estimate only.
+	// Pattern matching runs only on the last user message to avoid
+	// stale ARC/grid context from prior turns triggering false escalation.
+	var sbAll strings.Builder
+	lastUserMsg := ""
 	totalChars := 0
 	for _, m := range messages {
 		if content, ok := m["content"]; ok {
-			sb.WriteString(content)
-			sb.WriteRune('\n')
+			sbAll.WriteString(content)
+			sbAll.WriteRune('\n')
 			totalChars += len(content)
+			if role, ok := m["role"]; ok && role == "user" {
+				lastUserMsg = content
+			}
 		}
 	}
-	text := sb.String()
+	// Fall back to full text if no user message found
+	patternText := lastUserMsg
+	if patternText == "" {
+		patternText = sbAll.String()
+	}
 
 	var signals []signal
-	signals = append(signals, extractSignals(text, totalChars)...)
+	signals = append(signals, extractSignals(patternText, totalChars)...)
 
 	score, reasons := scoreSignals(signals)
 	tier := TierLocal
