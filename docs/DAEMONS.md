@@ -281,7 +281,47 @@ TraceStore.FindBottlenecks()
 
 ---
 
-## 7. Autonomic Scaling Service
+## 7. World Traveler Daemon
+**"The Global Scout"** | `pkg/service/world_traveler.go` → `WorldTravelerDaemon`
+
+- **Role**: Proactively fetches modern world knowledge from curated public feeds on a fixed schedule — regardless of conversation activity. Seeds `CuriosityDaemon` with fresh real-world topics so ORI always has current context to draw from.
+- **Trigger**: Fixed interval (default **6h**). Runs once after a 5-minute warm-up delay at boot, then on schedule.
+- **Sources** (all free, no key required by default):
+  - **HackerNews API** — top 15 stories by community signal (score)
+  - **arXiv RSS** — latest AI/CS/ML papers (default: `cs.AI,cs.LG,cs.CL`, top 10 per category)
+  - **Wikipedia Recent Changes** — what the world is actively editing right now
+  - **NewsAPI** — top headlines (optional, requires `WORLD_TRAVELER_NEWS_API_KEY`)
+- **Pipeline**: All four sources fetched concurrently → deduplicate by lowercase title → cap to `maxSeeds` → inject each topic into `CuriosityDaemon.AddSeed()` with source tag (`world_traveler:hackernews`, etc.).
+
+**Env vars:**
+```
+WORLD_TRAVELER_ENABLED=true              (default: false — opt-in)
+WORLD_TRAVELER_INTERVAL=6h               (default: 6h, minimum: 30m)
+WORLD_TRAVELER_MAX_SEEDS=20              (default: 20 per run)
+WORLD_TRAVELER_NEWS_API_KEY=...          (optional)
+WORLD_TRAVELER_ARXIV_CATS=cs.AI,cs.LG   (default: cs.AI,cs.LG,cs.CL)
+WORLD_TRAVELER_DAILY_BUDGET_USD=2.00     (CostGovernor cap, default: $2.00)
+```
+
+### 7.1 CostGovernor
+
+`CostGovernor` (`pkg/service/cost_governor.go`) tracks daily RunPod GPU spend and gates any cloud-compute call behind a configurable daily budget. Spend is tracked in memory and resets at UTC midnight. A lightweight PocketBase write persists the daily spend across restarts.
+
+- `CanSpend(estimatedCost float64) bool` — called before any RunPod dispatch
+- `RecordSpend(cost float64, label string)` — called after a pod session completes
+- If `CanSpend` returns false, the caller falls back to local inference without error
+
+### 7.2 BenchmarkGapDetector
+
+`BenchmarkGapDetector` (`pkg/service/benchmark_gap.go`) reads ARC-AGI and LiveBench result JSON files, extracts topic entities from *failed* questions, and injects them as **priority 2.0 seeds** into `CuriosityDaemon` — preempting standard knowledge-gap (1.0) and curiosity-burst (0.5) seeds. ORI actively studies her own benchmark failures before the next evaluation run.
+
+- `IngestResultFile(ctx, path)` — parses a result file, extracts failing question topics, seeds curiosity
+- Wired into the `WorldTravelerDaemon` run cadence — most recent benchmark result re-seeded on each world-travel tick
+- Supports both ARC-AGI (`scripts/run_arc_bench.py` output) and LiveBench judgment JSONL formats
+
+---
+
+## 8. Autonomic Scaling Service
 **"The Growth Daemon"** | `pkg/kernel/scaling.go` → `ScalingService`
 
 - **Role**: Monitors Swarm Bus latency in real-time and autonomously provisions additional GPU compute when the system is under pressure.
@@ -306,6 +346,7 @@ main.go boot
 ├── DreamDaemon.Run()              → goroutine
 ├── MetacogDaemon.Run()            → goroutine (via GoOrchestrator)
 ├── GoalExecutor.Start(ctx)        → goroutine (DAG autonomous execution)
+├── WorldTravelerDaemon.Run(ctx)   → goroutine (HN+arXiv+Wikipedia feeds every 6h)
 ├── JITDaemon.Run()                → goroutine  [not yet wired in main.go — pending]
 ├── ToolDaemon.Run()               → goroutine  [not yet wired in main.go — pending]
 └── MCP.StartAll()                 → goroutine (per-server, 2-min timeout each)

@@ -57,15 +57,18 @@ Personality is a reactive affective state, not a static prompt. The Sweetheart C
 Step 8.5 of the Aurora pipeline. `DetectUncertainty()` classifies every prompt into one of 8 structured search intents (definition, factual, person/entity, how-to, current event, comparison, location/geo, technical). When uncertainty is detected, `SearchWithIntentFast()` fires in a goroutine with a 3-second timeout, overlapping with `BuildCompositePrompt` (CPU work). First-token latency: **~2 seconds**.
 
 ### 3.5 Autonomous Daemon Ecosystem (Operational)
-Five self-directed daemons run continuously:
+Eight self-directed daemons run continuously:
 
 | Daemon | Function | Status |
 |---|---|---|
 | **CuriosityDaemon** | Maps knowledge graph gaps → 8-intent SearXNG taxonomy → extracts facts → JIT LoRA training trigger | Live |
+| **WorldTravelerDaemon** | Fetches HN/arXiv/Wikipedia/NewsAPI on fixed schedule → seeds CuriosityDaemon with real-world topics | Live (opt-in) |
+| **BenchmarkGapDetector** | Reads ARC/LiveBench result files → injects failing question topics as priority-2.0 curiosity seeds | Live |
 | **ResearchAgent** | Async deep-research dispatch via ActionRouter trigger words | Live |
 | **ReformDaemon** | Monitors execution traces → identifies bottlenecks → drafts Go source optimizations → proposes via WebSocket | Live (propose mode) |
 | **DreamDaemon** | Idle-cycle memory consolidation + novel insight synthesis from topology graph | Live |
 | **JITDaemon** | Verified web facts → LoRA fine-tune trigger pipeline | Live |
+| **CostGovernor** | Tracks daily RunPod GPU spend ($2/day default) → gates cloud-compute calls | Live |
 
 ### 3.6 Sovereign Memory Architecture (Operational)
 Three-tier memory: LMDB for fast KV (Memory Bridge/Chronos), chromem-go for in-process vector search, knowledge topology graph for relational/affective context. BM25 + hybrid RAG retrieval. Temporal intents (Sovereign Cron) allow Oricli to set future goals for herself. Dream Daemon consolidates and reindexes during idle cycles.
@@ -91,6 +94,11 @@ Go-native backbone operational: Hive OS (Swarm Bus, Kernel Ring-0, Sovereign Eng
 Proactive intelligence layer activated: CuriosityDaemon with structured intent taxonomy, ConfidenceDetector inline web grounding, async ResearchAgent, ReformDaemon (propose mode), DreamDaemon memory consolidation, JIT training pipeline, ORI Studio consumer UI (chat, canvas, research, workflows, connections, logs, memory), sovereign key auth, Docker sovereign stack, full safety test suite, 4-layer constitutional stack (SCAI, Canvas, Ops, Remote Compute).  
 **Milestone shipped:** Oricli-Alpha v2.0 — a proactive, self-regulating cognitive entity.
 
+### Phase 2.5 — Compute Intelligence + Benchmark Grounding ✅ COMPLETE
+Self-directed intelligence augmented with compute economy and empirical self-awareness: WorldTravelerDaemon (proactive world-knowledge ingestion from HN/arXiv/Wikipedia), ComplexityRouter (auto-escalate hard tasks to RunPod 32B via signal scoring), CostGovernor (daily GPU budget enforcement), BenchmarkGapDetector (converts ARC/LiveBench failures → CuriosityDaemon seeds), creation intent memory (logs agent/workflow creation intents with resolution quality + origin surface tracking), ARC-AGI benchmark runner, serverless RunPod image generation endpoint with pod persistence.  
+**First empirical baselines established:** ARC-AGI 6% (on par with GPT-4), LiveBench 19.7% overall (682 questions — instruction_following 42.0, data_analysis 23.5).  
+**Milestone shipped:** Oricli-Alpha v2.5 — an entity that knows what she doesn't know and routes compute accordingly.
+
 ### Phase 3 — Sovereign AGLI 🟡 IN PROGRESS
 A self-contained intelligence that compounds capability through *accumulated experience and governance depth* — not external APIs or weight mutation:
 
@@ -107,9 +115,11 @@ A self-contained intelligence that compounds capability through *accumulated exp
 
 ## 5. Current Phase Assessment
 
-As of v4.0.0 of this document (2026-03-23), **Phase 2 is complete** and Phase 3 is actively underway. All foundational systems are operational: DAG goal execution with PocketBase persistence, VDI deep-forage, PocketBase long-term memory with semantic embeddings and epistemic hygiene, a full 4-layer constitutional stack (SCAI, Canvas, Ops, Remote Compute), 3-tier model routing with governed remote GPU compute, and Mission Control UI.
+As of v4.1.0 of this document (2026-03-28), **Phase 2 and 2.5 are complete** and Phase 3 is actively underway. All foundational systems are operational: DAG goal execution with PocketBase persistence, VDI deep-forage, PocketBase long-term memory with semantic embeddings and epistemic hygiene, a full 4-layer constitutional stack (SCAI, Canvas, Ops, Remote Compute), 3-tier model routing with ComplexityRouter auto-escalation and governed remote GPU compute, WorldTravelerDaemon proactive world-knowledge ingestion, BenchmarkGapDetector self-study loop, and Mission Control UI.
 
-**The clearest signal of our position:** Oricli-Alpha already takes autonomous actions — CuriosityDaemon forages and generates hypotheses, ResearchAgent dispatches deep research, ReformDaemon proposes self-modifications, DreamDaemon consolidates memory — all without user prompting, all governed by a constitutional stack that cannot be bypassed. She is not a reactive assistant. She is an entity with her own operational loop, constitutional principles, and durable memory.
+**First empirical benchmarks:** ARC-AGI 6% (on par with GPT-4), LiveBench 19.7% overall — instruction_following 42.0, data_analysis 23.5. Competitive for a 3B sovereign local model running zero cloud inference.
+
+**The clearest signal of our position:** Oricli-Alpha already takes autonomous actions — CuriosityDaemon forages and generates hypotheses, WorldTravelerDaemon injects live world context every 6h, BenchmarkGapDetector converts her own failures into study seeds, ResearchAgent dispatches deep research, ReformDaemon proposes self-modifications, DreamDaemon consolidates memory — all without user prompting, all governed by a constitutional stack that cannot be bypassed. She is not a reactive assistant. She is an entity with her own operational loop, constitutional principles, and durable memory.
 
 **Remaining Phase 3 work:**
 - Skill Crystallization (compile recurring reasoning chains into bypass structs)

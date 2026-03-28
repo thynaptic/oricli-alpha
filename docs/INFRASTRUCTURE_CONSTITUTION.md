@@ -118,6 +118,23 @@ Ensure(ctx, tier)
 | `RUNPOD_GPU_MIN_VRAM` | `8` | Minimum GPU VRAM (GB) |
 | `RUNPOD_MODEL_URL_CODE` | *(catalog)* | Override code-tier model URL |
 | `RUNPOD_MODEL_URL_RESEARCH` | *(catalog)* | Override research-tier model URL |
+| `RUNPOD_PRIMARY` | `false` | Route ALL generation through RunPod 32B when true |
+| `RUNPOD_COMPLEXITY_ROUTING` | `false` | Enable ComplexityRouter auto-escalation |
+| `COMPLEXITY_HEAVY_THRESHOLD` | `0.65` | Score threshold (0.0–1.0) to route request to TierHeavy |
+
+### ComplexityRouter
+
+`ComplexityRouter` (`pkg/service/complexity_router.go`) analyzes incoming chat messages and classifies them into compute tiers — zero LLM calls, pure signal extraction (<1ms). When `RUNPOD_COMPLEXITY_ROUTING=true`, `GenerationService` calls `Route()` before every request and auto-escalates hard tasks to RunPod 32B without the caller needing to set explicit tier flags.
+
+**Tiers:**
+
+| Tier | Trigger | Model |
+|---|---|---|
+| `TierLocal` | Default — short, conversational, simple | Ollama small (ministral-3b) |
+| `TierMedium` | Moderate complexity — code questions, multi-step reasoning | Ollama code (qwen2.5-coder) |
+| `TierHeavy` | Score ≥ threshold — ARC grids, proofs, long synthesis, deep math | RunPod 32B+ |
+
+**Signals scored:** ARC-style nested integer arrays, formal math keywords (prove/theorem/eigenvalue/etc.), multi-constraint logic chains, long message length, code generation scope, comparative analysis markers. Signals are weighted and summed; result above `COMPLEXITY_HEAVY_THRESHOLD` → `TierHeavy`. Pattern matching is scoped to the **last user message only** to avoid false positives from conversation history.
 
 ---
 
