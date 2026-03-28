@@ -369,6 +369,8 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	sessionID := c.GetHeader("X-Session-ID")
 
 	modelName := req.Model
+	// oricli-bench: benchmark/direct mode — no sovereign pipeline, no mutex, just Ollama
+	isBenchMode := modelName == "oricli-bench" || c.GetHeader("X-Benchmark-Mode") == "true"
 	if strings.HasPrefix(modelName, "oricli") || modelName == "default" || modelName == "" {
 		modelName = ""
 	}
@@ -470,12 +472,25 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		return
 	}
 
+	// useSSE: stream:true (or default for UI) → SSE; stream:false → buffer + return JSON.
+	// Non-streaming clients (LiveBench, curl, SDK callers) must send stream:false.
+	// The UI always sends stream:true (or omits it, defaulting to SSE via request header).
+	useSSE := req.Stream
+	log.Printf("[DEBUG] handleChatCompletions: stream=%v useSSE=%v model=%s", req.Stream, useSSE, req.Model)
 	// ── Semantic response cache check ────────────────────────────────────────
 	// L1 (exact hash) is always checked. L2 (vector) only when model is idle.
-	// On hit: stream the cached response as SSE and return — LLM never called.
+	// On hit: stream the cached response as SSE (or return JSON for non-streaming).
 	if s.ResponseCache != nil && lastMsg != "" {
 		if cached, hit := s.ResponseCache.Get(c.Request.Context(), lastMsg); hit {
 			chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
+			if !useSSE {
+				c.JSON(http.StatusOK, gin.H{
+					"id": chatID, "object": "chat.completion",
+					"choices": []gin.H{{"index": 0, "message": gin.H{"role": "assistant", "content": cached}, "finish_reason": "stop"}},
+					"usage": gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+				})
+				return
+			}
 			c.Header("Content-Type", "text/event-stream")
 			c.Header("Cache-Control", "no-cache")
 			c.Header("X-Accel-Buffering", "no")
@@ -504,39 +519,46 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		}
 	}
 
-	// Commit to SSE NOW — before any blocking I/O (ProcessInference, Ollama warm-up).
-	// Cloudflare's idle timeout clock starts from the TCP handshake. Without this,
-	// ProcessInference (~3s) + Ollama model-load (up to 60s) + first-token latency
-	// can easily exceed 100s before a single byte is written, triggering a 524.
 	chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("X-Accel-Buffering", "no")
-	c.Writer.WriteString(": keep-alive\n\n")
-	c.Writer.Flush()
 
-	// Pipeline heartbeat — keeps the CF/browser connection alive during the
-	// blocking pipeline stages (ProcessInference + RAG embed, up to 90s).
-	// The main token-stream ticker takes over once ChatStream starts.
 	heartbeatDone := make(chan struct{})
-	go func() {
-		t := time.NewTicker(15 * time.Second)
-		defer t.Stop()
-		for {
-			select {
-			case <-t.C:
-				c.Writer.WriteString(": keep-alive\n\n")
-				c.Writer.Flush()
-			case <-heartbeatDone:
-				return
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	if useSSE {
+		// Commit to SSE NOW — before any blocking I/O (ProcessInference, Ollama warm-up).
+		// Cloudflare's idle timeout clock starts from the TCP handshake. Without this,
+		// ProcessInference (~3s) + Ollama model-load (up to 60s) + first-token latency
+		// can easily exceed 100s before a single byte is written, triggering a 524.
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("X-Accel-Buffering", "no")
+		c.Writer.WriteString(": keep-alive\n\n")
+		c.Writer.Flush()
 
-	// Helper to emit an SSE error event (can't use c.JSON once SSE headers are sent)
+		// Pipeline heartbeat — keeps the CF/browser connection alive during the
+		// blocking pipeline stages (ProcessInference + RAG embed, up to 90s).
+		// The main token-stream ticker takes over once ChatStream starts.
+		go func() {
+			t := time.NewTicker(15 * time.Second)
+			defer t.Stop()
+			for {
+				select {
+				case <-t.C:
+					c.Writer.WriteString(": keep-alive\n\n")
+					c.Writer.Flush()
+				case <-heartbeatDone:
+					return
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	// Helper to emit an error — SSE chunk when streaming, JSON otherwise.
 	sseError := func(msg string) {
+		if !useSSE {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+			return
+		}
 		errChunk := map[string]interface{}{
 			"id":     chatID,
 			"object": "chat.completion.chunk",
@@ -554,7 +576,60 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	service.SetChatModelActive(true)
 	defer service.SetChatModelActive(false)
 
-	// ── Pre-execution task decomposer ────────────────────────────────────────
+	// ── Benchmark / direct mode ──────────────────────────────────────────────
+	// oricli-bench or X-Benchmark-Mode:true skips ProcessInference entirely.
+	// No sovereign pipeline, no mutex contention, no reasoning mode LLM calls.
+	// Pure direct: minimal system prompt + Ollama ChatStream.
+	if isBenchMode {
+		benchMsgs := []map[string]string{
+			{"role": "system", "content": "You are ORI, a helpful and accurate AI assistant. Answer concisely and correctly."},
+		}
+		for _, m := range req.Messages {
+			benchMsgs = append(benchMsgs, map[string]string{"role": m.Role, "content": m.Content})
+		}
+		benchOpts := map[string]interface{}{
+			"options": map[string]interface{}{"num_predict": 512, "num_ctx": 4096},
+		}
+		benchCh, benchErr := s.Agent.GenService.ChatStream(c.Request.Context(), benchMsgs, benchOpts)
+		if benchErr != nil {
+			sseError(benchErr.Error())
+			return
+		}
+		if useSSE { close(heartbeatDone) }
+		var benchBuf strings.Builder
+		for tok := range benchCh {
+			benchBuf.WriteString(tok)
+			if useSSE {
+				chunk := map[string]interface{}{
+					"id": chatID, "object": "chat.completion.chunk",
+					"choices": []map[string]interface{}{
+						{"index": 0, "delta": map[string]interface{}{"role": "assistant", "content": tok}, "finish_reason": nil},
+					},
+				}
+				data, _ := json.Marshal(chunk)
+				c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+				c.Writer.Flush()
+			}
+		}
+		if useSSE {
+			doneChunk := map[string]interface{}{
+				"id": chatID, "object": "chat.completion.chunk",
+				"choices": []map[string]interface{}{{"index": 0, "delta": map[string]interface{}{}, "finish_reason": "stop"}},
+			}
+			data, _ := json.Marshal(doneChunk)
+			c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+			c.Writer.Flush()
+		} else {
+			c.JSON(http.StatusOK, gin.H{
+				"id": chatID, "object": "chat.completion", "model": "oricli-bench",
+				"choices": []gin.H{{"index": 0, "message": gin.H{"role": "assistant", "content": benchBuf.String()}, "finish_reason": "stop"}},
+				"usage": gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+			})
+		}
+		return
+	}
+
+
 	// For clearly multi-step prompts (research + compare + save chains), build
 	// a Task DAG and execute it deterministically before the main LLM call.
 	// The accumulated results are injected as rich context into the system prompt.
@@ -734,16 +809,16 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 	tokenCh, err := s.Agent.GenService.ChatStream(c.Request.Context(), msgs, streamOpts)
 	if err != nil {
-		close(heartbeatDone)
+		if useSSE { close(heartbeatDone) }
 		sseError(err.Error())
 		return
 	}
 	// Stop pipeline heartbeat — token-stream ticker takes over from here.
-	close(heartbeatDone)
+	if useSSE { close(heartbeatDone) }
 
 	// Emit agent_dispatch SSE event before the first token so the UI renders
 	// the dispatch card immediately
-	if dispatch != nil {
+	if dispatch != nil && useSSE {
 		modelTier := "chat"
 		if isResearchAction {
 			modelTier = "research"
@@ -772,34 +847,40 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		case token, ok := <-tokenCh:
 			if !ok {
 				streamDone = true
-				doneChunk := map[string]interface{}{
-					"id":     chatID,
-					"object": "chat.completion.chunk",
-					"choices": []map[string]interface{}{
-						{"index": 0, "delta": map[string]interface{}{}, "finish_reason": "stop"},
-					},
+				if useSSE {
+					doneChunk := map[string]interface{}{
+						"id":     chatID,
+						"object": "chat.completion.chunk",
+						"choices": []map[string]interface{}{
+							{"index": 0, "delta": map[string]interface{}{}, "finish_reason": "stop"},
+						},
+					}
+					data, _ := json.Marshal(doneChunk)
+					c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+					c.Writer.Flush()
 				}
-				data, _ := json.Marshal(doneChunk)
-				c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
-				c.Writer.Flush()
 			} else {
 				ticker.Reset(15 * time.Second)
 				responseBuilder.WriteString(token)
-				chunk := map[string]interface{}{
-					"id":     chatID,
-					"object": "chat.completion.chunk",
-					"choices": []map[string]interface{}{
-						{"index": 0, "delta": map[string]interface{}{"role": "assistant", "content": token}, "finish_reason": nil},
-					},
+				if useSSE {
+					chunk := map[string]interface{}{
+						"id":     chatID,
+						"object": "chat.completion.chunk",
+						"choices": []map[string]interface{}{
+							{"index": 0, "delta": map[string]interface{}{"role": "assistant", "content": token}, "finish_reason": nil},
+						},
+					}
+					data, _ := json.Marshal(chunk)
+					c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+					c.Writer.Flush()
 				}
-				data, _ := json.Marshal(chunk)
-				c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
-				c.Writer.Flush()
 			}
 		case <-ticker.C:
-			// No token in 15s — punch through Cloudflare's idle timer
-			c.Writer.WriteString(": keep-alive\n\n")
-			c.Writer.Flush()
+			if useSSE {
+				// No token in 15s — punch through Cloudflare's idle timer
+				c.Writer.WriteString(": keep-alive\n\n")
+				c.Writer.Flush()
+			}
 		case <-c.Request.Context().Done():
 			streamDone = true
 		}
@@ -813,6 +894,21 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
 	}
 
+	// Non-streaming response — return buffered result as plain JSON now that we have it.
+	if !useSSE {
+		c.JSON(http.StatusOK, gin.H{
+			"id":     chatID,
+			"object": "chat.completion",
+			"model":  modelName,
+			"choices": []gin.H{{
+				"index":         0,
+				"message":       gin.H{"role": "assistant", "content": responseText},
+				"finish_reason": "stop",
+			}},
+			"usage": gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+		})
+		return
+	}
 	// Store in semantic cache — async, never blocks. Skips canvas/code outputs
 	// (too context-specific to be reusable) and action-dispatched responses.
 	if s.ResponseCache != nil && lastMsg != "" && !isCanvasMode && dispatch == nil {
