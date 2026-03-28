@@ -391,6 +391,17 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 	return s.ollamaChatStream(ctx, messages, model, options)
 }
 
+// DirectOllama bypasses all routing logic (RunPod, complexity escalation, vLLM)
+// and calls Ollama synchronously. Use for bench/studio paths where latency matters
+// more than capability and adding a 15s vLLM timeout is unacceptable.
+func (s *GenerationService) DirectOllama(ctx context.Context, messages []map[string]string, options map[string]interface{}) (<-chan string, error) {
+	model := s.DefaultModel
+	if m, ok := options["model"].(string); ok && m != "" {
+		model = m
+	}
+	return s.ollamaChatStream(ctx, messages, model, options)
+}
+
 // ollamaChatStream is the raw Ollama streaming path, extracted so it can be
 // called directly as a fallback from the RunPod routing block.
 func (s *GenerationService) ollamaChatStream(ctx context.Context, messages []map[string]string, model string, options map[string]interface{}) (<-chan string, error) {

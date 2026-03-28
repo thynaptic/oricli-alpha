@@ -590,7 +590,8 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		benchOpts := map[string]interface{}{
 			"options": map[string]interface{}{"num_predict": 512, "num_ctx": 4096},
 		}
-		benchCh, benchErr := s.Agent.GenService.ChatStream(c.Request.Context(), benchMsgs, benchOpts)
+		// Direct Ollama — bypass vLLM/PrimaryMgr entirely for zero-wait inference.
+		benchCh, benchErr := s.Agent.GenService.DirectOllama(c.Request.Context(), benchMsgs, benchOpts)
 		if benchErr != nil {
 			sseError(benchErr.Error())
 			return

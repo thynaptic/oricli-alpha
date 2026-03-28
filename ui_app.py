@@ -3393,63 +3393,30 @@ def ori_ai_assist():
         return jsonify({"error": "unknown mode"}), 400
 
     def _stream():
-        """Stream tokens directly from backbone → avoids 524 (no silent wait)."""
+        """Direct bench-mode call via backbone — no sovereign pipeline overhead."""
         import json as _json
-        import re as _re
-        payload = {
-            "model": "oricli-cognitive",
-            "stream": True,
-            "max_tokens": 2500,
-            "messages": [
-                {"role": "system", "content": sys_msg},
-                {"role": "user",   "content": user_msg},
-            ],
-        }
-        # Immediate keepalive so Cloudflare sees bytes before it times out
         yield ": keepalive\n\n"
         try:
-            full_buf = ""
-            with _client().stream(
-                "POST",
-                f"{API_BASE}/v1/chat/completions",
-                json=payload,
-                headers=_build_headers(extra={"X-Code-Context": "true", "X-Ori-Context": "studio"}),
-            ) as resp:
-                resp.raise_for_status()
-                fence_stripped = False
-                open_fence_re = _re.compile(r'^```\w*\n')
-                fence_buf = ""
-                for raw_line in resp.iter_lines():
-                    if not raw_line.startswith("data:"):
-                        continue
-                    data = raw_line[5:].strip()
-                    if data == "[DONE]":
-                        break
-                    try:
-                        delta = _json.loads(data)["choices"][0]["delta"].get("content", "")
-                    except Exception:
-                        continue
-                    if not delta:
-                        continue
-                    # Strip leading ``` fence once we have enough to detect it
-                    if not fence_stripped:
-                        fence_buf += delta
-                        if len(fence_buf) >= 12 or '\n' in fence_buf:
-                            fence_stripped = True
-                            fence_buf = open_fence_re.sub("", fence_buf, count=1)
-                            delta = fence_buf
-                            fence_buf = ""
-                        else:
-                            continue
-                    full_buf += delta
+            with _client() as _hx:
+                _resp = _hx.post(
+                    f"{API_BASE}/v1/chat/completions",
+                    json={
+                        "model": "oricli-bench",
+                        "stream": False,
+                        "max_tokens": 2048,
+                        "messages": [
+                            {"role": "system", "content": sys_msg},
+                            {"role": "user",   "content": user_msg},
+                        ],
+                    },
+                    headers=_build_headers(extra={"X-Code-Context": "true", "X-Ori-Context": "studio"}),
+                )
+                _resp.raise_for_status()
+                full_buf = _resp.json()["choices"][0]["message"]["content"]
 
-            # Post-process: for DSL modes, extract only the workflow block and
-            # strip any prompt artifacts (instructions, "Output ONLY", etc.)
-            # that the model may have echoed back.
             if mode in ("generate", "edit", "fix"):
                 full_buf = _extract_workflow(full_buf)
 
-            # Stream the cleaned result as a single chunk
             if full_buf:
                 yield f"data: {_json.dumps({'text': full_buf})}\n\n"
 
