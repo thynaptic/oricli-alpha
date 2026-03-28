@@ -152,6 +152,7 @@ type Config struct {
 	RateLimitRPM                       int
 	AuditRetentionDays                 int
 	ReasoningHiddenByDefault           bool
+	TenantConstitutionPath             string
 }
 
 func Load() Config {
@@ -302,6 +303,7 @@ func Load() Config {
 		RateLimitRPM:                       envInt("GLM_RATE_LIMIT_RPM", 120),
 		AuditRetentionDays:                 envInt("GLM_AUDIT_RETENTION_DAYS", 90),
 		ReasoningHiddenByDefault:           envBool("GLM_REASONING_HIDDEN_DEFAULT", true),
+		TenantConstitutionPath:             env("ORICLI_TENANT_CONSTITUTION", ""),
 	}
 }
 

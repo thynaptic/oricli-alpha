@@ -361,6 +361,10 @@ type SovereignEngine struct {
 	// Constitution is the Living Constitution behavioral layer.
 	// Injected from server_v2 to avoid import cycles. Set via InjectConstitution().
 	Constitution ConstitutionProvider
+	// TenantConstitution is the SMB/operator behavioral layer loaded from a .ori file.
+	// Sits above LivingConstitution but below compiled core rules.
+	// Set via InjectTenantConstitution() at startup.
+	TenantConstitution ConstitutionProvider
 	// MemoryBankRef enables CBR and Active mode to query past solved cases and memory.
 	// Injected from server_v2 to avoid import cycles.
 	MemoryBankRef MemoryQuerier
@@ -680,6 +684,13 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	// Placed at the top of composite so it colors the entire system prompt.
 	if e.Constitution != nil && e.Constitution.HasRules() {
 		composite = e.Constitution.Inject() + "\n\n" + composite
+	}
+
+	// Inject Tenant Constitution — SMB/operator behavioral layer from .ori file.
+	// Sits above LivingConstitution so operator rules take precedence over learned prefs,
+	// but the compiled core identity + behavioral rules (already in composite) always win.
+	if e.TenantConstitution != nil && e.TenantConstitution.HasRules() {
+		composite = e.TenantConstitution.Inject() + "\n\n" + composite
 	}
 
 	// Inject reasoning mode enrichment (CBR adapted solutions, PAL results, gap fills, etc.)

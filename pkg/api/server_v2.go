@@ -172,6 +172,11 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	s.SignalProcessor = service.NewSignalProcessor(mb, lc)
 	agent.SovEngine.Constitution = lc
 
+	// Bootstrap Tenant Constitution — SMB/operator behavioral layer from .ori file.
+	if tc := service.LoadTenantConstitution(cfg.TenantConstitutionPath); tc != nil {
+		agent.SovEngine.TenantConstitution = tc
+	}
+
 	// Inject MemoryBank into SovereignEngine via adapter (avoids cognition→service import cycle).
 	adapter := &memoryBankAdapter{mb: mb}
 	agent.SovEngine.MemoryBankRef = adapter
