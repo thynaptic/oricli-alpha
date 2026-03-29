@@ -311,6 +311,14 @@ type ConstitutionProvider interface {
 	HasRules() bool
 }
 
+// EnterpriseKnowledgeLayer is satisfied by *enterprise.Layer.
+// Defined here to avoid import cycles.
+type EnterpriseKnowledgeLayer interface {
+	HasKnowledge() bool
+	QueryKnowledge(ctx context.Context, query string, topK int) ([]string, error)
+	Namespace() string
+}
+
 type SovereignEngine struct {
 	Subconscious *SubconsciousField
 	Sentiment    *AffectiveState
@@ -365,6 +373,10 @@ type SovereignEngine struct {
 	// Sits above LivingConstitution but below compiled core rules.
 	// Set via InjectTenantConstitution() at startup.
 	TenantConstitution ConstitutionProvider
+	// EnterpriseLayer is the SMB knowledge layer — namespace-isolated RAG over company data
+	// (Google Drive, Notion, GitHub, local directories). Nil when not configured.
+	// Set at startup via config ORICLI_ENTERPRISE_NAMESPACE + connector config.
+	EnterpriseLayer EnterpriseKnowledgeLayer
 	// MemoryBankRef enables CBR and Active mode to query past solved cases and memory.
 	// Injected from server_v2 to avoid import cycles.
 	MemoryBankRef MemoryQuerier
@@ -691,6 +703,23 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	// but the compiled core identity + behavioral rules (already in composite) always win.
 	if e.TenantConstitution != nil && e.TenantConstitution.HasRules() {
 		composite = e.TenantConstitution.Inject() + "\n\n" + composite
+	}
+
+	// Inject Enterprise Knowledge Layer — namespace-isolated RAG over company data.
+	// Prepended above the Tenant Constitution so company-specific facts are immediately
+	// visible when the model processes behavioral rules. Short timeout: if the embedding
+	// model is cold, skip rather than block the user.
+	if e.EnterpriseLayer != nil && e.EnterpriseLayer.HasKnowledge() {
+		entCtx, entCancel := context.WithTimeout(ctx, 6*time.Second)
+		entFrags, entErr := e.EnterpriseLayer.QueryKnowledge(entCtx, stimulus, 5)
+		entCancel()
+		if entErr == nil && len(entFrags) > 0 {
+			entBlock := "### COMPANY KNOWLEDGE [" + e.EnterpriseLayer.Namespace() + "]\n" +
+				strings.Join(entFrags, "\n\n---\n\n") +
+				"\n### END COMPANY KNOWLEDGE\n"
+			composite = entBlock + "\n\n" + composite
+			log.Printf("[Enterprise] Injected %d knowledge fragments for namespace %q", len(entFrags), e.EnterpriseLayer.Namespace())
+		}
 	}
 
 	// Inject reasoning mode enrichment (CBR adapted solutions, PAL results, gap fills, etc.)

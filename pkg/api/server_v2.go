@@ -26,6 +26,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/model"
 	"github.com/thynaptic/oricli-go/pkg/core/store"
+	"github.com/thynaptic/oricli-go/pkg/enterprise"
 	"github.com/thynaptic/oricli-go/pkg/reform"
 	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/service"
@@ -175,6 +176,17 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	// Bootstrap Tenant Constitution — SMB/operator behavioral layer from .ori file.
 	if tc := service.LoadTenantConstitution(cfg.TenantConstitutionPath); tc != nil {
 		agent.SovEngine.TenantConstitution = tc
+	}
+
+	// Bootstrap Enterprise Knowledge Layer — namespace-isolated RAG over company data.
+	// Activated by setting ORICLI_ENTERPRISE_NAMESPACE env var.
+	if ns := os.Getenv("ORICLI_ENTERPRISE_NAMESPACE"); ns != "" {
+		if el, err := enterprise.New(ns); err == nil {
+			agent.SovEngine.EnterpriseLayer = el
+			log.Printf("[Enterprise] Knowledge layer active for namespace %q", ns)
+		} else {
+			log.Printf("[Enterprise] Failed to init knowledge layer: %v", err)
+		}
 	}
 
 	// Inject MemoryBank into SovereignEngine via adapter (avoids cognition→service import cycle).
