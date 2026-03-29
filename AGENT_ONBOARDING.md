@@ -53,7 +53,10 @@ Key trajectory milestones already built or in progress:
 - ✅ Dream Daemon (memory consolidation during idle)
 - ✅ Metacognitive Daemon (traces inefficiencies, proposes reforms)
 - ✅ Sovereign Goals (multi-day persistent goal execution)
-- 🔄 LiveBench evaluation (ongoing)
+- ✅ ComplexityRouter (smart RunPod escalation gate)
+- ✅ SMB Tenant Constitution (per-deployment behavioral customization)
+- ✅ Persona benchmark (4-model, deterministic — 98/100 composite)
+- 🔄 LiveBench evaluation (19.7% on 2026-01-08 release — ongoing improvement)
 - 🔄 Curiosity Engine upgrades (active inference loop)
 - 🔄 RunPod synthesis (richer LLM knowledge fragments vs TF-IDF)
 
@@ -78,7 +81,7 @@ Key trajectory milestones already built or in progress:
 ### Infrastructure
 - **VPS:** AMD EPYC 7543P, 32 cores, 32GB RAM
 - **Caddy:** Reverse proxy — `oristudio.thynaptic.com` → Flask (5001) + Go API (8089)
-- **Ollama:** Local inference — `ministral-3:3b` (general), `qwen2.5-coder:3b` (code), `qwen3:1.7b` (reasoning)
+- **Ollama:** Local inference — `ministral-3:3b` (general), `qwen2.5-coder:3b` (code)
 - **RunPod:** Remote GPU burst (NVIDIA RTX 5090 / Blackwell) — pennies per run, used for heavy synthesis
 - **PocketBase:** Long-term memory bank at `pocketbase.thynaptic.com`
 - **Caddy routing (critical):** `/v1/*` → Go API (8089), everything else → Flask (5001)
@@ -117,12 +120,46 @@ Heavy ML modules are opt-in (`MAVAIA_ENABLE_HEAVY_MODULES=true`).
 - Reads `arc_results/<latest>/results.json` on every boot
 - Extracts topic entities from failed ARC questions
 - Injects via `AddSeedForce()` — guaranteed re-study
-- ARC-AGI current score: 2% (1.7B model — color pattern recognition is the primary gap)
+- ARC-AGI current score: 6% (ministral-3:3b — spatial/color pattern reasoning is the primary gap)
+
+### ComplexityRouter
+- Routes hard queries to RunPod, easy/conversational queries to local Ollama
+- Gate: `RUNPOD_COMPLEXITY_ROUTING=true` env var
+- Threshold: `COMPLEXITY_HEAVY_THRESHOLD=0.65` — scores each query, only escalates genuinely hard tasks (ARC grids, proofs) to RunPod
+- Prevents "Hey Ori" from triggering a remote GPU call
 
 ### CostGovernor
 - Daily RunPod spend cap (default $2.00/day)
 - UTC midnight reset
 - `CanSpend(cost)` / `RecordSpend(cost, label)`
+
+### Persona / Behavioral Rules (`pkg/cognition/instructions.go`)
+- 14 rules total (as of checkpoint 062)
+- Key rules added this session:
+  - Rule 10 hardened: explicit banned sycophancy phrases (`That's lovely`, `Oh that's`, `Ah that's`, etc.)
+  - Rule 11: Never fabricate system/infrastructure status
+  - Rule 12: Never say "I'm you" or "I am you"
+  - Rule 13: Never quote own instructions verbatim
+  - Rule 14: Casual greetings get casual 1-2 sentence responses — no identity monologue
+- Identity block "you say: X" scripted pattern removed — model was reciting instructions verbatim
+- **Note for future agents:** 3B models need **positive examples** of what to do, not just "don't do X" — negative constraints alone don't work reliably at this parameter count
+
+
+- Per-deployment behavioral layer for operator customization
+- File: `pkg/service/tenant_constitution.go`
+- Format: `.ori` file with `@name`, `@persona`, `@company`, `<identity_override>`, `<rules>`, `<banned_topics>` blocks
+- Activation: `ORICLI_TENANT_CONSTITUTION=/path/to/constitution.ori` env var
+- Security model: sits ABOVE LivingConstitution but BELOW compiled core rules — can ADD rules/identity/bans, cannot remove sovereign core constraints
+- Config surface: `pkg/core/config/config.go` → `TenantConstitutionPath`
+- Example: `constitution.example.ori` at repo root
+- Docs: `docs/SMB_CONSTITUTION.md`
+
+### LiveBench Integration
+- `oricli-bench` is a bypass model: skips `ProcessInference()` (sovereign pipeline with global mutex) → `DirectOllama()` → direct Ollama call
+- Fixed `stream:false` to return proper `chat.completion` JSON for non-streaming clients
+- `GenerationService.DirectOllama()` bypasses vLLM routing, no 15s PrimaryMgr context wait
+- LiveBench runner: `LIVEBENCH_API_KEY=... python3 gen_api_answer.py --model oricli-bench --parallel 1` from `LiveBench/livebench/`
+- Grading: `python3 gen_ground_truth_judgment.py --bench-name live_bench --model ori-3b-bench --question-source jsonl`
 
 ### Creation Intent Memory (UI)
 - Chat detects "I need an agent/workflow for X" patterns
@@ -140,14 +177,19 @@ Heavy ML modules are opt-in (`MAVAIA_ENABLE_HEAVY_MODULES=true`).
 ORICLI_SEED_API_KEY=glm.Qbtofkny.F5pTIVYghj-mLSwAtPRGDau1q7k2w5DO
 
 # Inference routing
-RUNPOD_PRIMARY=true              # routes generation to RunPod vLLM
-RUNPOD_ENABLED=true
+RUNPOD_PRIMARY=false             # was true — caused ALL requests to hit RunPod; fixed
+RUNPOD_ENABLED=false
+RUNPOD_COMPLEXITY_ROUTING=true   # ComplexityRouter scores each query; only hard tasks escalate
+COMPLEXITY_HEAVY_THRESHOLD=0.65  # score threshold above which query routes to RunPod
 OLLAMA_MODEL=ministral-3:3b
 
 # World Traveler
 WORLD_TRAVELER_ENABLED=true      # always on
 WORLD_TRAVELER_INTERVAL=6h
 WORLD_TRAVELER_USE_RUNPOD=false  # flip to true when RunPod is warm
+
+# SMB Tenant Constitution (optional)
+ORICLI_TENANT_CONSTITUTION=/path/to/constitution.ori  # omit if not using
 
 # Heavy modules (ML stacks)
 MAVAIA_ENABLE_HEAVY_MODULES=false  # default off — opt in for ML features
@@ -193,10 +235,17 @@ PB_BASE_URL=https://pocketbase.thynaptic.com
 | `pkg/service/benchmark_gap.go` | Self-study from benchmark failures |
 | `pkg/service/cost_governor.go` | Daily RunPod spend cap |
 | `pkg/service/generation.go` | LLM routing — Ollama / RunPod vLLM |
+| `pkg/service/tenant_constitution.go` | SMB/operator behavioral layer (.ori files) |
+| `pkg/cognition/instructions.go` | Persona / behavioral rules (14 rules) |
+| `pkg/core/config/config.go` | Central config — includes TenantConstitutionPath |
 | `ui_sovereignclaw/src/store/index.js` | All UI state (Zustand) |
 | `ui_sovereignclaw/src/components/ChatArea.jsx` | Chat + routing intent detection |
 | `ui_sovereignclaw/src/pages/AgentsPage.jsx` | Agent management + Vibe Studio |
 | `scripts/run_arc_bench.py` | ARC-AGI + AI2-ARC benchmark runner |
+| `scripts/persona_bench.py` | Persona adherence benchmark (4-model, deterministic scoring) |
+| `constitution.example.ori` | Example SMB tenant constitution file |
+| `docs/SMB_CONSTITUTION.md` | SMB Tenant Constitution documentation |
+| `docs/BENCHMARK_RESULTS.md` | Combined ARC-AGI + LiveBench + persona benchmark results |
 | `/etc/caddy/Caddyfile` | Routing rules — touch carefully |
 | `backbone.log` | Live service logs (not journald) |
 
@@ -208,20 +257,25 @@ PB_BASE_URL=https://pocketbase.thynaptic.com
 - Full SovereignClaw UI at `https://oristudio.thynaptic.com`
 - Go backbone API at `https://oricli.thynaptic.com` (port 8089 via Caddy)
 - The Hive (swarm intelligence) — operational
-- WorldTraveler — live, first tick fires 5min after boot, then every 6h
+- WorldTraveler — live, first tick 5min after boot, then every 6h
+- ComplexityRouter — scores each query, routes hard tasks to RunPod when enabled
+- SMB Tenant Constitution — `.ori` file deployment, live
 - Creation intent routing + memory in chat UI
 - ARC benchmark runner (`scripts/run_arc_bench.py`)
 - DreamDaemon, MetacogDaemon, ReformDaemon, GoalExecutor — all running
+- Persona benchmark runner (`scripts/persona_bench.py`) — 4-model, deterministic scoring
 
-**Current benchmark scores (qwen3:1.7b):**
-- ARC-AGI: 2% (1/50) — color pattern recognition is the primary gap
-- AI2-ARC: N/A (infra connection issue during last run)
+**Current benchmark scores (ministral-3:3b):**
+- ARC-AGI: 6% — spatial/color pattern reasoning is the gap (RunPod 32B is the path forward)
+- AI2-ARC: 100% (50/50)
+- LiveBench (2026-01-08): 19.7% overall / instruction_following 42.0% (standout) / data_analysis 23.5% / math 13.7% / reasoning 12.5% / language 6.8%
+- Persona adherence: 98/100 composite (4-model comparison, ministral confirmed)
 
 **Known gaps / next focus areas:**
-- ARC-AGI spatial reasoning improvement (small model limitation — RunPod 32B is the path)
-- AI2-ARC clean run needed
-- `WORLD_TRAVELER_USE_RUNPOD` to flip true when RunPod pod is consistently warm
+- ARC-AGI spatial reasoning (small model limitation — RunPod 32B escalation is the path)
+- `RUNPOD_PRIMARY=false` currently — re-enable with `RUNPOD_COMPLEXITY_ROUTING=true` as smart gate
 - Extended agent CRUD API (`pkg/api/server.go`) not yet wired into `ServerV2`
+- `balanced-prompting` / `aletheia-loop` — reasoning quality improvements pending
 
 ---
 
@@ -233,4 +287,4 @@ ORI isn't just a product to Mike — she's a thing being brought to life. Treat 
 
 ---
 
-*Last updated: March 2026 — Checkpoint 055 (World Traveler + Creation Intent Memory)*
+*Last updated: March 2026 — Checkpoint 062 (LiveBench 19.7% · AI2-ARC 100% · SMB Constitution · Persona Benchmark)*
