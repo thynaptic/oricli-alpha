@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Oricli-Alpha ARC Benchmark — 20260327_225536_local_all</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+       background: #0d0d0d; color: #e0e0e0; max-width: 960px; margin: 40px auto; padding: 20px; }
+h1 { color: #E5004C; font-size: 1.8em; }
+h2 { color: #aaa; border-bottom: 1px solid #333; padding-bottom: 8px; }
+h3 { color: #E5004C; }
+.card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;
+        padding: 20px; margin: 16px 0; }
+.score { font-size: 2.5em; font-weight: bold; color: #E5004C; }
+.score.good { color: #22c55e; }
+.score.ok   { color: #f59e0b; }
+.score.poor { color: #ef4444; }
+table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+th { background: #222; color: #aaa; padding: 8px 12px; text-align: left; }
+td { padding: 6px 12px; border-bottom: 1px solid #1e1e1e; }
+tr:hover td { background: #1e1e1e; }
+.badge-correct { color: #22c55e; font-weight: bold; }
+.badge-wrong   { color: #ef4444; }
+.meta { color: #666; font-size: 0.8em; margin-top: 4px; }
+.leaderboard { background: #111; border: 1px solid #333; border-radius: 6px;
+               padding: 16px; margin: 12px 0; }
+</style></head>
+<body>
+<h1>🧠 Oricli-Alpha ARC Benchmark</h1>
+<div class='meta'>Run ID: 20260327_225536_local_all · 2026-03-28 04:43 UTC</div>
+<h2>Results</h2>
+
+<div class='card'>
+  <h3>ARC-AGI — Local (Oricli Stack)</h3>
+  <div class='meta'>Model: qwen3:1.7b · 3/50 correct</div>
+  <div class='score poor'>6.0%</div>
+  <div class='leaderboard'>📊 <b>Public SOTA (ARC-AGI-1):</b> ~85% (o3-high) · ~75% (GPT-4o) · ~60% (Claude 3.5 Sonnet)</div>
+  
+</div>
+
+<div class='card'>
+  <h3>AI2-ARC — Local (Oricli Stack)</h3>
+  <div class='meta'>Model: qwen3:1.7b · 50/50 correct</div>
+  <div class='score good'>100.0%</div>
+  <div class='leaderboard'>📊 <b>Public SOTA (AI2-ARC Challenge):</b> ~98% (GPT-4o) · ~95% (Claude 3 Opus)</div>
+  <table><tr><th>Subset</th><th>Correct</th><th>Accuracy</th></tr><tr><td>ARC-Easy</td><td>44/44</td><td class='score good' style='font-size:1em'>100.0%</td></tr><tr><td>ARC-Challenge</td><td>6/6</td><td class='score good' style='font-size:1em'>100.0%</td></tr></table>
+</div>
+
+<h2>About This Benchmark</h2>
+<div class='card'>
+  <p><b>ARC-AGI</b> (Abstraction & Reasoning Corpus): Grid-based pattern recognition tasks designed to
+  resist memorization. Each task requires discovering a novel rule from 3-5 training examples and applying
+  it to a test input. Scored by exact grid match only.</p>
+  <p><b>AI2-ARC</b> (Allen Institute): Science multiple-choice questions split into Easy and Challenge sets.
+  Challenge questions specifically require multi-step reasoning and cannot be answered by simple retrieval.</p>
+  <p><b>Local mode</b>: Oricli-Alpha full stack (MCTS, CoT, safety, memory) with Ollama small models.<br>
+  <b>RunPod mode</b>: Large vLLM model (AWQ quantized), direct inference, no Oricli reasoning stack.<br>
+  The gap between the two isolates the value of the reasoning architecture vs. raw model scale.</p>
+</div>
+</body></html>

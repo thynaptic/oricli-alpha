@@ -81,5 +81,13 @@ func (l *Layer) IndexConnector(ctx context.Context, c connectors.Connector, fetc
 // Memory returns the underlying MemoryManager for advanced use.
 func (l *Layer) Memory() *memory.MemoryManager { return l.mm }
 
+// ClearKnowledge deletes all indexed knowledge documents for this namespace.
+func (l *Layer) ClearKnowledge() error {
+	return l.mm.ClearNamespace(l.namespace)
+}
+
+// DefaultIndexOptions exposes rag.DefaultIndexOptions at the enterprise package level.
+func DefaultIndexOptions() rag.IndexOptions { return rag.DefaultIndexOptions() }
+
 // Close is a no-op placeholder for future cleanup (e.g., flushing indexes).
 func (l *Layer) Close() {}

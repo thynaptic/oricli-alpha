@@ -317,6 +317,7 @@ type EnterpriseKnowledgeLayer interface {
 	HasKnowledge() bool
 	QueryKnowledge(ctx context.Context, query string, topK int) ([]string, error)
 	Namespace() string
+	ClearKnowledge() error
 }
 
 type SovereignEngine struct {

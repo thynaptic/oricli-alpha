@@ -507,6 +507,23 @@ func (mm *MemoryManager) ActiveNamespace() string {
 	return mm.activeNamespace
 }
 
+// ClearNamespace deletes all knowledge documents tagged with the given namespace.
+func (mm *MemoryManager) ClearNamespace(namespace string) error {
+	ns := strings.TrimSpace(namespace)
+	if ns == "" {
+		return fmt.Errorf("namespace is required")
+	}
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	where := map[string]string{"namespace": ns}
+	if err := mm.knowledgeCollection.Delete(context.Background(), where, nil); err != nil {
+		return fmt.Errorf("clear knowledge namespace %q: %w", ns, err)
+	}
+	// Rebuild BM25 index to reflect the deletion.
+	_ = mm.rebuildBM25IndexForCollection(mm.knowledgeCollection, mm.knowledgeBM25)
+	return nil
+}
+
 func (mm *MemoryManager) retrieveCandidates(col *chromem.Collection, idx *BM25Index, query string, candidateLimit int) ([]retrievalCandidate, error) {
 	if col == nil || candidateLimit <= 0 {
 		return nil, nil

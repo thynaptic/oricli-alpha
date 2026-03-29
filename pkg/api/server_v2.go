@@ -27,6 +27,9 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/core/model"
 	"github.com/thynaptic/oricli-go/pkg/core/store"
 	"github.com/thynaptic/oricli-go/pkg/enterprise"
+	enterpriseconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors"
+	githubconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/github"
+	notionconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/notion"
 	"github.com/thynaptic/oricli-go/pkg/reform"
 	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/service"
@@ -316,6 +319,11 @@ func (s *ServerV2) setupRoutes() {
 		// Sovereign Identity — active .ori profile editor
 		protected.GET("/sovereign/identity", s.handleGetSovereignIdentity)
 		protected.PUT("/sovereign/identity", s.handlePutSovereignIdentity)
+
+		// Enterprise Knowledge Layer — namespace-isolated RAG for SMB tenants
+		protected.POST("/enterprise/learn", s.handleEnterpriseLearn)
+		protected.GET("/enterprise/knowledge/search", s.handleEnterpriseSearch)
+		protected.DELETE("/enterprise/knowledge", s.handleEnterpriseClear)
 	}
 }
 
@@ -2136,4 +2144,191 @@ resp["memory_topic"] = topic
 }
 
 c.JSON(http.StatusOK, resp)
+}
+
+
+// ---------------------------------------------------------------------------
+// Enterprise Knowledge Layer API
+// ---------------------------------------------------------------------------
+
+// handleEnterpriseLearn indexes a directory or connector into the tenant namespace.
+//
+//POST /v1/enterprise/learn
+//{ "source": "dir",    "path": "/data/docs" }
+//{ "source": "notion", "database_id": "abc123" }          // NOTION_API_KEY from env
+//{ "source": "github", "repo": "owner/repo", "path": "" } // GITHUB_TOKEN from env
+func (s *ServerV2) handleEnterpriseLearn(c *gin.Context) {
+el := s.Agent.SovEngine.EnterpriseLayer
+if el == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{
+"error": "enterprise knowledge layer not active — set ORICLI_ENTERPRISE_NAMESPACE",
+})
+return
+}
+
+var req struct {
+Source     string `json:"source"`               // "dir" | "notion" | "github"
+Path       string `json:"path,omitempty"`        // dir path, or github subdir filter
+DatabaseID string `json:"database_id,omitempty"` // notion: database id
+Repo       string `json:"repo,omitempty"`        // github: owner/repo
+}
+if err := c.ShouldBindJSON(&req); err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+return
+}
+if req.Source == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "source is required (dir | notion | github)"})
+return
+}
+
+ctx := c.Request.Context()
+ent, ok := el.(*enterprise.Layer)
+if !ok {
+c.JSON(http.StatusInternalServerError, gin.H{"error": "enterprise layer type assertion failed"})
+return
+}
+
+switch req.Source {
+case "dir":
+if req.Path == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "path is required for source=dir"})
+return
+}
+stats, err := ent.IndexDirectory(req.Path, enterprise.DefaultIndexOptions())
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{
+"namespace": ent.Namespace(),
+"source":    "dir",
+"path":      req.Path,
+"indexed":   stats.FilesIndexed,
+"skipped":   stats.SkippedUnsupported,
+"chunks":    stats.ChunksIndexed,
+})
+
+case "notion":
+if req.DatabaseID == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "database_id is required for source=notion (set NOTION_API_KEY in env)"})
+return
+}
+conn, err := notionconn.NewNotionConnector()
+if err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": "notion connector: " + err.Error()})
+return
+}
+fetchOpts := enterpriseconn.FetchOptions{Query: req.DatabaseID}
+stats, err := ent.IndexConnector(ctx, conn, fetchOpts)
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{
+"namespace": ent.Namespace(),
+"source":    "notion",
+"database":  req.DatabaseID,
+"indexed":   stats.FilesIndexed,
+"skipped":   stats.SkippedUnsupported,
+"chunks":    stats.ChunksIndexed,
+})
+
+case "github":
+if req.Repo == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "repo is required for source=github (set GITHUB_TOKEN in env)"})
+return
+}
+conn := githubconn.NewGitHubConnector()
+fetchOpts := enterpriseconn.FetchOptions{Query: req.Repo, FolderID: req.Path}
+stats, err := ent.IndexConnector(ctx, conn, fetchOpts)
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{
+"namespace": ent.Namespace(),
+"source":    "github",
+"repo":      req.Repo,
+"indexed":   stats.FilesIndexed,
+"skipped":   stats.SkippedUnsupported,
+"chunks":    stats.ChunksIndexed,
+})
+
+default:
+c.JSON(http.StatusBadRequest, gin.H{
+"error": "unsupported source: " + req.Source + " (supported: dir, notion, github)",
+})
+}
+}
+
+// handleEnterpriseSearch queries the tenant's knowledge namespace.
+//
+// GET /v1/enterprise/knowledge/search?q=<query>&top_k=<n>
+func (s *ServerV2) handleEnterpriseSearch(c *gin.Context) {
+el := s.Agent.SovEngine.EnterpriseLayer
+if el == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "enterprise knowledge layer not active"})
+return
+}
+
+query := strings.TrimSpace(c.Query("q"))
+if query == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "q (query) parameter is required"})
+return
+}
+topK := 5
+if v := c.Query("top_k"); v != "" {
+if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 20 {
+topK = n
+}
+}
+
+ent, ok := el.(*enterprise.Layer)
+if !ok {
+c.JSON(http.StatusInternalServerError, gin.H{"error": "enterprise layer type assertion failed"})
+return
+}
+
+segments, err := ent.QueryKnowledgeSegments(c.Request.Context(), query, topK)
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+
+results := make([]gin.H, 0, len(segments))
+for _, seg := range segments {
+results = append(results, gin.H{
+"id":         seg.ID,
+"content":    seg.Content,
+"similarity": seg.Similarity,
+"metadata":   seg.Metadata,
+})
+}
+c.JSON(http.StatusOK, gin.H{
+"namespace": el.Namespace(),
+"query":     query,
+"top_k":     topK,
+"results":   results,
+})
+}
+
+// handleEnterpriseClear wipes all indexed knowledge for the active namespace.
+//
+// DELETE /v1/enterprise/knowledge
+func (s *ServerV2) handleEnterpriseClear(c *gin.Context) {
+el := s.Agent.SovEngine.EnterpriseLayer
+if el == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "enterprise knowledge layer not active"})
+return
+}
+
+ns := el.Namespace()
+if err := el.ClearKnowledge(); err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{
+"namespace": ns,
+"cleared":   true,
+})
 }
