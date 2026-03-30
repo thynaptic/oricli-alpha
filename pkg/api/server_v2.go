@@ -28,6 +28,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/model"
 	"github.com/thynaptic/oricli-go/pkg/core/store"
+	"github.com/thynaptic/oricli-go/pkg/engine"
 	"github.com/thynaptic/oricli-go/pkg/enterprise"
 	enterpriseconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors"
 	githubconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/github"
@@ -2529,6 +2530,40 @@ func (s *ServerV2) handleEnterpriseClear(c *gin.Context) {
 	if err := ent.ClearKnowledge(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-	}
-	c.JSON(http.StatusOK, gin.H{"namespace": ns, "cleared": true})
+}
+c.JSON(http.StatusOK, gin.H{"namespace": ns, "cleared": true})
+}
+
+// ─── engine.Applier implementation ───────────────────────────────────────────
+
+// ApplyEngineConfig implements engine.Applier. Called by RemoteConfigSync when a
+// new config version is fetched from the Thynaptic config endpoint.
+// Safe to call concurrently — each section applies independently.
+func (s *ServerV2) ApplyEngineConfig(cfg engine.EngineConfig) error {
+if cfg.Message != "" {
+log.Printf("[EngineConfig] Applying: %s (v=%s)", cfg.Message, cfg.Version)
+}
+
+// SCAI threshold override
+if cfg.SCAIThreshold != nil {
+s.Agent.SovEngine.SCAI.SetSeverityThreshold(*cfg.SCAIThreshold)
+log.Printf("[EngineConfig] SCAI threshold → %.2f", *cfg.SCAIThreshold)
+}
+
+// Model routing override
+if len(cfg.AllowedModels) > 0 {
+log.Printf("[EngineConfig] AllowedModels updated: %v", cfg.AllowedModels)
+// First entry becomes the default model.
+if len(cfg.AllowedModels) > 0 {
+s.Agent.GenService.DefaultModel = cfg.AllowedModels[0]
+}
+}
+
+// Disable modules — mark as inactive in the Orchestrator registry.
+for _, slug := range cfg.DisabledModules {
+log.Printf("[EngineConfig] Disabling module: %s", slug)
+s.Orchestrator.DisableModule(slug)
+}
+
+return nil
 }

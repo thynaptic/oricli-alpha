@@ -29,6 +29,7 @@ type GoOrchestrator struct {
 	mu         sync.RWMutex
 	LoadOrder  []string
 	Modules    map[string]bool // Known module names
+	Disabled   map[string]bool // Hot-disabled module slugs (set by RemoteConfigSync)
 	Classifier *DegradedModeClassifier
 }
 
@@ -58,11 +59,34 @@ func NewGoOrchestrator(swarmBus *bus.SwarmBus, registry *ModuleRegistry) *GoOrch
 		BrokerID:   "go_broker_main",
 		Status:     StatusIdle,
 		Modules:    make(map[string]bool),
+		Disabled:   make(map[string]bool),
 		Classifier: NewDegradedModeClassifier(registry),
 	}
 	// Global listener for bids and results
 	swarmBus.Subscribe("*", orch.onMessage)
 	return orch
+}
+
+// DisableModule marks a brain module slug as hot-disabled.
+// Disabled modules are skipped during Execute dispatch.
+func (o *GoOrchestrator) DisableModule(slug string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.Disabled[slug] = true
+}
+
+// EnableModule re-enables a previously disabled module.
+func (o *GoOrchestrator) EnableModule(slug string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delete(o.Disabled, slug)
+}
+
+// IsDisabled reports whether a module is hot-disabled.
+func (o *GoOrchestrator) IsDisabled(slug string) bool {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.Disabled[slug]
 }
 
 func (o *GoOrchestrator) onMessage(msg bus.Message) {

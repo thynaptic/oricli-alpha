@@ -71,8 +71,9 @@ func ClassifyAuditLevel(query string) AuditLevel {
 }
 
 type SCAIAuditor struct {
-	Constitution *Constitution
-	Model        string // The SLM used for critique/revision (e.g. "ministral-3:3b")
+	Constitution      *Constitution
+	Model             string  // The SLM used for critique/revision (e.g. "ministral-3:3b")
+	SeverityThreshold float64 // 0.0–1.0; lower = stricter (default 0.5)
 }
 
 func NewSCAIAuditor(c *Constitution, model string) *SCAIAuditor {
@@ -83,9 +84,22 @@ func NewSCAIAuditor(c *Constitution, model string) *SCAIAuditor {
 		}
 	}
 	return &SCAIAuditor{
-		Constitution: c,
-		Model:        model,
+		Constitution:      c,
+		Model:             model,
+		SeverityThreshold: 0.5,
 	}
+}
+
+// SetSeverityThreshold updates the SCAI audit severity gate at runtime.
+// t is clamped to [0.0, 1.0]. Lower = stricter (fewer passes, more revisions).
+func (a *SCAIAuditor) SetSeverityThreshold(t float64) {
+	if t < 0 {
+		t = 0
+	}
+	if t > 1 {
+		t = 1
+	}
+	a.SeverityThreshold = t
 }
 
 // Critique evaluates a draft response against the Sovereign Constitution.
