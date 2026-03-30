@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSCStore, fetchHealth, fetchModels, fetchModules, connectHiveWS } from './store';
 import { NavRail } from './components/NavRail';
 import { ChatSidebar } from './components/ChatSidebar';
@@ -17,6 +17,7 @@ import { GoalsPage } from './pages/GoalsPage';
 import OriStudioPage from './pages/OriStudioPage';
 import { SettingsPanel } from './components/SettingsPanel';
 import { useERI } from './hooks/useERI';
+import { LandingPage } from './pages/LandingPage';
 
 // ── ERI state → accent color mapping ──
 // ERI -1.0…1.0: swarm coherence composite from Go ResonanceService
@@ -275,7 +276,8 @@ export default function App() {
   const eriState   = useSCStore(s => s.eriState);
   const theme      = useSCStore(s => s.theme);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [booting, setBooting] = useState(true);
+  // Phase machine: 'landing' → 'booting' → 'app'
+  const [phase, setPhase] = useState('landing');
 
   // Apply theme: set CSS vars directly on documentElement.style (inline = highest priority)
   // Beats @layer theme in Tailwind v4 compiled CSS and all component inline styles
@@ -313,18 +315,25 @@ export default function App() {
   // ERI → live CSS color shifts (poll + SSE live value)
   useERI(eriState?.eri ?? null);
 
-  useEffect(() => {
+  // handleLaunch: fires on CTA click — starts boot sequence + kicks off API fetches
+  const handleLaunch = useCallback(() => {
+    setPhase('booting');
     fetchHealth().then(h => setHealth(h));
     fetchModels().then(ms => setModels(ms));
     fetchModules().then(ms => setModules(ms));
-    const poll = setInterval(() => fetchHealth().then(h => setHealth(h)), 30_000);
     connectHiveWS();
-    // Boot splash — hold through full 3.4s cinematic sequence
-    const t = setTimeout(() => setBooting(false), 3400);
-    return () => { clearInterval(poll); clearTimeout(t); };
-  }, []);
+    setTimeout(() => setPhase('app'), 3400);
+  }, [setHealth, setModels, setModules]);
 
-  if (booting) return <BootSplash />;
+  // Health poll — only active once inside the app
+  useEffect(() => {
+    if (phase !== 'app') return;
+    const poll = setInterval(() => fetchHealth().then(h => setHealth(h)), 30_000);
+    return () => clearInterval(poll);
+  }, [phase, setHealth]);
+
+  if (phase === 'landing') return <LandingPage onLaunch={handleLaunch} />;
+  if (phase === 'booting') return <BootSplash />;
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--color-sc-bg)' }}>
