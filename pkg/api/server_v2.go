@@ -70,9 +70,13 @@ type ServerV2 struct {
 	entLayers        sync.Map // namespace -> *enterprise.Layer cache
 	entJobs          sync.Map // job_id -> *enterpriseLearnJob
 
-	// SPP: Sovereign Peer Protocol
+	// SPP: Sovereign Peer Protocol (Phase 4)
 	SwarmRegistry *swarm.PeerRegistry
 	SwarmMonitor  *swarm.SwarmMonitor
+	// Phase 5: Hive Mind Consensus
+	JuryClient   *swarm.JuryClient
+	VoteLog      *swarm.FragmentVoteLog
+	ESIFederation *swarm.ESIFederation
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -351,6 +355,10 @@ func (s *ServerV2) setupRoutes() {
 		{
 			swarmAdmin.GET("/peers", s.handleSwarmPeers)
 			swarmAdmin.GET("/health", s.handleSwarmHealth)
+			// P5: Hive Mind Consensus admin endpoints
+			swarmAdmin.GET("/jury/status", s.handleSwarmJuryStatus)
+			swarmAdmin.GET("/consensus/fragments", s.handleSwarmConsensusFragments)
+			swarmAdmin.DELETE("/skills/traces/:node_id", s.handleSwarmPurgeTraces)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -2624,4 +2632,48 @@ ids = s.SwarmRegistry.ConnectedPeers()
 }
 report := s.SwarmMonitor.Report(ids)
 c.JSON(http.StatusOK, report)
+}
+
+// ---------------------------------------------------------------------------
+// P5: Hive Mind Consensus admin handlers
+// ---------------------------------------------------------------------------
+
+// handleSwarmJuryStatus returns active jury sessions and quorum state.
+func (s *ServerV2) handleSwarmJuryStatus(c *gin.Context) {
+if s.JuryClient == nil {
+c.JSON(http.StatusOK, gin.H{"jury_enabled": false})
+return
+}
+sessions := s.JuryClient.ActiveSessions()
+c.JSON(http.StatusOK, gin.H{
+"jury_enabled":    true,
+"active_sessions": sessions,
+})
+}
+
+// handleSwarmConsensusFragments returns universal-tier fragments and their vote tallies.
+func (s *ServerV2) handleSwarmConsensusFragments(c *gin.Context) {
+if s.VoteLog == nil {
+c.JSON(http.StatusOK, gin.H{"consensus_enabled": false})
+return
+}
+c.JSON(http.StatusOK, gin.H{
+"consensus_enabled": true,
+"fragments":         s.VoteLog.Snapshot(),
+})
+}
+
+// handleSwarmPurgeTraces deletes all ESI skill traces from a specific peer node.
+func (s *ServerV2) handleSwarmPurgeTraces(c *gin.Context) {
+nodeID := c.Param("node_id")
+if nodeID == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "node_id required"})
+return
+}
+if s.ESIFederation == nil {
+c.JSON(http.StatusOK, gin.H{"purged": 0, "esi_enabled": false})
+return
+}
+s.ESIFederation.PurgeNodeTraces(c.Request.Context(), nodeID)
+c.JSON(http.StatusOK, gin.H{"purged": true, "node_id": nodeID})
 }

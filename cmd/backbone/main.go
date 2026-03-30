@@ -292,6 +292,40 @@ func main() {
 			apiServer.SwarmRegistry = registry
 			apiServer.SwarmMonitor = monitor
 
+			// P5-1: Jury — multi-node SCAI verification
+			juryDeadlineMS := int64(4000)
+			resolver := swarm.NewQuorumResolver(swarm.QuorumMajority, juryDeadlineMS)
+			juryClient := swarm.NewJuryClient(nodeIdentity, registry, reputation, resolver, nil)
+			registry.RegisterAuxHandler(swarm.EnvTypeJuryRequest, func(peer *swarm.PeerConn, env swarm.SwarmEnvelope) {
+				juryClient.HandleJuryRequest(peer, env)
+			})
+			registry.RegisterAuxHandler(swarm.EnvTypeJuryVerdict, func(peer *swarm.PeerConn, env swarm.SwarmEnvelope) {
+				juryClient.HandleJuryVerdict(peer, env)
+			})
+			apiServer.JuryClient = juryClient
+			// Wire jury into SCAI auditor if present
+			if apiServer.Agent != nil && apiServer.Agent.SovEngine != nil && apiServer.Agent.SovEngine.SCAI != nil {
+				apiServer.Agent.SovEngine.SCAI.Jury = juryClient
+			}
+
+			// P5-2: Fragment Vote Log — Universal Truth promotion
+			voteLog := swarm.NewFragmentVoteLog(apiServer.MemoryBank) // MemoryBank implements swarm.FragmentPromoter
+			apiServer.VoteLog = voteLog
+			dream.VoteLog = voteLog
+
+			// P5-3: ESI — Epistemic Skill Inheritance
+			esiFed := swarm.NewESIFederation(nodeIdentity, registry)
+			if apiServer.MemoryBank != nil {
+				esiFed.SetIngester(apiServer.MemoryBank)
+			}
+			registry.RegisterAuxHandler(swarm.EnvTypeSkillTrace, func(peer *swarm.PeerConn, env swarm.SwarmEnvelope) {
+				esiFed.HandleSkillTrace(context.Background(), peer, env)
+			})
+			registry.RegisterAuxHandler(swarm.EnvTypeSkillManifest, func(peer *swarm.PeerConn, env swarm.SwarmEnvelope) {
+				esiFed.HandleSkillManifest(peer, env)
+			})
+			apiServer.ESIFederation = esiFed
+
 			swarmCtx, swarmCancel := context.WithCancel(context.Background())
 			_ = swarmCancel
 
@@ -300,7 +334,7 @@ func main() {
 			}
 			go monitor.RunBeaconPublisher(swarmCtx, registry, func() int { return 0 })
 
-			log.Printf("[Swarm] Node %s online — SPP active", nodeIdentity.ShortID())
+			log.Printf("[Swarm] Node %s online — SPP+P5 active", nodeIdentity.ShortID())
 		}
 	}
 

@@ -68,6 +68,7 @@ type PeerRegistry struct {
 	identity         *NodeIdentity
 	constitutionText string
 	handler          MessageHandler
+	auxHandlers      map[string]MessageHandler // P5: per-type auxiliary handlers
 
 	peers   map[string]*PeerConn // keyed by NodeID
 	mu      sync.RWMutex
@@ -82,12 +83,21 @@ func NewPeerRegistry(identity *NodeIdentity, constitutionText string, handler Me
 		identity:         identity,
 		constitutionText: constitutionText,
 		handler:          handler,
+		auxHandlers:      make(map[string]MessageHandler),
 		peers:            make(map[string]*PeerConn),
 		upgrader: websocket.Upgrader{
 			HandshakeTimeout: 15 * time.Second,
 			CheckOrigin:      func(r *http.Request) bool { return true },
 		},
 	}
+}
+
+// RegisterAuxHandler registers a per-envelope-type handler for P5 subsystems
+// (jury, ESI) without requiring modification of the primary Marketplace handler.
+func (r *PeerRegistry) RegisterAuxHandler(envType string, h MessageHandler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.auxHandlers[envType] = h
 }
 
 // ---------------------------------------------------------------------------
@@ -394,6 +404,13 @@ func (r *PeerRegistry) runPeer(ctx context.Context, peer *PeerConn) {
 			}
 			if r.handler != nil {
 				r.handler(peer, env)
+			}
+			// Dispatch to per-type auxiliary handlers registered by P5 subsystems.
+			r.mu.RLock()
+			aux := r.auxHandlers[env.Type]
+			r.mu.RUnlock()
+			if aux != nil {
+				aux(peer, env)
 			}
 		}
 	}()

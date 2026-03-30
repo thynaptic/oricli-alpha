@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/thynaptic/oricli-go/pkg/swarm"
 )
 
 type JITState struct {
@@ -143,6 +145,7 @@ type DreamDaemon struct {
 	GenService    *GenerationService
 	MemoryBank    *MemoryBank
 	Constitution  *LivingConstitution
+	VoteLog       *swarm.FragmentVoteLog // P5-2: Universal Truth promotion during idle cycles
 	lastActivity  int64
 }
 
@@ -287,6 +290,13 @@ func (d *DreamDaemon) ConsolidateExperience() {
 			log.Printf("[DreamDaemon] Age decay sweep: decayed importance on %d memories.", n)
 		}
 		d.MemoryBank.Recycle()
+	}
+	// P5-2: sweep any fragments that have crossed the Universal Truth threshold.
+	if d.VoteLog != nil && d.MemoryBank != nil {
+		sweepCtx, sweepCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer sweepCancel()
+		d.VoteLog.SweepPromotion(sweepCtx)
+		log.Printf("[DreamDaemon] Universal Truth sweep complete.")
 	}
 }
 

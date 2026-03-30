@@ -204,12 +204,43 @@ func main() {
 			apiServer.SwarmRegistry = registry
 			apiServer.SwarmMonitor = swarmMonitor
 
+			// P5-1: Jury — multi-node SCAI verification
+			resolver := swarm.NewQuorumResolver(swarm.QuorumMajority, 4000)
+			juryClient := swarm.NewJuryClient(nodeIdentity, registry, reputation, resolver, nil)
+			registry.RegisterAuxHandler(swarm.EnvTypeJuryRequest, func(peer *swarm.PeerConn, env swarm.SwarmEnvelope) {
+				juryClient.HandleJuryRequest(peer, env)
+			})
+			registry.RegisterAuxHandler(swarm.EnvTypeJuryVerdict, func(peer *swarm.PeerConn, env swarm.SwarmEnvelope) {
+				juryClient.HandleJuryVerdict(peer, env)
+			})
+			apiServer.JuryClient = juryClient
+			if apiServer.Agent != nil && apiServer.Agent.SovEngine != nil && apiServer.Agent.SovEngine.SCAI != nil {
+				apiServer.Agent.SovEngine.SCAI.Jury = juryClient
+			}
+
+			// P5-2: Fragment Vote Log — Universal Truth promotion
+			voteLog := swarm.NewFragmentVoteLog(apiServer.MemoryBank)
+			apiServer.VoteLog = voteLog
+
+			// P5-3: ESI — Epistemic Skill Inheritance
+			esiFed := swarm.NewESIFederation(nodeIdentity, registry)
+			if apiServer.MemoryBank != nil {
+				esiFed.SetIngester(apiServer.MemoryBank)
+			}
+			registry.RegisterAuxHandler(swarm.EnvTypeSkillTrace, func(peer *swarm.PeerConn, env swarm.SwarmEnvelope) {
+				esiFed.HandleSkillTrace(context.Background(), peer, env)
+			})
+			registry.RegisterAuxHandler(swarm.EnvTypeSkillManifest, func(peer *swarm.PeerConn, env swarm.SwarmEnvelope) {
+				esiFed.HandleSkillManifest(peer, env)
+			})
+			apiServer.ESIFederation = esiFed
+
 			swarmCtx, _ := context.WithCancel(context.Background())
 			if seedURL := os.Getenv("THYNAPTIC_PEER_REGISTRY_URL"); seedURL != "" {
 				go registry.Bootstrap(swarmCtx, seedURL)
 			}
 			go swarmMonitor.RunBeaconPublisher(swarmCtx, registry, func() int { return 0 })
-			log.Printf("[Swarm] Node %s online — SPP active", nodeIdentity.ShortID())
+			log.Printf("[Swarm] Node %s online — SPP+P5 active", nodeIdentity.ShortID())
 		}
 	}
 

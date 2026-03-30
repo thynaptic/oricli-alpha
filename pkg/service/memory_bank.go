@@ -1092,3 +1092,90 @@ return s
 }
 return s[:n]
 }
+
+// ---------------------------------------------------------------------------
+// P5-2: Universal Truth promotion (implements swarm.FragmentPromoter)
+// ---------------------------------------------------------------------------
+
+// PromoteToUniversal elevates a knowledge fragment topic to maximum importance (1.0)
+// in the knowledge_fragments collection. This gives it priority in all RAG queries.
+// Implements swarm.FragmentPromoter — called by swarm.FragmentVoteLog.SweepPromotion().
+func (m *MemoryBank) PromoteToUniversal(ctx context.Context, subject string) error {
+if !m.IsEnabled() {
+return nil
+}
+// Find existing fragment(s) for this subject.
+filter := "topic='" + subject + "'"
+result, err := m.adminClient.QueryRecords(ctx, "knowledge_fragments", filter, "", 10)
+if err != nil || len(result.Items) == 0 {
+// No existing fragment — write a universal stub so it's retrievable.
+m.WriteKnowledgeFragment(subject, "universal_truth", "Swarm-validated universal knowledge: "+subject, 1.0)
+return nil
+}
+// Promote all matching fragments.
+for _, item := range result.Items {
+id, _ := item["id"].(string)
+if id == "" {
+continue
+}
+if updateErr := m.adminClient.UpdateRecord(ctx, "knowledge_fragments", id, map[string]any{
+"importance": 1.0,
+"author":     "swarm:universal",
+}); updateErr != nil {
+return updateErr
+}
+}
+return nil
+}
+
+// ---------------------------------------------------------------------------
+// P5-3: ESI skill trace storage (implements swarm.SkillTraceIngester)
+// ---------------------------------------------------------------------------
+
+// StoreSkillTrace persists an incoming peer skill trace as a memory fragment
+// so it is retrievable as few-shot RAG context for matching skill queries.
+// skill, reasoning, quality, nodeID passed directly to avoid import cycle with pkg/swarm.
+func (m *MemoryBank) StoreSkillTrace(_ context.Context, skill, reasoning string, quality float64, nodeID string) error {
+	shortID := nodeID
+	if len(shortID) > 16 {
+		shortID = shortID[:16]
+	}
+	m.Write(MemoryFragment{
+		Content:    "Peer skill trace [" + skill + "]: " + reasoning,
+		Source:     "swarm:skill_trace:" + shortID,
+		Topic:      "skill_trace:" + skill,
+		Importance: quality * 0.9,
+		Provenance: ProvenanceSyntheticL1,
+		Volatility: VolatilityStable,
+	})
+	return nil
+}
+
+// PurgeSkillTraces removes all peer skill trace memories from a specific node.
+// Implements swarm.SkillTraceIngester.
+func (m *MemoryBank) PurgeSkillTraces(ctx context.Context, nodeID string) error {
+if !m.IsEnabled() {
+return nil
+}
+filter := "source='swarm:skill_trace:" + nodeID[:min16(len(nodeID))] + "'"
+result, err := m.adminClient.QueryRecords(ctx, "memories", filter, "", 200)
+if err != nil {
+return err
+}
+for _, item := range result.Items {
+id, _ := item["id"].(string)
+if id == "" {
+continue
+}
+_ = m.adminClient.DeleteRecord(ctx, "memories", id)
+}
+log.Printf("[memory-bank] purged skill traces from node %s (%d records)", nodeID[:min16(len(nodeID))], len(result.Items))
+return nil
+}
+
+func min16(n int) int {
+if n > 16 {
+return 16
+}
+return n
+}

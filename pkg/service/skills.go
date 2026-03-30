@@ -116,3 +116,37 @@ func (sm *SkillManager) MatchSkills(query string) []AgentSkill {
 	}
 	return matches
 }
+
+// ---------------------------------------------------------------------------
+// P5-3: Peer SkillManifest cache (ESI — Epistemic Skill Inheritance)
+// ---------------------------------------------------------------------------
+
+// peerManifestKey returns the cache key for a peer manifest.
+func peerManifestKey(skill, nodeShortID string) string {
+return "peer:" + nodeShortID + ":" + skill
+}
+
+// CachePeerManifest stores a peer-broadcasted .ori skill addendum (system-prompt section)
+// in memory so it can be loaded via X-ORI-Manifest: peer:<skill> header dispatch.
+func (sm *SkillManager) CachePeerManifest(skill, nodeShortID, systemAddendum string) {
+sm.mu.Lock()
+defer sm.mu.Unlock()
+sm.skills[peerManifestKey(skill, nodeShortID)] = AgentSkill{
+Name:        peerManifestKey(skill, nodeShortID),
+Description: "Peer manifest from " + nodeShortID,
+Triggers:    []string{skill},
+Instructions: systemAddendum,
+}
+}
+
+// GetPeerManifest retrieves a cached peer manifest for the given skill.
+// Returns the system addendum and whether it was found.
+func (sm *SkillManager) GetPeerManifest(skill, nodeShortID string) (string, bool) {
+sm.mu.RLock()
+defer sm.mu.RUnlock()
+s, ok := sm.skills[peerManifestKey(skill, nodeShortID)]
+if !ok {
+return "", false
+}
+return s.Instructions, true
+}

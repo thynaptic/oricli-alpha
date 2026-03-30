@@ -148,6 +148,8 @@ const (
 	EnvTypeBountyAccept   = "bounty_accept"
 	EnvTypeBountyResult   = "bounty_result"
 	EnvTypeHealthBeacon   = "health_beacon"   // SPP-5
+	// P5 types are declared in jury.go (EnvTypeJuryRequest, EnvTypeJuryVerdict)
+	// and federation.go (EnvTypeSkillTrace, EnvTypeSkillManifest).
 )
 
 // ---------------------------------------------------------------------------
@@ -211,6 +213,11 @@ func (m *Marketplace) HandleEnvelope(peer *PeerConn, env SwarmEnvelope) {
 		m.handleBountyAccept(peer, env)
 	case EnvTypeBountyResult:
 		m.handleBountyResult(peer, env)
+	// P5-1: Jury routing — delegated to JuryClient handler registered externally.
+	// P5-3: ESI routing — delegated to ESIFederation handler registered externally.
+	// Both are routed via PeerRegistry.RegisterHandler() in the boot block.
+	case EnvTypeJuryRequest, EnvTypeJuryVerdict, EnvTypeSkillTrace, EnvTypeSkillManifest:
+		// handled by P5 subsystem handlers registered via PeerRegistry.RegisterHandler()
 	}
 }
 

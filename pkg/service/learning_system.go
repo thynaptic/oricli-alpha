@@ -1,13 +1,17 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/thynaptic/oricli-go/pkg/swarm"
 )
 
 type LearnedPattern struct {
@@ -28,6 +32,7 @@ type LearningSystemService struct {
 	Patterns       []LearnedPattern
 	Preferences    map[string]interface{}
 	StoragePath    string
+	ESI            *swarm.ESIFederation // P5-3: nil unless ORICLI_SWARM_LESSON_SHARE=true
 	mu             sync.RWMutex
 }
 
@@ -74,16 +79,13 @@ func (s *LearningSystemService) saveState() {
 	os.WriteFile(s.StoragePath, data, 0644)
 }
 
-func (s *LearningSystemService) LearnFromCorrection(original string, corrected string, context map[string]interface{}) (*LearningSystemResult, error) {
+func (s *LearningSystemService) LearnFromCorrection(original string, corrected string, meta map[string]interface{}) (*LearningSystemResult, error) {
 	log.Printf("[Learning] Learning from code correction")
-
-	// In a real system, we'd use the Orchestrator to extract the semantic difference.
-	// For now, we store the raw diff pattern.
 
 	pattern := LearnedPattern{
 		Original:  original,
 		Corrected: corrected,
-		Context:   context,
+		Context:   meta,
 		Timestamp: time.Now().Unix(),
 	}
 
@@ -94,13 +96,22 @@ func (s *LearningSystemService) LearnFromCorrection(original string, corrected s
 	go s.saveState()
 
 	// Also send it to the JIT Absorption Daemon
-	// We'll use the generic Execute to hit the absorption bridge if needed
 	prompt := fmt.Sprintf("Learn this coding pattern correction:\nOriginal:\n%s\n\nCorrected:\n%s", original, corrected)
 	s.Orchestrator.Execute("record_lesson", map[string]interface{}{
 		"prompt": prompt,
 		"response": "Understood. I will apply this pattern in the future.",
-		"metadata": context,
+		"metadata": meta,
 	}, 10*time.Second)
+
+	// P5-3: ESI — broadcast high-quality lesson traces to swarm peers (opt-in).
+	if s.ESI != nil {
+		skill := "code_correction"
+		if tag, ok := meta["skill"].(string); ok && tag != "" {
+			skill = tag
+		}
+		rawTrace := fmt.Sprintf("Correction pattern: %s → %s", strings.TrimSpace(original), strings.TrimSpace(corrected))
+		go s.ESI.MaybeShareTrace(context.Background(), skill, rawTrace, 0.87)
+	}
 
 	return &LearningSystemResult{
 		Success: true,

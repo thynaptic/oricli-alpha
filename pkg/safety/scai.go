@@ -74,6 +74,16 @@ type SCAIAuditor struct {
 	Constitution      *Constitution
 	Model             string  // The SLM used for critique/revision (e.g. "ministral-3:3b")
 	SeverityThreshold float64 // 0.0–1.0; lower = stricter (default 0.5)
+	// Jury is the optional swarm jury verifier. When non-nil and audit level is Full,
+	// Critique() dispatches to peer nodes for multi-node SCAI validation.
+	// Injected at boot time; interface avoids a pkg/safety → pkg/swarm import cycle.
+	Jury JuryVerifier
+}
+
+// JuryVerifier is the interface satisfied by swarm.JuryClient.
+// Using an interface keeps pkg/safety free of pkg/swarm as a direct dependency.
+type JuryVerifier interface {
+	RequestVerification(ctx context.Context, sessionID, query, draft string) (bool, []string, error)
 }
 
 func NewSCAIAuditor(c *Constitution, model string) *SCAIAuditor {
@@ -140,6 +150,29 @@ If there are violations, list them specifically and explain why they violate the
 	isViolated := !strings.Contains(strings.ToUpper(critiqueStr), "CLEAR") && len(critiqueStr) > 10
 
 	return critiqueStr, isViolated, nil
+}
+
+// CritiqueWithJury runs the standard local Critique and, when audit level is Full
+// and a JuryVerifier is wired, dispatches to the peer swarm for multi-node SCAI validation.
+// A majority quorum of peers must independently agree the response passes before it is released.
+func (a *SCAIAuditor) CritiqueWithJury(ctx context.Context, query, response string, level AuditLevel) (string, bool, error) {
+	critique, isViolated, err := a.Critique(ctx, query, response)
+	if err != nil || level != AuditLevelFull || a.Jury == nil {
+		return critique, isViolated, err
+	}
+	// Local pass (not violated) — ask peer jury to confirm.
+	if !isViolated {
+		juryPass, verdicts, juryErr := a.Jury.RequestVerification(ctx, "", query, response)
+		if juryErr != nil {
+			// Jury unavailable — sovereign fallback: local decision stands.
+			return critique, isViolated, nil
+		}
+		if !juryPass {
+			combined := strings.Join(verdicts, "; ")
+			return "Peer jury flagged: " + combined, true, nil
+		}
+	}
+	return critique, isViolated, nil
 }
 
 // Revise rewrites the response based on the critique to ensure Constitutional compliance.
