@@ -26,6 +26,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/tcd"
 	"github.com/thynaptic/oricli-go/pkg/forge"
+	"github.com/thynaptic/oricli-go/pkg/pad"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 )
@@ -430,6 +431,21 @@ func main() {
 
 		apiServer.Forge = forgeSvc
 		log.Printf("[Forge] JIT Tool Forge active — library: %d tools, max: %d", forgeLib.Size(), forge.DefaultMaxTools)
+	}
+
+	// ── PAD: Parallel Agent Dispatch (opt-in via ORICLI_PAD_ENABLED=true) ────
+	if os.Getenv("ORICLI_PAD_ENABLED") == "true" {
+		padDecomposer := pad.NewTaskDecomposer(genService, pad.MaxWorkerConcurrency)
+		padPool := pad.NewWorkerPool(genService, swarmBus, 0) // 0 → uses DefaultWorkerConcurrency
+		padSynthesizer := pad.NewSynthesizer(genService)
+		padPBClient := pb.NewClientFromEnv()
+		padSessions := pad.NewSessionStore(padPBClient)
+		if err := padSessions.Bootstrap(context.Background()); err != nil {
+			log.Printf("[PAD] session store bootstrap warning: %v", err)
+		}
+		apiServer.PAD = service.NewPADService(padDecomposer, padPool, padSynthesizer, padSessions, swarmBus)
+		log.Printf("[PAD] Parallel Agent Dispatch active — concurrency: %d/%d",
+			apiServer.PAD.MaxWorkers, pad.MaxWorkerConcurrency)
 	}
 
 	go apiServer.Start()

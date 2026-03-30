@@ -96,6 +96,8 @@ type ServerV2 struct {
 	}
 	// Forge: JIT Tool Forge
 	Forge *service.ToolForgeService
+	// PAD: Parallel Agent Dispatch
+	PAD *service.PADService
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -407,6 +409,15 @@ func (s *ServerV2) setupRoutes() {
 			forgeAdmin.POST("/tools/:name/invoke", s.handleForgeInvokeTool)
 			forgeAdmin.GET("/stats", s.handleForgeStats)
 			forgeAdmin.POST("/forge", s.handleForgeTryForge)
+		}
+
+		// PAD: Parallel Agent Dispatch
+		padRoutes := protected.Group("/pad")
+		{
+			padRoutes.POST("/dispatch", s.handlePADDispatch)
+			padRoutes.GET("/sessions", s.handlePADListSessions)
+			padRoutes.GET("/sessions/:id", s.handlePADGetSession)
+			padRoutes.GET("/stats", s.handlePADStats)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3048,4 +3059,62 @@ c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 return
 }
 c.JSON(http.StatusCreated, gin.H{"tool": tool, "status": "forged"})
+}
+
+// ─── PAD: Parallel Agent Dispatch ────────────────────────────────────────────
+
+// POST /v1/pad/dispatch — submit a query for parallel dispatch
+func (s *ServerV2) handlePADDispatch(c *gin.Context) {
+if s.PAD == nil || !s.PAD.Enabled {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
+return
+}
+var req struct {
+Query      string `json:"query" binding:"required"`
+MaxWorkers int    `json:"max_workers"`
+}
+if err := c.ShouldBindJSON(&req); err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+return
+}
+session, err := s.PAD.Dispatch(c.Request.Context(), req.Query, req.MaxWorkers)
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, session)
+}
+
+// GET /v1/pad/sessions — list recent sessions (last 20)
+func (s *ServerV2) handlePADListSessions(c *gin.Context) {
+if s.PAD == nil || !s.PAD.Enabled {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
+return
+}
+sessions := s.PAD.Sessions.List(20)
+c.JSON(http.StatusOK, gin.H{"sessions": sessions, "count": len(sessions)})
+}
+
+// GET /v1/pad/sessions/:id — get session detail
+func (s *ServerV2) handlePADGetSession(c *gin.Context) {
+if s.PAD == nil || !s.PAD.Enabled {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
+return
+}
+id := c.Param("id")
+sess, ok := s.PAD.Sessions.Get(id)
+if !ok {
+c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+return
+}
+c.JSON(http.StatusOK, sess)
+}
+
+// GET /v1/pad/stats — dispatch metrics
+func (s *ServerV2) handlePADStats(c *gin.Context) {
+if s.PAD == nil || !s.PAD.Enabled {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
+return
+}
+c.JSON(http.StatusOK, s.PAD.Stats())
 }
