@@ -68,7 +68,7 @@ RETRY_COUNT = 3
 # Google OAuth2
 GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "357323906391-2b5pfagemqmfglk1j5u7uln8jqtpmfvh.apps.googleusercontent.com")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "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")
-GOOGLE_REDIRECT_URI  = "https://sovereignclaw.thynaptic.com/connections/oauth/callback/google"
+GOOGLE_REDIRECT_URI  = "https://oristudio.thynaptic.com/connections/oauth/callback/google"
 GOOGLE_SCOPES = " ".join([
     "openid", "email", "profile",
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -1859,7 +1859,7 @@ def _test_conn(conn_id: str, creds: dict) -> tuple[bool, str]:
     if conn_id == "reddit":
         cid = creds.get("client_id", ""); secret = creds.get("client_secret", "")
         if not cid or not secret: return False, "Client ID and secret required"
-        ua = creds.get("user_agent", "SovereignClaw/1.0")
+        ua = creds.get("user_agent", "ORIStudio/1.0")
         r = _hx.post("https://www.reddit.com/api/v1/access_token",
                      auth=(cid, secret), data={"grant_type": "client_credentials"},
                      headers={"User-Agent": ua}, timeout=8)
@@ -2084,7 +2084,7 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
             if not url.startswith("http"):
                 raise ValueError(f"Invalid URL: {url}")
             r = _hx.get(url, timeout=20, follow_redirects=True,
-                        headers={"User-Agent": "SovereignClaw/1.0"})
+                        headers={"User-Agent": "ORIStudio/1.0"})
             r.raise_for_status()
             import html as _html
             import re as _re
@@ -3952,7 +3952,7 @@ def _telegram_register_webhook(token: str) -> tuple[bool, str]:
     import hashlib
     # Derive a stable secret from the token (Telegram passes it back in X-Telegram-Bot-Api-Secret-Token)
     secret = hashlib.sha256(token.encode()).hexdigest()[:32]
-    webhook_url = f"https://sovereignclaw.thynaptic.com/connections/telegram/webhook"
+    webhook_url = f"https://oristudio.thynaptic.com/connections/telegram/webhook"
     try:
         r = _hx.post(
             f"https://api.telegram.org/bot{token}/setWebhook",
@@ -4242,7 +4242,7 @@ def _fetch_reddit(creds: dict, opts: dict) -> list[dict]:
     import httpx as _hx
     client_id = creds.get("client_id", "")
     client_secret = creds.get("client_secret", "")
-    user_agent = creds.get("user_agent", "SovereignClaw/1.0")
+    user_agent = creds.get("user_agent", "ORIStudio/1.0")
     if not all([client_id, client_secret]):
         raise ValueError("Reddit client_id and client_secret required")
     # Obtain app-only token
@@ -4807,7 +4807,7 @@ def logs_raw() -> Response:
         try:
             import subprocess
             result = subprocess.run(
-                ["journalctl", "-u", "sovereignclaw-ui.service", "-n", str(n), "--no-pager", "-o", "short"],
+                ["journalctl", "-u", "oristudio-ui.service", "-n", str(n), "--no-pager", "-o", "short"],
                 capture_output=True, text=True, timeout=5,
             )
             for l in result.stdout.splitlines():
