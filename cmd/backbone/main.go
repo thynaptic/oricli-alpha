@@ -34,6 +34,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/sentinel"
 	"github.com/thynaptic/oricli-go/pkg/curator"
 	"github.com/thynaptic/oricli-go/pkg/audit"
+	"github.com/thynaptic/oricli-go/pkg/metacog"
 )
 
 func bootstrapAPIKey(st *memory.MemoryStore) string {
@@ -521,6 +522,18 @@ func main() {
 		apiServer.AuditDaemon = auditDaemon
 		auditDaemon.StartDaemon(context.Background())
 		log.Printf("[Audit] Self-Audit Loop active — scanning own source, verifying via Gosh, PRs via oricli-bot")
+	}
+
+	// ── Metacog: Phase 8 Metacognitive Sentience (opt-in via ORICLI_METACOG_ENABLED=true) ──
+	if os.Getenv("ORICLI_METACOG_ENABLED") == "true" {
+		evtLog := metacog.NewEventLog(0)
+		detector := metacog.NewDetector(evtLog)
+		agentService.GenService.MetacogDetector = detector
+		mcDaemon := metacog.NewMetacogDaemon(evtLog, apiServer.WSHub)
+		apiServer.MetacogDaemon = mcDaemon
+		apiServer.MetacogLog = evtLog
+		mcDaemon.StartDaemon(context.Background())
+		log.Printf("[Metacog] Sentience layer active — inline loop/hallucination detection + 5-min rolling scan")
 	}
 
 	go apiServer.Start()

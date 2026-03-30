@@ -46,6 +46,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/finetune"
 	"github.com/thynaptic/oricli-go/pkg/curator"
 	"github.com/thynaptic/oricli-go/pkg/audit"
+	"github.com/thynaptic/oricli-go/pkg/metacog"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
@@ -117,6 +118,9 @@ type ServerV2 struct {
 	Curator *curator.ModelCurator
 	// AuditDaemon: Self-Audit Loop — scans own source, verifies via Gosh, opens PRs
 	AuditDaemon *audit.AuditDaemon
+	// MetacogDaemon: Phase 8 Metacognitive Sentience — rolling anomaly scan + WS broadcast
+	MetacogDaemon *metacog.MetacogDaemon
+	MetacogLog    *metacog.EventLog
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -487,6 +491,14 @@ func (s *ServerV2) setupRoutes() {
 			auditRoutes.POST("/run", s.handleAuditRun)
 			auditRoutes.GET("/runs", s.handleAuditListRuns)
 			auditRoutes.GET("/runs/:id", s.handleAuditGetRun)
+		}
+
+		// Metacognitive Sentience — Phase 8
+		metacogRoutes := protected.Group("/metacog")
+		{
+			metacogRoutes.GET("/events", s.handleMetacogEvents)
+			metacogRoutes.GET("/stats", s.handleMetacogStats)
+			metacogRoutes.POST("/scan", s.handleMetacogScan)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3614,4 +3626,47 @@ c.JSON(http.StatusNotFound, gin.H{"error": "run not found"})
 return
 }
 c.JSON(http.StatusOK, run)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8 — Metacognitive Sentience handlers
+// ---------------------------------------------------------------------------
+
+// GET /v1/metacog/events?n=50 — return the last N metacognitive events
+func (s *ServerV2) handleMetacogEvents(c *gin.Context) {
+if s.MetacogLog == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "metacog not enabled"})
+return
+}
+n := 50
+if nStr := c.Query("n"); nStr != "" {
+if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
+n = parsed
+}
+}
+events := s.MetacogLog.Recent(n)
+c.JSON(http.StatusOK, gin.H{"events": events, "count": len(events)})
+}
+
+// GET /v1/metacog/stats — per-type counts + rolling-window recurrence rates
+func (s *ServerV2) handleMetacogStats(c *gin.Context) {
+if s.MetacogDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "metacog not enabled"})
+return
+}
+c.JSON(http.StatusOK, s.MetacogDaemon.Stats())
+}
+
+// POST /v1/metacog/scan — trigger an immediate scan cycle, returns window counts
+func (s *ServerV2) handleMetacogScan(c *gin.Context) {
+if s.MetacogDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "metacog not enabled"})
+return
+}
+counts := s.MetacogDaemon.Scan()
+result := make(map[string]int)
+for t, n := range counts {
+result[string(t)] = n
+}
+c.JSON(http.StatusOK, gin.H{"window_counts": result, "scanned_at": time.Now().Format(time.RFC3339)})
 }

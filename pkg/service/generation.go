@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/scl"
 )
 
@@ -31,6 +32,7 @@ type GenerationService struct {
 	PrimaryMgr     *PrimaryInferenceManager // vLLM-based (all tiers, RUNPOD_PRIMARY=true)
 	Governor       *CostGovernor            // daily spend cap — blocks RunPod escalation when exhausted
 	CrystalCache   *scl.CrystalCache        // Skill Crystallization — LLM-bypass for proven patterns
+	MetacogDetector *metacog.Detector        // Phase 8: inline metacognitive anomaly detection
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -230,6 +232,16 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 	data, err := s.postJSON("/api/generate", payload)
 	if err == nil {
 		if resp, ok := data["response"].(string); ok {
+			if s.MetacogDetector != nil {
+				if evt := s.MetacogDetector.Check(prompt, resp); evt != nil && evt.Severity == "HIGH" {
+					log.Printf("[Metacog] %s — retrying with self-reflection prefix", evt.Type)
+					reflectPrompt := metacog.SelfReflectPrompt(evt) + prompt
+					retry, rerr := s.Chat([]map[string]string{{"role": "user", "content": reflectPrompt}}, options)
+					if rerr == nil {
+						return retry, nil
+					}
+				}
+			}
 			return map[string]interface{}{"success": true, "text": resp, "model": model, "method": "go_ollama_native", "confidence": 0.95}, nil
 		}
 	}
@@ -275,6 +287,29 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 	}
 	if msg, ok := data["message"].(map[string]interface{}); ok {
 		if content, ok := msg["content"].(string); ok {
+			if s.MetacogDetector != nil {
+				// Derive a representative prompt from the last user message
+				promptForCheck := ""
+				if len(messages) > 0 {
+					promptForCheck = messages[len(messages)-1]["content"]
+				}
+				if evt := s.MetacogDetector.Check(promptForCheck, content); evt != nil && evt.Severity == "HIGH" {
+					log.Printf("[Metacog] %s in Chat — retrying with self-reflection prefix", evt.Type)
+					// Prepend self-reflection as a new system message + replay conversation
+					reflectMsg := map[string]string{"role": "system", "content": metacog.SelfReflectPrompt(evt)}
+					retryMsgs := append([]map[string]string{reflectMsg}, messages...)
+					retryOpts := make(map[string]interface{})
+					for k, v := range options {
+						retryOpts[k] = v
+					}
+					retryOpts["_metacog_retry"] = true // prevent infinite recursion
+					if _, isRetry := options["_metacog_retry"]; !isRetry {
+						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
+							return retry, nil
+						}
+					}
+				}
+			}
 			return map[string]interface{}{"success": true, "text": content, "model": model, "method": "go_ollama_chat", "confidence": 0.95}, nil
 		}
 	}
