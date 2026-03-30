@@ -450,6 +450,9 @@ func (s *ServerV2) setupRoutes() {
 
 	// Swarm connect endpoint lives outside authMiddleware — auth is the SPP handshake itself.
 	v1.GET("/swarm/connect", s.handleSwarmConnect)
+
+	// Waitlist — public, no auth (marketing → SMB sign-up)
+	v1.POST("/waitlist", s.handleWaitlistJoin)
 }
 
 func (s *ServerV2) handleHealth(c *gin.Context) {
@@ -3310,4 +3313,63 @@ return
 }
 jobs := s.FineTune.ListJobs()
 c.JSON(http.StatusOK, gin.H{"jobs": jobs, "count": len(jobs)})
+}
+
+// ─── Waitlist: SMB API sign-up capture ───────────────────────────────────────
+
+// POST /v1/waitlist — public endpoint, no auth required
+func (s *ServerV2) handleWaitlistJoin(c *gin.Context) {
+var req struct {
+Name    string `json:"name"    binding:"required"`
+Company string `json:"company"`
+Email   string `json:"email"   binding:"required"`
+Plan    string `json:"plan"    binding:"required"`
+}
+if err := c.ShouldBindJSON(&req); err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": "name, email, and plan are required"})
+return
+}
+
+// Basic email sanity check
+if !strings.Contains(req.Email, "@") || !strings.Contains(req.Email, ".") {
+c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email address"})
+return
+}
+
+// Validate plan
+validPlans := map[string]bool{"starter": true, "business": true, "enterprise": true}
+if !validPlans[strings.ToLower(req.Plan)] {
+c.JSON(http.StatusBadRequest, gin.H{"error": "invalid plan — must be starter, business, or enterprise"})
+return
+}
+
+record := map[string]any{
+"name":       req.Name,
+"company":    req.Company,
+"email":      strings.ToLower(strings.TrimSpace(req.Email)),
+"plan":       strings.ToLower(req.Plan),
+"created_at": time.Now().UTC().Format(time.RFC3339),
+"status":     "pending",
+}
+
+// Write to PocketBase if available
+if s.MemoryBank != nil {
+pbClient := s.MemoryBank.GetAdminClient()
+if pbClient != nil {
+ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+defer cancel()
+_, err := pbClient.CreateRecord(ctx, "waitlist", record)
+if err != nil {
+log.Printf("[Waitlist] PB write error: %v", err)
+// Fall through — don't fail the request if PB is having issues
+} else {
+log.Printf("[Waitlist] New signup: %s <%s> plan=%s", req.Name, req.Email, req.Plan)
+}
+}
+}
+
+c.JSON(http.StatusOK, gin.H{
+"success": true,
+"message": "You're on the list. We'll reach out within 24 hours.",
+})
 }

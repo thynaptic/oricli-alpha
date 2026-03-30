@@ -4740,6 +4740,21 @@ def proxy_reaction_feedback() -> Response:
         return jsonify({"error": str(exc)}), 502
 
 
+@app.route("/api/waitlist", methods=["POST"])
+def proxy_waitlist() -> Response:
+    """Proxy POST /api/waitlist → backbone /v1/waitlist (public, no auth required)."""
+    try:
+        with _client() as client:
+            r = client.post(
+                f"{_BACKBONE_URL}/v1/waitlist",
+                json=request.get_json(force=True),
+                timeout=10,
+            )
+            return jsonify(r.json()), r.status_code
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
 @app.route("/api/v1/sovereign/identity", methods=["GET"])
 def proxy_sovereign_identity_get() -> Response:
     """Proxy GET /api/v1/sovereign/identity → backbone /v1/sovereign/identity."""
