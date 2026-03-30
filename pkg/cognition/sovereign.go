@@ -632,6 +632,11 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 			modeEnrichedComposite = answer
 			modeHandled = true
 		}
+	case ModeCrossdomainBridge:
+		if enriched, err := e.runCrossdomainBridge(ctx, stimulus, ""); err == nil {
+			modeEnrichedComposite = enriched
+			modeHandled = true
+		}
 	}
 
 	// --- Step 7: Subconscious & Stochastic Prep ---
@@ -668,7 +673,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		topic   string
 	}
 	// Skip parallel web search for modes that already did targeted search (Active, ReAct)
-	skipWebSearch := mode == ModeActive || mode == ModeReAct || mode == ModeDebate || mode == ModeCausal || mode == ModeDiscover || mode == ModeConsistency
+	skipWebSearch := mode == ModeActive || mode == ModeReAct || mode == ModeDebate || mode == ModeCausal || mode == ModeDiscover || mode == ModeConsistency || mode == ModeCrossdomainBridge
 	webCh := make(chan webResult, 1)
 	if !skipWebSearch && e.SearXNG != nil && e.SearXNG.IsAvailable() {
 		if needsSearch, sq := DetectUncertainty(stimulus); needsSearch {
@@ -769,9 +774,21 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		composite += "\n\n" + reform.NewRunPodConstitution().GetSystemPrompt()
 	}
 
+	// Balanced Prompting — anti-confirmation-bias injection.
+	// Fires on reasoning modes that are prone to sycophantic drift: debate, causal,
+	// discover, and any multi-step complexity. Suppressed for casual conversation.
+	if budget.Complexity >= 0.35 || mode == ModeDebate || mode == ModeCausal || mode == ModeDiscover {
+		composite += "\n\n### EPISTEMIC BALANCE\n" +
+			"**Before committing to any conclusion**: (1) Identify the strongest evidence AGAINST your current position. " +
+			"(2) Steelman the best opposing argument — not a strawman. " +
+			"(3) State your confidence level explicitly (high / medium / low) and what evidence would change it. " +
+			"Do NOT agree with the user simply because they assert something. " +
+			"If the evidence supports disagreement, state it directly and respectfully."
+	}
+
 	// Hard-cap composite to prevent system-prompt bloat from overwhelming the LLM context window.
 	// CPU-inference cost scales with prefill length — keep it tight for conversational turns.
-	const maxCompositeChars = 3000
+	const maxCompositeChars = 3200
 	if len(composite) > maxCompositeChars {
 		composite = composite[:maxCompositeChars] + "\n... [trace truncated for performance]"
 	}

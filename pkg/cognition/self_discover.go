@@ -91,7 +91,7 @@ var atomicModules = []AtomicModule{
 	{
 		Name:        "Cross-Domain Bridging",
 		Description: "Identify tools, theorems, or frameworks from fields unrelated to the problem domain that share structural similarity. Apply those foreign techniques to break deadlocks that domain-specific approaches cannot resolve.",
-		Mode:        ModeStandard, // enrichment only — no dedicated engine, injects as instruction
+		Mode:        ModeCrossdomainBridge,
 	},
 }
 
@@ -300,6 +300,8 @@ func (e *SovereignEngine) executePlan(ctx context.Context, stimulus, composite s
 			enriched, err = e.runReAct(ctx, stimulus, "")
 		case ModeDebate:
 			enriched, err = e.runDebate(ctx, stimulus, "")
+		case ModeCrossdomainBridge:
+			enriched, err = e.runCrossdomainBridge(ctx, stimulus, "")
 		case ModeCausal:
 			enriched, err = e.runCausal(ctx, stimulus, "")
 		}

@@ -963,3 +963,82 @@ cause = newCause
 }
 return cause
 }
+
+// ─── Cross-Domain Bridging ────────────────────────────────────────────────────
+
+// runCrossdomainBridge implements the Cross-Domain Bridging atomic module.
+//
+// Algorithm:
+//  1. Ask the LLM to classify the problem domain and name 2 structurally similar
+//     fields where the same class of problem is well-solved.
+//  2. Ask it to extract the key insight / technique from each analogous field.
+//  3. Inject the cross-domain insight block into the composite so the final
+//     generation can apply the foreign framework.
+//
+// This fires as an enrichment step — it returns an enriched composite, not a
+// final answer. The cost is 2 fast LLM calls (~100 tok each).
+func (e *SovereignEngine) runCrossdomainBridge(ctx context.Context, stimulus, composite string) (string, error) {
+// Stage 1: identify domain + analogous fields
+identifyPrompt := fmt.Sprintf(
+"You are a cross-domain reasoning expert.\n"+
+"Task: Identify the PRIMARY problem domain for this question, then name exactly 2 OTHER fields "+
+"where the same structural problem (same constraints, trade-offs, or optimization pattern) is well-studied and solved.\n\n"+
+"OUTPUT FORMAT (3 lines only):\n"+
+"Domain: <primary domain>\n"+
+"Analogy 1: <field> — <why it is structurally similar in one sentence>\n"+
+"Analogy 2: <field> — <why it is structurally similar in one sentence>\n\n"+
+"Question: %s", truncate(stimulus, 400),
+)
+identifyCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+defer cancel()
+_ = identifyCtx
+
+identRes, err := e.GenService.Generate(identifyPrompt, map[string]interface{}{
+"num_predict": 120,
+"num_ctx":     2048,
+"temperature": 0.3,
+})
+if err != nil || ctx.Err() != nil {
+return e.runStandard(ctx, stimulus, composite)
+}
+identText, _ := identRes["response"].(string)
+identText = strings.TrimSpace(identText)
+if identText == "" {
+return e.runStandard(ctx, stimulus, composite)
+}
+
+// Stage 2: extract the bridging insight from the two analogies
+bridgePrompt := fmt.Sprintf(
+"You identified these structural analogies for a problem:\n%s\n\n"+
+"For each analogous field, extract the KEY technique or theorem that resolves "+
+"the core constraint. Be specific and concrete — name the technique, not just the field.\n\n"+
+"OUTPUT FORMAT (2 lines only):\n"+
+"Technique 1: <field> uses <specific technique> — applying this here means: <one concrete application>\n"+
+"Technique 2: <field> uses <specific technique> — applying this here means: <one concrete application>",
+identText,
+)
+bridgeRes, err := e.GenService.Generate(bridgePrompt, map[string]interface{}{
+"num_predict": 160,
+"num_ctx":     2048,
+"temperature": 0.25,
+})
+if err != nil || ctx.Err() != nil {
+	// Partial enrichment — still useful
+	return e.runStandard(ctx, stimulus, composite+
+		"\n\n### CROSS-DOMAIN ANALOGIES\n"+identText+"\n### END ANALOGIES")
+}
+bridgeText, _ := bridgeRes["response"].(string)
+bridgeText = strings.TrimSpace(bridgeText)
+
+enrichment := fmt.Sprintf(
+"\n\n### CROSS-DOMAIN BRIDGE\n"+
+"**Domain mapping:**\n%s\n\n"+
+"**Bridging techniques:**\n%s\n\n"+
+"Apply the most structurally fitting technique above to the problem. "+
+"If neither technique applies cleanly, explain why and fall back to domain-native reasoning.\n"+
+"### END CROSS-DOMAIN BRIDGE",
+identText, bridgeText,
+)
+
+return e.runStandard(ctx, stimulus, composite+enrichment)
+}
