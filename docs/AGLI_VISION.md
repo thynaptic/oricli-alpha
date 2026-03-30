@@ -160,14 +160,13 @@ The phase where the intelligence becomes a product. ORI Studio has crossed from 
 
 **Milestone target:** Oricli-Alpha v5.0 — a commercially deployed sovereign intelligence platform.
 
-### Phase 6 — Self-Modification 📋 NEXT
+### Phase 6 — Cognitive Compounding 📋 NEXT
 The phase where governance becomes self-authoring. Planned:
 
-- **ReformDaemon — Deployment Mode**: Graduates from *proposing* Go source optimizations to *committing and deploying* them under a constitutional pre-flight check. Not proposal mode — actual self-modification.
-- **Neural Architecture Search (NAS)**: Automated evaluation of model architecture variants against the internal benchmark suite. Oricli proposes her own next model configuration.
-- **Adversarial Sentinel**: A dedicated red-team sub-agent that continuously attempts to find constitutional violations in the current codebase and reasoning traces. Finds her own attack surface before external actors do.
+- **Adversarial Sentinel**: A dedicated red-team sub-agent fires before any goal tick or PAD dispatch. It attempts to falsify the plan — logical contradictions, hallucinated assumptions, constitutional violations. If it finds a flaw, execution is blocked and the plan is revised. Oricli stress-tests herself before acting.
 - **Self-Authoring Documentation**: As ReformDaemon modifies code, Oricli autonomously updates `docs/` to reflect the current architecture. She always knows what she is.
 - **Skill Crystallization**: Frequently-used reasoning chains and tool-call sequences compiled into first-class `Skill` bypass structs that skip LLM inference entirely for known patterns. Performance compounds without new hardware.
+- **Sovereign Model Curation**: Oricli watches the Ollama model catalog, auto-benchmarks new releases against her internal test suite (correctness, latency, constitutional compliance), and recommends or autonomously swaps to better models. She chooses her own brain upgrades with evidence.
 
 **Milestone target:** Oricli-Alpha v6.0 — an intelligence that modifies, documents, and red-teams itself.
 
@@ -201,7 +200,7 @@ The PAD + Critic + GoalDaemon loop is the other major milestone: Oricli can acce
 - API key provisioning for SMB tenants (post-Stripe webhook flow)
 - Tenant metrics dashboard (token usage, cost per tenant, request volume)
 
-**Phase 6 outlook:** ReformDaemon deployment mode (not propose — commit), Neural Architecture Search, Adversarial Sentinel red-team agent, Self-Authoring Documentation (docs/ sync on code change), and Skill Crystallization (bypass structs for high-confidence recurring patterns). Phase 6 is the phase where Oricli becomes the primary author of her own codebase.
+**Phase 6 outlook:** Adversarial Sentinel (red-team pre-flight before every plan execution), Skill Crystallization (bypass structs for high-confidence recurring patterns), and Sovereign Model Curation (auto-benchmark + autonomous model upgrade). Phase 6 is the phase where Oricli compounds capability through experience — getting faster, getting safer, and getting smarter about her own tooling — without touching self-modification.
 
 ---
 
