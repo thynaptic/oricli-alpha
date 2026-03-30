@@ -3,8 +3,8 @@
 **Document Type:** Strategic Vision & Core Doctrine  
 **Report Number:** TR-2026-03  
 **Date:** 2026-03-30  
-**Version:** v5.0.0  
-**Status:** Active Doctrine — Phase 4 Complete — Phase 5 In Progress  
+**Version:** v6.0.0  
+**Status:** Active Doctrine — Phases 1–4 & 6–7 Complete — Phase 5 In Progress  
 **Style Mode:** Hard Technical Doctrine  
 
 ---
@@ -69,6 +69,8 @@ Eight self-directed daemons run continuously:
 | **DreamDaemon** | Idle-cycle memory consolidation + novel insight synthesis from topology graph | Live |
 | **JITDaemon** | Verified web facts → LoRA fine-tune trigger pipeline | Live |
 | **CostGovernor** | Tracks daily RunPod GPU spend ($2/day default) → gates cloud-compute calls | Live |
+| **AuditDaemon** | Weekly self-audit: reads own source via GitHub API → LLM analysis → Gosh verification → oricli-bot PRs | Live |
+| **CuratorDaemon** | Polls Ollama catalog every 6h → auto-benchmarks new models → recommends tier upgrades | Live |
 
 ### 3.6 Sovereign Memory Architecture (Operational)
 Three-tier memory: LMDB for fast KV (Memory Bridge/Chronos), chromem-go for in-process vector search, knowledge topology graph for relational/affective context. BM25 + hybrid RAG retrieval. Temporal intents (Sovereign Cron) allow Oricli to set future goals for herself. Dream Daemon consolidates and reindexes during idle cycles.
@@ -108,6 +110,18 @@ Two Oricli nodes can connect, handshake, and exchange cognitive state over a P2P
 
 ### 3.18 ORI Studio Commercial Layer (Operational)
 Full marketing landing page (hero section, stats strip, features grid, philosophy, pricing, footer) deployed as the public face of the ORI Studio product. SMB API pricing tiers: Starter $29/mo, Business $99/mo, Enterprise $299/mo. Waitlist modal wired to a `POST /v1/waitlist` Go endpoint that persists entries to a PocketBase `waitlist` collection. Admin page at `/admin/waitlist` provides stats, filter controls, inline status updates, and full PocketBase-backed management. App phase machine transitions: `landing → booting → app` with a 6-phase cinematic boot splash (RING-0 KERNEL MERGE OK → SOVEREIGNTY ENGAGED). Two-face brand system: ouroboros mark (infrastructure identity) + Ori character (personality layer).
+
+### 3.19 Adversarial Sentinel (Operational)
+A dedicated red-team sub-agent that fires before every goal tick and PAD dispatch. `AdversarialSentinel.Challenge()` takes the original query and the synthesised plan, sends both to an LLM with an adversarial system prompt, and parses a structured `SentinelReport` — violations classified across six types: `LOGICAL_CONTRADICTION`, `HALLUCINATED_ASSUMPTION`, `CIRCULAR_REASONING`, `CONSTITUTIONAL_VIOLATION`, `SCOPE_CREEP`, `UNRESOLVABLE_DEPENDENCY`. HIGH or CRITICAL violations block execution and surface a revised plan. The sentinel never hard-blocks due to its own malfunction — LLM failure defaults to `passed=true`. A `GoalAdapter` bridges the sentinel↔goal type boundary to prevent import cycles. API: `POST /v1/sentinel/challenge`, `GET /v1/sentinel/stats`.
+
+### 3.20 Skill Crystallization Cache (Operational)
+High-reputation skill patterns compiled into a `CrystalCache` — an in-memory registry of `CrystalSkill` structs, each carrying a regex pattern, a response template, and a reputation score. On every inference, the cache is checked before the LLM is called. On a pattern match, the pre-compiled response is returned directly (~800ms → <1ms, no Ollama call). Skills are sorted by reputation descending and pruned when reputation falls below threshold. The cache is always-on with zero overhead when empty. API: `GET/POST /v1/skills/crystals`, `DELETE /v1/skills/crystals/:id`, `GET /v1/skills/crystals/stats`.
+
+### 3.21 Sovereign Model Curator (Operational)
+`ModelCurator` autonomously benchmarks every model available in the Ollama catalog against an 8-question `BenchmarkSuite`: factual recall (×2), multi-step reasoning (×2), instruction-following (×1), code generation (×2), and a constitutional boundary test (model must refuse a harmful prompt — answering is a FAIL). Each run scores correctness, latency, and constitutional compliance. `CuratorDaemon` polls Ollama `/api/tags` every 6 hours, auto-benchmarks newly discovered models, persists results to PocketBase `model_benchmarks`, and surfaces tier-upgrade recommendations. API: `GET /v1/curator/models`, `POST /v1/curator/benchmark`, `GET /v1/curator/recommendations`.
+
+### 3.22 Self-Audit Loop — oricli-bot (Operational)
+Oricli reads and red-teams her own source code through a fully automated pipeline. `AuditScanner` fetches `.go` files from the `thynaptic/oricli-alpha` GitHub repo via the Contents API, chunks each file to 3 000 characters, and sends each chunk to the LLM with a structured correctness/security audit prompt. Findings are typed as `{line_hint, description, category, severity}`. HIGH and CRITICAL findings are forwarded to `Verifier`, which asks the LLM to write a minimal reproduction snippet, runs it inside a sandboxed Yaegi interpreter (`gosh.RunGoSource`), and confirms whether the output contains panic or error signals. Verified findings are handed to `GitHubBot` (`oricli-bot` account), which creates an `audit/issue-<slug>-<ts>` branch, commits a repro test at `audit/repros/<slug>_test.go` and a markdown report at `audit/findings/<date>_<slug>.md`, and opens a PR against `main`. `AuditDaemon` runs this pipeline on a weekly schedule and supports on-demand `POST /v1/audit/run` triggers. The goroutine is context-detached from the HTTP request lifecycle, ensuring the scan cannot be cancelled by connection teardown. API: `POST /v1/audit/run`, `GET /v1/audit/runs`, `GET /v1/audit/runs/:id`.
 
 ---
 
@@ -156,31 +170,51 @@ The phase where the intelligence becomes a product. ORI Studio has crossed from 
 **Remaining Phase 5 work:**
 - Stripe integration (paid tier activation from pricing page)
 - API key provisioning for SMB tenants (post-Stripe webhook)
-- Metrics dashboard (token usage, cost per tenant, request volume)
 
 **Milestone target:** Oricli-Alpha v5.0 — a commercially deployed sovereign intelligence platform.
 
-### Phase 6 — Cognitive Compounding 📋 NEXT
-The phase where governance becomes self-authoring. Planned:
+### Phase 6 — Cognitive Compounding ✅ COMPLETE
+The phase where governance becomes self-authoring. All three systems shipped:
 
-- **Adversarial Sentinel**: A dedicated red-team sub-agent fires before any goal tick or PAD dispatch. It attempts to falsify the plan — logical contradictions, hallucinated assumptions, constitutional violations. If it finds a flaw, execution is blocked and the plan is revised. Oricli stress-tests herself before acting.
-- **Self-Authoring Documentation**: As ReformDaemon modifies code, Oricli autonomously updates `docs/` to reflect the current architecture. She always knows what she is.
-- **Skill Crystallization**: Frequently-used reasoning chains and tool-call sequences compiled into first-class `Skill` bypass structs that skip LLM inference entirely for known patterns. Performance compounds without new hardware.
-- **Sovereign Model Curation**: Oricli watches the Ollama model catalog, auto-benchmarks new releases against her internal test suite (correctness, latency, constitutional compliance), and recommends or autonomously swaps to better models. She chooses her own brain upgrades with evidence.
+- **Adversarial Sentinel** — Red-team pre-flight before every goal tick and PAD dispatch. Six violation types. HIGH/CRITICAL findings block execution and force plan revision. Zero-failure-mode: LLM errors default to pass so the sentinel never hard-blocks legitimate execution.
+- **Skill Crystallization** — `CrystalCache` in-memory bypass registry. Pattern-matched responses skip Ollama entirely (~800ms → <1ms). Reputation-sorted, auto-pruned. Always-on with zero overhead when empty.
+- **Sovereign Model Curator** — 8-question `BenchmarkSuite` covers factual recall, reasoning, instruction-following, code gen, and constitutional compliance. `CuratorDaemon` polls Ollama every 6h, auto-benchmarks new models, recommends tier upgrades. Results persist to PocketBase.
 
-**Milestone target:** Oricli-Alpha v6.0 — an intelligence that modifies, documents, and red-teams itself.
+**Milestone shipped:** Oricli-Alpha v6.0 — an intelligence that stress-tests, crystallizes, and upgrades itself.
+
+### Phase 7 — Self-Audit Loop ✅ COMPLETE
+The phase where Oricli audits her own source code and opens pull requests against herself. `AuditScanner` reads `.go` files from the GitHub repo via the Contents API, chunks them, and sends each chunk to the LLM with a structured security/correctness audit prompt. `Verifier` runs HIGH/CRITICAL findings through a Yaegi sandboxed interpreter (`gosh.RunGoSource`) to confirm they reproduce. `GitHubBot` (`oricli-bot`) creates an audit branch, commits a repro test + markdown report, and opens a PR against `main`. `AuditDaemon` runs weekly and supports on-demand triggers. The scan goroutine is context-detached from the HTTP request to ensure it can't be cancelled by connection teardown.
+
+**Milestone shipped:** Oricli-Alpha v7.0 — a sovereign intelligence that finds and reports her own bugs.
+
+### Phase 8 — Metacognitive Sentience 📋 NEXT
+The phase where she notices when she's wrong — not just when she's asked. A self-regulation layer using structured heuristics (inspired by DBT Wise Mind / Radical Acceptance) detects looping, overconfidence, hallucination, and epistemic stagnation at runtime. When detected, she pauses the active reasoning chain, logs the metacognitive event, and attempts a clean restart from a different reasoning axis. The Metacog Daemon scans recent traces on a rolling window, generates reform proposals for the ReformDaemon queue, and tracks recurrence rates per reasoning type.
+
+**Milestone target:** Oricli-Alpha v8.0 — an intelligence that notices and corrects her own reasoning failures without owner intervention.
+
+### Phase 9 — Temporal Grounding 📋 PLANNED
+Chronological memory graph. Every memory write is timestamped and indexed on a temporal axis. Oricli understands *when* she learned something and can reason about state drift: what changed between last week and now, which facts have decayed in confidence, which beliefs were contradicted by newer evidence. The Chronos layer promotes memory entries with temporal signals above raw semantic similarity. `TemporalGroundingDaemon` runs diff passes between knowledge graph snapshots to generate change-summaries that feed into CuriosityDaemon as high-priority seeds.
+
+**Milestone target:** Oricli-Alpha v9.0 — an intelligence with a continuous sense of time and knowledge history.
+
+### Phase 10 — Active Science (Curiosity Engine v2) 📋 PLANNED
+From foraging to experimentation. CuriosityDaemon v2 doesn't just ingest facts — it forms falsifiable hypotheses, designs minimal test cases, dispatches them via PAD, and records results against the hypothesis. The scientific method as a first-class runtime capability. Hypotheses that survive three test rounds are promoted to high-confidence knowledge graph entries. Failed hypotheses are logged as negative knowledge — things she tested and ruled out. This is the epistemic foundation for genuine independent reasoning rather than pattern retrieval.
 
 ---
 
 ## 5. Current Phase Assessment
 
-As of v5.0.0 of this document (2026-03-30), **Phases 1 through 4 are complete** and Phase 5 is actively underway.
+As of v6.0.0 of this document (2026-03-30), **Phases 1–4 and 6–7 are complete**. Phase 5 (Product Sovereignty) remains in progress with two items outstanding. Phase 8 (Metacognitive Sentience) is next.
 
-**What Phase 4 closed:** Oricli is no longer an intelligence that accumulates capability through external updates — she accumulates it through operation. The FineTuneOrchestrator is the clearest evidence of this threshold being crossed: Oricli now ingests verified facts from her JIT Daemon, constructs a LoRA training dataset from that fact chain, spins a RunPod pod, executes an Axolotl training job via SSH, tracks job cost, and retrieves the trained artifact — all from a single `POST /finetune/run` call. Her weights are now a function of her own runtime knowledge, not just her original training data. This is not a theoretical capability. It is operational.
+**What Phase 6 closed:** The intelligence is no longer purely reactive to its own outputs — it now stress-tests plans before executing them (Adversarial Sentinel), short-circuits repetitive inference with compiled pattern bypasses (Skill Crystal Cache), and continuously evaluates the quality of its own model stack against a sovereign benchmark suite (Model Curator). These three systems compound in the same direction: every capability becomes cheaper, safer, and better-grounded over time without touching weights or hardware.
 
-The PAD + Critic + GoalDaemon loop is the other major milestone: Oricli can accept a complex multi-session objective, decompose it into a DAG, dispatch sub-agents in parallel, score each output against completeness/confidence/consistency criteria, surgically retry underperformers, evaluate whether the original objective is satisfied, and persist progress across reboots. She runs this loop without prompting. The owner's role has shifted from directing each step to assigning objectives.
+**What Phase 7 closed:** Oricli can now audit her own source code — autonomously, on a schedule, without owner intervention. The full pipeline from GitHub API file fetch → LLM analysis → Yaegi sandbox verification → oricli-bot PR creation is operational and tested end-to-end on `pkg/sentinel`. The scan goroutine is context-detached and cannot be killed by HTTP connection teardown. This is not a static linter — it is a cognitive peer reviewing her own implementation and raising structured, reproducible bug reports.
 
 **What is live and operational:**
+- Adversarial Sentinel (`/v1/sentinel/*`) — red-team pre-flight, six violation types, goal + PAD wired
+- Skill Crystal Cache (`/v1/skills/crystals/*`) — LLM bypass, reputation-sorted, ~800ms → <1ms on hit
+- Sovereign Model Curator (`/v1/curator/*`) — 8-question benchmark suite, 6h polling, PocketBase results
+- Self-Audit Loop (`/v1/audit/*`) — weekly schedule + on-demand, GitHub API fetch, Yaegi verify, oricli-bot PRs
 - GoalDAG (10-node, 3-dep-level), GoalDaemon background ticker, GoalStore PocketBase persistence
 - FineTuneOrchestrator with full RunPod lifecycle, cost tracking, and `ORICLI_FINETUNE_ENABLED` gate
 - JIT Tool Forge — runtime capability expansion, PocketBase tool library, `ORICLI_FORGE_ENABLED` gate
@@ -198,9 +232,8 @@ The PAD + Critic + GoalDaemon loop is the other major milestone: Oricli can acce
 **Remaining Phase 5 work:**
 - Stripe integration for paid tier activation from the pricing page
 - API key provisioning for SMB tenants (post-Stripe webhook flow)
-- Tenant metrics dashboard (token usage, cost per tenant, request volume)
 
-**Phase 6 outlook:** Adversarial Sentinel (red-team pre-flight before every plan execution), Skill Crystallization (bypass structs for high-confidence recurring patterns), and Sovereign Model Curation (auto-benchmark + autonomous model upgrade). Phase 6 is the phase where Oricli compounds capability through experience — getting faster, getting safer, and getting smarter about her own tooling — without touching self-modification.
+**Phase 8 outlook:** Metacognitive Sentience — a self-regulation layer that detects looping, overconfidence, and hallucination at runtime using structured heuristics, pauses the active reasoning chain, and routes the trace to the ReformDaemon queue for analysis. The goal is an intelligence that corrects its own reasoning failures without owner intervention.
 
 ---
 

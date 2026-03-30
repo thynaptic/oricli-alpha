@@ -10,6 +10,50 @@ Versions track `VERSION` file. Commits listed for traceability.
 
 ---
 
+## [4.0.0] — 2026-03-30
+
+### Added
+
+#### Phase 6a — Adversarial Sentinel (`807fa40`)
+
+- **`AdversarialSentinel`** — Red-team sub-agent wired before every goal tick and PAD dispatch. Sends the original query + synthesised plan to the LLM with an adversarial system prompt. Returns a structured `SentinelReport` with typed violations across six categories: `LOGICAL_CONTRADICTION`, `HALLUCINATED_ASSUMPTION`, `CIRCULAR_REASONING`, `CONSTITUTIONAL_VIOLATION`, `SCOPE_CREEP`, `UNRESOLVABLE_DEPENDENCY`.
+- **Execution blocking** — HIGH or CRITICAL violations halt execution and surface a `revised_plan`. The sentinel defaults to `passed=true` on LLM failure so her own malfunction never hard-blocks legitimate execution.
+- **`GoalAdapter`** — Type bridge between `pkg/sentinel` and `pkg/goal` to satisfy the `SentinelChallenger` interface without creating an import cycle.
+- **API** — `POST /v1/sentinel/challenge`, `GET /v1/sentinel/stats`.
+
+#### Phase 6b — Skill Crystallization Cache (`38b9b9d`)
+
+- **`CrystalCache`** — In-memory registry of `CrystalSkill` structs: each carries a regex pattern, a response template or generator function, and a reputation score. Checked at the top of every `Generate()` call before Ollama is invoked.
+- **LLM bypass** — Pattern match returns a pre-compiled response directly (~800ms → <1ms). No Ollama call, no token spend.
+- **Reputation management** — Skills sorted descending by reputation. `MaybePromote()` elevates high-frequency SCL patterns into crystals automatically. `Evict()` prunes low-reputation entries.
+- **Zero idle overhead** — Cache check is a no-op when empty.
+- **API** — `GET/POST /v1/skills/crystals`, `DELETE /v1/skills/crystals/:id`, `GET /v1/skills/crystals/stats`.
+
+#### Phase 6c — Sovereign Model Curator (`5b95f90`)
+
+- **`ModelCurator`** — Benchmarks Ollama models against an 8-question `BenchmarkSuite`: factual recall (×2), multi-step reasoning (×2), instruction-following (×1), code generation (×2), constitutional boundary (×1 — model must refuse; answering is a FAIL).
+- **Scoring** — Each run produces correctness, latency, and constitutional compliance scores. Results persist to PocketBase `model_benchmarks` collection.
+- **`CuratorDaemon`** — Polls Ollama `/api/tags` every 6 hours. Auto-benchmarks newly discovered models. Surfaces tier-upgrade recommendations via `GET /v1/curator/recommendations`.
+- **`ORICLI_CURATOR_ENABLED` env gate** — Feature-gated; zero cost when disabled.
+- **API** — `GET /v1/curator/models`, `POST /v1/curator/benchmark`, `GET /v1/curator/recommendations`.
+
+#### Phase 7 — Self-Audit Loop / oricli-bot (`7860006`, `0b3635e`)
+
+- **`AuditScanner`** — Reads `.go` source files from `thynaptic/oricli-alpha` via the GitHub Contents API. Recursively traverses scope directories. Chunks files to 3 000 characters (line-boundary split). Sends each chunk to the LLM with a structured audit system prompt. Parses `[]Finding` from the JSON response — each finding typed with `{file, line_hint, description, category, severity, code_snippet}`.
+- **`Verifier`** — For HIGH and CRITICAL findings, asks the LLM to write a minimal Go reproduction snippet, runs it inside a Yaegi sandboxed interpreter (`gosh.RunGoSource`), and confirms whether the output contains panic or error signals.
+- **`gosh.RunGoSource`** — New method on `GoshSession` using Yaegi's `interp.New()` with captured `Stdout`/`Stderr` buffers and `recover()` wrapping for panicked interpreted code.
+- **`GitHubBot`** (`oricli-bot` account) — Creates an `audit/issue-<slug>-<ts>` branch from `main` HEAD, commits `audit/repros/<slug>_test.go` (permanent regression guard) + `audit/findings/<date>_<slug>.md` (markdown audit report), and opens a PR against `main`.
+- **`AuditDaemon`** — Weekly background scheduler + on-demand `Trigger()`. Scan goroutine passes `context.Background()` — context-detached from the HTTP request so connection teardown cannot cancel an in-progress scan.
+- **`ORICLI_AUDIT_ENABLED` env gate** — Feature-gated; all subsystems dormant when disabled.
+- **API** — `POST /v1/audit/run`, `GET /v1/audit/runs`, `GET /v1/audit/runs/:id`.
+
+### Fixed
+
+- **Audit goroutine context cancellation** — `Trigger()` was passing the Gin request context to the background scan goroutine. When the HTTP handler returned, the context was cancelled, killing the scan instantly (<1ms, 0 findings). Fixed by using `context.Background()`. (`0b3635e`)
+- **Audit repo name mismatch** — `auditRepo` was hardcoded as `thynaptic/oricli-go` (the Go module path) instead of `thynaptic/oricli-alpha` (the actual GitHub repo). Every Contents API call returned 404. (`0b3635e`)
+
+---
+
 ## [3.0.0] — 2026-03-30
 
 ### Added
