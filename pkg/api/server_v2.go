@@ -23,6 +23,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/cache"
 	"github.com/thynaptic/oricli-go/pkg/cognition"
 	"github.com/thynaptic/oricli-go/pkg/connectors/runpod"
+	tenantauth "github.com/thynaptic/oricli-go/pkg/auth"
 	"github.com/thynaptic/oricli-go/pkg/core/auth"
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/model"
@@ -221,7 +222,7 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			if _, err := s.auth.RegisterAPIKey(ctx, seedKey, "default", []string{"chat", "read", "write"}, nil); err != nil {
+			if _, err := s.auth.RegisterAPIKey(ctx, seedKey, "default", []string{"chat", "read", "write", "admin"}, nil); err != nil {
 				log.Printf("[ServerV2] seed key register error (may already exist): %v", err)
 			} else {
 				log.Printf("[ServerV2] seed API key registered")
@@ -287,7 +288,7 @@ func (s *ServerV2) setupRoutes() {
 	})
 
 	// Protected
-	protected := v1.Group("/", s.authMiddleware(), s.RateLimiter.GinMiddleware())
+	protected := v1.Group("/", s.authMiddleware(), tenantauth.TenantEnricher(s.store), s.RateLimiter.GinMiddleware())
 	{
 		protected.POST("/chat/completions", s.handleChatCompletions)
 		protected.POST("/images/generations", s.handleImageGenerations)
@@ -330,6 +331,14 @@ func (s *ServerV2) setupRoutes() {
 		protected.GET("/enterprise/learn/:job_id", s.handleEnterpriseLearnStatus)
 		protected.GET("/enterprise/knowledge/search", s.handleEnterpriseSearch)
 		protected.DELETE("/enterprise/knowledge", s.handleEnterpriseClear)
+
+		// Tenant Admin — owner-key only (AdminOnly middleware enforced)
+		admin := protected.Group("/admin", tenantauth.AdminOnly())
+		{
+			admin.POST("/tenants", s.handleAdminCreateTenant)
+			admin.GET("/tenants", s.handleAdminListTenants)
+			admin.POST("/tenants/:id/keys", s.handleAdminCreateAPIKey)
+		}
 	}
 }
 
@@ -493,9 +502,13 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Valid values: standard, cbr, pal, active, leasttomost, selfrefine, react,
 	//               debate, causal, discover, consistency, crossdomainbridge
 	if modeStr := c.GetHeader("X-Reasoning-Mode"); modeStr != "" {
+		if !tenantauth.ReasoningModeAllowed(ctx, modeStr) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "reasoning mode not permitted for this tenant: " + modeStr})
+			return
+		}
 		if forced, ok := cognition.ParseReasoningMode(modeStr); ok {
 			ctx = cognition.WithForcedReasoningMode(ctx, forced)
-			log.Printf("[OpenAIBridge] X-Reasoning-Mode: forcing engine %s", forced.String())
+			log.Printf("[OpenAIBridge] X-Reasoning-Mode: forcing engine %s (tenant=%s)", forced.String(), tenantauth.TenantID(ctx))
 		} else {
 			log.Printf("[OpenAIBridge] X-Reasoning-Mode: unrecognised value %q — ignored", modeStr)
 		}
@@ -985,7 +998,8 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// so the UI can patch the last assistant message in-place with the revised text.
 	// This also generates an RFAL DPO pair for every violation (learning signal).
 	// Zero impact on the happy path (CLEAR critique → goroutine exits silently).
-	go func(query, response, sid string) {
+	tenantID := tenantauth.TenantID(c.Request.Context())
+	go func(query, response, sid, tid string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		corrected, violated := s.Agent.SovEngine.SelfAlign(ctx, query, response)
@@ -1012,9 +1026,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		})
 		// Persist revision to reflection_log for operator audit and DPO learning.
 		if s.MemoryBank != nil && s.MemoryBank.IsEnabled() {
-			s.MemoryBank.SaveSCAIRevision(sid, "", query, response, corrected, "SCAI constitutional violation")
+			s.MemoryBank.SaveSCAIRevision(sid, tid, query, response, corrected, "SCAI constitutional violation")
 		}
-	}(lastMsg, responseText, sessionID)
+	}(lastMsg, responseText, sessionID, tenantID)
 
 	// ExploiterLeague — 3 async specialists audit every response post-stream (AlphaStar League).
 	// FactChecker, LogicAuditor, ClarityProbe each fire a ≤128-token LLM probe.
@@ -1320,6 +1334,60 @@ func (s *ServerV2) handleSovereignAuth(c *gin.Context, rawMsg, sessionKey string
 		"✅ **Sovereign session established — Level %d (%s)**\n\nCapabilities unlocked: %s\n\nSession expires in 1 hour of inactivity. Type `/auth off` to end.",
 		level, levelName, capabilities,
 	))
+}
+
+// --- Admin: Tenant Management ---
+
+func (s *ServerV2) handleAdminCreateTenant(c *gin.Context) {
+	var req struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	tenant, err := s.store.CreateTenant(c.Request.Context(), req.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, tenant)
+}
+
+func (s *ServerV2) handleAdminListTenants(c *gin.Context) {
+	tenants, err := s.store.ListTenants(c.Request.Context(), 100)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tenants": tenants})
+}
+
+func (s *ServerV2) handleAdminCreateAPIKey(c *gin.Context) {
+	tenantID := c.Param("id")
+	var req struct {
+		Scopes []string `json:"scopes"` // e.g. ["chat", "read", "write"]
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Scopes) == 0 {
+		req.Scopes = []string{"chat", "read", "write"}
+	}
+	raw, rec, err := s.auth.GenerateAPIKey(c.Request.Context(), tenantID, req.Scopes, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	// Return the raw key ONCE — it cannot be retrieved again.
+	c.JSON(http.StatusCreated, gin.H{
+		"key":       raw,
+		"key_id":    rec.ID,
+		"tenant_id": rec.TenantID,
+		"scopes":    rec.Scopes,
+		"warning":   "Store this key securely — it will not be shown again",
+	})
 }
 
 // --- DAG Goal Handlers ---
