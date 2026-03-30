@@ -298,6 +298,7 @@ func (s *ServerV2) setupRoutes() {
 
 		// DAG Goal Management
 		protected.GET("/goals", s.handleListGoals)
+		protected.GET("/goals/:id", s.handleGetGoal)
 		protected.POST("/goals", s.handleCreateGoal)
 		protected.PUT("/goals/:id", s.handleUpdateGoal)
 		protected.DELETE("/goals/:id", s.handleDeleteGoal)
@@ -488,6 +489,32 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	sovLevel := s.SovAuth.GetSessionLevel(sessionKey)
 	ctx := sovereign.WithSovereignLevel(c.Request.Context(), sovLevel)
 
+	// X-Reasoning-Mode: force a specific reasoning engine, bypassing the classifier.
+	// Valid values: standard, cbr, pal, active, leasttomost, selfrefine, react,
+	//               debate, causal, discover, consistency, crossdomainbridge
+	if modeStr := c.GetHeader("X-Reasoning-Mode"); modeStr != "" {
+		if forced, ok := cognition.ParseReasoningMode(modeStr); ok {
+			ctx = cognition.WithForcedReasoningMode(ctx, forced)
+			log.Printf("[OpenAIBridge] X-Reasoning-Mode: forcing engine %s", forced.String())
+		} else {
+			log.Printf("[OpenAIBridge] X-Reasoning-Mode: unrecognised value %q — ignored", modeStr)
+		}
+	}
+
+	// X-ORI-Manifest: load a named .ori skill/manifest file as the system prompt layer.
+	// Value is the filename stem (e.g. "senior_python_dev" loads senior_python_dev.ori).
+	// Manifest is injected ABOVE the sovereign trace, below the LivingConstitution.
+	var manifestInjection string
+	if manifestName := c.GetHeader("X-ORI-Manifest"); manifestName != "" {
+		manifestPath := filepath.Join(s.Agent.SovEngine.Profiles.Dir, manifestName+".ori")
+		if tc := service.LoadTenantConstitution(manifestPath); tc != nil && tc.HasRules() {
+			manifestInjection = tc.Inject()
+			log.Printf("[OpenAIBridge] X-ORI-Manifest: loaded %q (%d chars)", manifestName, len(manifestInjection))
+		} else {
+			log.Printf("[OpenAIBridge] X-ORI-Manifest: manifest %q not found or empty", manifestName)
+		}
+	}
+
 	// Level 2: handle !exec commands before LLM inference
 	if sovLevel >= sovereign.LevelExec && sovereign.IsExecCommand(lastMsg) {
 		result := s.ExecHandler.Handle(lastMsg)
@@ -510,7 +537,10 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// ── Semantic response cache check ────────────────────────────────────────
 	// L1 (exact hash) is always checked. L2 (vector) only when model is idle.
 	// On hit: stream the cached response as SSE (or return JSON for non-streaming).
-	if s.ResponseCache != nil && lastMsg != "" {
+	// Skip cache when caller forces a specific reasoning engine or manifest — they
+	// explicitly want fresh inference through the requested engine.
+	forcedEngine := c.GetHeader("X-Reasoning-Mode") != "" || c.GetHeader("X-ORI-Manifest") != ""
+	if !forcedEngine && s.ResponseCache != nil && lastMsg != "" {
 		if cached, hit := s.ResponseCache.Get(c.Request.Context(), lastMsg); hit {
 			chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
 			if !useSSE {
@@ -734,6 +764,10 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 	if clientSystem != "" {
 		systemContent = sovTrace + "\n\n---\n\n" + clientSystem
+	}
+	// X-ORI-Manifest injection — prepended so skill identity shapes the full response.
+	if manifestInjection != "" {
+		systemContent = manifestInjection + "\n\n---\n\n" + systemContent
 	}
 
 	// Inject relevant long-term memories as RAG context prefix.
@@ -1298,6 +1332,24 @@ func (s *ServerV2) handleListGoals(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"goals": goals, "count": len(goals)})
+}
+
+func (s *ServerV2) handleGetGoal(c *gin.Context) {
+	if s.GoalService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "goal service not available"})
+		return
+	}
+	id := c.Param("id")
+	obj, err := s.GoalService.GetObjective(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if obj == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "goal not found"})
+		return
+	}
+	c.JSON(http.StatusOK, obj)
 }
 
 func (s *ServerV2) handleCreateGoal(c *gin.Context) {

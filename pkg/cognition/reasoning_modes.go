@@ -111,3 +111,37 @@ func ClassifyReasoningMode(stimulus string, budget AdaptiveBudget) ReasoningMode
 
 	return ModeStandard
 }
+
+// ParseReasoningMode maps a case-insensitive string to a ReasoningMode.
+// Used by the X-Reasoning-Mode header to force a specific engine.
+// Returns (mode, true) on match, (ModeStandard, false) if unrecognised.
+func ParseReasoningMode(s string) (ReasoningMode, bool) {
+switch strings.ToLower(strings.TrimSpace(s)) {
+case "standard":
+return ModeStandard, true
+case "cbr":
+return ModeCBR, true
+case "pal":
+return ModePAL, true
+case "active":
+return ModeActive, true
+case "leasttomost", "least_to_most":
+return ModeLeastToMost, true
+case "selfrefine", "self_refine":
+return ModeSelfRefine, true
+case "react":
+return ModeReAct, true
+case "debate":
+return ModeDebate, true
+case "causal":
+return ModeCausal, true
+case "discover":
+return ModeDiscover, true
+case "consistency":
+return ModeConsistency, true
+case "crossdomainbridge", "cross_domain_bridge", "crossdomain":
+return ModeCrossdomainBridge, true
+default:
+return ModeStandard, false
+}
+}

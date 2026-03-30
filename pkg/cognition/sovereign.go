@@ -89,6 +89,15 @@ type EventBroadcaster interface {
 // sovereignContextKey is the context key for the authenticated sovereign level.
 type sovereignContextKey struct{}
 
+// ForcedReasoningModeKey is a context key for the X-Reasoning-Mode header.
+// When set, ProcessInference skips ClassifyReasoningMode() and uses this mode directly.
+type forcedModeKey struct{}
+
+// WithForcedReasoningMode returns a context carrying the forced reasoning mode.
+func WithForcedReasoningMode(ctx context.Context, mode ReasoningMode) context.Context {
+	return context.WithValue(ctx, forcedModeKey{}, mode)
+}
+
 // --- Pillar 5: Sovereign Engine (The Synthesis) ---
 // MemoryQuerier is satisfied by *service.MemoryBank.
 // Defined here to avoid import cycles (service → cognition, not reverse).
@@ -608,6 +617,10 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	reasoningMethod := "Standard"
 	budget := DetermineBudget(stimulus)
 	mode := ClassifyReasoningMode(stimulus, budget)
+	// X-Reasoning-Mode header override — bypasses classifier, forces specific engine.
+	if forced, ok := ctx.Value(forcedModeKey{}).(ReasoningMode); ok {
+		mode = forced
+	}
 	reasoningMethod = mode.String()
 
 	// Modes that return a final composite (not a complete response) fall through to

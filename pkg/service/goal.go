@@ -32,6 +32,8 @@ type Objective struct {
 	Metadata   map[string]interface{} `json:"metadata"`
 	DependsOn  []string               `json:"depends_on,omitempty"`  // IDs of objectives that must complete first
 	RetryCount int                    `json:"retry_count,omitempty"` // times re-queued after failure
+	Result     string                 `json:"result,omitempty"`      // final output written on completion
+	WebhookURL string                 `json:"webhook_url,omitempty"` // POST target on completed/failed
 }
 
 // IsReady returns true if all declared dependencies are in a completed state.
@@ -124,6 +126,13 @@ func pbItemToObjective(item map[string]any) Objective {
 		if json.Unmarshal(b, &meta) == nil {
 			obj.Metadata = meta
 		}
+	}
+
+	if v, ok := item["result"].(string); ok {
+		obj.Result = v
+	}
+	if v, ok := item["webhook_url"].(string); ok {
+		obj.WebhookURL = v
 	}
 
 	return obj

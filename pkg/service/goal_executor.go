@@ -1,8 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log"
+	"net/http"
 	"sort"
 	"time"
 )
@@ -169,6 +172,9 @@ func (e *GoalExecutor) awaitCompletion(ctx context.Context, objID, jobID string)
 				log.Printf("[GoalExecutor] failed to mark %s completed: %v", objID, err)
 			} else {
 				log.Printf("[GoalExecutor] Objective %s completed ✓", objID)
+				if obj, err := e.Goals.GetObjective(objID); err == nil && obj.WebhookURL != "" {
+					go fireGoalWebhook(obj.WebhookURL, objID, string(GoalCompleted), "", obj.Result)
+				}
 			}
 			return
 		case JobStatusFailed:
@@ -194,4 +200,33 @@ func (e *GoalExecutor) markFailed(objID, reason string) {
 	} else {
 		log.Printf("[GoalExecutor] Objective %s failed: %s", objID, reason)
 	}
+	if obj, err := e.Goals.GetObjective(objID); err == nil && obj.WebhookURL != "" {
+		go fireGoalWebhook(obj.WebhookURL, objID, string(GoalFailed), reason, "")
+	}
+}
+
+// fireGoalWebhook POSTs a goal terminal-state notification to the registered URL.
+// Runs in a goroutine — never blocks the execution loop.
+func fireGoalWebhook(url, goalID, status, reason, result string) {
+	payload := map[string]string{
+		"goal_id": goalID,
+		"status":  status,
+		"reason":  reason,
+		"result":  result,
+	}
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		log.Printf("[GoalWebhook] bad URL for %s: %v", goalID, err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[GoalWebhook] delivery failed for %s: %v", goalID, err)
+		return
+	}
+	resp.Body.Close()
+	log.Printf("[GoalWebhook] %s → %s (%d)", goalID, url, resp.StatusCode)
 }
