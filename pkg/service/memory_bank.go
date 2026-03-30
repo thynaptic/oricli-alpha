@@ -974,3 +974,86 @@ recs[i] = PBMemoryRecord(item)
 }
 return recs, result.TotalItems, nil
 }
+
+// ─── Age Decay Sweep ──────────────────────────────────────────────────────────
+
+// ApplyAgeDecaySweep applies a soft importance decay to non-immortal memories that
+// have aged past their volatility half-life. Called by DreamDaemon during idle cycles.
+//
+// Algorithm:
+//   - Queries up to 150 non-immortal memories, sorted by oldest creation date.
+//   - For each, computes Recency (same formula as ComputeBelief).
+//   - If Recency < 0.50 (fragment has aged past its half-life), scales importance
+//     down by decayFactor = 0.90 + 0.10×Recency  (range 0.855–0.95 for Recency 0.05–0.50).
+//   - Skips fragments where the delta is negligible (< 0.005) to reduce write load.
+//   - Immortal fragments (user_stated, gold) are never touched.
+//
+// Purpose: keeps the stored Importance field aligned with actual freshness so
+// Recycle() can correctly identify low-retention candidates over time.
+func (m *MemoryBank) ApplyAgeDecaySweep(ctx context.Context) (decayed int, err error) {
+if !m.enabled {
+return 0, nil
+}
+
+filter := `provenance != "user_stated" && provenance != "gold"`
+result, err := m.adminClient.QueryRecords(ctx, "memories", filter, "created", 150)
+if err != nil {
+return 0, fmt.Errorf("age decay sweep query: %w", err)
+}
+
+for _, item := range result.Items {
+id := stringField(item, "id")
+if id == "" {
+continue
+}
+imp := floatField(item, "importance")
+if imp <= 0 {
+continue
+}
+vol := Volatility(stringField(item, "topic_volatility"))
+if vol == "" {
+vol = InferVolatility(stringField(item, "topic"))
+}
+var created time.Time
+if ts := stringField(item, "created"); ts != "" {
+created, _ = time.Parse(time.RFC3339, ts)
+}
+if created.IsZero() {
+continue
+}
+
+halfLife := vol.halfLifeDays()
+if halfLife == 0 {
+halfLife = 180
+}
+ageDays := time.Since(created).Hours() / 24
+// Only decay past-half-life fragments.
+if ageDays <= halfLife {
+continue
+}
+// Recency score: mirrors cognition.computeRecency logic.
+overdue := ageDays - halfLife
+penalty := math.Min(overdue/(halfLife*2), 0.90)
+recency := math.Max(0.95-penalty, 0.05)
+
+// Soft decay: importance shrinks toward the recency floor.
+// decayFactor ∈ [0.855, 0.95] for recency ∈ [0.05, 0.50].
+decayFactor := 0.90 + 0.10*recency
+newImp := imp * decayFactor
+if newImp < 0.01 {
+newImp = 0.01
+}
+if math.Abs(newImp-imp) < 0.005 {
+continue // negligible change — skip write
+}
+
+if updateErr := m.adminClient.UpdateRecord(ctx, "memories", id, map[string]any{
+"importance": newImp,
+}); updateErr != nil {
+log.Printf("[memory-bank] age-decay update %s: %v", id, updateErr)
+continue
+}
+decayed++
+}
+return decayed, nil
+}

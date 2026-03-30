@@ -272,9 +272,22 @@ func (d *DreamDaemon) ConsolidateExperience() {
 
 	// ── ExploiterLeague Blackboard Integration ────────────────────────────────
 	d.consolidateLeagueFindings()
-	// Note: age-based decay is no longer needed here. Belief.Recency is computed
-	// live at query time from age+volatility — it is never persisted. Factual and
-	// Causal axes only mutate on explicit corroboration/contradiction signals.
+
+	// ── Age Decay Sweep ───────────────────────────────────────────────────────
+	// Applies soft importance decay to non-immortal memories that have aged past
+	// their volatility half-life. Keeps Recycle() working efficiently: memories
+	// with artificially high importance fields are now correctly downweighted so
+	// the retention score reflects actual staleness.
+	if d.MemoryBank != nil && d.MemoryBank.IsEnabled() {
+		sweepCtx, sweepCancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer sweepCancel()
+		if n, sweepErr := d.MemoryBank.ApplyAgeDecaySweep(sweepCtx); sweepErr != nil {
+			log.Printf("[DreamDaemon] Age decay sweep error: %v", sweepErr)
+		} else if n > 0 {
+			log.Printf("[DreamDaemon] Age decay sweep: decayed importance on %d memories.", n)
+		}
+		d.MemoryBank.Recycle()
+	}
 }
 
 // consolidateLeagueFindings reads the ExploiterLeague blackboard JSON and distills
