@@ -41,6 +41,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 	tcdpkg "github.com/thynaptic/oricli-go/pkg/tcd"
+	"github.com/thynaptic/oricli-go/pkg/goal"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
@@ -98,6 +99,10 @@ type ServerV2 struct {
 	Forge *service.ToolForgeService
 	// PAD: Parallel Agent Dispatch
 	PAD *service.PADService
+	// Goals: Sovereign Goal Engine
+	GoalDaemon  *service.GoalDaemon
+	GoalStore   *goal.GoalStore
+	GoalPlanner *goal.GoalPlanner
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -418,6 +423,16 @@ func (s *ServerV2) setupRoutes() {
 			padRoutes.GET("/sessions", s.handlePADListSessions)
 			padRoutes.GET("/sessions/:id", s.handlePADGetSession)
 			padRoutes.GET("/stats", s.handlePADStats)
+		}
+
+		// Goals: Sovereign Goal Engine (Phase 10)
+		sovereignGoals := protected.Group("/sovereign/goals")
+		{
+			sovereignGoals.POST("", s.handleGoalCreate)
+			sovereignGoals.GET("", s.handleGoalList)
+			sovereignGoals.GET("/:id", s.handleGoalGet)
+			sovereignGoals.POST("/:id/tick", s.handleGoalTick)
+			sovereignGoals.DELETE("/:id", s.handleGoalCancel)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3117,4 +3132,96 @@ c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
 return
 }
 c.JSON(http.StatusOK, s.PAD.Stats())
+}
+
+// ─── Goals: Sovereign Goal Engine ────────────────────────────────────────────
+
+// POST /v1/goals — create a new sovereign goal
+func (s *ServerV2) handleGoalCreate(c *gin.Context) {
+if s.GoalStore == nil || s.GoalPlanner == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
+return
+}
+var req struct {
+Objective string `json:"objective" binding:"required"`
+Context   string `json:"context"`
+MaxNodes  int    `json:"max_nodes"`
+}
+if err := c.ShouldBindJSON(&req); err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+return
+}
+
+dag, err := s.GoalPlanner.Plan(c.Request.Context(), req.Objective, req.Context, req.MaxNodes)
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+if err := s.GoalStore.Save(c.Request.Context(), dag); err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+
+// Trigger a manual daemon tick so goal starts immediately (non-blocking)
+if s.GoalDaemon != nil {
+select {
+case s.GoalDaemon.ManualTick <- struct{}{}:
+default:
+}
+}
+
+c.JSON(http.StatusCreated, dag)
+}
+
+// GET /v1/goals — list recent goals
+func (s *ServerV2) handleGoalList(c *gin.Context) {
+if s.GoalStore == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
+return
+}
+goals := s.GoalStore.List(20)
+c.JSON(http.StatusOK, gin.H{"goals": goals, "count": len(goals)})
+}
+
+// GET /v1/goals/:id — get goal detail
+func (s *ServerV2) handleGoalGet(c *gin.Context) {
+if s.GoalStore == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
+return
+}
+id := c.Param("id")
+g, err := s.GoalStore.Load(c.Request.Context(), id)
+if err != nil {
+c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, g)
+}
+
+// POST /v1/goals/:id/tick — manually advance a specific goal
+func (s *ServerV2) handleGoalTick(c *gin.Context) {
+if s.GoalStore == nil || s.GoalDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
+return
+}
+select {
+case s.GoalDaemon.ManualTick <- struct{}{}:
+c.JSON(http.StatusAccepted, gin.H{"status": "tick triggered"})
+default:
+c.JSON(http.StatusTooManyRequests, gin.H{"error": "tick already queued"})
+}
+}
+
+// DELETE /v1/goals/:id — cancel a goal
+func (s *ServerV2) handleGoalCancel(c *gin.Context) {
+if s.GoalStore == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
+return
+}
+id := c.Param("id")
+if err := s.GoalStore.Cancel(c.Request.Context(), id); err != nil {
+c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{"status": "cancelled", "id": id})
 }

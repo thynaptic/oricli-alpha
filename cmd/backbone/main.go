@@ -27,6 +27,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/tcd"
 	"github.com/thynaptic/oricli-go/pkg/forge"
 	"github.com/thynaptic/oricli-go/pkg/pad"
+	"github.com/thynaptic/oricli-go/pkg/goal"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 )
@@ -448,6 +449,33 @@ func main() {
 			apiServer.PAD.MaxWorkers, pad.MaxWorkerConcurrency)
 	}
 
+	// ── Goal Engine: Sovereign Goal Engine (opt-in via ORICLI_GOALS_ENABLED=true) ──
+	if os.Getenv("ORICLI_GOALS_ENABLED") == "true" {
+		goalPBClient := pb.NewClientFromEnv()
+		goalStore := goal.NewGoalStore(goalPBClient)
+		if err := goalStore.Bootstrap(context.Background()); err != nil {
+			log.Printf("[Goals] store bootstrap warning: %v", err)
+		}
+		goalPlanner := goal.NewGoalPlanner(genService)
+		goalAcceptor := goal.NewGoalAcceptor(genService)
+
+		// PADDispatcher adapter — bridges GoalExecutor to PADService
+		var padDispatcher goal.PADDispatcher
+		if apiServer.PAD != nil {
+			padDispatcher = &padServiceAdapter{pad: apiServer.PAD}
+		}
+
+		goalExecutor := goal.NewGoalExecutor(padDispatcher, goalStore)
+		goalDaemon := service.NewGoalDaemon(goalExecutor, goalAcceptor, goalStore)
+
+		apiServer.GoalDaemon = goalDaemon
+		apiServer.GoalStore = goalStore
+		apiServer.GoalPlanner = goalPlanner
+
+		go goalDaemon.Run()
+		log.Printf("[Goals] Sovereign Goal Engine active — interval: %s", os.Getenv("ORICLI_GOAL_INTERVAL"))
+	}
+
 	go apiServer.Start()
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)
 
@@ -468,4 +496,23 @@ func main() {
 	mb.Close()
 	swarmBus.Stop()
 	log.Println("[System] Oricli-Alpha Hive OS Offline.")
+}
+
+// ─── PAD → Goal adapter ───────────────────────────────────────────────────────
+
+// padServiceAdapter adapts *service.PADService to goal.PADDispatcher.
+type padServiceAdapter struct {
+pad *service.PADService
+}
+
+func (a *padServiceAdapter) Dispatch(ctx context.Context, query string, maxWorkers int) (goal.PADSession, error) {
+session, err := a.pad.Dispatch(ctx, query, maxWorkers)
+if err != nil || session == nil {
+return goal.PADSession{}, err
+}
+return goal.PADSession{
+ID:        session.ID,
+Synthesis: session.Synthesis,
+Status:    string(session.Status),
+}, nil
 }
