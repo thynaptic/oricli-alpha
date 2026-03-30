@@ -252,3 +252,43 @@ func (s *Session) WriteFile(path string, data []byte) error {
 func (s *Session) ReadFile(path string) ([]byte, error) {
 	return afero.ReadFile(s.fs, path)
 }
+
+// RunGoSource interprets a Go source program (package main) using the Yaegi
+// interpreter. Returns stdout output, stderr/panic output, and any execution error.
+// This is the Verifier's primary entry point — sandboxed, no subprocess needed.
+func (s *Session) RunGoSource(ctx context.Context, source string) (stdout, stderr string, err error) {
+var outBuf, errBuf bytes.Buffer
+
+i := interp.New(interp.Options{
+Stdout: &outBuf,
+Stderr: &errBuf,
+})
+i.Use(stdlib.Symbols)
+
+// Recover from panics inside the interpreted code
+defer func() {
+if r := recover(); r != nil {
+stderr = fmt.Sprintf("panic: %v", r)
+err = fmt.Errorf("panic in interpreted code: %v", r)
+}
+}()
+
+if _, evalErr := i.Eval(source); evalErr != nil {
+return outBuf.String(), errBuf.String() + evalErr.Error(), evalErr
+}
+
+// Call main.main() if it exists
+mainFn, evalErr := i.Eval("main.main")
+if evalErr != nil {
+return outBuf.String(), errBuf.String() + evalErr.Error(), evalErr
+}
+
+fn, ok := mainFn.Interface().(func())
+if !ok {
+execErr := fmt.Errorf("main.main has unexpected type")
+return outBuf.String(), errBuf.String(), execErr
+}
+
+fn()
+return outBuf.String(), errBuf.String(), nil
+}

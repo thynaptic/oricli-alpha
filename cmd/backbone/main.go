@@ -33,6 +33,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/finetune"
 	"github.com/thynaptic/oricli-go/pkg/sentinel"
 	"github.com/thynaptic/oricli-go/pkg/curator"
+	"github.com/thynaptic/oricli-go/pkg/audit"
 )
 
 func bootstrapAPIKey(st *memory.MemoryStore) string {
@@ -510,6 +511,16 @@ func main() {
 		apiServer.Curator = c
 		c.StartDaemon(context.Background())
 		log.Printf("[Curator] Sovereign Model Curation active — auto-benchmarking Ollama models every 6h")
+	}
+
+	// ── Audit: Self-Audit Loop (opt-in via ORICLI_AUDIT_ENABLED=true) ──
+	if os.Getenv("ORICLI_AUDIT_ENABLED") == "true" {
+		ghToken := os.Getenv("GITHUB_TOKEN")
+		botToken := os.Getenv("ORICLI_BOT_GITHUB_TOKEN")
+		auditDaemon := audit.NewAuditDaemon(agentService.GenService.DirectOllamaSingle, ghToken, botToken)
+		apiServer.AuditDaemon = auditDaemon
+		auditDaemon.StartDaemon(context.Background())
+		log.Printf("[Audit] Self-Audit Loop active — scanning own source, verifying via Gosh, PRs via oricli-bot")
 	}
 
 	go apiServer.Start()

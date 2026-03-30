@@ -45,6 +45,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/goal"
 	"github.com/thynaptic/oricli-go/pkg/finetune"
 	"github.com/thynaptic/oricli-go/pkg/curator"
+	"github.com/thynaptic/oricli-go/pkg/audit"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
@@ -114,6 +115,8 @@ type ServerV2 struct {
 	CrystalCache *scl.CrystalCache
 	// Curator: Sovereign Model Curation — auto-benchmark + recommendation engine
 	Curator *curator.ModelCurator
+	// AuditDaemon: Self-Audit Loop — scans own source, verifies via Gosh, opens PRs
+	AuditDaemon *audit.AuditDaemon
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -476,6 +479,14 @@ func (s *ServerV2) setupRoutes() {
 			curatorRoutes.GET("/models", s.handleCuratorModels)
 			curatorRoutes.POST("/benchmark", s.handleCuratorBenchmark)
 			curatorRoutes.GET("/recommendations", s.handleCuratorRecommendations)
+		}
+
+		// Audit: Self-Audit Loop
+		auditRoutes := protected.Group("/audit")
+		{
+			auditRoutes.POST("/run", s.handleAuditRun)
+			auditRoutes.GET("/runs", s.handleAuditListRuns)
+			auditRoutes.GET("/runs/:id", s.handleAuditGetRun)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3559,4 +3570,48 @@ if recs == nil {
 recs = []curator.Recommendation{}
 }
 c.JSON(http.StatusOK, gin.H{"recommendations": recs})
+}
+
+// ---------------------------------------------------------------------------
+// Audit: Self-Audit Loop handlers
+// ---------------------------------------------------------------------------
+
+// POST /v1/audit/run — trigger an audit run (async)
+func (s *ServerV2) handleAuditRun(c *gin.Context) {
+if s.AuditDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "audit not enabled — set ORICLI_AUDIT_ENABLED=true"})
+return
+}
+var req struct {
+Scope []string `json:"scope"` // e.g. ["pkg/goal", "pkg/pad"] — empty = full pkg/
+}
+_ = c.ShouldBindJSON(&req)
+runID := s.AuditDaemon.Trigger(c.Request.Context(), req.Scope)
+c.JSON(http.StatusAccepted, gin.H{
+"message": "audit run queued — poll GET /v1/audit/runs/" + runID,
+"run_id":  runID,
+})
+}
+
+// GET /v1/audit/runs — list audit runs
+func (s *ServerV2) handleAuditListRuns(c *gin.Context) {
+if s.AuditDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "audit not enabled"})
+return
+}
+c.JSON(http.StatusOK, gin.H{"runs": s.AuditDaemon.ListRuns()})
+}
+
+// GET /v1/audit/runs/:id — get a specific run with findings
+func (s *ServerV2) handleAuditGetRun(c *gin.Context) {
+if s.AuditDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "audit not enabled"})
+return
+}
+run := s.AuditDaemon.GetRun(c.Param("id"))
+if run == nil {
+c.JSON(http.StatusNotFound, gin.H{"error": "run not found"})
+return
+}
+c.JSON(http.StatusOK, run)
 }
