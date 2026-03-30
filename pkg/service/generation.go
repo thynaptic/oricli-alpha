@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/thynaptic/oricli-go/pkg/scl"
 )
 
 // GenerationService handles direct requests to Ollama for high-speed prose
@@ -28,6 +30,7 @@ type GenerationService struct {
 	RunPodMgr      *RunPodManager           // KoboldCpp-based (code/research tiers, legacy)
 	PrimaryMgr     *PrimaryInferenceManager // vLLM-based (all tiers, RUNPOD_PRIMARY=true)
 	Governor       *CostGovernor            // daily spend cap — blocks RunPod escalation when exhausted
+	CrystalCache   *scl.CrystalCache        // Skill Crystallization — LLM-bypass for proven patterns
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -162,6 +165,21 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 	model := s.DefaultModel
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
+	}
+
+	// ── Skill Crystallization: LLM-bypass for proven patterns ──
+	if s.CrystalCache != nil {
+		if resp, skillID, hit := s.CrystalCache.Match(prompt); hit {
+			log.Printf("[Crystal] HIT skill=%s — LLM bypassed", skillID)
+			return map[string]interface{}{
+				"success":  true,
+				"text":     resp,
+				"response": resp,
+				"model":    "crystal/" + skillID,
+				"method":   "crystal_bypass",
+				"confidence": 0.99,
+			}, nil
+		}
 	}
 
 	// When RUNPOD_PRIMARY=true and the pod is warm, route Generate through the 32B

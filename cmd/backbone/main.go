@@ -497,6 +497,12 @@ func main() {
 		log.Printf("[Sentinel] Adversarial Sentinel active — red-teaming goal ticks + manual /v1/sentinel/challenge")
 	}
 
+	// ── Crystal Cache: Skill Crystallization (always-on, zero-overhead when empty) ──
+	crystalCache := scl.NewCrystalCache()
+	apiServer.CrystalCache = crystalCache
+	agentService.GenService.CrystalCache = crystalCache
+	log.Printf("[Crystal] Skill Crystallization Cache active — LLM bypass ready for high-reputation patterns")
+
 	go apiServer.Start()
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)
 

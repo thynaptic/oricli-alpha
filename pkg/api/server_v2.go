@@ -109,6 +109,8 @@ type ServerV2 struct {
 	FineTune *service.FineTuneService
 	// Sentinel: Adversarial Sentinel — red-team pre-flight
 	Sentinel *sentinel.AdversarialSentinel
+	// CrystalCache: Skill Crystallization — LLM-bypass for high-reputation patterns
+	CrystalCache *scl.CrystalCache
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -454,6 +456,15 @@ func (s *ServerV2) setupRoutes() {
 		{
 			sentinelRoutes.POST("/challenge", s.handleSentinelChallenge)
 			sentinelRoutes.GET("/stats", s.handleSentinelStats)
+		}
+
+		// Crystal: Skill Crystallization cache
+		crystalRoutes := protected.Group("/skills/crystals")
+		{
+			crystalRoutes.GET("", s.handleCrystalList)
+			crystalRoutes.POST("", s.handleCrystalRegister)
+			crystalRoutes.DELETE("/:id", s.handleCrystalEvict)
+			crystalRoutes.GET("/stats", s.handleCrystalStats)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3419,4 +3430,75 @@ func (s *ServerV2) handleSentinelStats(c *gin.Context) {
 		"blocked":           stats.Blocked,
 		"last_challenge_at": stats.LastChallengeAt,
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Crystal: Skill Crystallization handlers
+// ---------------------------------------------------------------------------
+
+// GET /v1/skills/crystals — list all registered crystals
+func (s *ServerV2) handleCrystalList(c *gin.Context) {
+if s.CrystalCache == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
+return
+}
+c.JSON(http.StatusOK, gin.H{"crystals": s.CrystalCache.List()})
+}
+
+// POST /v1/skills/crystals — register a new crystal skill
+func (s *ServerV2) handleCrystalRegister(c *gin.Context) {
+if s.CrystalCache == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
+return
+}
+var req struct {
+ID              string  `json:"id" binding:"required"`
+Name            string  `json:"name"`
+Description     string  `json:"description"`
+Pattern         string  `json:"pattern" binding:"required"`
+TemplateBody    string  `json:"template_body"`
+ReputationScore float64 `json:"reputation_score"`
+HitCount        int     `json:"hit_count"`
+}
+if err := c.ShouldBindJSON(&req); err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+return
+}
+skill := scl.CrystalSkill{
+ID:              req.ID,
+Name:            req.Name,
+Description:     req.Description,
+Pattern:         req.Pattern,
+TemplateBody:    req.TemplateBody,
+ReputationScore: req.ReputationScore,
+HitCount:        req.HitCount,
+}
+if err := s.CrystalCache.Register(skill); err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusCreated, gin.H{"message": "crystal registered", "id": req.ID})
+}
+
+// DELETE /v1/skills/crystals/:id — evict a crystal
+func (s *ServerV2) handleCrystalEvict(c *gin.Context) {
+if s.CrystalCache == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
+return
+}
+id := c.Param("id")
+if !s.CrystalCache.Evict(id) {
+c.JSON(http.StatusNotFound, gin.H{"error": "crystal not found: " + id})
+return
+}
+c.JSON(http.StatusOK, gin.H{"message": "evicted", "id": id})
+}
+
+// GET /v1/skills/crystals/stats — cache-level telemetry
+func (s *ServerV2) handleCrystalStats(c *gin.Context) {
+if s.CrystalCache == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
+return
+}
+c.JSON(http.StatusOK, s.CrystalCache.Stats())
 }
