@@ -24,6 +24,7 @@ import (
 	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
+	"github.com/thynaptic/oricli-go/pkg/swarm"
 )
 
 func bootstrapAPIKey(st *memory.MemoryStore) string {
@@ -260,6 +261,49 @@ func main() {
 	go service.SeedIdentity(apiServer.MemoryBank)
 	log.Println("[Boot] Identity seed queued.")
 	
+	// ── SPP: Sovereign Peer Protocol (opt-in via ORICLI_SWARM_ENABLED=true) ──
+	if os.Getenv("ORICLI_SWARM_ENABLED") == "true" {
+		stateDir := "/home/mike/Mavaia/.oricli"
+		nodeIdentity, err := swarm.LoadOrCreateIdentity(stateDir)
+		if err != nil {
+			log.Printf("[Swarm] identity load error: %v — swarm disabled", err)
+		} else {
+			constitutionText := apiServer.Constitution.Inject()
+
+			reputation := swarm.NewReputationStore(nil, nil) // LMDB writeback wired after mb.Close() is plumbed
+			monitor := swarm.NewSwarmMonitor(nodeIdentity, reputation, nil)
+
+			marketplace := swarm.NewMarketplace(nodeIdentity, nil, nil, nil) // registry injected below
+
+			combinedHandler := swarm.MessageHandler(func(peer *swarm.PeerConn, env swarm.SwarmEnvelope) {
+				switch env.Type {
+				case swarm.EnvTypeHealthBeacon:
+					var beacon swarm.SwarmHealthBeacon
+					if b, err := env.UnmarshalPayload(&beacon); b && err == nil {
+						monitor.IngestBeacon(beacon)
+					}
+				default:
+					marketplace.HandleEnvelope(peer, env)
+				}
+			})
+
+			registry := swarm.NewPeerRegistry(nodeIdentity, constitutionText, combinedHandler)
+			marketplace.SetRegistry(registry)
+			apiServer.SwarmRegistry = registry
+			apiServer.SwarmMonitor = monitor
+
+			swarmCtx, swarmCancel := context.WithCancel(context.Background())
+			_ = swarmCancel
+
+			if seedURL := os.Getenv("THYNAPTIC_PEER_REGISTRY_URL"); seedURL != "" {
+				go registry.Bootstrap(swarmCtx, seedURL)
+			}
+			go monitor.RunBeaconPublisher(swarmCtx, registry, func() int { return 0 })
+
+			log.Printf("[Swarm] Node %s online — SPP active", nodeIdentity.ShortID())
+		}
+	}
+
 	go apiServer.Start()
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)
 

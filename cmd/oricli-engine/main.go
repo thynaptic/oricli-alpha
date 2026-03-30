@@ -47,6 +47,7 @@ import (
 	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
+	"github.com/thynaptic/oricli-go/pkg/swarm"
 )
 
 const (
@@ -175,7 +176,44 @@ func main() {
 	// ── 12. Identity Seed ────────────────────────────────────────────────────
 	go service.SeedIdentity(apiServer.MemoryBank)
 
-	// ── 13. Start API ─────────────────────────────────────────────────────────
+	// ── 13. SPP: Sovereign Peer Protocol (opt-in) ─────────────────────────────
+	if os.Getenv("ORICLI_SWARM_ENABLED") == "true" {
+		nodeIdentity, err := swarm.LoadOrCreateIdentity(stateDir)
+		if err != nil {
+			log.Printf("[Swarm] identity load error: %v — swarm disabled", err)
+		} else {
+			constitutionText := apiServer.Constitution.Inject()
+			reputation := swarm.NewReputationStore(nil, nil)
+			swarmMonitor := swarm.NewSwarmMonitor(nodeIdentity, reputation, nil)
+			marketplace := swarm.NewMarketplace(nodeIdentity, nil, nil, nil)
+
+			combinedHandler := swarm.MessageHandler(func(peer *swarm.PeerConn, env swarm.SwarmEnvelope) {
+				switch env.Type {
+				case swarm.EnvTypeHealthBeacon:
+					var beacon swarm.SwarmHealthBeacon
+					if ok, err := env.UnmarshalPayload(&beacon); ok && err == nil {
+						swarmMonitor.IngestBeacon(beacon)
+					}
+				default:
+					marketplace.HandleEnvelope(peer, env)
+				}
+			})
+
+			registry := swarm.NewPeerRegistry(nodeIdentity, constitutionText, combinedHandler)
+			marketplace.SetRegistry(registry)
+			apiServer.SwarmRegistry = registry
+			apiServer.SwarmMonitor = swarmMonitor
+
+			swarmCtx, _ := context.WithCancel(context.Background())
+			if seedURL := os.Getenv("THYNAPTIC_PEER_REGISTRY_URL"); seedURL != "" {
+				go registry.Bootstrap(swarmCtx, seedURL)
+			}
+			go swarmMonitor.RunBeaconPublisher(swarmCtx, registry, func() int { return 0 })
+			log.Printf("[Swarm] Node %s online — SPP active", nodeIdentity.ShortID())
+		}
+	}
+
+	// ── 14. Start API ─────────────────────────────────────────────────────────
 	go apiServer.Start()
 	log.Printf("[Engine] Sovereign API Gateway live on :%d", port)
 	log.Printf("[Engine] OpenAI-compatible: POST http://localhost:%d/v1/chat/completions", port)

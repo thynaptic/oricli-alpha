@@ -38,6 +38,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
+	"github.com/thynaptic/oricli-go/pkg/swarm"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
@@ -68,6 +69,10 @@ type ServerV2 struct {
 	Constitution     *service.LivingConstitution
 	entLayers        sync.Map // namespace -> *enterprise.Layer cache
 	entJobs          sync.Map // job_id -> *enterpriseLearnJob
+
+	// SPP: Sovereign Peer Protocol
+	SwarmRegistry *swarm.PeerRegistry
+	SwarmMonitor  *swarm.SwarmMonitor
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -340,7 +345,18 @@ func (s *ServerV2) setupRoutes() {
 			admin.GET("/tenants", s.handleAdminListTenants)
 			admin.POST("/tenants/:id/keys", s.handleAdminCreateAPIKey)
 		}
+
+		// SPP: Sovereign Peer Protocol — swarm management (admin only)
+		swarmAdmin := protected.Group("/swarm", tenantauth.AdminOnly())
+		{
+			swarmAdmin.GET("/peers", s.handleSwarmPeers)
+			swarmAdmin.GET("/health", s.handleSwarmHealth)
+		}
+		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
+
+	// Swarm connect endpoint lives outside authMiddleware — auth is the SPP handshake itself.
+	v1.GET("/swarm/connect", s.handleSwarmConnect)
 }
 
 func (s *ServerV2) handleHealth(c *gin.Context) {
@@ -2566,4 +2582,46 @@ s.Orchestrator.DisableModule(slug)
 }
 
 return nil
+}
+
+// ---------------------------------------------------------------------------
+// SPP Swarm Handlers
+// ---------------------------------------------------------------------------
+
+// handleSwarmConnect upgrades the HTTP connection to a WebSocket SPP peer session.
+// Auth is the SPP handshake itself (Ed25519 + Constitutional Attestation).
+func (s *ServerV2) handleSwarmConnect(c *gin.Context) {
+if s.SwarmRegistry == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "swarm not enabled — set ORICLI_SWARM_ENABLED=true"})
+return
+}
+s.SwarmRegistry.HandleUpgrade(c.Writer, c.Request)
+}
+
+// handleSwarmPeers returns all connected peers and their reputation scores (admin only).
+func (s *ServerV2) handleSwarmPeers(c *gin.Context) {
+if s.SwarmRegistry == nil {
+c.JSON(http.StatusOK, gin.H{"peers": []any{}, "swarm_enabled": false})
+return
+}
+ids := s.SwarmRegistry.ConnectedPeers()
+c.JSON(http.StatusOK, gin.H{
+"swarm_enabled":   true,
+"connected_peers": len(ids),
+"peer_ids":        ids,
+})
+}
+
+// handleSwarmHealth returns the aggregate swarm health report (admin only).
+func (s *ServerV2) handleSwarmHealth(c *gin.Context) {
+if s.SwarmMonitor == nil {
+c.JSON(http.StatusOK, gin.H{"swarm_enabled": false})
+return
+}
+var ids []string
+if s.SwarmRegistry != nil {
+ids = s.SwarmRegistry.ConnectedPeers()
+}
+report := s.SwarmMonitor.Report(ids)
+c.JSON(http.StatusOK, report)
 }
