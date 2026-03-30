@@ -25,6 +25,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/tcd"
+	"github.com/thynaptic/oricli-go/pkg/forge"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 )
@@ -395,6 +396,40 @@ func main() {
 		apiServer.TCDGapDetector = tcdDetector
 		go tcdDaemon.Run()
 		log.Println("[TCD] Temporal Curriculum Daemon starting")
+	}
+
+	// ── Forge: JIT Tool Forge (opt-in via ORICLI_FORGE_ENABLED=true) ──────────
+	if os.Getenv("ORICLI_FORGE_ENABLED") == "true" {
+		forgePB := pb.NewClientFromEnv()
+		forgeLib := forge.NewToolLibrary(forgePB, forge.DefaultMaxTools)
+		forgeCtx, forgeCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		if err := forgeLib.Bootstrap(forgeCtx); err != nil {
+			log.Printf("[Forge] library bootstrap warning: %v", err)
+		}
+		forgeCancel()
+
+		constitution := forge.NewCodeConstitution()
+
+		// Wire GoshModule as the sandbox verifier.
+		var verifier *forge.ToolVerifier
+		if goshMod != nil {
+			verifier = forge.NewToolVerifier(goshMod)
+		}
+
+		// Create a standalone ToolService for the forge (registered tools
+		// live here and are invocable via the forge endpoints).
+		forgeTool := service.NewToolService(orch)
+
+		gate := forge.NewPOCGate(nil, nil, constitution)
+		generator := forge.NewToolGenerator(nil, constitution)
+
+		forgeSvc := service.NewToolForgeService(gate, generator, constitution, verifier, forgeLib, forgeTool)
+		forgeBootCtx, forgeBootCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		forgeSvc.LoadDefaultTools(forgeBootCtx)
+		forgeBootCancel()
+
+		apiServer.Forge = forgeSvc
+		log.Printf("[Forge] JIT Tool Forge active — library: %d tools, max: %d", forgeLib.Size(), forge.DefaultMaxTools)
 	}
 
 	go apiServer.Start()

@@ -94,6 +94,8 @@ type ServerV2 struct {
 	TCDGapDetector interface {
 		Scan(ctx context.Context) (int, error)
 	}
+	// Forge: JIT Tool Forge
+	Forge *service.ToolForgeService
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -395,6 +397,16 @@ func (s *ServerV2) setupRoutes() {
 			tcdAdmin.GET("/gaps", s.handleTCDGaps)
 			tcdAdmin.GET("/domains/:id/lineage", s.handleTCDDomainLineage)
 			tcdAdmin.GET("/lineage", s.handleTCDEvolutionTree)
+		}
+		// Forge: JIT Tool Forge admin endpoints
+		forgeAdmin := protected.Group("/forge", tenantauth.AdminOnly())
+		{
+			forgeAdmin.GET("/tools", s.handleForgeListTools)
+			forgeAdmin.DELETE("/tools/:name", s.handleForgeDeleteTool)
+			forgeAdmin.GET("/tools/:name/source", s.handleForgeToolSource)
+			forgeAdmin.POST("/tools/:name/invoke", s.handleForgeInvokeTool)
+			forgeAdmin.GET("/stats", s.handleForgeStats)
+			forgeAdmin.POST("/forge", s.handleForgeTryForge)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -2931,4 +2943,109 @@ return
 }
 tree := s.TCDManifest.GetEvolutionTree()
 c.JSON(http.StatusOK, gin.H{"evolution_tree": tree})
+}
+
+// ── Forge Admin Handlers ──────────────────────────────────────────────────────
+
+// GET /v1/forge/tools — list all tools in the library
+func (s *ServerV2) handleForgeListTools(c *gin.Context) {
+if s.Forge == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+return
+}
+tools := s.Forge.Library.All()
+c.JSON(http.StatusOK, gin.H{"tools": tools, "count": len(tools), "library_size": s.Forge.LibrarySize()})
+}
+
+// DELETE /v1/forge/tools/:name — evict a tool from the library
+func (s *ServerV2) handleForgeDeleteTool(c *gin.Context) {
+if s.Forge == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+return
+}
+name := c.Param("name")
+ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+defer cancel()
+if err := s.Forge.Library.Delete(ctx, name); err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{"deleted": name})
+}
+
+// GET /v1/forge/tools/:name/source — inspect generated bash source
+func (s *ServerV2) handleForgeToolSource(c *gin.Context) {
+if s.Forge == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+return
+}
+name := c.Param("name")
+tool, ok := s.Forge.Library.Load(name)
+if !ok {
+c.JSON(http.StatusNotFound, gin.H{"error": "tool not found"})
+return
+}
+c.JSON(http.StatusOK, gin.H{"name": name, "source": tool.Source, "description": tool.Description})
+}
+
+// POST /v1/forge/tools/:name/invoke — manually invoke a forge tool
+// Body: {"args": {...}}
+func (s *ServerV2) handleForgeInvokeTool(c *gin.Context) {
+if s.Forge == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+return
+}
+name := c.Param("name")
+var body struct {
+Args map[string]interface{} `json:"args"`
+}
+if err := c.ShouldBindJSON(&body); err != nil {
+body.Args = map[string]interface{}{}
+}
+ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+defer cancel()
+out, err := s.Forge.InvokeJITTool(ctx, name, body.Args)
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{"result": out, "tool": name})
+}
+
+// GET /v1/forge/stats — pipeline metrics
+func (s *ServerV2) handleForgeStats(c *gin.Context) {
+if s.Forge == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+return
+}
+stats := s.Forge.Stats()
+c.JSON(http.StatusOK, gin.H{
+"stats":        stats,
+"library_size": s.Forge.LibrarySize(),
+})
+}
+
+// POST /v1/forge/forge — manually trigger a forge attempt
+// Body: {"task": "...", "tried_tools": ["tool_a", "tool_b"]}
+func (s *ServerV2) handleForgeTryForge(c *gin.Context) {
+if s.Forge == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+return
+}
+var body struct {
+Task        string   `json:"task"`
+TriedTools  []string `json:"tried_tools"`
+}
+if err := c.ShouldBindJSON(&body); err != nil || body.Task == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "task required"})
+return
+}
+ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+defer cancel()
+tool, err := s.Forge.TryForge(ctx, body.Task, body.TriedTools)
+if err != nil {
+c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusCreated, gin.H{"tool": tool, "status": "forged"})
 }
