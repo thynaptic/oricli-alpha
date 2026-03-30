@@ -3080,24 +3080,39 @@ c.JSON(http.StatusCreated, gin.H{"tool": tool, "status": "forged"})
 
 // POST /v1/pad/dispatch — submit a query for parallel dispatch
 func (s *ServerV2) handlePADDispatch(c *gin.Context) {
-if s.PAD == nil || !s.PAD.Enabled {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
-return
-}
-var req struct {
-Query      string `json:"query" binding:"required"`
-MaxWorkers int    `json:"max_workers"`
-}
-if err := c.ShouldBindJSON(&req); err != nil {
-c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-return
-}
-session, err := s.PAD.Dispatch(c.Request.Context(), req.Query, req.MaxWorkers)
-if err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusOK, session)
+	if s.PAD == nil || !s.PAD.Enabled {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
+		return
+	}
+	var req struct {
+		Query      string `json:"query" binding:"required"`
+		MaxWorkers int    `json:"max_workers"`
+		Critique   bool   `json:"critique"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Critique {
+		session, report, err := s.PAD.DispatchWithCritique(c.Request.Context(), req.Query, req.MaxWorkers)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"session":         session,
+			"critique_report": report,
+		})
+		return
+	}
+
+	session, err := s.PAD.Dispatch(c.Request.Context(), req.Query, req.MaxWorkers)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, session)
 }
 
 // GET /v1/pad/sessions — list recent sessions (last 20)

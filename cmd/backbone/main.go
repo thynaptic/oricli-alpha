@@ -445,6 +445,7 @@ func main() {
 			log.Printf("[PAD] session store bootstrap warning: %v", err)
 		}
 		apiServer.PAD = service.NewPADService(padDecomposer, padPool, padSynthesizer, padSessions, swarmBus)
+		apiServer.PAD.EnableCritique(genService)
 		log.Printf("[PAD] Parallel Agent Dispatch active — concurrency: %d/%d",
 			apiServer.PAD.MaxWorkers, pad.MaxWorkerConcurrency)
 	}
