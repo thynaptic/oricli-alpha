@@ -32,6 +32,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 	"github.com/thynaptic/oricli-go/pkg/finetune"
 	"github.com/thynaptic/oricli-go/pkg/sentinel"
+	"github.com/thynaptic/oricli-go/pkg/curator"
 )
 
 func bootstrapAPIKey(st *memory.MemoryStore) string {
@@ -502,6 +503,14 @@ func main() {
 	apiServer.CrystalCache = crystalCache
 	agentService.GenService.CrystalCache = crystalCache
 	log.Printf("[Crystal] Skill Crystallization Cache active — LLM bypass ready for high-reputation patterns")
+
+	// ── Curator: Sovereign Model Curation (opt-in via ORICLI_CURATOR_ENABLED=true) ──
+	if os.Getenv("ORICLI_CURATOR_ENABLED") == "true" {
+		c := curator.New()
+		apiServer.Curator = c
+		c.StartDaemon(context.Background())
+		log.Printf("[Curator] Sovereign Model Curation active — auto-benchmarking Ollama models every 6h")
+	}
 
 	go apiServer.Start()
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)

@@ -44,6 +44,7 @@ import (
 	tcdpkg "github.com/thynaptic/oricli-go/pkg/tcd"
 	"github.com/thynaptic/oricli-go/pkg/goal"
 	"github.com/thynaptic/oricli-go/pkg/finetune"
+	"github.com/thynaptic/oricli-go/pkg/curator"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
@@ -111,6 +112,8 @@ type ServerV2 struct {
 	Sentinel *sentinel.AdversarialSentinel
 	// CrystalCache: Skill Crystallization — LLM-bypass for high-reputation patterns
 	CrystalCache *scl.CrystalCache
+	// Curator: Sovereign Model Curation — auto-benchmark + recommendation engine
+	Curator *curator.ModelCurator
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -465,6 +468,14 @@ func (s *ServerV2) setupRoutes() {
 			crystalRoutes.POST("", s.handleCrystalRegister)
 			crystalRoutes.DELETE("/:id", s.handleCrystalEvict)
 			crystalRoutes.GET("/stats", s.handleCrystalStats)
+		}
+
+		// Curator: Sovereign Model Curation
+		curatorRoutes := protected.Group("/curator")
+		{
+			curatorRoutes.GET("/models", s.handleCuratorModels)
+			curatorRoutes.POST("/benchmark", s.handleCuratorBenchmark)
+			curatorRoutes.GET("/recommendations", s.handleCuratorRecommendations)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3501,4 +3512,51 @@ c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"
 return
 }
 c.JSON(http.StatusOK, s.CrystalCache.Stats())
+}
+
+// ---------------------------------------------------------------------------
+// Curator: Sovereign Model Curation handlers
+// ---------------------------------------------------------------------------
+
+// GET /v1/curator/models — all benchmarked models sorted by score
+func (s *ServerV2) handleCuratorModels(c *gin.Context) {
+if s.Curator == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "curator not enabled — set ORICLI_CURATOR_ENABLED=true"})
+return
+}
+c.JSON(http.StatusOK, gin.H{"models": s.Curator.All()})
+}
+
+// POST /v1/curator/benchmark — trigger a manual benchmark for a model
+func (s *ServerV2) handleCuratorBenchmark(c *gin.Context) {
+if s.Curator == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "curator not enabled — set ORICLI_CURATOR_ENABLED=true"})
+return
+}
+var req struct {
+Model string `json:"model" binding:"required"`
+}
+if err := c.ShouldBindJSON(&req); err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+return
+}
+// Run benchmark in background — client polls /v1/curator/models for result
+go s.Curator.Benchmark(c.Request.Context(), req.Model)
+c.JSON(http.StatusAccepted, gin.H{
+"message": "benchmark queued — poll GET /v1/curator/models for result",
+"model":   req.Model,
+})
+}
+
+// GET /v1/curator/recommendations — ranked suggestions for tier reassignment
+func (s *ServerV2) handleCuratorRecommendations(c *gin.Context) {
+if s.Curator == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "curator not enabled — set ORICLI_CURATOR_ENABLED=true"})
+return
+}
+recs := s.Curator.Recommend()
+if recs == nil {
+recs = []curator.Recommendation{}
+}
+c.JSON(http.StatusOK, gin.H{"recommendations": recs})
 }
