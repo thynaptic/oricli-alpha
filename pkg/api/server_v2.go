@@ -88,8 +88,8 @@ type ServerV2 struct {
 	}
 	TCDManifest interface {
 		All() []*tcdpkg.Domain
-		GetLineage(ctx context.Context, domainID string) ([]tcdpkg.DomainEvent, error)
-		GetEvolutionTree(ctx context.Context) (map[string][]tcdpkg.DomainEvent, error)
+		GetLineage(domainID string) []tcdpkg.DomainEvent
+		GetEvolutionTree() map[string][]tcdpkg.DomainEvent
 	}
 	TCDGapDetector interface {
 		Scan(ctx context.Context) (int, error)
@@ -2919,13 +2919,7 @@ c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
 return
 }
 id := c.Param("id")
-ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-defer cancel()
-events, err := s.TCDManifest.GetLineage(ctx, id)
-if err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
+events := s.TCDManifest.GetLineage(id)
 c.JSON(http.StatusOK, gin.H{"domain_id": id, "events": events, "count": len(events)})
 }
 
@@ -2935,12 +2929,6 @@ if s.TCDManifest == nil {
 c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
 return
 }
-ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-defer cancel()
-tree, err := s.TCDManifest.GetEvolutionTree(ctx)
-if err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
+tree := s.TCDManifest.GetEvolutionTree()
 c.JSON(http.StatusOK, gin.H{"evolution_tree": tree})
 }

@@ -391,6 +391,8 @@ func main() {
 
 		tcdDaemon := service.NewTCDDaemon(tcdManifest, tcdAuditor, tcdIngestor, tcdMaintainer, tcdDetector)
 		apiServer.TCDDaemon = tcdDaemon
+		apiServer.TCDManifest = tcdManifest
+		apiServer.TCDGapDetector = tcdDetector
 		go tcdDaemon.Run()
 		log.Println("[TCD] Temporal Curriculum Daemon starting")
 	}
