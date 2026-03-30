@@ -45,6 +45,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/core/store/memory"
 	"github.com/thynaptic/oricli-go/pkg/engine"
 	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
+	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
@@ -244,7 +245,28 @@ func main() {
 		}
 	}
 
-	// ── 14. Start API ─────────────────────────────────────────────────────────
+	// ── 14. SCL: Sovereign Cognitive Ledger ──────────────────────────────────
+	if os.Getenv("ORICLI_SCL_ENABLED") != "false" {
+		sclClient := pb.NewClientFromEnv()
+		sclLedger := scl.New(sclClient, nil)
+		sclBootCtx, sclBootCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		if err := sclLedger.Bootstrap(sclBootCtx); err != nil {
+			log.Printf("[SCL] Bootstrap warning: %v", err)
+		}
+		sclBootCancel()
+		sclWriter := scl.NewLedgerWriter(sclLedger)
+		apiServer.SCL = sclLedger
+		apiServer.SCLEngine = scl.NewRetrievalEngine(sclLedger)
+		if curiosity != nil {
+			curiosity.SCL = sclWriter
+		}
+		if apiServer.DocumentIngestor != nil {
+			apiServer.DocumentIngestor.SCL = sclWriter
+		}
+		log.Printf("[SCL] Sovereign Cognitive Ledger active")
+	}
+
+	// ── 15. Start API ─────────────────────────────────────────────────────────
 	go apiServer.Start()
 	log.Printf("[Engine] Sovereign API Gateway live on :%d", port)
 	log.Printf("[Engine] OpenAI-compatible: POST http://localhost:%d/v1/chat/completions", port)

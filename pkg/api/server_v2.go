@@ -36,6 +36,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/enterprise/rag"
 	"github.com/thynaptic/oricli-go/pkg/reform"
 	"github.com/thynaptic/oricli-go/pkg/safety"
+	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
@@ -77,6 +78,9 @@ type ServerV2 struct {
 	JuryClient   *swarm.JuryClient
 	VoteLog      *swarm.FragmentVoteLog
 	ESIFederation *swarm.ESIFederation
+	// SCL-6: Sovereign Cognitive Ledger
+	SCL       *scl.Ledger
+	SCLEngine *scl.RetrievalEngine
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -359,6 +363,15 @@ func (s *ServerV2) setupRoutes() {
 			swarmAdmin.GET("/jury/status", s.handleSwarmJuryStatus)
 			swarmAdmin.GET("/consensus/fragments", s.handleSwarmConsensusFragments)
 			swarmAdmin.DELETE("/skills/traces/:node_id", s.handleSwarmPurgeTraces)
+		}
+		// SCL-6: Sovereign Cognitive Ledger admin endpoints
+		sclAdmin := protected.Group("/scl", tenantauth.AdminOnly())
+		{
+			sclAdmin.GET("/records", s.handleSCLBrowse)
+			sclAdmin.GET("/search", s.handleSCLSearch)
+			sclAdmin.DELETE("/records/:id", s.handleSCLDelete)
+			sclAdmin.PATCH("/records/:id", s.handleSCLRevise)
+			sclAdmin.GET("/stats", s.handleSCLStats)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -820,6 +833,15 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			if ragCtx != "" {
 				systemContent = ragCtx + "\n\n---\n\n" + systemContent
 			}
+		}
+	}
+	// SCL-6: inject Sovereign Cognitive Ledger context — corrections always first.
+	if s.SCLEngine != nil && lastMsg != "" {
+		sclCtx, sclCancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		sclWindow := s.SCLEngine.BuildContextWindow(sclCtx, lastMsg, scl.RetrievalOptions{MaxTokens: 800})
+		sclCancel()
+		if sclWindow != "" {
+			systemContent = sclWindow + "\n\n---\n\n" + systemContent
 		}
 	}
 
@@ -2676,4 +2698,122 @@ return
 }
 s.ESIFederation.PurgeNodeTraces(c.Request.Context(), nodeID)
 c.JSON(http.StatusOK, gin.H{"purged": true, "node_id": nodeID})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCL-6: Sovereign Cognitive Ledger admin endpoints
+// ─────────────────────────────────────────────────────────────────────────────
+
+// handleSCLBrowse lists SCL records, optionally filtered by tier.
+// GET /v1/scl/records?tier=facts&limit=20
+func (s *ServerV2) handleSCLBrowse(c *gin.Context) {
+	if s.SCLEngine == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "SCL not initialized"})
+		return
+	}
+	tierStr := c.Query("tier")
+	limit := 20
+	if lStr := c.Query("limit"); lStr != "" {
+		if n, err := strconv.Atoi(lStr); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	records, _, err := s.SCLEngine.Browse(ctx, scl.Tier(tierStr), 1, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"records": records, "count": len(records)})
+}
+
+// handleSCLSearch performs a semantic search over the SCL.
+// GET /v1/scl/search?q=<query>&tier=<tier>
+func (s *ServerV2) handleSCLSearch(c *gin.Context) {
+	if s.SCLEngine == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "SCL not initialized"})
+		return
+	}
+	query := c.Query("q")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "q required"})
+		return
+	}
+	limit := 10
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	records, err := s.SCLEngine.SearchBySubject(ctx, query, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"results": records, "count": len(records)})
+}
+
+// handleSCLDelete hard-deletes a record from the SCL.
+// DELETE /v1/scl/records/:id
+func (s *ServerV2) handleSCLDelete(c *gin.Context) {
+	if s.SCL == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "SCL not initialized"})
+		return
+	}
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	if err := s.SCL.Delete(ctx, id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": id})
+}
+
+// handleSCLRevise updates the content of an existing SCL record (versioned).
+// PATCH /v1/scl/records/:id   Body: {"content": "...", "confidence": 0.9}
+func (s *ServerV2) handleSCLRevise(c *gin.Context) {
+	if s.SCL == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "SCL not initialized"})
+		return
+	}
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
+		return
+	}
+	var body struct {
+		Content    string  `json:"content"`
+		Confidence float64 `json:"confidence"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Content == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "content required"})
+		return
+	}
+	if body.Confidence <= 0 {
+		body.Confidence = 0.8
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	newID, err := s.SCL.Revise(ctx, id, body.Content, body.Confidence)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"revised": id, "new_id": newID})
+}
+
+// handleSCLStats returns record counts per tier, avg confidence, and stale count.
+// GET /v1/scl/stats
+func (s *ServerV2) handleSCLStats(c *gin.Context) {
+	if s.SCL == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "SCL not initialized"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	stats := s.SCL.Stats(ctx)
+	c.JSON(http.StatusOK, stats)
 }

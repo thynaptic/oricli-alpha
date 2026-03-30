@@ -29,6 +29,14 @@ type JITDaemon struct {
 	CooldownSeconds int64
 	State           JITState
 	Orchestrator    *GoOrchestrator
+	// SCL: when non-nil, lessons are written to the Sovereign Cognitive Ledger
+	// instead of triggering a Python weight-training subprocess.
+	SCL             SCLWriter
+}
+
+// SCLWriter is the interface JITDaemon uses to write lessons — avoids import cycle.
+type SCLWriter interface {
+	WriteLesson(ctx context.Context, topic, content string, confidence float64) error
 }
 
 func NewJITDaemon(root string, orch *GoOrchestrator) *JITDaemon {
@@ -93,8 +101,17 @@ func (d *JITDaemon) Run() {
 }
 
 func (d *JITDaemon) triggerTraining(currentCount int) {
-	log.Printf("[JITDaemon] Triggering remote JIT knowledge absorption (Count: %d)", currentCount)
+	// SCL path: flush lessons to the Sovereign Cognitive Ledger instead of
+	// running a Python weight-training subprocess. No GPU, no RunPod cost,
+	// no risk of overfitting or drift. Instant, inspectable, reversible.
+	if d.SCL != nil {
+		d.flushLessonsToSCL(currentCount)
+		return
+	}
 
+	// Legacy fallback: Python --train-jit subprocess (weight mutation).
+	// Only runs when SCL is not wired — kept for backward compat during rollout.
+	log.Printf("[JITDaemon] SCL not wired — falling back to Python weight training (Count: %d)", currentCount)
 	pythonExe := filepath.Join(d.RepoRoot, ".venv/bin/python3")
 	bridgeScript := filepath.Join(d.RepoRoot, "scripts/runpod_bridge.py")
 
@@ -116,22 +133,71 @@ func (d *JITDaemon) triggerTraining(currentCount int) {
 
 	if err == nil {
 		log.Printf("[JITDaemon] JIT Absorption complete in %v", duration)
-		d.State.LastSyncTime = time.Now().Unix()
-		d.State.LastSyncCount = currentCount
-		d.saveState()
-
-		// Update memory graph via orchestrator
-		d.Orchestrator.Execute("graph_query", map[string]interface{}{
-			"query": "CREATE (n:MetaEvent {id: $id, type: 'meta_event', content: $content, timestamp: $ts, importance: 0.9})",
-			"params": map[string]interface{}{
-				"id":      fmt.Sprintf("jit_sync_%d", d.State.LastSyncTime),
-				"content": fmt.Sprintf("JIT Knowledge Absorption completed for %d lessons.", currentCount),
-				"ts":      d.State.LastSyncTime,
-			},
-		}, 30*time.Second)
+		d.recordSync(currentCount)
 	} else {
 		log.Printf("[JITDaemon] JIT Training failed: %v\nOutput: %s", err, string(output))
 	}
+}
+
+// flushLessonsToSCL reads the JSONL lesson file and writes each entry
+// as a TierSkills record in the Sovereign Cognitive Ledger.
+// This is the SCL-path replacement for Python LoRA training.
+func (d *JITDaemon) flushLessonsToSCL(currentCount int) {
+	log.Printf("[JITDaemon] SCL lesson flush — %d lessons", currentCount)
+	f, err := os.Open(d.JitFile)
+	if err != nil {
+		log.Printf("[JITDaemon] open jit file: %v", err)
+		return
+	}
+	defer f.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	written := 0
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	for scanner.Scan() {
+		var entry struct {
+			Prompt   string `json:"prompt"`
+			Response string `json:"response"`
+			Skill    string `json:"skill"`
+		}
+		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+			continue
+		}
+		content := entry.Prompt
+		if entry.Response != "" {
+			content += "\n→ " + entry.Response
+		}
+		topic := entry.Skill
+		if topic == "" {
+			topic = "general"
+		}
+		if err := d.SCL.WriteLesson(ctx, topic, content, 0.8); err != nil {
+			log.Printf("[JITDaemon] SCL write lesson: %v", err)
+		} else {
+			written++
+		}
+	}
+	log.Printf("[JITDaemon] SCL flush complete — %d lessons written", written)
+	d.recordSync(currentCount)
+
+	// Emit a meta-event to the graph so DreamDaemon knows a sync happened.
+	d.Orchestrator.Execute("graph_query", map[string]interface{}{
+		"query": "CREATE (n:MetaEvent {id: $id, type: 'meta_event', content: $content, timestamp: $ts, importance: 0.9})",
+		"params": map[string]interface{}{
+			"id":      fmt.Sprintf("scl_sync_%d", d.State.LastSyncTime),
+			"content": fmt.Sprintf("SCL lesson flush: %d lessons committed to Sovereign Cognitive Ledger.", written),
+			"ts":      d.State.LastSyncTime,
+		},
+	}, 30*time.Second)
+}
+
+func (d *JITDaemon) recordSync(currentCount int) {
+	d.State.LastSyncTime = time.Now().Unix()
+	d.State.LastSyncCount = currentCount
+	d.saveState()
 }
 
 type DreamDaemon struct {
@@ -146,7 +212,18 @@ type DreamDaemon struct {
 	MemoryBank    *MemoryBank
 	Constitution  *LivingConstitution
 	VoteLog       *swarm.FragmentVoteLog // P5-2: Universal Truth promotion during idle cycles
+	// SCL-4: Sovereign Cognitive Ledger maintenance during idle cycles.
+	// Injected at boot; nil-safe (skipped when not wired).
+	SCLLedger     SCLMaintainer
 	lastActivity  int64
+}
+
+// SCLMaintainer is the interface DreamDaemon uses for SCL maintenance operations.
+// Satisfied by a thin adapter wrapping *scl.Ledger — avoids import cycle.
+type SCLMaintainer interface {
+	Deduplicate(ctx context.Context, threshold float64) (int, error)
+	DecayStale(ctx context.Context, staleDays int, decayRate float64) (int, error)
+	PromoteHighConfidence(ctx context.Context, threshold float64) (int, error)
 }
 
 func NewDreamDaemon(idleThreshold, checkInterval int64, graph *GraphService, memory *MemoryBridge, gosh *GoshModule, ghost *GhostClusterService, orch *GoOrchestrator) *DreamDaemon {
@@ -297,6 +374,26 @@ func (d *DreamDaemon) ConsolidateExperience() {
 		defer sweepCancel()
 		d.VoteLog.SweepPromotion(sweepCtx)
 		log.Printf("[DreamDaemon] Universal Truth sweep complete.")
+	}
+	// SCL-4: Sovereign Cognitive Ledger maintenance — dedup, decay, promote.
+	if d.SCLLedger != nil {
+		sclCtx, sclCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer sclCancel()
+		if merged, err := d.SCLLedger.Deduplicate(sclCtx, 0.95); err != nil {
+			log.Printf("[DreamDaemon] SCL dedup error: %v", err)
+		} else if merged > 0 {
+			log.Printf("[DreamDaemon] SCL dedup: merged %d near-duplicate records.", merged)
+		}
+		if decayed, err := d.SCLLedger.DecayStale(sclCtx, 30, 0.05); err != nil {
+			log.Printf("[DreamDaemon] SCL decay error: %v", err)
+		} else if decayed > 0 {
+			log.Printf("[DreamDaemon] SCL decay: lowered confidence on %d stale records.", decayed)
+		}
+		if promoted, err := d.SCLLedger.PromoteHighConfidence(sclCtx, 0.95); err != nil {
+			log.Printf("[DreamDaemon] SCL promote error: %v", err)
+		} else if promoted > 0 {
+			log.Printf("[DreamDaemon] SCL promote: %d records reached gold tier.", promoted)
+		}
 	}
 }
 

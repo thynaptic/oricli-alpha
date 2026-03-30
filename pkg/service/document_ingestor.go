@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"log"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -18,9 +19,17 @@ import (
 type DocumentIngestor struct {
 	MemoryBank      *MemoryBank
 	CuriosityDaemon *CuriosityDaemon
+	// SCL: when non-nil, document chunks are also written to TierFacts
+	// with ProvenanceUserStated — user-uploaded docs are high-trust knowledge.
+	SCL             DocumentSCLWriter
 
 	mu   sync.RWMutex
 	docs map[string]IngestedDoc
+}
+
+// DocumentSCLWriter is the interface DocumentIngestor uses to write facts.
+type DocumentSCLWriter interface {
+	WriteFact(ctx context.Context, topic, content string, confidence float64, webVerified bool) error
 }
 
 // IngestedDoc records metadata about a document that has been ingested.
@@ -53,6 +62,12 @@ func (d *DocumentIngestor) Ingest(ctx context.Context, filename string, data []b
 			Content:    chunk,
 			Importance: 0.75,
 		})
+		// SCL-5: dual write — user-stated facts are high-trust knowledge.
+		if d.SCL != nil {
+			if err := d.SCL.WriteFact(ctx, topic, chunk, 0.75, false); err != nil {
+				log.Printf("[DocumentIngestor] SCL write: %v", err)
+			}
+		}
 	}
 
 	if d.CuriosityDaemon != nil {

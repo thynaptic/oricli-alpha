@@ -22,6 +22,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/kernel"
 	"github.com/thynaptic/oricli-go/pkg/node"
 	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
+	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
@@ -336,6 +337,38 @@ func main() {
 
 			log.Printf("[Swarm] Node %s online — SPP+P5 active", nodeIdentity.ShortID())
 		}
+	}
+
+	// ── SCL-6: Sovereign Cognitive Ledger (opt-in; default enabled) ──
+	if os.Getenv("ORICLI_SCL_ENABLED") != "false" {
+		pbClient := pb.NewClientFromEnv()
+		sclLedger := scl.New(pbClient, nil)
+		sclBootCtx, sclBootCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		if err := sclLedger.Bootstrap(sclBootCtx); err != nil {
+			log.Printf("[SCL] Bootstrap warning: %v — SCL will retry lazily", err)
+		}
+		sclBootCancel()
+
+		sclWriter := scl.NewLedgerWriter(sclLedger)
+
+		apiServer.SCL = sclLedger
+		apiServer.SCLEngine = scl.NewRetrievalEngine(sclLedger)
+
+		if apiServer.DocumentIngestor != nil {
+			apiServer.DocumentIngestor.SCL = sclWriter
+		}
+		if curiosity != nil {
+			curiosity.SCL = sclWriter
+		}
+		if dream != nil {
+			dream.SCLLedger = sclLedger
+		}
+
+		pbURL := os.Getenv("PB_BASE_URL")
+		if pbURL == "" {
+			pbURL = "http://127.0.0.1:8090"
+		}
+		log.Printf("[SCL] Sovereign Cognitive Ledger active — PB: %s", pbURL)
 	}
 
 	go apiServer.Start()

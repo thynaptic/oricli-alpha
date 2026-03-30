@@ -58,6 +58,9 @@ type CuriosityDaemon struct {
 	SearXNG     *SearXNGSearcher
 	MemoryBank  *MemoryBank // PocketBase long-term memory (optional)
 	Governor    *CostGovernor // optional spend guard for RunPod synthesis
+	// SCL: when non-nil, curiosity findings are written to the Sovereign Cognitive Ledger
+	// instead of directly to MemoryBank's WriteKnowledgeFragment. No weight mutation.
+	SCL         CuriositySCLWriter
 
 	// RunPod synthesis: when true, forageTopic uses an LLM synthesis pass
 	// instead of pure TF-IDF extraction — produces richer knowledge fragments.
@@ -78,6 +81,12 @@ type CuriosityDaemon struct {
 	interruptMu sync.Mutex
 
 	active bool
+}
+
+// CuriositySCLWriter is the interface the CuriosityDaemon uses to write facts.
+// Satisfied by *scl.LedgerWriter — defined as interface to avoid import cycle.
+type CuriositySCLWriter interface {
+	WriteFact(ctx context.Context, topic, content string, confidence float64, webVerified bool) error
 }
 
 func NewCuriosityDaemon(graph *memory.WorkingMemoryGraph, vdi *vdi.Manager, gen *GenerationService, hub interface {
@@ -470,7 +479,15 @@ func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string, depth i
 
 	log.Printf("[CuriosityDaemon] Committed: %q", topic)
 
-	// Persist finding to PocketBase long-term memory bank (async, non-blocking)
+	// SCL path — primary: writes verified fact to Sovereign Cognitive Ledger.
+	// MemoryBank write is kept as a secondary path for episodic recall + existing RAG.
+	if d.SCL != nil {
+		// Determine if this was web-sourced (depth 0 = ground truth, depth>0 = hypothesis)
+		webVerified := depth == 0
+		if err := d.SCL.WriteFact(ctx, topic, factSummary, 0.75, webVerified); err != nil {
+			log.Printf("[CuriosityDaemon] SCL write: %v", err)
+		}
+	}
 	if d.MemoryBank != nil {
 		d.MemoryBank.WriteKnowledgeFragment(topic, string(intent), factSummary, 0.7)
 	}

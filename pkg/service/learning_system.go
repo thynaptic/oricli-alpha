@@ -33,7 +33,15 @@ type LearningSystemService struct {
 	Preferences    map[string]interface{}
 	StoragePath    string
 	ESI            *swarm.ESIFederation // P5-3: nil unless ORICLI_SWARM_LESSON_SHARE=true
+	// SCL: when non-nil, corrections are written to the Sovereign Cognitive Ledger
+	// under TierCorrections in addition to the local JSONL pattern store.
+	SCL            LearnerSCLWriter
 	mu             sync.RWMutex
+}
+
+// LearnerSCLWriter is the interface LearningSystemService uses to persist corrections.
+type LearnerSCLWriter interface {
+	WriteCorrection(ctx context.Context, original, corrected, skill string) error
 }
 
 func NewLearningSystemService(orch *GoOrchestrator, storagePath string) *LearningSystemService {
@@ -102,6 +110,17 @@ func (s *LearningSystemService) LearnFromCorrection(original string, corrected s
 		"response": "Understood. I will apply this pattern in the future.",
 		"metadata": meta,
 	}, 10*time.Second)
+
+	// SCL-5: write correction to Sovereign Cognitive Ledger (TierCorrections).
+	if s.SCL != nil {
+		skill := "general"
+		if tag, ok := meta["skill"].(string); ok && tag != "" {
+			skill = tag
+		}
+		if err := s.SCL.WriteCorrection(context.Background(), original, corrected, skill); err != nil {
+			log.Printf("[Learning] SCL write correction: %v", err)
+		}
+	}
 
 	// P5-3: ESI — broadcast high-quality lesson traces to swarm peers (opt-in).
 	if s.ESI != nil {
