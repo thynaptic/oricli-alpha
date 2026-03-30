@@ -237,17 +237,20 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 		gb.WriteString("The following memory fragments are relevant. Only those marked 'verified' are ground truth.\n\n")
 		validCount := 0
 		for i, f := range frags {
-			// Noise gate: discard fragments below combined belief threshold.
-			// U=1 (unverified) in AI-Supervisor §3.1 terms = Score() < 0.40.
-			if f.Belief.Score() < 0.40 {
+			// Noise gate: discard fragments below combined dynamic certainty threshold.
+			// DynamicCertainty blends Belief.Score() + semantic relevance + importance.
+			// Threshold 0.35 (vs prior 0.40 on Belief.Score alone) since DynamicCertainty
+			// already rewards high semantic match — a very relevant fragment with moderate
+			// static belief should still ground.
+			if f.DynamicCertainty < 0.35 {
 				continue
 			}
 			certLabel := "unverified"
 			if f.Belief.Factual >= 0.80 {
 				certLabel = "verified" // U=0: strong factual grounding
 			}
-			gb.WriteString(fmt.Sprintf("[%d] (factual=%.2f/causal=%.2f/%s) %s\n",
-				i+1, f.Belief.Factual, f.Belief.Causal, certLabel, truncate(f.Content, 200)))
+			gb.WriteString(fmt.Sprintf("[%d] (factual=%.2f/causal=%.2f/dyn=%.2f/%s) %s\n",
+				i+1, f.Belief.Factual, f.Belief.Causal, f.DynamicCertainty, certLabel, truncate(f.Content, 200)))
 			validCount++
 		}
 		gb.WriteString("### END GROUNDING SIGNAL")
@@ -265,7 +268,7 @@ func (e *SovereignEngine) runSelfRefine(ctx context.Context, stimulus, composite
 	// CORRECT → bump Factual (+0.03), ADMIT_FAILURE → drop Factual (-0.05).
 	groundingFragIDs := make([]string, 0, len(frags))
 	for _, f := range frags {
-		if f.Belief.Score() >= 0.40 && f.ID != "" {
+		if f.DynamicCertainty >= 0.35 && f.ID != "" {
 			groundingFragIDs = append(groundingFragIDs, f.ID)
 		}
 	}

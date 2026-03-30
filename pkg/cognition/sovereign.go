@@ -203,17 +203,50 @@ func (b Belief) Score() float64 {
 
 // MemFrag is a minimal memory record crossing the cognition/service interface boundary.
 type MemFrag struct {
-	ID           string
-	Content      string
-	Source       string
-	Topic        string
-	Importance   float64
-	AccessCount  int
-	Volatility   string    // "stable" | "current" | "ephemeral"
-	CreatedAt    time.Time // used to compute Belief.Recency
-	CausalScore  float64   // persisted via PB causal_score field; 0.50 neutral default
-	SemanticScore float64  // cosine similarity to the query; populated by adapter
-	Belief       Belief    // computed by ComputeBelief — do not set manually
+	ID              string
+	Content         string
+	Source          string
+	Topic           string
+	Importance      float64
+	AccessCount     int
+	Volatility      string    // "stable" | "current" | "ephemeral"
+	CreatedAt       time.Time // used to compute Belief.Recency
+	CausalScore     float64   // persisted via PB causal_score field; 0.50 neutral default
+	SemanticScore   float64   // cosine similarity to the query; populated by adapter
+	Belief          Belief    // computed by ComputeBelief — do not set manually
+	DynamicCertainty float64  // computed by ComputeDynamicCertainty — query-time composite
+}
+
+// ComputeDynamicCertainty returns a query-time composite certainty for noise gating
+// and ranking. Unlike Belief.Score() (static epistemic axes only), this blends:
+//
+//   0.40 × Belief.Score()    — epistemic quality (factual + causal + recency)
+//   0.35 × SemanticScore     — query relevance (cosine similarity from adapter)
+//   0.15 × Importance        — editorial signal (operator-assigned + Aletheia bumps)
+//   0.10 × AccessBonus       — usage reinforcement (log-scaled, capped at 0.10)
+//
+// Returns a [0.05, 0.98] score. Call after ComputeBelief + SemanticScore are set.
+// The result is stored in MemFrag.DynamicCertainty by ComputeBelief.
+func ComputeDynamicCertainty(frag MemFrag) float64 {
+	accessBonus := math.Log1p(float64(frag.AccessCount)) / math.Log1p(20) * 0.10
+	if accessBonus > 0.10 {
+		accessBonus = 0.10
+	}
+	importance := frag.Importance
+	if importance <= 0 {
+		importance = 0.50 // neutral default for un-scored fragments
+	}
+	score := 0.40*frag.Belief.Score() +
+		0.35*frag.SemanticScore +
+		0.15*importance +
+		accessBonus
+	if score < 0.05 {
+		return 0.05
+	}
+	if score > 0.98 {
+		return 0.98
+	}
+	return score
 }
 
 // CertaintyUpdater is satisfied by the MemoryBank adapter in server_v2.
@@ -289,11 +322,14 @@ func ComputeBelief(frag MemFrag) Belief {
 		causal = 0.50
 	}
 
-	return Belief{
+	frag.Belief = Belief{
 		Factual: factual,
 		Causal:  causal,
 		Recency: computeRecency(frag),
 	}
+	// Populate DynamicCertainty after all source fields are resolved.
+	frag.DynamicCertainty = ComputeDynamicCertainty(frag)
+	return frag.Belief
 }
 
 // WebSearcher is satisfied by *service.SearXNGSearcher.

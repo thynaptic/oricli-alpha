@@ -1846,6 +1846,7 @@ func (a *memoryBankAdapter) QuerySimilarWeighted(ctx context.Context, query stri
 			Belief:        cognition.Belief{Factual: provenanceCertainty(f.Provenance)},
 		}
 		mf.Belief = cognition.ComputeBelief(mf)
+		mf.DynamicCertainty = cognition.ComputeDynamicCertainty(mf)
 		candidates[i] = mf
 	}
 
@@ -1940,6 +1941,7 @@ func (a *memoryBankAdapter) QuerySolved(ctx context.Context, topic string, limit
 			Belief:      cognition.Belief{Factual: provenanceCertainty(f.Provenance)},
 		}
 		mf.Belief = cognition.ComputeBelief(mf)
+		mf.DynamicCertainty = cognition.ComputeDynamicCertainty(mf)
 		out[i] = mf
 	}
 	return out, nil
