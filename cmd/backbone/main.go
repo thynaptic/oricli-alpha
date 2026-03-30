@@ -24,6 +24,7 @@ import (
 	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
 	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/service"
+	"github.com/thynaptic/oricli-go/pkg/tcd"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 )
@@ -369,6 +370,29 @@ func main() {
 			pbURL = "http://127.0.0.1:8090"
 		}
 		log.Printf("[SCL] Sovereign Cognitive Ledger active — PB: %s", pbURL)
+	}
+
+	// ── TCD: Temporal Curriculum Daemon (opt-in via ORICLI_TCD_ENABLED=true) ──
+	if os.Getenv("ORICLI_TCD_ENABLED") == "true" {
+		tcdPB := pb.NewClientFromEnv()
+		tcdManifest := tcd.NewDomainManifest(tcdPB)
+		tcdAuditor := tcd.NewFreshnessAuditor(tcdManifest)
+
+		var tcdIngestor *tcd.DomainIngestor
+		var tcdWriter tcd.FactWriter
+		if apiServer.SCL != nil {
+			tcdWriter = scl.NewLedgerWriter(apiServer.SCL)
+			tcdIngestor = tcd.NewDomainIngestor(tcdManifest, nil, tcdWriter)
+		}
+
+		tcdMaintainer := tcd.NewManifestMaintainer(tcdManifest, nil)
+
+		tcdDetector := tcd.NewGapDetector(tcdManifest, nil)
+
+		tcdDaemon := service.NewTCDDaemon(tcdManifest, tcdAuditor, tcdIngestor, tcdMaintainer, tcdDetector)
+		apiServer.TCDDaemon = tcdDaemon
+		go tcdDaemon.Run()
+		log.Println("[TCD] Temporal Curriculum Daemon starting")
 	}
 
 	go apiServer.Start()

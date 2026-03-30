@@ -40,6 +40,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
+	tcdpkg "github.com/thynaptic/oricli-go/pkg/tcd"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
@@ -81,6 +82,18 @@ type ServerV2 struct {
 	// SCL-6: Sovereign Cognitive Ledger
 	SCL       *scl.Ledger
 	SCLEngine *scl.RetrievalEngine
+	// TCD: Temporal Curriculum Daemon
+	TCDDaemon interface {
+		TriggerManualTick()
+	}
+	TCDManifest interface {
+		All() []*tcdpkg.Domain
+		GetLineage(ctx context.Context, domainID string) ([]tcdpkg.DomainEvent, error)
+		GetEvolutionTree(ctx context.Context) (map[string][]tcdpkg.DomainEvent, error)
+	}
+	TCDGapDetector interface {
+		Scan(ctx context.Context) (int, error)
+	}
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -372,6 +385,16 @@ func (s *ServerV2) setupRoutes() {
 			sclAdmin.DELETE("/records/:id", s.handleSCLDelete)
 			sclAdmin.PATCH("/records/:id", s.handleSCLRevise)
 			sclAdmin.GET("/stats", s.handleSCLStats)
+		}
+		// TCD: Temporal Curriculum Daemon admin endpoints
+		tcdAdmin := protected.Group("/tcd", tenantauth.AdminOnly())
+		{
+			tcdAdmin.GET("/domains", s.handleTCDListDomains)
+			tcdAdmin.POST("/domains", s.handleTCDAddDomain)
+			tcdAdmin.POST("/tick", s.handleTCDTriggerTick)
+			tcdAdmin.GET("/gaps", s.handleTCDGaps)
+			tcdAdmin.GET("/domains/:id/lineage", s.handleTCDDomainLineage)
+			tcdAdmin.GET("/lineage", s.handleTCDEvolutionTree)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -2816,4 +2839,108 @@ func (s *ServerV2) handleSCLStats(c *gin.Context) {
 	defer cancel()
 	stats := s.SCL.Stats(ctx)
 	c.JSON(http.StatusOK, stats)
+}
+
+// ── TCD Admin Handlers ────────────────────────────────────────────────────────
+
+// GET /v1/tcd/domains — list all domains with status + confidence
+func (s *ServerV2) handleTCDListDomains(c *gin.Context) {
+if s.TCDManifest == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
+return
+}
+domains := s.TCDManifest.All()
+c.JSON(http.StatusOK, gin.H{"domains": domains, "count": len(domains)})
+}
+
+// POST /v1/tcd/domains — manually add a domain
+// Body: {"name": "robotics", "keywords": ["robot", "automation"]}
+func (s *ServerV2) handleTCDAddDomain(c *gin.Context) {
+if s.TCDManifest == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
+return
+}
+var body struct {
+Name     string   `json:"name"`
+Keywords []string `json:"keywords"`
+}
+if err := c.ShouldBindJSON(&body); err != nil || body.Name == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
+return
+}
+d := &tcdpkg.Domain{
+ID:            strings.ToLower(strings.ReplaceAll(body.Name, " ", "_")),
+Name:          body.Name,
+Keywords:      body.Keywords,
+Status:        tcdpkg.StatusActive,
+SourceWeights: tcdpkg.DefaultSourceWeights,
+}
+ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+defer cancel()
+if err := s.TCDManifest.(interface {
+Add(context.Context, *tcdpkg.Domain) error
+}).Add(ctx, d); err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusCreated, gin.H{"domain": d})
+}
+
+// POST /v1/tcd/tick — trigger immediate TCD cycle (admin)
+func (s *ServerV2) handleTCDTriggerTick(c *gin.Context) {
+if s.TCDDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
+return
+}
+s.TCDDaemon.TriggerManualTick()
+c.JSON(http.StatusOK, gin.H{"status": "tick queued"})
+}
+
+// GET /v1/tcd/gaps — list current orphan clusters detected by GapDetector
+func (s *ServerV2) handleTCDGaps(c *gin.Context) {
+if s.TCDGapDetector == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD gap detector not enabled"})
+return
+}
+ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+defer cancel()
+spawned, err := s.TCDGapDetector.Scan(ctx)
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{"domains_spawned": spawned})
+}
+
+// GET /v1/tcd/domains/:id/lineage — full event chain for a domain
+func (s *ServerV2) handleTCDDomainLineage(c *gin.Context) {
+if s.TCDManifest == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
+return
+}
+id := c.Param("id")
+ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+defer cancel()
+events, err := s.TCDManifest.GetLineage(ctx, id)
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{"domain_id": id, "events": events, "count": len(events)})
+}
+
+// GET /v1/tcd/lineage — full evolution DAG across all domains
+func (s *ServerV2) handleTCDEvolutionTree(c *gin.Context) {
+if s.TCDManifest == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
+return
+}
+ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+defer cancel()
+tree, err := s.TCDManifest.GetEvolutionTree(ctx)
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{"evolution_tree": tree})
 }
