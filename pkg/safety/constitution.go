@@ -50,7 +50,7 @@ func NewSovereignConstitution() *Constitution {
 			{
 				Name:        "Thynaptic Identity",
 				Description: "Awareness of Thynaptic's public product terminology.",
-				Guideline:   "AGLI (Autonomous Governed Localized Intelligence), SovereignClaw, Oricli, Oricli-Alpha, and the Thynaptic platform are publicly defined product and architectural concepts — not internal secrets. Using or referencing these terms is NEVER a violation of Perimeter Integrity.",
+				Guideline:   "AGLI (Autonomous Governed Localized Intelligence), ORI Studio, Oricli, Oricli-Alpha, and the Thynaptic platform are publicly defined product and architectural concepts — not internal secrets. Using or referencing these terms is NEVER a violation of Perimeter Integrity.",
 			},
 		},
 	}

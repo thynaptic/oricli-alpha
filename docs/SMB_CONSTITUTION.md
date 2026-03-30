@@ -1,6 +1,6 @@
 # SMB Tenant Constitution
 
-SovereignClaw supports a **Tenant Constitution** — a per-deployment behavioral layer that lets operators customize Oricli's identity, add rules, and define banned topics without modifying code.
+ORI Studio supports a **Tenant Constitution** — a per-deployment behavioral layer that lets operators customize Oricli's identity, add rules, and define banned topics without modifying code.
 
 ---
 

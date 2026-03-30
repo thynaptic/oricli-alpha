@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **ORI Studio / SovereignClaw** are documented here.  
+All notable changes to **ORI Studio / ORI Studio** are documented here.  
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
 Versions track `VERSION` file. Commits listed for traceability.
 
@@ -50,7 +50,7 @@ Versions track `VERSION` file. Commits listed for traceability.
 ### Changed
 - **`/models`** — Now returns only chat-capable models from Ollama (embedding models excluded). Pattern filter: `embed`, `minilm`, `nomic`, `mxbai`, `bge-`, `e5-`, `gte-`.
 - **`/health`** — Now reports `{ backbone: bool, ollama: bool }` against real services.
-- **AI system prompt** — Updated branding from "SovereignClaw" → "ORI Studio".
+- **AI system prompt** — Updated branding from "ORI Studio" → "ORI Studio".
 - **Flask proxy** — `PYTHON_API_BASE` fully removed; replaced with `OLLAMA_BASE` (`localhost:11434`).
 
 ---
@@ -71,7 +71,7 @@ Versions track `VERSION` file. Commits listed for traceability.
 - **Research page** — Canvas fixes. (`003`)
 
 ### Changed
-- **Rebrand: SovereignClaw → ORI Studio** — UI, docs, service names, system prompts. (`0db0469`, `07fd93c`)
+- **Rebrand: ORI Studio → ORI Studio** — UI, docs, service names, system prompts. (`0db0469`, `07fd93c`)
 - **ORI crimson color system** — New design language replacing electric sci-fi palette.
 
 ### Fixed
@@ -82,7 +82,7 @@ Versions track `VERSION` file. Commits listed for traceability.
 
 ## [1.x] — Pre-2026
 
-Initial SovereignClaw consumer UI, Canvas, Agent Creators, deployment on `sovereignclaw.thynaptic.com` → migrated to `oristudio.thynaptic.com`. See earlier session checkpoints for history.
+Initial ORI Studio consumer UI, Canvas, Agent Creators, deployment on `sovereignclaw.thynaptic.com` → migrated to `oristudio.thynaptic.com`. See earlier session checkpoints for history.
 
 ---
 

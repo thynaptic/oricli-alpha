@@ -11,7 +11,7 @@ ORI Studio is the **sovereign developer workspace** built on top of Oricli-Alpha
 
 Think of it as an IDE that thinks with you. Not a chat window bolted onto a code editor — a unified environment where AI cognition, automation pipelines, and code generation are first-class citizens of the workspace itself.
 
-ORI Studio lives at **oristudio.thynaptic.com** and is the consumer-facing product layer of the SovereignClaw platform.
+ORI Studio lives at **oristudio.thynaptic.com** and is the consumer-facing product layer of the ORI Studio platform.
 
 ---
 

@@ -1,4 +1,4 @@
-# Agent Onboarding — Mavaia / SovereignClaw / Oricli-Alpha
+# Agent Onboarding — Mavaia / ORI Studio / Oricli-Alpha
 
 > **For:** Any AI agent (Claude, GPT, Gemini, etc.) being dropped into this codebase.
 > Read this first. It'll save both of you a lot of time.
@@ -29,9 +29,9 @@
 
 ### What We're Building
 
-**SovereignClaw** — a consumer-facing AI product. Think OpenAI's ChatGPT interface, but the intelligence underneath is 100% owned, not rented. No API wrappers to OpenAI/Anthropic. This is the strategic advantage.
+**ORI Studio** — a consumer-facing AI product. Think OpenAI's ChatGPT interface, but the intelligence underneath is 100% owned, not rented. No API wrappers to OpenAI/Anthropic. This is the strategic advantage.
 
-**Oricli-Alpha** (a.k.a. ORI, a.k.a. "she") — the actual intelligence stack powering SovereignClaw. A modular cognitive framework with:
+**Oricli-Alpha** (a.k.a. ORI, a.k.a. "she") — the actual intelligence stack powering ORI Studio. A modular cognitive framework with:
 - A Go-native backbone (`bin/oricli-go-v2`) serving an OpenAI-compatible REST API on port 8089
 - A React/Vite consumer UI (`ui_sovereignclaw/`) proxied via Caddy at `https://oristudio.thynaptic.com`
 - A Python FastAPI layer for legacy and ML tooling
@@ -254,7 +254,7 @@ PB_BASE_URL=https://pocketbase.thynaptic.com
 ## 8. Current State (as of March 2026)
 
 **What's live and working:**
-- Full SovereignClaw UI at `https://oristudio.thynaptic.com`
+- Full ORI Studio UI at `https://oristudio.thynaptic.com`
 - Go backbone API at `https://oricli.thynaptic.com` (port 8089 via Caddy)
 - The Hive (swarm intelligence) — operational
 - WorldTraveler — live, first tick 5min after boot, then every 6h
