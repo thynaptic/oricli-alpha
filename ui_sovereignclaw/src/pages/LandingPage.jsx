@@ -74,8 +74,245 @@ const FEATURES = [
   },
 ];
 
+// ── Pricing plans ─────────────────────────────────────────────────────────────
+const PLANS = [
+  {
+    id: 'starter',
+    name: 'Starter',
+    price: '$29',
+    period: '/mo',
+    tag: 'For developers & small teams',
+    requests: '5,000 API calls/mo',
+    features: ['OpenAI-compatible API', 'Core chat + memory modules', 'Standard response time', 'Email support'],
+    highlight: false,
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    price: '$99',
+    period: '/mo',
+    tag: 'Most popular',
+    requests: '25,000 API calls/mo',
+    features: ['Everything in Starter', 'Full Hive (250+ modules)', 'Custom .ori constitution', 'Webhook notifications', 'Priority queue', 'Slack support'],
+    highlight: true,
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise',
+    price: '$299',
+    period: '/mo',
+    tag: 'For growing orgs',
+    requests: 'Unlimited (fair use)',
+    features: ['Everything in Business', 'Custom fine-tuned model', 'Dedicated capacity', 'Custom subdomain', '99.9% SLA', 'Direct support'],
+    highlight: false,
+  },
+];
+
+// ── Waitlist modal ────────────────────────────────────────────────────────────
+function WaitlistModal({ plan, onClose }) {
+  const [form, setForm] = useState({ name: '', company: '', email: '', plan: plan?.id ?? 'starter' });
+  const [state, setState] = useState('idle'); // idle | loading | success | error
+  const [errMsg, setErrMsg] = useState('');
+
+  // Update plan when prop changes (user clicked different plan button)
+  useEffect(() => { if (plan) setForm(f => ({ ...f, plan: plan.id })); }, [plan]);
+
+  // Lock body scroll while modal open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.email.trim()) return;
+    setState('loading');
+    try {
+      const res = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Something went wrong');
+      setState('success');
+    } catch (err) {
+      setErrMsg(err.message);
+      setState('error');
+    }
+  };
+
+  const inputStyle = {
+    width: '100%', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(229,0,76,0.20)',
+    borderRadius: 8, padding: '11px 14px',
+    fontSize: 14, color: '#F0ECF0',
+    outline: 'none', fontFamily: 'system-ui,-apple-system,sans-serif',
+    transition: 'border-color 0.2s',
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 24,
+        animation: 'landFadeIn 0.2s ease forwards',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#0C080F',
+          border: '1px solid rgba(229,0,76,0.25)',
+          borderRadius: 16, padding: '36px 32px',
+          width: '100%', maxWidth: 440,
+          animation: 'landScaleIn 0.25s ease forwards',
+          position: 'relative',
+        }}
+      >
+        {/* Close */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: 16, right: 16,
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'rgba(240,236,240,0.35)', fontSize: 18, lineHeight: 1,
+            transition: 'color 0.15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.color = '#F0ECF0'}
+          onMouseLeave={e => e.currentTarget.style.color = 'rgba(240,236,240,0.35)'}
+        >✕</button>
+
+        {state === 'success' ? (
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>✦</div>
+            <h3 style={{
+              fontFamily: 'system-ui,-apple-system,sans-serif',
+              fontSize: 22, fontWeight: 700, color: '#F0ECF0', margin: '0 0 12px',
+            }}>You're on the list.</h3>
+            <p style={{ color: 'rgba(240,236,240,0.5)', fontSize: 15, lineHeight: 1.6, margin: '0 0 28px' }}>
+              We'll reach out within 24 hours with your API access details.
+            </p>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'rgba(229,0,76,0.12)', border: '1px solid rgba(229,0,76,0.35)',
+                borderRadius: 8, padding: '10px 24px', color: '#E5004C',
+                fontFamily: "'SF Mono','Fira Code',monospace",
+                fontSize: 11, letterSpacing: '0.1em', cursor: 'pointer',
+              }}
+            >CLOSE</button>
+          </div>
+        ) : (
+          <>
+            <div style={{
+              fontFamily: "'SF Mono','Fira Code',monospace",
+              fontSize: 9.5, letterSpacing: '0.22em', color: 'rgba(229,0,76,0.65)',
+              marginBottom: 10,
+            }}>GET API ACCESS</div>
+            <h3 style={{
+              fontFamily: 'system-ui,-apple-system,sans-serif',
+              fontSize: 22, fontWeight: 700, color: '#F0ECF0',
+              margin: '0 0 24px', letterSpacing: '-0.01em',
+            }}>Join the waitlist</h3>
+
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Plan selector */}
+              <div>
+                <label style={{ fontSize: 11, color: 'rgba(240,236,240,0.4)', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>PLAN</label>
+                <select
+                  value={form.plan}
+                  onChange={e => setForm(f => ({ ...f, plan: e.target.value }))}
+                  style={{ ...inputStyle, cursor: 'pointer' }}
+                  onFocus={e => e.target.style.borderColor = 'rgba(229,0,76,0.55)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(229,0,76,0.20)'}
+                >
+                  <option value="starter">Starter — $29/mo</option>
+                  <option value="business">Business — $99/mo</option>
+                  <option value="enterprise">Enterprise — $299/mo</option>
+                </select>
+              </div>
+
+              {/* Name */}
+              <div>
+                <label style={{ fontSize: 11, color: 'rgba(240,236,240,0.4)', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>FULL NAME *</label>
+                <input
+                  type="text" required placeholder="Jane Smith"
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  style={inputStyle}
+                  onFocus={e => e.target.style.borderColor = 'rgba(229,0,76,0.55)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(229,0,76,0.20)'}
+                />
+              </div>
+
+              {/* Company */}
+              <div>
+                <label style={{ fontSize: 11, color: 'rgba(240,236,240,0.4)', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>COMPANY <span style={{ opacity: 0.5 }}>(optional)</span></label>
+                <input
+                  type="text" placeholder="Acme Inc."
+                  value={form.company}
+                  onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
+                  style={inputStyle}
+                  onFocus={e => e.target.style.borderColor = 'rgba(229,0,76,0.55)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(229,0,76,0.20)'}
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label style={{ fontSize: 11, color: 'rgba(240,236,240,0.4)', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>WORK EMAIL *</label>
+                <input
+                  type="email" required placeholder="jane@acme.com"
+                  value={form.email}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  style={inputStyle}
+                  onFocus={e => e.target.style.borderColor = 'rgba(229,0,76,0.55)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(229,0,76,0.20)'}
+                />
+              </div>
+
+              {state === 'error' && (
+                <div style={{ fontSize: 12, color: '#FF4D4D', padding: '8px 12px', background: 'rgba(255,0,0,0.06)', borderRadius: 6 }}>
+                  {errMsg}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={state === 'loading'}
+                style={{
+                  marginTop: 4,
+                  background: state === 'loading' ? 'rgba(229,0,76,0.5)' : '#E5004C',
+                  border: 'none', borderRadius: 9,
+                  padding: '14px', color: '#FFFFFF',
+                  fontFamily: 'system-ui,-apple-system,sans-serif',
+                  fontSize: 15, fontWeight: 700, cursor: state === 'loading' ? 'not-allowed' : 'pointer',
+                  transition: 'background 0.15s, transform 0.15s',
+                }}
+                onMouseEnter={e => { if (state !== 'loading') e.currentTarget.style.background = '#FF1A5E'; }}
+                onMouseLeave={e => { if (state !== 'loading') e.currentTarget.style.background = '#E5004C'; }}
+              >
+                {state === 'loading' ? 'Submitting...' : 'Request Access →'}
+              </button>
+
+              <p style={{ fontSize: 11, color: 'rgba(240,236,240,0.25)', textAlign: 'center', margin: 0 }}>
+                No spam. We'll only contact you about your API access.
+              </p>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Nav ───────────────────────────────────────────────────────────────────────
-function LandingNav({ onLaunch }) {
+function LandingNav({ onLaunch, onWaitlist }) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -104,27 +341,50 @@ function LandingNav({ onLaunch }) {
         }}>ORI STUDIO</span>
       </div>
 
-      {/* CTA */}
-      <button
-        onClick={onLaunch}
-        style={{
-          fontFamily: "'SF Mono','Fira Code',monospace",
-          fontSize: 11, fontWeight: 600, letterSpacing: '0.12em',
-          color: '#E5004C', background: 'transparent',
-          border: '1px solid rgba(229,0,76,0.45)',
-          borderRadius: 6, padding: '7px 18px',
-          cursor: 'pointer',
-          transition: 'background 0.2s, border-color 0.2s, color 0.2s',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.background = 'rgba(229,0,76,0.12)';
-          e.currentTarget.style.borderColor = 'rgba(229,0,76,0.75)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.borderColor = 'rgba(229,0,76,0.45)';
-        }}
-      >LAUNCH →</button>
+      {/* CTAs */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          onClick={onWaitlist}
+          style={{
+            fontFamily: "'SF Mono','Fira Code',monospace",
+            fontSize: 11, fontWeight: 600, letterSpacing: '0.12em',
+            color: 'rgba(240,236,240,0.65)', background: 'transparent',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 6, padding: '7px 16px',
+            cursor: 'pointer',
+            transition: 'background 0.2s, border-color 0.2s, color 0.2s',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+            e.currentTarget.style.color = '#F0ECF0';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'rgba(240,236,240,0.65)';
+          }}
+        >FOR BUSINESS</button>
+
+        <button
+          onClick={onLaunch}
+          style={{
+            fontFamily: "'SF Mono','Fira Code',monospace",
+            fontSize: 11, fontWeight: 600, letterSpacing: '0.12em',
+            color: '#E5004C', background: 'transparent',
+            border: '1px solid rgba(229,0,76,0.45)',
+            borderRadius: 6, padding: '7px 18px',
+            cursor: 'pointer',
+            transition: 'background 0.2s, border-color 0.2s, color 0.2s',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(229,0,76,0.12)';
+            e.currentTarget.style.borderColor = 'rgba(229,0,76,0.75)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.borderColor = 'rgba(229,0,76,0.45)';
+          }}
+        >LAUNCH →</button>
+      </div>
     </nav>
   );
 }
@@ -392,6 +652,151 @@ function Features() {
   );
 }
 
+// ── Pricing ───────────────────────────────────────────────────────────────────
+function PlanCard({ plan, delay, visible, onSelect }) {
+  const [hovered, setHovered] = useState(false);
+  const active = plan.highlight || hovered;
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        background: plan.highlight ? 'rgba(229,0,76,0.06)' : 'rgba(255,255,255,0.025)',
+        border: `1px solid ${active ? 'rgba(229,0,76,0.55)' : 'rgba(229,0,76,0.12)'}`,
+        borderRadius: 16, padding: '32px 28px',
+        display: 'flex', flexDirection: 'column',
+        opacity: visible ? 1 : 0,
+        transform: visible ? (hovered ? 'translateY(-4px)' : 'none') : 'translateY(24px)',
+        transition: `opacity 0.55s ease ${delay}s, transform 0.3s ease, border-color 0.25s`,
+      }}
+    >
+      {/* Popular badge */}
+      {plan.highlight && (
+        <div style={{
+          position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)',
+          background: '#E5004C', color: '#FFF',
+          fontFamily: "'SF Mono','Fira Code',monospace",
+          fontSize: 9, fontWeight: 700, letterSpacing: '0.14em',
+          padding: '4px 14px', borderRadius: 20,
+        }}>MOST POPULAR</div>
+      )}
+
+      {/* Plan name + tag */}
+      <div style={{
+        fontFamily: "'SF Mono','Fira Code',monospace",
+        fontSize: 9.5, letterSpacing: '0.2em',
+        color: plan.highlight ? 'rgba(229,0,76,0.8)' : 'rgba(240,236,240,0.35)',
+        marginBottom: 8,
+      }}>{plan.tag.toUpperCase()}</div>
+      <div style={{
+        fontFamily: 'system-ui,-apple-system,sans-serif',
+        fontSize: 20, fontWeight: 700, color: '#F0ECF0',
+        marginBottom: 16, letterSpacing: '-0.01em',
+      }}>{plan.name}</div>
+
+      {/* Price */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 6 }}>
+        <span style={{
+          fontFamily: 'system-ui,-apple-system,sans-serif',
+          fontSize: 46, fontWeight: 800, color: '#F0ECF0',
+          letterSpacing: '-0.03em', lineHeight: 1,
+        }}>{plan.price}</span>
+        <span style={{ color: 'rgba(240,236,240,0.4)', fontSize: 15 }}>{plan.period}</span>
+      </div>
+
+      {/* Requests */}
+      <div style={{
+        fontFamily: "'SF Mono','Fira Code',monospace",
+        fontSize: 10.5, color: 'rgba(229,0,76,0.7)',
+        marginBottom: 24, letterSpacing: '0.04em',
+      }}>{plan.requests}</div>
+
+      {/* Features list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 28, flex: 1 }}>
+        {plan.features.map((f, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, fontSize: 13.5, color: 'rgba(240,236,240,0.6)' }}>
+            <span style={{ color: '#E5004C', flexShrink: 0, marginTop: 1 }}>✓</span>
+            <span>{f}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* CTA */}
+      <button
+        onClick={() => onSelect(plan)}
+        style={{
+          background: plan.highlight ? '#E5004C' : 'transparent',
+          border: `1px solid ${plan.highlight ? '#E5004C' : 'rgba(229,0,76,0.35)'}`,
+          borderRadius: 9, padding: '13px',
+          color: plan.highlight ? '#FFFFFF' : '#E5004C',
+          fontFamily: 'system-ui,-apple-system,sans-serif',
+          fontSize: 14, fontWeight: 700, cursor: 'pointer',
+          transition: 'background 0.2s, border-color 0.2s, transform 0.15s',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.background = '#FF1A5E';
+          e.currentTarget.style.borderColor = '#FF1A5E';
+          e.currentTarget.style.color = '#FFF';
+          e.currentTarget.style.transform = 'scale(1.02)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = plan.highlight ? '#E5004C' : 'transparent';
+          e.currentTarget.style.borderColor = plan.highlight ? '#E5004C' : 'rgba(229,0,76,0.35)';
+          e.currentTarget.style.color = plan.highlight ? '#FFF' : '#E5004C';
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
+      >
+        Get {plan.name} Access →
+      </button>
+    </div>
+  );
+}
+
+function Pricing({ onSelectPlan }) {
+  const [ref, visible] = useInView(0.1);
+  return (
+    <section ref={ref} style={{ padding: '100px 32px', maxWidth: 1040, margin: '0 auto', width: '100%' }}>
+      {/* Header */}
+      <div style={{
+        textAlign: 'center', marginBottom: 64,
+        opacity: visible ? 1 : 0, transform: visible ? 'none' : 'translateY(20px)',
+        transition: 'opacity 0.5s ease, transform 0.5s ease',
+      }}>
+        <div style={{
+          fontFamily: "'SF Mono','Fira Code',monospace",
+          fontSize: 10, letterSpacing: '0.26em', color: 'rgba(229,0,76,0.65)',
+          marginBottom: 14, fontWeight: 500,
+        }}>API ACCESS FOR BUSINESS</div>
+        <h2 style={{
+          fontFamily: 'system-ui,-apple-system,sans-serif',
+          fontSize: 'clamp(28px,4vw,44px)', fontWeight: 800,
+          color: '#F0ECF0', margin: '0 0 14px', letterSpacing: '-0.02em',
+        }}>Simple, predictable pricing.</h2>
+        <p style={{ fontSize: 16, color: 'rgba(240,236,240,0.45)', margin: 0 }}>
+          Fixed monthly cost. No per-token surprises. Drop-in OpenAI replacement.
+        </p>
+      </div>
+
+      {/* Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+        {PLANS.map((plan, i) => (
+          <PlanCard key={plan.id} plan={plan} delay={0.1 + i * 0.1} visible={visible} onSelect={onSelectPlan} />
+        ))}
+      </div>
+
+      {/* Fine print */}
+      <p style={{
+        textAlign: 'center', marginTop: 32,
+        fontFamily: "'SF Mono','Fira Code',monospace",
+        fontSize: 10, color: 'rgba(240,236,240,0.22)', letterSpacing: '0.06em',
+      }}>
+        All plans include the OpenAI-compatible REST API · Data stays on our sovereign infrastructure · Cancel anytime
+      </p>
+    </section>
+  );
+}
+
 // ── Philosophy ────────────────────────────────────────────────────────────────
 function Philosophy() {
   const [ref, visible] = useInView(0.15);
@@ -448,7 +853,7 @@ function Philosophy() {
 }
 
 // ── Final CTA ─────────────────────────────────────────────────────────────────
-function FinalCTA({ onLaunch }) {
+function FinalCTA({ onLaunch, onWaitlist }) {
   const [ref, visible] = useInView(0.2);
   return (
     <section ref={ref} style={{
@@ -496,6 +901,7 @@ function FinalCTA({ onLaunch }) {
       </p>
 
       <div style={{
+        display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center',
         opacity: visible ? 1 : 0, transform: visible ? 'scale(1)' : 'scale(0.92)',
         transition: 'opacity 0.5s ease 0.3s, transform 0.5s ease 0.3s',
       }}>
@@ -520,6 +926,28 @@ function FinalCTA({ onLaunch }) {
           }}
         >
           Enter ORI Studio →
+        </button>
+
+        <button
+          onClick={onWaitlist}
+          style={{
+            fontFamily: 'system-ui,-apple-system,sans-serif',
+            fontSize: 17, fontWeight: 700,
+            color: '#F0ECF0', background: 'transparent',
+            border: '1px solid rgba(240,236,240,0.18)', borderRadius: 10,
+            padding: '17px 36px', cursor: 'pointer',
+            transition: 'transform 0.15s ease, border-color 0.15s ease',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'scale(1.04)';
+            e.currentTarget.style.borderColor = 'rgba(240,236,240,0.4)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.borderColor = 'rgba(240,236,240,0.18)';
+          }}
+        >
+          API Access →
         </button>
       </div>
     </section>
@@ -551,6 +979,11 @@ function Footer() {
 
 // ── Root landing page ─────────────────────────────────────────────────────────
 export function LandingPage({ onLaunch }) {
+  const [waitlistPlan, setWaitlistPlan] = useState(null);
+
+  const openWaitlist = (plan) => setWaitlistPlan(plan || PLANS[1]);
+  const closeWaitlist = () => setWaitlistPlan(null);
+
   return (
     <div style={{
       background: '#040208',
@@ -559,13 +992,17 @@ export function LandingPage({ onLaunch }) {
       overflowX: 'hidden',
     }}>
       <style>{KEYFRAMES}</style>
-      <LandingNav onLaunch={onLaunch} />
+      <LandingNav onLaunch={onLaunch} onWaitlist={() => openWaitlist(null)} />
       <Hero onLaunch={onLaunch} />
       <Stats />
       <Features />
+      <Pricing onSelectPlan={openWaitlist} />
       <Philosophy />
-      <FinalCTA onLaunch={onLaunch} />
+      <FinalCTA onLaunch={onLaunch} onWaitlist={() => openWaitlist(null)} />
       <Footer />
+      {waitlistPlan !== null && (
+        <WaitlistModal plan={waitlistPlan} onClose={closeWaitlist} />
+      )}
     </div>
   );
 }
