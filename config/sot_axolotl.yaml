@@ -1,0 +1,97 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Oricli Structured Output LoRA — Axolotl config
+# Target: Qwen/Qwen2.5-1.5B-Instruct (fast overnight, well-supported by Axolotl)
+#
+# RunPod usage:
+#   1. Deploy a RunPod Fine-Tune pod (RTX 4090 or A100 recommended)
+#   2. Copy this file to /workspace/fine-tuning/config.yaml on the pod
+#   3. Upload your dataset to HuggingFace and set datasets[0].path below
+#   4. Run: axolotl train config.yaml
+#   5. Output is at /workspace/fine-tuning/outputs/sot-lora/
+# ─────────────────────────────────────────────────────────────────────────────
+
+base_model: Qwen/Qwen2.5-1.5B-Instruct
+model_type: AutoModelForCausalLM
+tokenizer_type: AutoTokenizer
+
+# ── Dataset ──────────────────────────────────────────────────────────────────
+# Option A: HuggingFace dataset (recommended for RunPod)
+#   Upload your sot_train.jsonl to HuggingFace first:
+#   huggingface-cli upload <your-org>/oricli-sot data/sot_train.jsonl train.jsonl
+datasets:
+  - path: thynaptic/oricli-sot   # ← change to your HF dataset repo
+    type: alpaca
+    # Alternatively, use local file on the pod:
+    # path: /workspace/fine-tuning/sot_train.jsonl
+    # type: alpaca
+
+dataset_prepared_path: /workspace/fine-tuning/.cache/sot_prepared
+val_set_size: 0.05
+
+# ── Output ───────────────────────────────────────────────────────────────────
+output_dir: /workspace/fine-tuning/outputs/sot-lora
+
+# ── QLoRA ────────────────────────────────────────────────────────────────────
+adapter: lora
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+lora_target_linear: true
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+load_in_4bit: true
+bf16: auto
+fp16: false
+
+# ── Training ─────────────────────────────────────────────────────────────────
+sequence_len: 2048
+sample_packing: true
+pad_to_sequence_len: true
+
+num_epochs: 3
+micro_batch_size: 4
+gradient_accumulation_steps: 4
+learning_rate: 0.0002
+lr_scheduler: cosine
+warmup_steps: 20
+
+optimizer: adamw_bnb_8bit
+weight_decay: 0.01
+max_grad_norm: 1.0
+
+# ── Logging + Checkpointing ───────────────────────────────────────────────────
+logging_steps: 10
+save_steps: 100
+eval_steps: 50
+save_total_limit: 3
+
+# ── Prompt format ─────────────────────────────────────────────────────────────
+# Alpaca format: instruction + input → output
+# This matches our AlpacaExample struct exactly.
+
+# ── Merge + Export ────────────────────────────────────────────────────────────
+# After training, merge LoRA weights and export GGUF:
+#
+#   axolotl merge-lora config.yaml
+#   # Merged model → /workspace/fine-tuning/outputs/sot-lora/merged/
+#
+#   # Convert to GGUF (llama.cpp must be installed on pod):
+#   python3 /workspace/llama.cpp/convert_hf_to_gguf.py \
+#     /workspace/fine-tuning/outputs/sot-lora/merged \
+#     --outfile /workspace/fine-tuning/outputs/sot-lora/oricli-sot-q4.gguf \
+#     --outtype q4_k_m
+#
+#   # Pull GGUF to VPS:
+#   scp <pod>:/workspace/fine-tuning/outputs/sot-lora/oricli-sot-q4.gguf /home/mike/Mavaia/data/
+#   # Then run: bash scripts/swap_ollama_model.sh /home/mike/Mavaia/data/oricli-sot-q4.gguf
+#
+# Optional: push merged model to HuggingFace
+#   huggingface-cli upload thynaptic/oricli-sot-merged \
+#     /workspace/fine-tuning/outputs/sot-lora/merged

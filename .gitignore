@@ -199,3 +199,4 @@ ui_daemon.log
 
 # Source constitution — proprietary IP, never commit
 data/source_constitution.json
+data/sot_train.jsonl
