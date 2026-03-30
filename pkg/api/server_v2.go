@@ -42,6 +42,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 	tcdpkg "github.com/thynaptic/oricli-go/pkg/tcd"
 	"github.com/thynaptic/oricli-go/pkg/goal"
+	"github.com/thynaptic/oricli-go/pkg/finetune"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
@@ -103,6 +104,8 @@ type ServerV2 struct {
 	GoalDaemon  *service.GoalDaemon
 	GoalStore   *goal.GoalStore
 	GoalPlanner *goal.GoalPlanner
+	// FineTune: Automated LoRA training orchestrator
+	FineTune *service.FineTuneService
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -433,6 +436,14 @@ func (s *ServerV2) setupRoutes() {
 			sovereignGoals.GET("/:id", s.handleGoalGet)
 			sovereignGoals.POST("/:id/tick", s.handleGoalTick)
 			sovereignGoals.DELETE("/:id", s.handleGoalCancel)
+		}
+
+		// FineTune: Automated LoRA training
+		ftRoutes := protected.Group("/finetune")
+		{
+			ftRoutes.POST("/run", s.handleFineTuneRun)
+			ftRoutes.GET("/status/:job_id", s.handleFineTuneStatus)
+			ftRoutes.GET("/jobs", s.handleFineTuneJobs)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3239,4 +3250,64 @@ c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 return
 }
 c.JSON(http.StatusOK, gin.H{"status": "cancelled", "id": id})
+}
+
+// ─── FineTune: Automated LoRA Training ───────────────────────────────────────
+
+// POST /v1/finetune/run — start a fine-tuning job
+func (s *ServerV2) handleFineTuneRun(c *gin.Context) {
+if s.FineTune == nil || !s.FineTune.Enabled {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning disabled — set ORICLI_FINETUNE_ENABLED=true"})
+return
+}
+var req struct {
+ModelBase    string `json:"model_base"`
+DatasetCount int    `json:"dataset_count"`
+GPUType      string `json:"gpu_type"`
+}
+if err := c.ShouldBindJSON(&req); err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+return
+}
+
+cfg := finetune.RunConfig{
+ModelBase:    req.ModelBase,
+DatasetCount: req.DatasetCount,
+GPUType:      req.GPUType,
+}
+
+jobID, err := s.FineTune.RunAsync(cfg)
+if err != nil {
+c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusAccepted, gin.H{
+"job_id":  jobID,
+"message": "fine-tuning job queued — poll GET /v1/finetune/status/" + jobID,
+})
+}
+
+// GET /v1/finetune/status/:job_id — get job status
+func (s *ServerV2) handleFineTuneStatus(c *gin.Context) {
+if s.FineTune == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning not enabled"})
+return
+}
+jobID := c.Param("job_id")
+status, ok := s.FineTune.GetStatus(jobID)
+if !ok {
+c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+return
+}
+c.JSON(http.StatusOK, status)
+}
+
+// GET /v1/finetune/jobs — list all jobs
+func (s *ServerV2) handleFineTuneJobs(c *gin.Context) {
+if s.FineTune == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning not enabled"})
+return
+}
+jobs := s.FineTune.ListJobs()
+c.JSON(http.StatusOK, gin.H{"jobs": jobs, "count": len(jobs)})
 }

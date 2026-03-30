@@ -30,6 +30,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/goal"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
+	"github.com/thynaptic/oricli-go/pkg/finetune"
 )
 
 func bootstrapAPIKey(st *memory.MemoryStore) string {
@@ -475,6 +476,13 @@ func main() {
 
 		go goalDaemon.Run()
 		log.Printf("[Goals] Sovereign Goal Engine active — interval: %s", os.Getenv("ORICLI_GOAL_INTERVAL"))
+	}
+
+	// ── FineTune: Automated LoRA Orchestrator (opt-in via ORICLI_FINETUNE_ENABLED=true) ──
+	if os.Getenv("ORICLI_FINETUNE_ENABLED") == "true" {
+		repoRoot, _ := filepath.Abs(".")
+		apiServer.FineTune = service.NewFineTuneService(repoRoot)
+		log.Printf("[FineTune] Orchestrator active — default GPU: %s", finetune.DefaultGPUType)
 	}
 
 	go apiServer.Start()
