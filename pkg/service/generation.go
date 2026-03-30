@@ -25,8 +25,9 @@ type GenerationService struct {
 	NumThreads     int
 	HTTPClient     *http.Client
 	StreamClient   *http.Client
-	RunPodMgr      *RunPodManager         // KoboldCpp-based (code/research tiers, legacy)
+	RunPodMgr      *RunPodManager           // KoboldCpp-based (code/research tiers, legacy)
 	PrimaryMgr     *PrimaryInferenceManager // vLLM-based (all tiers, RUNPOD_PRIMARY=true)
+	Governor       *CostGovernor            // daily spend cap — blocks RunPod escalation when exhausted
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -276,9 +277,15 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 	if IsComplexityRoutingEnabled() {
 		complexity := ClassifyComplexity(messages)
 		if complexity.Tier > TierLocal {
-			ApplyComplexityRouting(complexity, options)
-			log.Printf("[GenerationService] complexity=%s score=%.2f reasons=%v",
-				complexity.Tier, complexity.Score, complexity.Reasons)
+			// Governor hard-cap: if daily budget is exhausted, stay local.
+			estimatedCost := EstimateRunPodCost(1)
+			if s.Governor != nil && !s.Governor.CanSpend(estimatedCost) {
+				log.Printf("[GenerationService] CostGovernor: daily cap hit — forcing TierLocal (was %s)", complexity.Tier)
+			} else {
+				ApplyComplexityRouting(complexity, options)
+				log.Printf("[GenerationService] complexity=%s score=%.2f reasons=%v",
+					complexity.Tier, complexity.Score, complexity.Reasons)
+			}
 		}
 	}
 

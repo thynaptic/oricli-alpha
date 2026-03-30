@@ -855,6 +855,33 @@ func (m *MemoryBank) LoadSpend(ctx context.Context, service, month string) float
 	return floatField(result.Items[0], "amount")
 }
 
+// ─── SCAI Reflection Log ──────────────────────────────────────────────────────
+
+// SaveSCAIRevision records a safety self-correction event to the reflection_log
+// collection. Called whenever SelfAlign() detects a constitutional violation and
+// rewrites the response. Non-blocking — fires in a goroutine.
+func (m *MemoryBank) SaveSCAIRevision(sessionID, tenantID, query, original, revised, reason string) {
+	if !m.enabled {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, err := m.adminClient.CreateRecord(ctx, "reflection_log", map[string]any{
+			"session_id":  sessionID,
+			"tenant_id":   tenantID,
+			"query":       truncateMB(query, 5000),
+			"original":    truncateMB(original, 20000),
+			"revised":     truncateMB(revised, 20000),
+			"reason":      truncateMB(reason, 2000),
+			"revised_at":  time.Now().UTC().Format(time.RFC3339),
+		})
+		if err != nil {
+			log.Printf("[MemoryBank] reflection_log write error: %v", err)
+		}
+	}()
+}
+
 // ─── Conversation Summary ─────────────────────────────────────────────────────
 
 // SaveConversationSummary stores a compressed session summary for future RAG.
@@ -1056,4 +1083,12 @@ continue
 decayed++
 }
 return decayed, nil
+}
+
+// truncateMB clips s to at most n bytes (rune-safe approximation).
+func truncateMB(s string, n int) string {
+if len(s) <= n {
+return s
+}
+return s[:n]
 }

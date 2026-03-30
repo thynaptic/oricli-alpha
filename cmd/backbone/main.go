@@ -155,6 +155,7 @@ func main() {
 	// Initialize World Traveler + Benchmark Gap Detector
 	costGovernor := service.NewCostGovernor(nil)
 	curiosity.Governor = costGovernor
+	genService.Governor = costGovernor // gate RunPod escalation on daily budget
 	if os.Getenv("WORLD_TRAVELER_USE_RUNPOD") == "true" {
 		curiosity.UseRunPodSynthesis = true
 		log.Println("[Boot] RunPod synthesis enabled for CuriosityDaemon.")

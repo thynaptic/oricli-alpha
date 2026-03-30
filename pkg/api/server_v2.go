@@ -1010,6 +1010,10 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			"corrected":        corrected,
 			"original_preview": response[:min(120, len(response))],
 		})
+		// Persist revision to reflection_log for operator audit and DPO learning.
+		if s.MemoryBank != nil && s.MemoryBank.IsEnabled() {
+			s.MemoryBank.SaveSCAIRevision(sid, "", query, response, corrected, "SCAI constitutional violation")
+		}
 	}(lastMsg, responseText, sessionID)
 
 	// ExploiterLeague — 3 async specialists audit every response post-stream (AlphaStar League).

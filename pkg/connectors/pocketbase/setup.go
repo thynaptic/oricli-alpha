@@ -18,6 +18,7 @@ func Bootstrap(ctx context.Context, c *Client) error {
 		conversationSummariesSchema(),
 		sovereignGoalsSchema(),
 		canvasSharesSchema(),
+		reflectionLogSchema(),
 	}
 
 	for _, schema := range collections {
@@ -263,4 +264,23 @@ Schema: []FieldSchema{
 {Name: "language",  Type: "text"},
 },
 }
+}
+
+// reflectionLogSchema stores SCAI safety revision events for audit and learning.
+// Each record captures the original response, the violation reason, and the
+// revised output so operators can see exactly what the AI self-corrected.
+func reflectionLogSchema() CollectionSchema {
+	return CollectionSchema{
+		Name: "reflection_log",
+		Type: "base",
+		Schema: []FieldSchema{
+			{Name: "session_id",  Type: "text", Required: true},
+			{Name: "tenant_id",  Type: "text"},                                             // empty until tenant-auth ships
+			{Name: "query",      Type: "text", Required: true, Options: map[string]any{"maxSize": 5000}},
+			{Name: "original",   Type: "text", Required: true, Options: map[string]any{"maxSize": 20000}},
+			{Name: "revised",    Type: "text", Required: true, Options: map[string]any{"maxSize": 20000}},
+			{Name: "reason",     Type: "text", Required: true, Options: map[string]any{"maxSize": 2000}},
+			{Name: "revised_at", Type: "text", Required: true}, // RFC3339
+		},
+	}
 }
