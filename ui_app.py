@@ -4889,6 +4889,387 @@ def main() -> None:
         raise
 
 
+# ── Waitlist Admin ────────────────────────────────────────────────────────────
+_PB_BASE  = os.getenv("PB_BASE_URL", "https://pocketbase.thynaptic.com")
+_PB_EMAIL = os.getenv("PB_ADMIN_EMAIL", "")
+_PB_PASS  = os.getenv("PB_ADMIN_PASSWORD", "")
+_ADMIN_PASSWORD = os.getenv("WAITLIST_ADMIN_PASSWORD", "thynaptic2026")
+
+_WAITLIST_ADMIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ORI Studio — Waitlist Admin</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #050309; --surface: #0d0a14; --border: rgba(229,0,76,0.15);
+    --red: #E5004C; --red-dim: rgba(229,0,76,0.7); --text: #F0ECF0;
+    --muted: rgba(240,236,240,0.45); --mono: 'SF Mono','Fira Code','Courier New',monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-system,sans-serif;
+         min-height: 100vh; padding: 0; }
+
+  /* Gate */
+  #gate { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .gate-box { background: var(--surface); border:1px solid var(--border);
+              border-radius:16px; padding:40px 36px; width:340px; text-align:center; }
+  .gate-logo { width:48px; height:48px; margin: 0 auto 20px; }
+  .gate-box h1 { font-size:18px; font-weight:700; margin-bottom:6px; }
+  .gate-box p { font-size:13px; color:var(--muted); margin-bottom:28px; }
+  .gate-box input { width:100%; background:#000; border:1px solid var(--border);
+                    border-radius:8px; padding:12px 14px; color:var(--text);
+                    font-size:14px; outline:none; margin-bottom:14px; }
+  .gate-box input:focus { border-color:var(--red-dim); }
+  .gate-btn { width:100%; background:var(--red); border:none; border-radius:8px;
+              padding:13px; color:#fff; font-size:14px; font-weight:700;
+              cursor:pointer; transition:background 0.15s; }
+  .gate-btn:hover { background:#FF1A5E; }
+  .gate-err { color:var(--red); font-size:12px; margin-top:10px; font-family:var(--mono); }
+
+  /* Main layout */
+  #main { display:none; }
+  header { background:var(--surface); border-bottom:1px solid var(--border);
+           padding:0 32px; height:60px; display:flex; align-items:center; gap:12px;
+           position:sticky; top:0; z-index:10; }
+  header img { width:28px; height:28px; object-fit:contain; }
+  header .title { font-family:var(--mono); font-size:11px; letter-spacing:0.16em;
+                  color:var(--muted); }
+  header .title span { color:var(--text); font-weight:600; }
+  .hright { margin-left:auto; display:flex; gap:10px; align-items:center; }
+  .hright .badge { font-family:var(--mono); font-size:10px; color:var(--muted); }
+  .refresh-btn { background:transparent; border:1px solid var(--border); border-radius:6px;
+                 padding:6px 14px; color:var(--muted); font-size:11px; cursor:pointer;
+                 font-family:var(--mono); letter-spacing:0.1em; transition:all 0.2s; }
+  .refresh-btn:hover { border-color:var(--red-dim); color:var(--text); }
+
+  /* Stats strip */
+  .stats { display:flex; gap:16px; padding:24px 32px 0; flex-wrap:wrap; }
+  .stat { background:var(--surface); border:1px solid var(--border); border-radius:12px;
+          padding:18px 24px; min-width:160px; }
+  .stat-val { font-size:32px; font-weight:800; letter-spacing:-0.02em; }
+  .stat-label { font-family:var(--mono); font-size:9.5px; color:var(--muted);
+                letter-spacing:0.18em; margin-top:4px; }
+  .stat.red .stat-val { color:var(--red); }
+
+  /* Filters */
+  .filters { padding:20px 32px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .filter-btn { background:transparent; border:1px solid var(--border); border-radius:20px;
+                padding:6px 16px; color:var(--muted); font-size:12px; cursor:pointer;
+                font-family:var(--mono); letter-spacing:0.08em; transition:all 0.2s; }
+  .filter-btn:hover, .filter-btn.active { background:rgba(229,0,76,0.1); border-color:var(--red-dim); color:var(--text); }
+  .search { margin-left:auto; background:#000; border:1px solid var(--border); border-radius:8px;
+            padding:7px 12px; color:var(--text); font-size:13px; width:220px; outline:none; }
+  .search:focus { border-color:var(--red-dim); }
+
+  /* Table */
+  .table-wrap { padding:20px 32px 40px; overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  thead th { font-family:var(--mono); font-size:9.5px; letter-spacing:0.18em;
+             color:var(--muted); text-align:left; padding:0 16px 12px;
+             border-bottom:1px solid var(--border); white-space:nowrap; }
+  tbody tr { border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.15s; }
+  tbody tr:hover { background:rgba(255,255,255,0.025); }
+  td { padding:14px 16px; vertical-align:middle; }
+  td.name { font-weight:600; color:var(--text); }
+  td.company { color:var(--muted); font-size:12.5px; }
+  td.email { font-family:var(--mono); font-size:12px; color:rgba(240,236,240,0.6); }
+  td.date { font-family:var(--mono); font-size:11px; color:var(--muted); }
+
+  /* Plan badge */
+  .plan { display:inline-block; font-family:var(--mono); font-size:9.5px;
+          font-weight:700; letter-spacing:0.14em; padding:4px 10px;
+          border-radius:20px; }
+  .plan-starter  { background:rgba(120,120,180,0.15); color:#9090cc; border:1px solid rgba(120,120,180,0.25); }
+  .plan-business { background:rgba(229,0,76,0.12); color:var(--red); border:1px solid rgba(229,0,76,0.3); }
+  .plan-enterprise { background:rgba(255,180,0,0.10); color:#e8b84b; border:1px solid rgba(255,180,0,0.25); }
+
+  /* Status select */
+  .status-sel { background:#000; border:1px solid var(--border); border-radius:6px;
+                padding:5px 8px; color:var(--text); font-family:var(--mono); font-size:10.5px;
+                cursor:pointer; outline:none; }
+  .status-sel:focus { border-color:var(--red-dim); }
+  .status-sel.pending  { border-color:rgba(229,0,76,0.3); color:var(--red-dim); }
+  .status-sel.approved { border-color:rgba(0,200,100,0.3); color:#3ecf8e; }
+  .status-sel.rejected { border-color:rgba(255,255,255,0.15); color:var(--muted); }
+
+  /* Empty */
+  .empty { text-align:center; padding:80px 32px; color:var(--muted);
+           font-family:var(--mono); font-size:12px; letter-spacing:0.12em; }
+
+  /* Toast */
+  #toast { position:fixed; bottom:28px; right:28px; background:#111; border:1px solid var(--border);
+           border-radius:10px; padding:12px 20px; font-size:13px; color:var(--text);
+           opacity:0; transition:opacity 0.25s; pointer-events:none; z-index:100; }
+  #toast.show { opacity:1; }
+  #toast.ok  { border-color:rgba(0,200,100,0.4); color:#3ecf8e; }
+  #toast.err { border-color:rgba(229,0,76,0.4); color:var(--red); }
+</style>
+</head>
+<body>
+
+<!-- Gate -->
+<div id="gate">
+  <div class="gate-box">
+    <img src="/ori-mark-red.png" class="gate-logo" alt="ORI" />
+    <h1>Waitlist Admin</h1>
+    <p>ORI Studio · Thynaptic</p>
+    <input type="password" id="pwd" placeholder="Admin password" autocomplete="current-password" />
+    <button class="gate-btn" onclick="unlock()">ENTER →</button>
+    <div class="gate-err" id="gate-err"></div>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="main">
+  <header>
+    <img src="/ori-mark-red.png" alt="ORI" />
+    <div class="title"><span>ORI STUDIO</span> · WAITLIST ADMIN</div>
+    <div class="hright">
+      <span class="badge" id="last-refresh">—</span>
+      <button class="refresh-btn" onclick="loadData()">⟳ REFRESH</button>
+    </div>
+  </header>
+
+  <div class="stats" id="stats-strip"></div>
+
+  <div class="filters">
+    <button class="filter-btn active" data-plan="all" onclick="setFilter(this)">ALL</button>
+    <button class="filter-btn" data-plan="starter" onclick="setFilter(this)">STARTER</button>
+    <button class="filter-btn" data-plan="business" onclick="setFilter(this)">BUSINESS</button>
+    <button class="filter-btn" data-plan="enterprise" onclick="setFilter(this)">ENTERPRISE</button>
+    <input class="search" id="search" placeholder="Search name / email / company…" oninput="renderTable()" />
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>NAME</th>
+          <th>COMPANY</th>
+          <th>EMAIL</th>
+          <th>PLAN</th>
+          <th>STATUS</th>
+          <th>SIGNED UP</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none">NO SIGNUPS YET</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let _records = [];
+let _filter  = 'all';
+let _token   = null;
+
+async function unlock() {
+  const pwd = document.getElementById('pwd').value;
+  const res = await fetch('/admin/waitlist/auth', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({password: pwd})
+  });
+  const d = await res.json();
+  if (d.token) {
+    _token = d.token;
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('main').style.display  = 'block';
+    loadData();
+  } else {
+    document.getElementById('gate-err').textContent = '✗ incorrect password';
+  }
+}
+
+document.getElementById('pwd').addEventListener('keydown', e => {
+  if (e.key === 'Enter') unlock();
+});
+
+function setFilter(btn) {
+  _filter = btn.dataset.plan;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+
+async function loadData() {
+  if (!_token) return;
+  try {
+    const res = await fetch('/admin/waitlist/data', {
+      headers: {'X-Admin-Token': _token}
+    });
+    if (res.status === 401) { location.reload(); return; }
+    const d = await res.json();
+    _records = d.records || [];
+    renderStats();
+    renderTable();
+    document.getElementById('last-refresh').textContent =
+      'Updated ' + new Date().toLocaleTimeString();
+  } catch(e) { toast('Failed to load data', 'err'); }
+}
+
+function renderStats() {
+  const total    = _records.length;
+  const starter  = _records.filter(r => r.plan === 'starter').length;
+  const business = _records.filter(r => r.plan === 'business').length;
+  const enterprise = _records.filter(r => r.plan === 'enterprise').length;
+  const pending  = _records.filter(r => r.status === 'pending').length;
+  document.getElementById('stats-strip').innerHTML = `
+    <div class="stat red"><div class="stat-val">${total}</div><div class="stat-label">TOTAL SIGNUPS</div></div>
+    <div class="stat"><div class="stat-val">${pending}</div><div class="stat-label">PENDING REVIEW</div></div>
+    <div class="stat"><div class="stat-val">${starter}</div><div class="stat-label">STARTER</div></div>
+    <div class="stat"><div class="stat-val">${business}</div><div class="stat-label">BUSINESS</div></div>
+    <div class="stat"><div class="stat-val">${enterprise}</div><div class="stat-label">ENTERPRISE</div></div>
+  `;
+}
+
+function renderTable() {
+  const q = (document.getElementById('search').value || '').toLowerCase();
+  let rows = _records.filter(r => {
+    if (_filter !== 'all' && r.plan !== _filter) return false;
+    if (q) {
+      return (r.name||'').toLowerCase().includes(q) ||
+             (r.email||'').toLowerCase().includes(q) ||
+             (r.company||'').toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  const tbody = document.getElementById('tbody');
+  const empty = document.getElementById('empty');
+
+  if (!rows.length) {
+    tbody.innerHTML = ''; empty.style.display = 'block'; return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = rows.map(r => {
+    const date = r.created ? new Date(r.created).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '—';
+    return `<tr>
+      <td class="name">${esc(r.name)}</td>
+      <td class="company">${esc(r.company || '—')}</td>
+      <td class="email">${esc(r.email)}</td>
+      <td><span class="plan plan-${r.plan}">${(r.plan||'').toUpperCase()}</span></td>
+      <td>
+        <select class="status-sel ${r.status}" onchange="updateStatus('${r.id}', this)"
+                data-id="${r.id}">
+          <option value="pending"  ${r.status==='pending'  ?'selected':''}>pending</option>
+          <option value="approved" ${r.status==='approved' ?'selected':''}>approved</option>
+          <option value="rejected" ${r.status==='rejected' ?'selected':''}>rejected</option>
+        </select>
+      </td>
+      <td class="date">${date}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function updateStatus(id, sel) {
+  sel.className = 'status-sel ' + sel.value;
+  const res = await fetch('/admin/waitlist/update', {
+    method:'POST', headers:{'Content-Type':'application/json','X-Admin-Token':_token},
+    body: JSON.stringify({id, status: sel.value})
+  });
+  const d = await res.json();
+  if (d.ok) {
+    const rec = _records.find(r => r.id === id);
+    if (rec) rec.status = sel.value;
+    renderStats();
+    toast('Status updated → ' + sel.value, 'ok');
+  } else {
+    toast('Update failed', 'err');
+  }
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function toast(msg, type='ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  setTimeout(() => t.className = '', 2400);
+}
+</script>
+</body>
+</html>"""
+
+
+@app.route("/admin/waitlist", methods=["GET"])
+def waitlist_admin_page() -> Response:
+    """Serve the waitlist admin SPA."""
+    from flask import make_response
+    return make_response(_WAITLIST_ADMIN_HTML, 200, {"Content-Type": "text/html"})
+
+
+@app.route("/admin/waitlist/auth", methods=["POST"])
+def waitlist_admin_auth() -> Response:
+    """Exchange admin password for a short-lived PB admin token."""
+    import hashlib, hmac
+    data = request.get_json(force=True) or {}
+    pwd  = data.get("password", "")
+    if not hmac.compare_digest(pwd, _ADMIN_PASSWORD):
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        with _client() as client:
+            r = client.post(
+                f"{_PB_BASE}/api/admins/auth-with-password",
+                json={"identity": _PB_EMAIL, "password": _PB_PASS},
+                timeout=10,
+            )
+            d = r.json()
+            if "token" in d:
+                return jsonify({"token": d["token"]})
+            return jsonify({"error": "pb auth failed"}), 500
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/admin/waitlist/data", methods=["GET"])
+def waitlist_admin_data() -> Response:
+    """Return all waitlist records (proxied from PB with admin token)."""
+    pb_token = request.headers.get("X-Admin-Token", "")
+    if not pb_token:
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        with _client() as client:
+            r = client.get(
+                f"{_PB_BASE}/api/collections/waitlist/records",
+                params={"perPage": 500, "sort": "-created"},
+                headers={"Authorization": pb_token},
+                timeout=10,
+            )
+            d = r.json()
+            return jsonify({"records": d.get("items", []), "total": d.get("totalItems", 0)})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/admin/waitlist/update", methods=["POST"])
+def waitlist_admin_update() -> Response:
+    """PATCH a waitlist record's status."""
+    pb_token = request.headers.get("X-Admin-Token", "")
+    if not pb_token:
+        return jsonify({"error": "unauthorized"}), 401
+    data   = request.get_json(force=True) or {}
+    rec_id = data.get("id", "")
+    status = data.get("status", "")
+    if status not in ("pending", "approved", "rejected"):
+        return jsonify({"error": "invalid status"}), 400
+    try:
+        with _client() as client:
+            r = client.patch(
+                f"{_PB_BASE}/api/collections/waitlist/records/{rec_id}",
+                json={"status": status},
+                headers={"Authorization": pb_token},
+                timeout=10,
+            )
+            return jsonify({"ok": r.status_code < 300})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
 if __name__ == "__main__":
     main()
 
