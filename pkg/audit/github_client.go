@@ -34,7 +34,7 @@ func newGitHubFileClient(token string) *githubFileClient {
 }
 
 const ghAPIBase = "https://api.github.com"
-const auditRepo = "thynaptic/oricli-go"
+const auditRepo = "thynaptic/oricli-alpha"
 
 // fetchFileList recursively lists all files under path in the repo.
 func (c *githubFileClient) fetchFileList(ctx context.Context, path string) ([]repoFile, error) {

@@ -95,7 +95,9 @@ func (d *AuditDaemon) StartDaemon(ctx context.Context) {
 
 // Trigger queues an on-demand audit run for the given scope.
 // Returns the run ID immediately; the run executes asynchronously.
-func (d *AuditDaemon) Trigger(ctx context.Context, scope []string) string {
+// NOTE: we intentionally detach from the caller's context so the HTTP request
+// lifecycle does not cancel the long-running background scan.
+func (d *AuditDaemon) Trigger(_ context.Context, scope []string) string {
 	if len(scope) == 0 {
 		scope = []string{"pkg"}
 	}
@@ -110,7 +112,7 @@ func (d *AuditDaemon) Trigger(ctx context.Context, scope []string) string {
 	d.runs[runID] = run
 	d.mu.Unlock()
 
-	go d.executeRun(ctx, run)
+	go d.executeRun(context.Background(), run)
 	return runID
 }
 
