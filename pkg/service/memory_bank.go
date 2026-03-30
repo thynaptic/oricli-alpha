@@ -30,6 +30,10 @@ type MemoryBank struct {
 	embedder     *Embedder
 	maxRecs      int
 	enabled      bool
+	// WriteHook, if set, is called synchronously before the async PB write.
+	// Used by the Chronos temporal accounting layer (pkg/chronos) without
+	// creating an import cycle.
+	WriteHook func(MemoryFragment)
 }
 
 // ─── Epistemic Hygiene Types ──────────────────────────────────────────────────
@@ -197,6 +201,9 @@ func (m *MemoryBank) Bootstrap(ctx context.Context) error {
 func (m *MemoryBank) Write(frag MemoryFragment) {
 	if !m.enabled {
 		return
+	}
+	if m.WriteHook != nil {
+		m.WriteHook(frag)
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -47,6 +47,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/curator"
 	"github.com/thynaptic/oricli-go/pkg/audit"
 	"github.com/thynaptic/oricli-go/pkg/metacog"
+	"github.com/thynaptic/oricli-go/pkg/chronos"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
@@ -121,6 +122,9 @@ type ServerV2 struct {
 	// MetacogDaemon: Phase 8 Metacognitive Sentience — rolling anomaly scan + WS broadcast
 	MetacogDaemon *metacog.MetacogDaemon
 	MetacogLog    *metacog.EventLog
+	// ChronosIndex + ChronosDaemon: Phase 9 Temporal Grounding
+	ChronosIndex  *chronos.ChronosIndex
+	ChronosDaemon *chronos.TemporalGroundingDaemon
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -499,6 +503,16 @@ func (s *ServerV2) setupRoutes() {
 			metacogRoutes.GET("/events", s.handleMetacogEvents)
 			metacogRoutes.GET("/stats", s.handleMetacogStats)
 			metacogRoutes.POST("/scan", s.handleMetacogScan)
+		}
+
+		// Temporal Grounding — Phase 9
+		chronosRoutes := protected.Group("/chronos")
+		{
+			chronosRoutes.GET("/entries", s.handleChronosEntries)
+			chronosRoutes.GET("/snapshot", s.handleChronosSnapshot)
+			chronosRoutes.GET("/changes", s.handleChronosChanges)
+			chronosRoutes.POST("/decay-scan", s.handleChronosDecayScan)
+			chronosRoutes.POST("/snapshot", s.handleChronosForceSnapshot)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3669,4 +3683,87 @@ for t, n := range counts {
 result[string(t)] = n
 }
 c.JSON(http.StatusOK, gin.H{"window_counts": result, "scanned_at": time.Now().Format(time.RFC3339)})
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9 — Temporal Grounding handlers
+// ---------------------------------------------------------------------------
+
+// GET /v1/chronos/entries?stale=true&n=50&topic=<topic>
+func (s *ServerV2) handleChronosEntries(c *gin.Context) {
+if s.ChronosIndex == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
+return
+}
+n := 50
+if nStr := c.Query("n"); nStr != "" {
+if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
+n = parsed
+}
+}
+staleOnly := c.Query("stale") == "true"
+topicFilter := c.Query("topic")
+
+entries := s.ChronosIndex.TopN(n * 4) // fetch extra to allow filtering
+var result []*chronos.ChronosEntry
+now := time.Now()
+for _, e := range entries {
+if staleOnly && !e.IsStale(now, chronos.StaleThreshold) {
+continue
+}
+if topicFilter != "" && e.Topic != topicFilter {
+continue
+}
+result = append(result, e)
+if len(result) >= n {
+break
+}
+}
+c.JSON(http.StatusOK, gin.H{"entries": result, "count": len(result)})
+}
+
+// GET /v1/chronos/snapshot — latest persisted snapshot
+func (s *ServerV2) handleChronosSnapshot(c *gin.Context) {
+if s.ChronosDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
+return
+}
+snap := s.ChronosDaemon.LatestSnapshot()
+c.JSON(http.StatusOK, snap)
+}
+
+// GET /v1/chronos/changes?n=10 — last N change records
+func (s *ServerV2) handleChronosChanges(c *gin.Context) {
+if s.ChronosDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
+return
+}
+n := 10
+if nStr := c.Query("n"); nStr != "" {
+if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
+n = parsed
+}
+}
+records := s.ChronosDaemon.RecentChanges(n)
+c.JSON(http.StatusOK, gin.H{"changes": records, "count": len(records)})
+}
+
+// POST /v1/chronos/decay-scan — force immediate decay scan
+func (s *ServerV2) handleChronosDecayScan(c *gin.Context) {
+if s.ChronosDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
+return
+}
+result := s.ChronosDaemon.ForceDecayScan()
+c.JSON(http.StatusOK, result)
+}
+
+// POST /v1/chronos/snapshot — force snapshot + diff pass
+func (s *ServerV2) handleChronosForceSnapshot(c *gin.Context) {
+if s.ChronosDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
+return
+}
+diff := s.ChronosDaemon.ForceSnapshot()
+c.JSON(http.StatusOK, diff)
 }

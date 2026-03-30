@@ -35,6 +35,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/curator"
 	"github.com/thynaptic/oricli-go/pkg/audit"
 	"github.com/thynaptic/oricli-go/pkg/metacog"
+	"github.com/thynaptic/oricli-go/pkg/chronos"
 )
 
 func bootstrapAPIKey(st *memory.MemoryStore) string {
@@ -525,15 +526,44 @@ func main() {
 	}
 
 	// ── Metacog: Phase 8 Metacognitive Sentience (opt-in via ORICLI_METACOG_ENABLED=true) ──
+	var metacogEvtLog *metacog.EventLog
 	if os.Getenv("ORICLI_METACOG_ENABLED") == "true" {
-		evtLog := metacog.NewEventLog(0)
-		detector := metacog.NewDetector(evtLog)
+		metacogEvtLog = metacog.NewEventLog(0)
+		detector := metacog.NewDetector(metacogEvtLog)
 		agentService.GenService.MetacogDetector = detector
-		mcDaemon := metacog.NewMetacogDaemon(evtLog, apiServer.WSHub)
+		mcDaemon := metacog.NewMetacogDaemon(metacogEvtLog, apiServer.WSHub)
 		apiServer.MetacogDaemon = mcDaemon
-		apiServer.MetacogLog = evtLog
+		apiServer.MetacogLog = metacogEvtLog
 		mcDaemon.StartDaemon(context.Background())
 		log.Printf("[Metacog] Sentience layer active — inline loop/hallucination detection + 5-min rolling scan")
+	}
+
+	// ── Chronos: Phase 9 Temporal Grounding (opt-in via ORICLI_CHRONOS_ENABLED=true) ──
+	if os.Getenv("ORICLI_CHRONOS_ENABLED") == "true" {
+		chronosIdx := chronos.NewChronosIndex(0)
+		// Hook into MemoryBank — translate MemoryFragment → ObserveInput transparently
+		apiServer.MemoryBank.WriteHook = func(frag service.MemoryFragment) {
+			chronosIdx.Observe(chronos.ObserveInput{
+				ID:         frag.ID,
+				Content:    frag.Content,
+				Topic:      frag.Topic,
+				Source:     frag.Source,
+				Importance: frag.Importance,
+				Volatility: string(frag.Volatility),
+				CreatedAt:  frag.CreatedAt,
+			})
+		}
+		snapDir := "/home/mike/Mavaia/data/chronos/snapshots"
+		chDaemon := chronos.NewTemporalGroundingDaemon(
+			chronosIdx, snapDir,
+			agentService.GenService, // LLMSummarizer interface
+			nil,                     // CuriositySeeder — wire below if curiosity daemon exposed
+			metacogEvtLog,           // nil-safe: phases 8+9 bridge
+		)
+		apiServer.ChronosIndex = chronosIdx
+		apiServer.ChronosDaemon = chDaemon
+		chDaemon.StartDaemon(context.Background())
+		log.Printf("[Chronos] Temporal Grounding active — 30-min decay scan + 6-hour snapshot pass")
 	}
 
 	go apiServer.Start()
