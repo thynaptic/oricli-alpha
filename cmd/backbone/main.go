@@ -31,6 +31,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 	"github.com/thynaptic/oricli-go/pkg/finetune"
+	"github.com/thynaptic/oricli-go/pkg/sentinel"
 )
 
 func bootstrapAPIKey(st *memory.MemoryStore) string {
@@ -483,6 +484,17 @@ func main() {
 		repoRoot, _ := filepath.Abs(".")
 		apiServer.FineTune = service.NewFineTuneService(repoRoot)
 		log.Printf("[FineTune] Orchestrator active — default GPU: %s", finetune.DefaultGPUType)
+	}
+
+	// ── Sentinel: Adversarial pre-flight (opt-in via ORICLI_SENTINEL_ENABLED=true) ──
+	if os.Getenv("ORICLI_SENTINEL_ENABLED") == "true" {
+		s := sentinel.New(agentService.GenService.DirectOllamaSingle)
+		apiServer.Sentinel = s
+		// Wire into GoalExecutor so every goal tick is challenged
+		if apiServer.GoalDaemon != nil && apiServer.GoalDaemon.Executor != nil {
+			apiServer.GoalDaemon.Executor.Sentinel = sentinel.NewGoalAdapter(s)
+		}
+		log.Printf("[Sentinel] Adversarial Sentinel active — red-teaming goal ticks + manual /v1/sentinel/challenge")
 	}
 
 	go apiServer.Start()

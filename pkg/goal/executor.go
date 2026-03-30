@@ -20,11 +20,33 @@ type PADSession struct {
 	Status    string
 }
 
+// SentinelChallenger is the interface for the AdversarialSentinel.
+// Satisfied by *sentinel.AdversarialSentinel — defined here to avoid import cycles.
+type SentinelChallenger interface {
+	Challenge(ctx context.Context, query, plan string) SentinelReport
+}
+
+// SentinelReport is a minimal view of a sentinel challenge result.
+type SentinelReport struct {
+	Passed     bool
+	Blocked    bool
+	Violations []SentinelViolation
+	RevisedPlan string
+}
+
+// SentinelViolation is a single flaw found by the sentinel.
+type SentinelViolation struct {
+	Type        string
+	Description string
+	Severity    string
+}
+
 // GoalExecutor drives one execution tick of a GoalDAG:
 // finds ready nodes → fires PAD dispatches → stores results → advances DAG.
 type GoalExecutor struct {
-	PAD   PADDispatcher
-	Store *GoalStore
+	PAD      PADDispatcher
+	Store    *GoalStore
+	Sentinel SentinelChallenger // optional — nil means sentinel checks are skipped
 }
 
 // NewGoalExecutor creates an executor.
@@ -64,6 +86,33 @@ func (e *GoalExecutor) Tick(ctx context.Context, goal *GoalDAG) (bool, error) {
 
 		// Build context-enriched query: inject accumulated results from done nodes
 		query := e.buildNodeQuery(goal, node)
+
+		// Adversarial Sentinel pre-flight: challenge the plan before dispatching.
+		if e.Sentinel != nil {
+			sentinelCtx, sentinelCancel := context.WithTimeout(ctx, 30*time.Second)
+			report := e.Sentinel.Challenge(sentinelCtx, goal.Objective, query)
+			sentinelCancel()
+			if report.Blocked {
+				log.Printf("[GoalExecutor:%s] Sentinel BLOCKED node %s — %d critical violation(s)",
+					goal.ID[:8], node.ID[:8], len(report.Violations))
+				errMsg := "sentinel blocked: "
+				for i, v := range report.Violations {
+					if i > 0 {
+						errMsg += "; "
+					}
+					errMsg += v.Description
+				}
+				_ = goal.FailNode(node.ID, errMsg)
+				_ = e.Store.Update(ctx, goal)
+				continue
+			}
+			// Non-blocking violations: log as warnings, use revised plan if provided
+			if !report.Passed && report.RevisedPlan != "" {
+				log.Printf("[GoalExecutor:%s] Sentinel WARNING on node %s — using revised plan",
+					goal.ID[:8], node.ID[:8])
+				query = report.RevisedPlan
+			}
+		}
 
 		nodeCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		session, err := e.PAD.Dispatch(nodeCtx, query, 3)

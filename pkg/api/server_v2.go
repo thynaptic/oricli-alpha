@@ -37,6 +37,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/reform"
 	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/scl"
+	"github.com/thynaptic/oricli-go/pkg/sentinel"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
@@ -106,6 +107,8 @@ type ServerV2 struct {
 	GoalPlanner *goal.GoalPlanner
 	// FineTune: Automated LoRA training orchestrator
 	FineTune *service.FineTuneService
+	// Sentinel: Adversarial Sentinel — red-team pre-flight
+	Sentinel *sentinel.AdversarialSentinel
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -444,6 +447,13 @@ func (s *ServerV2) setupRoutes() {
 			ftRoutes.POST("/run", s.handleFineTuneRun)
 			ftRoutes.GET("/status/:job_id", s.handleFineTuneStatus)
 			ftRoutes.GET("/jobs", s.handleFineTuneJobs)
+		}
+
+		// Sentinel: Adversarial challenge endpoint
+		sentinelRoutes := protected.Group("/sentinel")
+		{
+			sentinelRoutes.POST("/challenge", s.handleSentinelChallenge)
+			sentinelRoutes.GET("/stats", s.handleSentinelStats)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3372,4 +3382,41 @@ c.JSON(http.StatusOK, gin.H{
 "success": true,
 "message": "You're on the list. We'll reach out within 24 hours.",
 })
+}
+
+// ── Adversarial Sentinel ──────────────────────────────────────────────────────
+
+// POST /v1/sentinel/challenge — manually challenge a plan
+func (s *ServerV2) handleSentinelChallenge(c *gin.Context) {
+	if s.Sentinel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "sentinel not enabled — set ORICLI_SENTINEL_ENABLED=true"})
+		return
+	}
+	var req struct {
+		Query string `json:"query" binding:"required"`
+		Plan  string `json:"plan"  binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query and plan are required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 45*time.Second)
+	defer cancel()
+	report := s.Sentinel.Challenge(ctx, req.Query, req.Plan)
+	c.JSON(http.StatusOK, report)
+}
+
+// GET /v1/sentinel/stats — sentinel activity stats
+func (s *ServerV2) handleSentinelStats(c *gin.Context) {
+	if s.Sentinel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "sentinel not enabled"})
+		return
+	}
+	stats := s.Sentinel.GetStats()
+	c.JSON(http.StatusOK, gin.H{
+		"total_challenges":  stats.TotalChallenges,
+		"passed":            stats.Passed,
+		"blocked":           stats.Blocked,
+		"last_challenge_at": stats.LastChallengeAt,
+	})
 }

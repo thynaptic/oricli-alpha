@@ -497,6 +497,42 @@ func (s *GenerationService) ollamaChatStream(ctx context.Context, messages []map
 	return ch, nil
 }
 
+// DirectOllamaSingle makes a single (non-streaming) Ollama call and returns the
+// full response text. Used by subsystems that need a simple string back (Sentinel,
+// Curator, Crystallization checks) without managing a streaming channel.
+func (s *GenerationService) DirectOllamaSingle(ctx context.Context, messages []map[string]string) (string, error) {
+	model := s.DefaultModel
+	ollamaMessages := make([]map[string]interface{}, len(messages))
+	for i, msg := range messages {
+		ollamaMessages[i] = map[string]interface{}{"role": msg["role"], "content": msg["content"]}
+	}
+	payload := map[string]interface{}{
+		"model":      model,
+		"messages":   ollamaMessages,
+		"stream":     false,
+		"keep_alive": "60m",
+		"options": map[string]interface{}{
+			"num_thread":  s.NumThreads,
+			"num_ctx":     4096,
+			"num_predict": 1024,
+			"temperature": 0.2,
+		},
+	}
+	if strings.HasPrefix(strings.ToLower(model), "qwen3") {
+		payload["think"] = false
+	}
+	result, err := s.postJSON("/api/chat", payload)
+	if err != nil {
+		return "", err
+	}
+	if msg, ok := result["message"].(map[string]interface{}); ok {
+		if content, ok := msg["content"].(string); ok {
+			return content, nil
+		}
+	}
+	return "", fmt.Errorf("unexpected ollama response shape: %v", result)
+}
+
 func (s *GenerationService) postJSON(path string, payload interface{}) (map[string]interface{}, error) {
 	body, _ := json.Marshal(payload)
 	targetURL := s.BaseURL
