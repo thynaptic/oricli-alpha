@@ -118,7 +118,7 @@ export function NavRail({ onOpenSettings }) {
       {/* Logo */}
       <div style={{ marginBottom: 16, padding: '4px 0' }}>
         <img
-          src="/oricli-icon.png"
+          src="/ori-mark.png"
           alt="Oricli"
           className="logo-light-src"
           style={{ width: 32, height: 32, objectFit: 'contain', display: 'block' }}

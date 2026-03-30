@@ -31,6 +31,30 @@ export function resolveEriTheme(eri) {
   return ERI_STATES.find(s => eri >= s.min) ?? ERI_STATES[ERI_STATES.length - 1];
 }
 
+// ── Boot splash ───────────────────────────────────────────────────────────────
+function BootSplash() {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: '#000',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      animation: 'oriSplashFade 0.4s ease 1.8s both',
+    }}>
+      <img
+        src="/ori-boot-splash.png"
+        alt="ORI Studio"
+        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+      />
+      <style>{`
+        @keyframes oriSplashFade {
+          from { opacity: 1; }
+          to   { opacity: 0; pointer-events: none; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 export default function App() {
   const setHealth  = useSCStore(s => s.setHealth);
   const setModels  = useSCStore(s => s.setModels);
@@ -39,6 +63,7 @@ export default function App() {
   const eriState   = useSCStore(s => s.eriState);
   const theme      = useSCStore(s => s.theme);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [booting, setBooting] = useState(true);
 
   // Apply theme: set CSS vars directly on documentElement.style (inline = highest priority)
   // Beats @layer theme in Tailwind v4 compiled CSS and all component inline styles
@@ -82,8 +107,12 @@ export default function App() {
     fetchModules().then(ms => setModules(ms));
     const poll = setInterval(() => fetchHealth().then(h => setHealth(h)), 30_000);
     connectHiveWS();
-    return () => clearInterval(poll);
+    // Boot splash — show for 2.2s then fade
+    const t = setTimeout(() => setBooting(false), 2200);
+    return () => { clearInterval(poll); clearTimeout(t); };
   }, []);
+
+  if (booting) return <BootSplash />;
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--color-sc-bg)' }}>
