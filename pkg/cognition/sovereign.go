@@ -811,9 +811,11 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	}
 
 	// Balanced Prompting — anti-confirmation-bias injection.
-	// Fires on reasoning modes that are prone to sycophantic drift: debate, causal,
-	// discover, and any multi-step complexity. Suppressed for casual conversation.
-	if budget.Complexity >= 0.35 || mode == ModeDebate || mode == ModeCausal || mode == ModeDiscover {
+	// Restricted to explicit open-reasoning modes only. Complexity-gating was
+	// removed because it triggered on short MCQ prompts (complexity ~0.35-0.45)
+	// causing the model to second-guess correct answers — verified -20% regression
+	// on AI2-ARC (100% → 80%). Standard mode with low complexity must stay clean.
+	if mode == ModeDebate || mode == ModeCausal || mode == ModeDiscover || mode == ModeCrossdomainBridge {
 		composite += "\n\n### EPISTEMIC BALANCE\n" +
 			"**Before committing to any conclusion**: (1) Identify the strongest evidence AGAINST your current position. " +
 			"(2) Steelman the best opposing argument — not a strawman. " +
