@@ -473,3 +473,30 @@ return nil, err
 }
 return result, nil
 }
+
+// GetPseudoIdentityStats returns Phase 39 Pseudo-Identity stats.
+func (c *Client) GetPseudoIdentityStats() (map[string]interface{}, error) {
+var result map[string]interface{}
+if err := c.get("/v1/cognition/pseudoidentity/stats", &result); err != nil {
+return nil, err
+}
+return result, nil
+}
+
+// GetThoughtReformStats returns Phase 40 Lifton Thought Reform stats.
+func (c *Client) GetThoughtReformStats() (map[string]interface{}, error) {
+var result map[string]interface{}
+if err := c.get("/v1/cognition/thoughtreform/stats", &result); err != nil {
+return nil, err
+}
+return result, nil
+}
+
+// GetApathyStats returns Phase 41 Apathy Syndrome stats.
+func (c *Client) GetApathyStats() (map[string]interface{}, error) {
+var result map[string]interface{}
+if err := c.get("/v1/cognition/apathy/stats", &result); err != nil {
+return nil, err
+}
+return result, nil
+}

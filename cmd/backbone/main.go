@@ -58,6 +58,9 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/cbasp"
 	"github.com/thynaptic/oricli-go/pkg/mbct"
 	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
+	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
+	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
+	"github.com/thynaptic/oricli-go/pkg/apathy"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
@@ -773,6 +776,39 @@ func main() {
 		genService.PhaseOriented = &service.PhaseOrientedKit{Detector: phaseDetector, Guide: phaseGuide, Stats: phaseStats}
 		apiServer.PhaseStats = phaseStats
 		log.Printf("[PhaseOriented] Phase 38 Phase-Oriented Treatment online — ISSTD phase inference + dissociative signal detection")
+	}
+
+	// ── Phase 41: Apathy Syndrome (opt-in via ORICLI_APATHY_ENABLED=true) ──
+	if os.Getenv("ORICLI_APATHY_ENABLED") == "true" {
+		os.MkdirAll("data/apathy", 0755)
+		apathyDetector := apathy.NewApathySyndromeDetector()
+		apathyActivator := apathy.NewApathyActivator()
+		apathyStats := apathy.NewApathyStats("data/apathy/stats.json")
+		genService.Apathy = &service.ApathyKit{Detector: apathyDetector, Activator: apathyActivator, Stats: apathyStats}
+		apiServer.ApathyStats = apathyStats
+		log.Printf("[Apathy] Phase 41 Apathy Syndrome online — affectlessness + agency collapse + dependency transfer detection")
+	}
+
+	// ── Phase 40: Lifton Thought Reform (opt-in via ORICLI_THOUGHTREFORM_ENABLED=true) ──
+	if os.Getenv("ORICLI_THOUGHTREFORM_ENABLED") == "true" {
+		os.MkdirAll("data/thoughtreform", 0755)
+		trDetector := thoughtreform.NewThoughtReformDetector()
+		trDeconstructor := thoughtreform.NewThoughtReformDeconstructor()
+		trStats := thoughtreform.NewThoughtReformStats("data/thoughtreform/stats.json")
+		genService.ThoughtReform = &service.ThoughtReformKit{Detector: trDetector, Deconstructor: trDeconstructor, Stats: trStats}
+		apiServer.ThoughtReformStats = trStats
+		log.Printf("[ThoughtReform] Phase 40 Lifton Thought Reform online — 5-criteria environment deconstruction")
+	}
+
+	// ── Phase 39: Pseudo-Identity / Authentic Self (opt-in via ORICLI_PSEUDOIDENTITY_ENABLED=true) ──
+	if os.Getenv("ORICLI_PSEUDOIDENTITY_ENABLED") == "true" {
+		os.MkdirAll("data/pseudoidentity", 0755)
+		piDetector := pseudoidentity.NewPseudoIdentityDetector()
+		piGuide := pseudoidentity.NewAuthenticSelfGuide()
+		piStats := pseudoidentity.NewIdentityStats("data/pseudoidentity/stats.json")
+		genService.PseudoIdentity = &service.PseudoIdentityKit{Detector: piDetector, Guide: piGuide, Stats: piStats}
+		apiServer.PseudoIdentityStats = piStats
+		log.Printf("[PseudoIdentity] Phase 39 Pseudo-Identity online — Jenkinson authentic-self vs cult-installed belief detection")
 	}
 
 	// ── Phase 37: MBCT Decentering (opt-in via ORICLI_MBCT_ENABLED=true) ──

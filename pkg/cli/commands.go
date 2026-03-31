@@ -125,7 +125,15 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/phaseoriented":
 		return runPhaseOriented(client), true
 
-	case "/goals":
+	case "/pseudoidentity":
+		return runPseudoIdentity(client), true
+
+	case "/thoughtreform":
+		return runThoughtReform(client), true
+
+	case "/apathy":
+		return runApathy(client), true
+
 		return runGoals(client), true
 
 	case "/goal":
@@ -480,6 +488,9 @@ func renderHelp() string {
 		{"/cbasp", "CBASP stats — interpersonal impact disconnection types + reconnections (McCullough)"},
 		{"/mbct", "MBCT stats — depressive spiral warnings + decentering injections (Segal/Williams/Teasdale)"},
 		{"/phaseoriented", "Phase-Oriented Treatment stats — ISSTD phase inference + dissociative signals (ISSTD)"},
+		{"/pseudoidentity", "Pseudo-Identity stats — cult-installed vs authentic self signals (Jenkinson)"},
+		{"/thoughtreform", "Thought Reform stats — Lifton's 8 criteria deconstruction signals"},
+		{"/apathy", "Apathy Syndrome stats — affectlessness + agency collapse + dependency transfer"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
@@ -1214,6 +1225,99 @@ sb.WriteString(styleDim.Render("  Phase Distribution:\n"))
 for k, v := range phases {
 if count, ok := v.(float64); ok && count > 0 {
 sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 26)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runPseudoIdentity(client *Client) string {
+data, err := client.GetPseudoIdentityStats()
+if err != nil {
+return styleDanger.Render("Error fetching PseudoIdentity stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Pseudo-Identity / Authentic Self (Jenkinson)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["type_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Signal Types:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 30)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runThoughtReform(client *Client) string {
+data, err := client.GetThoughtReformStats()
+if err != nil {
+return styleDanger.Render("Error fetching ThoughtReform stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Lifton Thought Reform — Eight Criteria Deconstruction") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if criteria, ok := data["criterion_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Lifton Criteria:\n"))
+for k, v := range criteria {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 30)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runApathy(client *Client) string {
+data, err := client.GetApathyStats()
+if err != nil {
+return styleDanger.Render("Error fetching Apathy stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Apathy Syndrome — Agency Collapse + Affectlessness Activator") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["type_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Signal Types:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 30)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
 }
 }
 }

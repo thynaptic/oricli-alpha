@@ -67,6 +67,9 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/cbasp"
 	"github.com/thynaptic/oricli-go/pkg/mbct"
 	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
+	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
+	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
+	"github.com/thynaptic/oricli-go/pkg/apathy"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
@@ -207,7 +210,10 @@ type ServerV2 struct {
 	UPStats             *up.UPStats
 	CBASPStats          *cbasp.CBASPStats
 	MBCTStats           *mbct.MBCTStats
-	PhaseStats          *phaseoriented.PhaseStats
+	PhaseStats              *phaseoriented.PhaseStats
+	PseudoIdentityStats     *pseudoidentity.IdentityStats
+	ThoughtReformStats      *thoughtreform.ThoughtReformStats
+	ApathyStats             *apathy.ApathyStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -661,6 +667,9 @@ func (s *ServerV2) setupRoutes() {
 			cognitionRoutes.GET("/cbasp/stats", s.handleCBASPStats)
 			cognitionRoutes.GET("/mbct/stats", s.handleMBCTStats)
 			cognitionRoutes.GET("/phaseoriented/stats", s.handlePhaseOrientedStats)
+			cognitionRoutes.GET("/pseudoidentity/stats", s.handlePseudoIdentityStats)
+			cognitionRoutes.GET("/thoughtreform/stats", s.handleThoughtReformStats)
+			cognitionRoutes.GET("/apathy/stats", s.handleApathyStats)
 			cognitionRoutes.POST("/defeat/measure", s.handleDefeatMeasure)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
@@ -4524,4 +4533,28 @@ func (s *ServerV2) handlePhaseOrientedStats(c *gin.Context) {
 		return
 	}
 	c.JSON(200, s.PhaseStats)
+}
+
+func (s *ServerV2) handlePseudoIdentityStats(c *gin.Context) {
+	if s.PseudoIdentityStats == nil {
+		c.JSON(503, gin.H{"error": "PseudoIdentity not enabled"})
+		return
+	}
+	c.JSON(200, s.PseudoIdentityStats)
+}
+
+func (s *ServerV2) handleThoughtReformStats(c *gin.Context) {
+	if s.ThoughtReformStats == nil {
+		c.JSON(503, gin.H{"error": "ThoughtReform not enabled"})
+		return
+	}
+	c.JSON(200, s.ThoughtReformStats)
+}
+
+func (s *ServerV2) handleApathyStats(c *gin.Context) {
+	if s.ApathyStats == nil {
+		c.JSON(503, gin.H{"error": "Apathy not enabled"})
+		return
+	}
+	c.JSON(200, s.ApathyStats)
 }

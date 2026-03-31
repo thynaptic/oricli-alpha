@@ -30,6 +30,9 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/cbasp"
 	"github.com/thynaptic/oricli-go/pkg/mbct"
 	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
+	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
+	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
+	"github.com/thynaptic/oricli-go/pkg/apathy"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
@@ -82,6 +85,9 @@ type GenerationService struct {
 	CBASP           *CBASPKit                // Phase 36: CBASP Interpersonal Impact
 	MBCT            *MBCTKit                 // Phase 37: MBCT Decentering
 	PhaseOriented   *PhaseOrientedKit        // Phase 38: Phase-Oriented Treatment (ISSTD)
+	PseudoIdentity  *PseudoIdentityKit       // Phase 39: Pseudo-Identity / Authentic Self (Jenkinson)
+	ThoughtReform   *ThoughtReformKit        // Phase 40: Lifton Thought Reform Deconstruction
+	Apathy          *ApathyKit               // Phase 41: Apathy Syndrome Activator
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -256,6 +262,27 @@ type PhaseOrientedKit struct {
 	Detector *phaseoriented.PhaseOrientedDetector
 	Guide    *phaseoriented.PhaseGuide
 	Stats    *phaseoriented.PhaseStats
+}
+
+// PseudoIdentityKit groups Phase 39 components injected from main.go.
+type PseudoIdentityKit struct {
+	Detector *pseudoidentity.PseudoIdentityDetector
+	Guide    *pseudoidentity.AuthenticSelfGuide
+	Stats    *pseudoidentity.IdentityStats
+}
+
+// ThoughtReformKit groups Phase 40 components injected from main.go.
+type ThoughtReformKit struct {
+	Detector     *thoughtreform.ThoughtReformDetector
+	Deconstructor *thoughtreform.ThoughtReformDeconstructor
+	Stats        *thoughtreform.ThoughtReformStats
+}
+
+// ApathyKit groups Phase 41 components injected from main.go.
+type ApathyKit struct {
+	Detector  *apathy.ApathySyndromeDetector
+	Activator *apathy.ApathyActivator
+	Stats     *apathy.ApathyStats
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -514,6 +541,57 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 					messages = append([]map[string]string{sysMsg}, messages...)
 					options["_phase_injected"] = true
 					log.Printf("[PhaseOriented] P38 dissociative signal detected phase=%s signals=%d — guiding before generation", scan.InferredPhase, len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 41: Apathy Syndrome — fires PRE-generation (micro-agency restoration)
+	if s.Apathy != nil {
+		if _, isRetry := options["_apathy_injected"]; !isRetry {
+			scan := s.Apathy.Detector.Scan(messages)
+			s.Apathy.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.Apathy.Activator.Activate(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_apathy_injected"] = true
+					log.Printf("[Apathy] P41 apathy syndrome detected signals=%d — activating before generation", len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 40: Lifton Thought Reform — fires PRE-generation (environment deconstruction)
+	if s.ThoughtReform != nil {
+		if _, isRetry := options["_thoughtreform_injected"]; !isRetry {
+			scan := s.ThoughtReform.Detector.Scan(messages)
+			s.ThoughtReform.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.ThoughtReform.Deconstructor.Deconstruct(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_thoughtreform_injected"] = true
+					log.Printf("[ThoughtReform] P40 Lifton criterion detected signals=%d — deconstructing before generation", len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 39: Pseudo-Identity / Authentic Self — fires PRE-generation (identity attribution)
+	if s.PseudoIdentity != nil {
+		if _, isRetry := options["_pseudoidentity_injected"]; !isRetry {
+			scan := s.PseudoIdentity.Detector.Scan(messages)
+			s.PseudoIdentity.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.PseudoIdentity.Guide.Guide(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_pseudoidentity_injected"] = true
+					log.Printf("[PseudoIdentity] P39 identity confusion detected signals=%d — authentic-self framing before generation", len(scan.Signals))
 				}
 			}
 		}
