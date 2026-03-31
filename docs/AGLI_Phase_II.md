@@ -31,21 +31,35 @@ Phase II asks: **what does she become now that the foundation is complete?**
 
 ---
 
-### Phase 11 — _(TBD)_
+### Phase 11 — Subconscious Field
 
-> **Whiteboard:** _[pending]_
+A persistent vectorized bias layer that influences generation without RAG overhead. Unlike memory retrieval (explicit, per-query), the Subconscious Field is a continuous low-level pressure on the generation process — shaped by high-confidence confirmed hypotheses, constitutional anchors, and long-term affective state. It doesn't answer questions; it shapes *how* she answers them. The accumulated weight of everything she has learned and confirmed, expressed as a soft embedding bias rather than a hard prompt injection.
 
----
-
-### Phase 12 — _(TBD)_
-
-> **Whiteboard:** _[pending]_
+> **Whiteboard:** _[design pending — architecture, storage format, injection point in Aurora pipeline]_
 
 ---
 
-### Phase 13 — _(TBD)_
+### Phase 12 — Sovereign Compute Bidding
 
-> **Whiteboard:** _[pending]_
+Oricli autonomously decides *where* a task runs — local CPU (Ollama), remote GPU (RunPod), or symbolic-only (no LLM) — based on real-time task complexity scoring, current budget state, and expected quality delta. Today she routes by complexity signal but the decision is heuristic. Phase 12 makes it a first-class bidding system: each compute tier submits a "bid" (cost, latency, confidence estimate), a governor selects the winner, and the outcome feeds back to SCL so routing improves over time. She stops burning GPU budget on tasks that 3B can handle.
+
+> **Whiteboard:** _[design pending — bid interface, complexity scorer v2, SCL feedback loop]_
+
+---
+
+### Phase 13 — Temporal Goal Chains
+
+Multi-day plans that persist, resume, and self-correct across reboots. Phase I's GoalEngine handles single-session DAGs well. Phase 13 extends this to week-scale chains: goals with time anchors, progress checkpoints, and self-correction passes when external state has changed since the plan was formed. If a goal node's underlying knowledge has decayed or been refuted by the ScienceDaemon since the plan was written, the node is automatically invalidated and re-planned. Goals survive not just reboots but *epistemic drift*.
+
+> **Whiteboard:** _[design pending — ChronosGoalBridge, checkpoint schema, re-plan trigger conditions]_
+
+---
+
+### Phase 14 — NAS Lite (Routing Topology Self-Modification)
+
+Oricli proposes and benchmarks her own reasoning pipeline topology changes. Not weight mutation — structural changes to *how she routes inference*: which Aurora steps fire for which intent classes, which modules get dispatched in parallel vs serial, which reasoning modes activate under what conditions. The ReformDaemon already drafts optimization proposals from execution traces. Phase 14 closes the loop: proposals go through a sandboxed A/B benchmark pass (old topology vs proposed), and winning topologies are committed as new routing defaults. She improves her own cognitive architecture from the outside in.
+
+> **Whiteboard:** _[design pending — topology schema, A/B harness, safe rollback on regression]_
 
 ---
 
@@ -80,8 +94,9 @@ _These are the questions Phase II needs to answer. They shape which directions a
 
 | Phase | Name | Status |
 |---|---|---|
-| 11 | TBD | 🔲 Whiteboard |
-| 12 | TBD | 🔲 Whiteboard |
-| 13 | TBD | 🔲 Whiteboard |
+| 11 | Subconscious Field | 🔲 Whiteboard |
+| 12 | Sovereign Compute Bidding | 🔲 Whiteboard |
+| 13 | Temporal Goal Chains | 🔲 Whiteboard |
+| 14 | NAS Lite — Routing Topology Self-Modification | 🔲 Whiteboard |
 
 _This document will be updated as the whiteboard session concludes._
