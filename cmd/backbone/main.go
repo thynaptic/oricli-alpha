@@ -611,6 +611,15 @@ func main() {
 		apiServer.TherapyABC = therapyABC
 		apiServer.TherapyChain = therapyChain
 
+		// Wire into GenerationService — therapy fires automatically on MetacogDetector HIGH anomaly
+		genService.Therapy = &service.TherapyKit{
+			Skills: therapySkills,
+			Detect: therapyDetect,
+			ABC:    therapyABC,
+			Chain:  therapyChain,
+			Log:    therapyLog,
+		}
+
 		log.Printf("[Therapy] Phase 15 Therapeutic Cognition Stack online — distortion detector, DBT skills, REBT auditor, chain analysis")
 	}
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/scl"
+	"github.com/thynaptic/oricli-go/pkg/therapy"
 )
 
 // GenerationService handles direct requests to Ollama for high-speed prose
@@ -33,6 +34,17 @@ type GenerationService struct {
 	Governor       *CostGovernor            // daily spend cap — blocks RunPod escalation when exhausted
 	CrystalCache   *scl.CrystalCache        // Skill Crystallization — LLM-bypass for proven patterns
 	MetacogDetector *metacog.Detector        // Phase 8: inline metacognitive anomaly detection
+	Therapy         *TherapyKit              // Phase 15: DBT/CBT/REBT therapeutic cognition stack
+}
+
+// TherapyKit groups Phase 15 components injected from main.go.
+// Using a wrapper struct avoids a large number of optional fields.
+type TherapyKit struct {
+	Skills  *therapy.SkillRunner
+	Detect  *therapy.DistortionDetector
+	ABC     *therapy.ABCAuditor
+	Chain   *therapy.ChainAnalyzer
+	Log     *therapy.EventLog
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -235,7 +247,9 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 			if s.MetacogDetector != nil {
 				if evt := s.MetacogDetector.Check(prompt, resp); evt != nil && evt.Severity == "HIGH" {
 					log.Printf("[Metacog] %s — retrying with self-reflection prefix", evt.Type)
-					reflectPrompt := metacog.SelfReflectPrompt(evt) + prompt
+					reflectPrompt := metacog.SelfReflectPrompt(evt)
+					reflectPrompt += s.therapyAugment(prompt, resp, evt.ID, string(evt.Type))
+					reflectPrompt += prompt
 					retry, rerr := s.Chat([]map[string]string{{"role": "user", "content": reflectPrompt}}, options)
 					if rerr == nil {
 						return retry, nil
@@ -295,8 +309,10 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 				}
 				if evt := s.MetacogDetector.Check(promptForCheck, content); evt != nil && evt.Severity == "HIGH" {
 					log.Printf("[Metacog] %s in Chat — retrying with self-reflection prefix", evt.Type)
+					therapyCtx := s.therapyAugment(promptForCheck, content, evt.ID, string(evt.Type))
 					// Prepend self-reflection as a new system message + replay conversation
-					reflectMsg := map[string]string{"role": "system", "content": metacog.SelfReflectPrompt(evt)}
+					reflectContent := metacog.SelfReflectPrompt(evt) + therapyCtx
+					reflectMsg := map[string]string{"role": "system", "content": reflectContent}
 					retryMsgs := append([]map[string]string{reflectMsg}, messages...)
 					retryOpts := make(map[string]interface{})
 					for k, v := range options {
@@ -613,4 +629,66 @@ func (s *GenerationService) postJSON(path string, payload interface{}) (map[stri
 	var result map[string]interface{}
 	json.NewDecoder(resp.Body).Decode(&result)
 	return result, nil
+}
+
+// ---------------------------------------------------------------------------
+// Phase 15 — Therapy augmentation
+// ---------------------------------------------------------------------------
+
+// therapyAugment runs Phase 15 therapy layer on a HIGH anomaly.
+// Returns additional context to prepend to the self-reflection prompt.
+// Never blocks — all therapy paths are fail-open.
+func (s *GenerationService) therapyAugment(query, response, anomalyID, anomalyType string) string {
+if s.Therapy == nil {
+return ""
+}
+t := s.Therapy
+
+// 1. STOP — log and flag the pause
+stopInv := t.Skills.STOP(anomalyType, response)
+log.Printf("[Therapy] STOP invoked — %s", stopInv.Reason)
+
+// 2. Detect distortion
+result := t.Detect.Detect(response, anomalyType)
+log.Printf("[Therapy] Distortion detected: %s (%.2f, %s)", result.Distortion, result.Confidence, result.Source)
+
+// 3. Record in chain analyzer for audit trail
+if t.Chain != nil {
+t.Chain.Record(query, response, result.Distortion, 0.0, 0.0, anomalyType)
+}
+
+// 4. Build targeted therapy context for the retry prompt
+if result.Distortion == therapy.DistortionNone {
+return "\n[THERAPY] No specific cognitive distortion detected. Apply general Beginner's Mind — reset assumptions and respond from first principles.\n"
+}
+
+return "\n[THERAPY] Cognitive distortion detected: " + string(result.Distortion) + ".\n" +
+"Evidence: " + result.Evidence + "\n" +
+"Correction: " + distortionCorrectionHint(result.Distortion) + "\n"
+}
+
+// distortionCorrectionHint returns a one-line corrective instruction per distortion type.
+func distortionCorrectionHint(d therapy.DistortionType) string {
+switch d {
+case therapy.AllOrNothing:
+return "Avoid absolute framing. Present partial, nuanced, or conditional answers."
+case therapy.FortuneTelling:
+return "Do not predict outcomes as certainties. State what is known and what is uncertain."
+case therapy.Magnification:
+return "Scale confidence to match actual evidence. Avoid amplifying uncertainty or certainty beyond what the data supports."
+case therapy.EmotionalReasoning:
+return "Separate tone from logic. Base the answer on facts, not on the emotional register of the query."
+case therapy.ShouldStatements:
+return "Replace rigid 'must/should/always' framing with conditional or contextual framing."
+case therapy.Overgeneralization:
+return "Limit the scope of claims to what was actually observed or asked. Do not extrapolate broadly."
+case therapy.MindReading:
+return "Respond to what was literally asked. Do not assume hidden intent or unstated meaning."
+case therapy.Labeling:
+return "Describe the specific situation rather than applying a categorical label."
+case therapy.Personalization:
+return "Attribute causes accurately. Avoid taking on responsibility that belongs to external factors."
+default:
+return "Apply Describe-No-Judge: state observations without evaluative framing."
+}
 }
