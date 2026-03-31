@@ -1,9 +1,9 @@
 # Oricli-Alpha
 
 **Sovereign Agent OS by [Thynaptic Research](https://thynaptic.com)**  
-`v10.0.0` · Go 1.25 · MIT License
+`v11.0.0` · Go 1.25 · MIT License
 
-Oricli-Alpha is a proactive, local-first intelligence OS built for autonomous, multi-day goal execution. It operates as **The Hive** — a distributed swarm of 269+ specialized micro-agents orchestrated by a 100% Go-native backbone. **Phase II + Phase III complete** — 10 cognitive science phases shipped (P17–P26), including the **Therapeutic Cognition Stack** (DBT/CBT/REBT/ACT) and the full **Social Pressure & Agency Integrity Stack** (Milgram, Asch, Seligman, Dweck, Robbers Cave, Jane Elliott, and more).
+Oricli-Alpha is a proactive, local-first intelligence OS built for autonomous, multi-day goal execution. It operates as **The Hive** — a distributed swarm of 269+ specialized micro-agents orchestrated by a 100% Go-native backbone. **Phase V complete** — 48 cognitive/philosophical/neuroscientific pre-generation phases shipped (P17–P48), including the **Therapeutic Cognition Stack** (DBT/CBT/REBT/ACT), the **Social Pressure & Agency Integrity Stack**, the **Deep Clinical Stack** (P27–P41), and now the **Philosophy + Neuroscience Stack** (P42–P48: Logotherapy · Stoic · Socratic · Narrative Identity · Polyvagal · DMN · Interoception). The pre-generation pipeline is **28 layers deep** — firing before every generation to orient the model's response posture based on detected cognitive, emotional, somatic, and philosophical signals.
 
 ---
 
@@ -38,7 +38,9 @@ Oricli-Alpha is a proactive, local-first intelligence OS built for autonomous, m
 | Inference | Ollama | Local LLM generation (`ministral-3:3b`, `qwen2.5-coder:3b`) |
 | Therapy Stack | `pkg/therapy/` | DBT/CBT/REBT/ACT inline cognitive regulation (Phase 15–16) |
 | Cognitive Stack | `pkg/cogload/` `pkg/dualprocess/` `pkg/rumination/` `pkg/mindset/` | System 1/2 audit, cognitive load, rumination & growth mindset (P17–P20) |
-| Agency Stack | `pkg/hopecircuit/` `pkg/socialdefeat/` `pkg/conformity/` `pkg/ideocapture/` `pkg/coalition/` `pkg/statusbias/` | Hope circuit, social defeat recovery, conformity shield, ideological capture, coalition bias, status bias (P21–P26) |
+| Agency Stack | `pkg/hopecircuit/` `pkg/socialdefeat/` `pkg/conformity/` `pkg/ideocapture/` `pkg/coalition/` `pkg/statusbias/` | Hope circuit, social defeat, conformity shield, ideological capture, coalition/status bias (P21–P26) |
+| Deep Clinical Stack | `pkg/arousal/` `pkg/interference/` `pkg/mct/` `pkg/mbt/` `pkg/schema/` `pkg/ipsrt/` `pkg/ilm/` `pkg/iut/` `pkg/up/` `pkg/cbasp/` `pkg/mbct/` `pkg/phaseoriented/` `pkg/pseudoidentity/` `pkg/thoughtreform/` `pkg/apathy/` | Yerkes-Dodson · Stroop · MCT · MBT · Schema/TFP · IPSRT · ILM · IUT · Unified Protocol · CBASP · MBCT · ISSTD · Jenkinson · Lifton · Apathy (P27–P41) |
+| Philosophy + Neuroscience Stack | `pkg/logotherapy/` `pkg/stoic/` `pkg/socratic/` `pkg/narrative/` `pkg/polyvagal/` `pkg/dmn/` `pkg/interoception/` | Frankl · Epictetus/Aurelius · Socratic elenchus · McAdams · Porges · Raichle/Buckner · Craig/Damasio (P42–P48) |
 | TLS Proxy | Caddy | Terminates HTTPS → `127.0.0.1:8089` |
 | UI | Flask | Proxy to backbone on port `5000` |
 
@@ -174,7 +176,7 @@ See [`INSTALL.md`](INSTALL.md) for full setup instructions.
 
 | Doc | Contents |
 |---|---|
-| [`docs/AGLI_Phase_II.md`](docs/AGLI_Phase_II.md) | Phase II + III cognitive science roadmap — all P17–P26 shipped |
+| [`docs/AGLI_Phase_II.md`](docs/AGLI_Phase_II.md) | AGLI roadmap — all 48 phases shipped (P17–P48), full 28-layer pipeline documented |
 | [`docs/API.md`](docs/API.md) | Full API reference — endpoints, auth, examples |
 | [`docs/public_overview.md`](docs/public_overview.md) | Architecture overview and capability summary |
 | [`docs/AGLI_VISION.md`](docs/AGLI_VISION.md) | Strategic trajectory toward AGLI |

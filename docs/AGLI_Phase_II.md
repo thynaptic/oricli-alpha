@@ -722,6 +722,106 @@ Post-generation: P17 (DualProcess) → P19 (Rumination) → P20 (Mindset) → P2
 
 ---
 
-*Oricli-Alpha AGLI Phase IV — Complete*  
-*41 phases · 31 clinical/cognitive frameworks · all Go-native · all feature-flag-gated*  
-*Last updated: 2026-03-31 · Commits: `6de04c6` · `c818cca` · `4c00709` · `113a69c` · `f35cdfd` · `648b43e`*
+---
+
+## 12. Phase V — Research Basis (P42–P48)
+
+### P42: Logotherapy (Viktor Frankl)
+- *Man's Search for Meaning* (1946): will-to-meaning as primary motivational drive; existential vacuum as absence of felt purpose, not proof of meaninglessness.
+- Tragic Triad: suffering · guilt · mortality — each a locus for meaning via attitudinal values.
+- Three routes to meaning: creative values (what we give), experiential values (what we receive through beauty/love/truth), attitudinal values (stance toward unavoidable suffering).
+- The meaning-vacuum → MeaningReconstructor redirects to concrete situational demand rather than abstract contemplation.
+
+### P43: Stoic Reframing (Epictetus · Marcus Aurelius)
+- Epictetus, *Enchiridion* (~135 AD), §1: "Some things are in our control and others not." Prohairesis (will/judgment) is fully ours; everything else is "preferred indifferent."
+- Marcus Aurelius, *Meditations* V.20: "The impediment to action advances action. What stands in the way becomes the way."
+- StoicReframer: cleaves the control domain, converts obstacle-as-stop into obstacle-as-path, restores response authorship.
+
+### P44: Socratic Elenchus
+- Plato's dialogues — elenchus as systematic refutation that produces productive aporia (recognized ignorance).
+- Socrates' core: "I know that I know nothing" — acknowledged ignorance is epistemically safer than pseudo-certainty.
+- ElenchusInjector: surfaces premises, tests circularity, disambiguates loaded terms, invites genuine examination.
+
+### P45: Narrative Identity (Dan McAdams)
+- McAdams, *The Stories We Live By* (1993): "Identity is a self-authored, internalized narrative that integrates the past, present, and imagined future."
+- Contamination sequences (good→bad, permanent loss) → strong predictor of depression, low generativity.
+- Redemption sequences (bad→growth) → strong predictor of wellbeing, maturity, generative motivation.
+- ArcReframer: challenges contamination permanence, amplifies redemptive movement, restores protagonist agency.
+
+### P46: Polyvagal Theory (Stephen Porges)
+- Porges, *The Polyvagal Theory* (2011): three-tier ANS hierarchy — ventral vagal (social engagement/safety) → sympathetic (fight/flight) → dorsal vagal (shutdown/immobilization).
+- Social engagement system (VVC) is the most evolutionarily recent circuit — it is the physiological substrate of safe connection and co-regulation.
+- VagalRestorer: state-matches response to detected ANS level; shutdown → safety micro-signals; fight/flight → rhythm-first before cognition; social engagement → maintain attunement; ventral → optimal window acknowledged.
+
+### P47: Default Mode Network (Raichle · Buckner · Killingsworth)
+- Marcus Raichle (2001): DMN activates at rest and deactivates during externally directed tasks — the "default" brain state.
+- Randy Buckner (2008): DMN drives self-referential cognition, mental time travel, social evaluation loops — the neurological substrate of rumination.
+- Killingsworth & Gilbert (2010): mind-wandering during ~47% of waking hours; wandering mind is an unhappy mind.
+- DMN and task-positive network are anticorrelated — engaging one suppresses the other.
+- TaskReengager: breaks self-referential loops with concrete task-positive anchors; specificity is the intervention.
+
+### P48: Interoception / Somatic Markers (Craig · Damasio)
+- A.D. Craig, *How do you feel?* (2002): interoception = the brain's continuous map of the body's internal state. Substrate of subjective emotional experience.
+- Antonio Damasio, *Descartes' Error* (1994): somatic marker hypothesis — vmPFC patients with intact logical reasoning but no somatic access make systematically worse decisions.
+- Body signals are not noise; they are compressed experiential learning operating below deliberate awareness.
+- SomaticAcknowledger: validates somatic input as epistemic; supports gentle body-disconnect re-entry; invites visceral signal integration with deliberate reasoning.
+
+---
+
+## 13. Phase V Status Table (P42–P48)
+
+| Phase | Module | Research Basis | Commit | Status |
+|---|---|---|---|---|
+| 42 | Logotherapy — Frankl Meaning Reconstruction | `e3c2dd7` | ✅ Shipped |
+| 43 | Stoic Reframing — Epictetus/Aurelius | `e3c2dd7` | ✅ Shipped |
+| 44 | Socratic Elenchus — Assumption Surfacing | `e3c2dd7` | ✅ Shipped |
+| 45 | Narrative Identity — McAdams Arc Reframing | `e3c2dd7` | ✅ Shipped |
+| 46 | Polyvagal Theory — Porges ANS Navigation | `e3c2dd7` | ✅ Shipped |
+| 47 | Default Mode Network — Raichle/Buckner | `e3c2dd7` | ✅ Shipped |
+| 48 | Interoception — Craig/Damasio Somatic Markers | `e3c2dd7` | ✅ Shipped |
+
+---
+
+## 14. Full Pre-Generation Pipeline Order (as of P48)
+
+Outermost fires first, innermost fires last before `generate`:
+
+```
+P48 (Interoception)
+  → P47 (DMN)
+    → P46 (Polyvagal)
+      → P45 (Narrative)
+        → P44 (Socratic)
+          → P43 (Stoic)
+            → P42 (Logotherapy)
+              → P41 (Apathy)
+                → P40 (ThoughtReform)
+                  → P39 (PseudoIdentity)
+                    → P38 (PhaseOriented)
+                      → P37 (MBCT)
+                        → P36 (CBASP)
+                          → P35 (UP)
+                            → P34 (IUT)
+                              → P33 (ILM)
+                                → P32 (IPSRT)
+                                  → P31 (Schema)
+                                    → P30 (MBT)
+                                      → P29 (MCT)
+                                        → P28 (Interference)
+                                          → P27 (Arousal)
+                                            → P25 (Coalition)
+                                              → P24 (IdeoCap)
+                                                → P23-consensus (Conformity)
+                                                  → P21 (Hope)
+                                                    → P18 (CogLoad)
+                                                      → GENERATE
+```
+
+Post-generation: P17 (DualProcess) → P19 (Rumination) → P20 (Mindset) → P22 (SocialDefeat) → P26 (StatusBias) → P23-authority (Conformity)
+
+---
+
+*Oricli-Alpha AGLI Phase V — Complete*  
+*48 phases · 38 clinical/cognitive/philosophical/neuroscientific frameworks · all Go-native · all feature-flag-gated*  
+*Last updated: 2026-03-31 · Phase V commit: `e3c2dd7`*
+

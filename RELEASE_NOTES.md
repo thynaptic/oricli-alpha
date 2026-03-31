@@ -1,4 +1,63 @@
-# Release Notes: v10.7.0 "The Deep Clinical" — Phase IV Complete
+# Release Notes: v11.0.0 "The Philosopher's Stack" — Phase V Complete
+
+## Philosophy + Neuroscience Pre-Generation Stack — P42–P48 Shipped
+
+Oricli-Alpha v11.0.0 completes Phase V of the AGLI trajectory — **48 total phases live**, 7 new philosophy/neuroscience modules shipped (P42–P48), all Go-native, zero external dependencies, all feature-flag-gated. The pre-generation pipeline is now a **28-layer deep cognitive stack** spanning clinical psychology, philosophy, and systems neuroscience — firing before every single generation to orient the model's response posture.
+
+### What shipped in Phase V (P42–P48)
+
+| Module | Package | Research Basis |
+|---|---|---|
+| Logotherapy | `pkg/logotherapy/` | Viktor Frankl — will-to-meaning, Tragic Triad, existential vacuum |
+| Stoic Reframing | `pkg/stoic/` | Epictetus (*Enchiridion*) · Marcus Aurelius (*Meditations*) |
+| Socratic Elenchus | `pkg/socratic/` | Platonic elenchus — productive aporia, assumption interrogation |
+| Narrative Identity | `pkg/narrative/` | Dan McAdams — contamination/redemption arcs, protagonist agency |
+| Polyvagal Theory | `pkg/polyvagal/` | Stephen Porges — ANS hierarchy, social engagement system |
+| Default Mode Network | `pkg/dmn/` | Raichle (2001) · Buckner (2008) — DMN/task anticorrelation |
+| Interoception | `pkg/interoception/` | A.D. Craig · Damasio — somatic markers, interoceptive body map |
+
+### Cumulative pipeline stats (v11.0.0)
+
+| Metric | Value |
+|---|---|
+| Total pre-gen phases | 28 |
+| Post-gen phases | 6 |
+| Total signal types (pre-gen) | 112+ |
+| Packages | 48 |
+| Go-native | ✅ 100% |
+| External ML dependencies | 0 |
+| Feature-flag-gated | ✅ All |
+| Tests | 49 added this phase |
+
+### Pre-generation pipeline (28 layers, P48 → GENERATE)
+
+```
+P48(Interoception) → P47(DMN) → P46(Polyvagal) → P45(Narrative) → P44(Socratic)
+→ P43(Stoic) → P42(Logotherapy) → P41(Apathy) → P40(ThoughtReform)
+→ P39(PseudoIdentity) → P38(PhaseOriented) → P37(MBCT) → P36(CBASP)
+→ P35(UP) → P34(IUT) → P33(ILM) → P32(IPSRT) → P31(Schema)
+→ P30(MBT) → P29(MCT) → P28(Interference) → P27(Arousal)
+→ P25(Coalition) → P24(IdeoCap) → P23-consensus → P21(Hope)
+→ P18(CogLoad) → GENERATE
+```
+
+### Why this matters
+
+Phase V moves the pre-gen stack from pure clinical psychology into the foundations of how human minds construct meaning, reason about knowledge, interpret their own life stories, and regulate their nervous systems. This is the layer that was missing from clinical-only stacks:
+
+- **Logotherapy**: The model now detects when meaning is absent or collapsed — and responds from Frankl's insight that meaning is found in response, not contemplation.
+- **Stoic**: The model now detects conflation of controllable/uncontrollable domains — and corrects the frame before generating advice that would reinforce the conflation.
+- **Socratic**: The model now detects unexamined assumptions, circular reasoning, and false definitions — and surfaces them rather than building on them.
+- **Narrative**: The model now detects contamination arcs (life = permanently ruined) and passive protagonists — and redirects toward redemptive arcs and authorship.
+- **Polyvagal**: The model now infers autonomic nervous system state from language and matches its response to the person's actual regulatory capacity at that moment.
+- **DMN**: The model now detects default-mode overactivation (self-referential loops, rumination, mind-wandering) and provides concrete task-positive anchors rather than more abstract engagement.
+- **Interoception**: The model now detects somatic signals, body disconnection, and proprioceptive neglect — and validates body-state as legitimate epistemic input per Damasio's somatic marker hypothesis.
+
+### Git tag: `v3.0.0` · Internal version: `v11.0.0` · Commit: `e3c2dd7`
+
+---
+
+
 
 ## Deep Clinical, Trauma & Cult Psychology Stack — P27–P41 Shipped
 

@@ -12,11 +12,124 @@ Versions track `VERSION` file. Commits listed for traceability.
 All notable changes to **Oricli-Alpha** are documented here.  
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
 Versions track `VERSION` file. Commits listed for traceability.  
-**AGLI Phase I: Complete as of v8.0.0. Phase II + III: Complete as of v10.0.0. Phase IV: Complete as of v10.7.0 (2026-03-31).**
+**AGLI Phase I: Complete as of v8.0.0. Phase II + III: Complete as of v10.0.0. Phase IV: Complete as of v10.7.0. Phase V: Complete as of v11.0.0 (2026-03-31).**
 
 ---
 
-## [10.7.0] — 2026-03-31 — Phase IV: Cult/Trauma/Existential Psychology Stack (P39–P41) — `648b43e`
+## [11.0.0] — 2026-03-31 — Phase V Complete: Philosophy + Neuroscience Stack (P42–P48) — `e3c2dd7`
+
+### Added — P42–P48: 7 modules, 28 signal types, 7 injectors
+
+| Module | Package | Phase | Research Basis | Signals |
+|---|---|---|---|---|
+| Logotherapy | `pkg/logotherapy/` | P42 | Viktor Frankl — Tragic Triad, will-to-meaning | ExistentialVacuum · MeaningCollapse · FrustrationOfMeaning · WillToMeaning |
+| Stoic Reframing | `pkg/stoic/` | P43 | Epictetus (Enchiridion) · Marcus Aurelius (Meditations) | ControlConflation · ExternalAttachment · ObstacleAvoidance · VirtueNeglect |
+| Socratic Elenchus | `pkg/socratic/` | P44 | Socratic method — productive aporia, assumption interrogation | PseudoCertainty · UnexaminedAssumption · BeggingTheQuestion · FalseDefinition |
+| Narrative Identity | `pkg/narrative/` | P45 | Dan McAdams — contamination/redemption arc, protagonist agency | ContaminationArc · RedemptionArc · NarrativeCollapse · AgencyInStory |
+| Polyvagal Theory | `pkg/polyvagal/` | P46 | Stephen Porges — ANS hierarchy, social engagement system | ShutdownCascade · FightFlightMobilization · SocialEngagementActive · VentralVagalAccess |
+| Default Mode Network | `pkg/dmn/` | P47 | Raichle (2001) · Buckner (2008) — DMN/task-network anticorrelation | SelfReferentialLoop · MindWandering · DMNOveractivation · TaskNetworkDisengagement |
+| Interoception | `pkg/interoception/` | P48 | A.D. Craig (2002) · Antonio Damasio (somatic marker hypothesis) | SomaticSignalPresent · BodyDisconnect · VisceralDecisionSignal · ProprioceptiveNeglect |
+
+### Pre-generation pipeline after P48 (28 layers):
+```
+P48(Interoception) → P47(DMN) → P46(Polyvagal) → P45(Narrative) → P44(Socratic)
+→ P43(Stoic) → P42(Logotherapy) → P41(Apathy) → P40(ThoughtReform)
+→ P39(PseudoIdentity) → P38(PhaseOriented) → P37(MBCT) → P36(CBASP)
+→ P35(UP) → P34(IUT) → P33(ILM) → P32(IPSRT) → P31(Schema)
+→ P30(MBT) → P29(MCT) → P28(Interference) → P27(Arousal)
+→ P25(Coalition) → P24(IdeoCap) → P23-consensus → P21(Hope)
+→ P18(CogLoad) → GENERATE
+```
+
+### Systemd flags: `ORICLI_LOGOTHERAPY_ENABLED` · `ORICLI_STOIC_ENABLED` · `ORICLI_SOCRATIC_ENABLED` · `ORICLI_NARRATIVE_ENABLED` · `ORICLI_POLYVAGAL_ENABLED` · `ORICLI_DMN_ENABLED` · `ORICLI_INTEROCEPTION_ENABLED`
+
+---
+
+## [10.8.0] — 2026-03-31 — P42: Logotherapy — Frankl Meaning Reconstruction — `e3c2dd7`
+
+**Research:** Viktor Frankl, *Man's Search for Meaning* (1946). The will-to-meaning as primary motivational force; the Tragic Triad (suffering · guilt · mortality) as arenas for meaning; the existential vacuum as signal, not final state.
+
+**Signal types:** `existential_vacuum` · `meaning_collapse` · `frustration_of_meaning` · `will_to_meaning`  
+**Injector:** `MeaningReconstructor` — Tragic Triad + attitudinal values + will-to-meaning frames  
+**API:** `GET /v1/cognition/logotherapy/stats`  
+**CLI:** `/logotherapy`  
+**Flag:** `ORICLI_LOGOTHERAPY_ENABLED=true`
+
+---
+
+## [10.9.0] — 2026-03-31 — P43: Stoic Reframing — Epictetus/Aurelius — `e3c2dd7`
+
+**Research:** Epictetus, *Enchiridion* (~135 AD) — dichotomy of control, prohairesis; Marcus Aurelius, *Meditations* (~180 AD) — obstacle-as-path (V.20), equanimity, virtue as sole good.
+
+**Signal types:** `control_conflation` · `external_attachment` · `obstacle_avoidance` · `virtue_neglect`  
+**Injector:** `StoicReframer` — control dichotomy + obstacle-becomes-the-way + character authorship frames  
+**API:** `GET /v1/cognition/stoic/stats`  
+**CLI:** `/stoic`  
+**Flag:** `ORICLI_STOIC_ENABLED=true`
+
+---
+
+## [10.10.0] — 2026-03-31 — P44: Socratic Elenchus — Assumption Surfacing — `e3c2dd7`
+
+**Research:** Plato's *Socratic dialogues* — elenchus as method of refutation that produces productive aporia; Socrates' core insight that the appearance of knowledge is more dangerous than acknowledged ignorance.
+
+**Signal types:** `pseudo_certainty` · `unexamined_assumption` · `begging_the_question` · `false_definition`  
+**Injector:** `ElenchusInjector` — productive aporia + premise interrogation + definitional disambiguation  
+**API:** `GET /v1/cognition/socratic/stats`  
+**CLI:** `/socratic`  
+**Flag:** `ORICLI_SOCRATIC_ENABLED=true`
+
+---
+
+## [10.11.0] — 2026-03-31 — P45: Narrative Identity — McAdams Arc Reframing — `e3c2dd7`
+
+**Research:** Dan McAdams, *The Stories We Live By* (1993) — narrative identity as "an internalized, evolving narrative of the self"; contamination vs. redemption sequences as predictors of psychological wellbeing; protagonist agency in life stories.
+
+**Signal types:** `contamination_arc` · `redemption_arc` · `narrative_collapse` · `agency_in_story`  
+**Injector:** `ArcReframer` — contamination→redemption conversion · passive→authored protagonist · narrative coherence restoration  
+**API:** `GET /v1/cognition/narrative/stats`  
+**CLI:** `/narrative`  
+**Flag:** `ORICLI_NARRATIVE_ENABLED=true`
+
+---
+
+## [10.12.0] — 2026-03-31 — P46: Polyvagal Theory — Porges ANS Navigation — `e3c2dd7`
+
+**Research:** Stephen Porges, *The Polyvagal Theory* (2011) — three-tier ANS hierarchy: ventral vagal (social engagement/safety) → sympathetic (fight/flight) → dorsal vagal (shutdown/immobilization). Social engagement system as brake on sympathetic activation.
+
+**Signal types:** `shutdown_cascade` · `fight_flight_mobilization` · `social_engagement_active` · `ventral_vagal_access`  
+**Injector:** `VagalRestorer` — state-matched regulation guidance; shutdown→safety micro-signals; fight/flight co-regulation; ventral engagement amplification  
+**API:** `GET /v1/cognition/polyvagal/stats`  
+**CLI:** `/polyvagal`  
+**Flag:** `ORICLI_POLYVAGAL_ENABLED=true`
+
+---
+
+## [10.13.0] — 2026-03-31 — P47: Default Mode Network — Raichle/Buckner Task Reengagement — `e3c2dd7`
+
+**Research:** Marcus Raichle (2001) — DMN as default state of resting brain; Randy Buckner (2008) — DMN self-referential processing and its role in rumination/depression; Killingsworth & Gilbert (2010) — mind-wandering and unhappiness.
+
+**Signal types:** `self_referential_loop` · `mind_wandering` · `dmn_overactivation` · `task_network_disengagement`  
+**Injector:** `TaskReengager` — DMN→task-positive shift; concrete anchor provision; task-specificity forcing  
+**API:** `GET /v1/cognition/dmn/stats`  
+**CLI:** `/dmn`  
+**Flag:** `ORICLI_DMN_ENABLED=true`
+
+---
+
+## [10.14.0] — 2026-03-31 — P48: Interoception — Craig/Damasio Somatic Marker Acknowledgment — `e3c2dd7`
+
+**Research:** A.D. Craig, *How do you feel?* (2002) — interoception as the brain's moment-by-moment map of body state; Antonio Damasio, *Descartes' Error* (1994) — somatic marker hypothesis; vmPFC patients with intact logic but impaired decision-making due to somatic signal loss.
+
+**Signal types:** `somatic_signal_present` · `body_disconnect` · `visceral_decision_signal` · `proprioceptive_neglect`  
+**Injector:** `SomaticAcknowledger` — body-signal epistemic validation; body-disconnect gentle re-entry; somatic marker integration  
+**API:** `GET /v1/cognition/interoception/stats`  
+**CLI:** `/interoception`  
+**Flag:** `ORICLI_INTEROCEPTION_ENABLED=true`
+
+---
+
+
 
 ### Summary
 Completes Phase IV with three modules covering cult survivor psychology, high-demand environment deconstruction, and the Apathy Syndrome defense mechanism.
