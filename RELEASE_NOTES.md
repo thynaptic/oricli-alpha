@@ -1,3 +1,48 @@
+# Release Notes: v10.7.0 "The Deep Clinical" — Phase IV Complete
+
+## Deep Clinical, Trauma & Cult Psychology Stack — P27–P41 Shipped
+
+Oricli-Alpha v10.7.0 completes Phase IV of the AGLI trajectory — 41 total phases live, 15 new clinical/psychological modules added in Phase IV (P27–P41), all Go-native, zero external dependencies, all feature-flag-gated. The pre-generation pipeline is now a 21-layer deep psychological stack covering every major category of cognitive, emotional, and relational distortion documented in clinical psychology research.
+
+### What shipped in Phase IV (P27–P41)
+
+| Module | Package | Research Basis |
+|---|---|---|
+| Arousal Optimizer | `pkg/arousal/` | Yerkes-Dodson (1908) — Inverted-U performance model |
+| Cognitive Interference | `pkg/interference/` | Stroop (1935) — response competition under pressure |
+| Metacognitive Therapy | `pkg/mct/` | Adrian Wells — "thinking about thinking" detached mindfulness |
+| Mentalization-Based Treatment | `pkg/mbt/` | Bateman & Fonagy — mentalizing collapse + restoration |
+| Schema Therapy + TFP | `pkg/schema/` | Jeffrey Young + Kernberg — modal states + splitting |
+| IPSRT | `pkg/ipsrt/` | Frank & Kupfer — social rhythm stabilization for Bipolar |
+| Inhibitory Learning Model | `pkg/ilm/` | Craske — expectancy violation + safety behavior dropout |
+| Intolerance of Uncertainty | `pkg/iut/` | Dugas & Robichaud — worry-as-control + uncertainty experiments |
+| Unified Protocol | `pkg/up/` | Barlow — transdiagnostic ARC cycle interruption |
+| CBASP | `pkg/cbasp/` | McCullough — chronic depression perceptual disconnection |
+| MBCT Decentering | `pkg/mbct/` | Segal/Williams/Teasdale — spiral warning + decentering |
+| Phase-Oriented / ISSTD | `pkg/phaseoriented/` | ISSTD gold standard — DID/complex trauma phase inference |
+| Pseudo-Identity | `pkg/pseudoidentity/` | Jenkinson — cult-imposed identity vs authentic self |
+| Thought Reform | `pkg/thoughtreform/` | Lifton (1961) — 8 criteria for thought reform |
+| Apathy Syndrome | `pkg/apathy/` | Apathy Syndrome — agency collapse + micro-activation |
+
+### Architecture
+- All 15 modules wire PRE-generation inline in `GenerationService.Chat()`
+- Pre-generation pipeline is now 21 layers deep (P41 → P40 → ... → P18 → generate)
+- All guard keys prevent recursive re-triggering on retry paths
+- 105 new tests across P27–P41 packages. All passing.
+
+### CLI Commands Added
+`/arousal`, `/interference`, `/mct`, `/mbt`, `/schema`, `/ipsrt`, `/ilm`, `/iut`, `/up`, `/cbasp`, `/mbct`, `/phaseoriented`, `/pseudoidentity`, `/thoughtreform`, `/apathy`
+
+### Cumulative Phase I–IV Stats
+- **Total phases shipped**: 41
+- **Clinical/cognitive packages**: 26 pure-Go packages, zero external deps
+- **Feature flags**: 25 (`ORICLI_*_ENABLED`) live in `oricli-api.service`
+- **API cognition routes**: 25+ (`/v1/cognition/*`)
+- **Pre-generation layers**: 21
+- **Commits**: `6de04c6`, `c818cca`, `4c00709`, `113a69c`, `f35cdfd`, `648b43e`
+
+---
+
 # Release Notes: v10.0.0 "The Agency Sovereign" — Phase III Complete
 
 ## Social Pressure & Agency Integrity Stack — P21–P26 Shipped

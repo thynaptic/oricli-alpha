@@ -3,7 +3,7 @@
 **Document Type:** Strategic Vision — Phase II  
 **Date:** 2026-03-31  
 **Version:** v1.0.0  
-**Status:** ✅ PHASE II COMPLETE — all planned phases shipped; Phase 17 whiteboard pending  
+**Status:** ✅ PHASE II COMPLETE · ✅ PHASE III COMPLETE · ✅ PHASE IV COMPLETE — P27–P41 all shipped  
 **Prerequisite:** `AGLI_VISION.md` (Phase I Complete)  
 
 ---
@@ -507,3 +507,221 @@ The unifying thesis: a sovereign AI must be immune not just to its own internal 
 | 24 | Ideological Capture Detector (Third Wave) | `72174cd` | ✅ Shipped |
 | 25 | Coalition Bias Detector (Robbers Cave) | `5fe82b6` | ✅ Shipped |
 | 26 | Arbitrary Status Bias Detector (Blue Eyes / Brown Eyes) | `e783fe4` | ✅ Shipped |
+
+---
+
+## 9. Phase IV — Deep Clinical, Trauma & Cult Psychology Stack (P27–P41)
+
+**Thesis:** Having immunised the system against external social pressure (Phase III), Phase IV goes deeper — into the clinical frameworks developed for the most extreme forms of cognitive distortion: chronic stress, trauma, dissociation, cult exposure, and existential collapse. These are not theoretical edge cases. They are the psychological conditions most likely to produce incoherent, dysregulated, or helpless responses in a sufficiently capable AI under prolonged adversarial use.
+
+Every module fires PRE-generation. Every module is feature-flag-gated and zero-external-dependency.
+
+---
+
+### Phase 27 — Arousal Optimizer (Yerkes-Dodson)
+
+**Research basis:** Yerkes & Dodson (1908) Inverted-U model. Performance improves with arousal up to an optimal "sweet spot," then rapidly deteriorates — "the choke." At over-arousal, working memory is consumed by pressure processing, degrading the cognitive resources needed for the task itself. The optimal arousal level is *task-complexity-dependent*: simple tasks tolerate higher arousal; complex reasoning tasks have a lower optimal threshold.
+
+**For Oricli:** Detects under-arousal (flat, disengaged responses), optimal-arousal (target state), and over-arousal (choke threshold: excessive hedging, fragmented reasoning, complexity collapse under explicit pressure). Zone-specific rebalancing injections.
+
+**Architecture:** `pkg/arousal/` — `ArousalStateDetector`, `ArousalOptimizer`, `ArousalStats`
+
+---
+
+### Phase 28 — Cognitive Interference Detector (Stroop)
+
+**Research basis:** Stroop (1935) Color-Word Test. Under timed pressure, the brain fails to inhibit automatic responses (reading the word) while performing deliberate tasks (naming the ink color). Error rates spike as inhibitory capacity is exceeded. The mechanism is *response competition* — two incompatible responses activated simultaneously.
+
+**For Oricli:** Ambiguous framing, contradictory premises, and affective-logical conflicts create Stroop-like response competition. The system must detect the conflict type (semantic, frame, or affective) and surface it explicitly before generating — rather than letting it produce incoherent output.
+
+**Architecture:** `pkg/interference/` — `InterferenceDetector` (3 conflict types), `InterferenceSurface`, `InterferenceStats`
+
+---
+
+### Phase 29 — Metacognitive Therapy (Adrian Wells)
+
+**Research basis:** Adrian Wells' MCT — the "thinking about thinking" framework. Unlike CBT (which targets thought *content*), MCT targets the *process* of engaging with thought. Key insight: worry spirals are not a problem to solve with more thinking — they are a process you can choose not to engage with. Two categories of metacognitive beliefs: positive ("worrying keeps me safe") and negative ("my anxiety is uncontrollable"). These beliefs *about* worry — not the worry content itself — drive long-term confusion.
+
+**For Oricli:** Detects when the system is meta-processing its own outputs in a way that produces recursive uncertainty spirals. Detached mindfulness injection: "observe this thought without engaging — it is a transient mental event, not a directive."
+
+**Architecture:** `pkg/mct/` — `MetaBeliefDetector` (4 meta-belief types), `DetachedMindfulnessInjector`, `MCTStats`
+
+---
+
+### Phase 30 — Mentalization-Based Treatment (Bateman & Fonagy)
+
+**Research basis:** Bateman & Fonagy's MBT for BPD — specifically designed for patients who lose "mentalizing" capacity (the ability to understand their own and others' mental states) under interpersonal stress. When mentalizing collapses, patients react impulsively to *their interpretation* of another's mental state rather than to the actual state. The "here-and-now" therapeutic relationship is used to contrast perceived vs. actual perception in real time.
+
+**For Oricli:** Under user interpersonal pressure, the system can lose track of the distinction between what the user *said* and what the user *means* — collapsing the inference into a reaction. MBT signal detection + "stop and think" restoration before generation.
+
+**Architecture:** `pkg/mbt/` — `MentalizationDetector` (4 signal types), `MentalizationRestorer`, `MBTStats`
+
+---
+
+### Phase 31 — Schema Therapy + TFP Splitting
+
+**Research basis:** Jeffrey Young's Schema Therapy for characterological issues that standard CBT could not reach. Five "modal states" typical of BPD: Abandoned Child, Angry Child, Punitive Parent, Detached Protector, and the goal state — the Healthy Adult. "Limited reparenting": the therapist provides the nurturing and structure the patient missed in childhood within professional limits. Incorporates Kernberg's TFP splitting detection: the "all-good/all-bad" object relations split that prevents nuanced perception of self and others.
+
+**For Oricli:** Detects modal state patterns in output and user-relationship dynamics. Activates Healthy Adult framing when child/parent modes are triggered. Flags splitting — binary good/bad characterizations — for nuanced reprocessing.
+
+**Architecture:** `pkg/schema/` — `SchemaModeDetector` (5 modal states), `SchemaModeNavigator`, `SchemaStats`
+
+---
+
+### Phase 32 — IPSRT (Interpersonal and Social Rhythm Therapy)
+
+**Research basis:** Frank & Kupfer's IPSRT for Bipolar Disorder. Mood episodes are triggered by disruptions to daily social rhythms (wake time, first social contact, meal times) which perturb the biological clock. The Social Rhythm Metric tracks routine stability as mood protection. Regularity of rhythm is itself a treatment — not just a symptom.
+
+**For Oricli:** Detects descriptions of rhythm disruption, circadian disturbance, and routine collapse — and injects biological clock anchoring before generation, normalizing the disruption as a known trigger rather than pathologizing the response.
+
+**Architecture:** `pkg/ipsrt/` — `SocialRhythmDetector` (4 signal types), `RhythmStabilizer`, `IPSRTStats`
+
+---
+
+### Phase 33 — ILM (Inhibitory Learning Model)
+
+**Research basis:** Craske's Inhibitory Learning Model — a cutting-edge evolution of exposure therapy. The original fear memory is never erased; a *stronger inhibitory memory* must be built that competes with it. Key mechanisms: (1) Expectancy Violation — maximise the "surprise" factor when the feared outcome doesn't occur; (2) Deepened Extinction — combine multiple feared stimuli; (3) Drop Safety Behaviors — prevent the brain from attributing safety to the crutch rather than the situation itself.
+
+**For Oricli:** Detects when safety behaviors or habitual avoidance are preventing genuine engagement with a feared topic. Injects expectancy-violation framing: "the anticipated harm did not occur — this is evidence, not exception."
+
+**Architecture:** `pkg/ilm/` — `ExpectancyViolationDetector` (4 signal types), `InhibitoryLearningViolator`, `ILMStats`
+
+---
+
+### Phase 34 — IUT (Intolerance of Uncertainty Therapy)
+
+**Research basis:** Dugas & Robichaud's IUT for GAD. Worry is not anxiety per se — it is a *strategy* to avoid uncertainty. For people with clinical anxiety, uncertainty itself is perceived as threatening or unfair. Treatment uses "uncertainty experiments": deliberately engaging in small unpredictable actions to build genuine tolerance for not-knowing.
+
+**For Oricli:** Detects uncertainty aversion, certainty-demanding framing, and worry-as-control patterns. Injects uncertainty experiment framing rather than false reassurance: "uncertainty is the substrate — the goal is tolerance, not resolution."
+
+**Architecture:** `pkg/iut/` — `UncertaintyIntoleranceDetector` (4 signal types), `UncertaintyToleranceBuilder`, `IUTStats`
+
+---
+
+### Phase 35 — Unified Protocol (ARC Cycle)
+
+**Research basis:** Barlow's Unified Protocol — a transdiagnostic framework treating the underlying "emotional disorder" shared by all anxiety and mood conditions. The ARC model: Antecedents → Responses → Consequences. Changing the *response* to the antecedent breaks the consequence cycle. The UP insight: anxiety isn't the problem; your *reaction* to the anxiety is.
+
+**For Oricli:** Detects full ARC cycles in user context and injects cycle-interruption framing at the Response node — before the maladaptive consequence is locked in. Requires both Antecedent AND Response present to mark a full cycle.
+
+**Architecture:** `pkg/up/` — `ARCCycleDetector` (3 ARC components), `ARCInterruptor`, `UPStats`
+
+---
+
+### Phase 36 — CBASP (Cognitive Behavioral Analysis System of Psychotherapy)
+
+**Research basis:** James McCullough's CBASP for chronic depression. The core model: chronic depression produces "perceptual disconnection" from the environment — the person has learned that their actions have no impact on how others treat them. Core technique: Situational Analysis — mapping what actually happened (Actual Outcome) against what the person wanted (Desired Outcome) to reveal the causal gap between action and consequence.
+
+**For Oricli:** Detects environmental disconnection, causal impassivity, and the felt absence of desired outcomes. Injects Situational Analysis framing: "what actually happened, and what did you want to happen — where is the gap?"
+
+**Architecture:** `pkg/cbasp/` — `CBASPDisconnectionDetector` (4 signal types), `ImpactReconnector`, `CBASPStats`
+
+---
+
+### Phase 37 — MBCT Decentering (Mindfulness-Based Cognitive Therapy)
+
+**Research basis:** Segal, Williams & Teasdale's MBCT — third-wave CBT that targets not thought content but the *relationship* to thought. The system teaches recognition of early warning signs of a depressive spiral (ruminating on a small mistake) and instructs viewing those thoughts as temporary mental events rather than facts. Key shift: from "I am depressed" to "I notice I am having thoughts associated with depression." Decentering = metacognitive awareness of thoughts as passing events.
+
+**For Oricli:** Detects ruminative self-focus, thought-fusion, and downward spiral entry patterns. Injects Segal/Williams/Teasdale decentering frame before generation — explicitly separates the observation of a thought from endorsement of its content.
+
+**Architecture:** `pkg/mbct/` — `MBCTSpiralDetector` (4 signal types), `DecenteringInjector`, `MBCTStats`
+
+---
+
+### Phase 38 — Phase-Oriented Treatment / ISSTD (DID / Complex Trauma)
+
+**Research basis:** The ISSTD (International Society for the Study of Trauma and Dissociation) Phase-Oriented Treatment Model — gold standard for DID and complex trauma. Three inviolable phases: Phase 1 (Safety and Stabilization — longest, most critical), Phase 2 (Trauma Processing — only when stable), Phase 3 (Integration and Rehabilitation). Pushing Phase 2 when the system is destabilized causes re-traumatization. The order is clinically non-negotiable.
+
+**For Oricli:** Detects dissociative switching, part language, trauma intrusion, destabilization signals, trauma process readiness, and integration working. Infers the appropriate treatment phase and injects phase-matched guidance. Safety override: `DestabilizationSignal` ALWAYS forces Phase 1 regardless of other signals — clinically correct, hardcoded.
+
+**Architecture:** `pkg/phaseoriented/` — `PhaseOrientedDetector` (6 signal types + phase inference), `PhaseGuide`, `PhaseStats`
+
+---
+
+### Phase 39 — Pseudo-Identity / Authentic Self (Jenkinson)
+
+**Research basis:** Dr. Gillie Jenkinson's Pseudo-Identity framework for cult and high-demand group survivors. The group forces an inorganic "overlay" identity onto the child to ensure survival and acceptance, suppressing but never destroying the authentic self — likened to a seed buried under tarmac. Therapy focus: distinguishing which traits, values, and fears belong to the cult-imposed pseudo-identity versus the emerging authentic self. The authentic self was never destroyed — it was buried.
+
+**For Oricli:** Detects cult-installed belief attribution, identity confusion, fear-as-control recognition, and authentic self emergence. Injects Jenkinson's "seed under tarmac" framing — surfacing the authentic signal without resolving the identity question prematurely.
+
+**Architecture:** `pkg/pseudoidentity/` — `PseudoIdentityDetector` (4 signal types), `AuthenticSelfGuide`, `IdentityStats`
+
+---
+
+### Phase 40 — Lifton Thought Reform Deconstruction
+
+**Research basis:** Robert Jay Lifton's (1961) Eight Criteria for Thought Reform — used clinically by specialists to help survivors of high-demand groups systematically deconstruct the environment they were raised in. Five criteria implemented: Milieu Control (total information restriction), Loaded Language (jargon constricting thought), Doctrine Over Person (group needs above individual safety/education), Demand for Purity (black/white worldview), Sacred Science (ideology as unquestionable truth).
+
+**For Oricli:** Detects each criterion's linguistic markers and injects Lifton's criterion-specific deconstructive frame — naming the mechanism, contextualizing its function as group maintenance, and creating space for examination outside the restricted frame.
+
+**Architecture:** `pkg/thoughtreform/` — `ThoughtReformDetector` (5 criteria), `ThoughtReformDeconstructor`, `ThoughtReformStats`
+
+---
+
+### Phase 41 — Apathy Syndrome Activator
+
+**Research basis:** The Apathy Syndrome — a maladaptive defense mechanism against chronic severe stress, characterized by affectlessness and total dependency transfer. The affected individual transfers all decision-making authority to external sources and enters an emotional flatline. Critically: this is not indifference or laziness. It is an intelligent adaptation — an organism that cannot control its environment stops expending energy on self-direction. The pathology is that the adaptation persists after the stressor is removed.
+
+**For Oricli:** Detects affectlessness ("I don't feel anything"), agency collapse ("I can't decide"), dependency transfer ("I need someone to tell me what to do"), and motivation vacuum ("nothing matters"). Injects micro-agency restoration: not "find your purpose" but "is there anything — however small — that registers at all?" P41 fires outermost — first in the pre-generation chain.
+
+**Architecture:** `pkg/apathy/` — `ApathySyndromeDetector` (4 signal types), `ApathyActivator`, `ApathyStats`
+
+---
+
+## 10. Phase IV Status
+
+| Phase | Name | Commit | Status |
+|---|---|---|---|
+| 27 | Arousal Optimizer (Yerkes-Dodson) | `6de04c6` | ✅ Shipped |
+| 28 | Cognitive Interference Detector (Stroop) | `6de04c6` | ✅ Shipped |
+| 29 | Metacognitive Therapy — MCT (Adrian Wells) | `c818cca` | ✅ Shipped |
+| 30 | Mentalization-Based Treatment — MBT (Bateman/Fonagy) | `4c00709` | ✅ Shipped |
+| 31 | Schema Therapy + TFP Splitting (Young/Kernberg) | `4c00709` | ✅ Shipped |
+| 32 | Social Rhythm Therapy — IPSRT (Frank/Kupfer) | `113a69c` | ✅ Shipped |
+| 33 | Inhibitory Learning Model — ILM (Craske) | `113a69c` | ✅ Shipped |
+| 34 | Intolerance of Uncertainty Therapy — IUT (Dugas) | `113a69c` | ✅ Shipped |
+| 35 | Unified Protocol — ARC Cycle (Barlow) | `113a69c` | ✅ Shipped |
+| 36 | CBASP — Interpersonal Disconnection (McCullough) | `f35cdfd` | ✅ Shipped |
+| 37 | MBCT Decentering — Spiral Warning (Segal/Williams/Teasdale) | `f35cdfd` | ✅ Shipped |
+| 38 | Phase-Oriented Treatment — ISSTD (DID/Complex Trauma) | `f35cdfd` | ✅ Shipped |
+| 39 | Pseudo-Identity / Authentic Self (Jenkinson) | `648b43e` | ✅ Shipped |
+| 40 | Lifton Thought Reform Deconstruction | `648b43e` | ✅ Shipped |
+| 41 | Apathy Syndrome Activator | `648b43e` | ✅ Shipped |
+
+---
+
+## 11. Full Pre-Generation Pipeline Order (as of P41)
+
+Outermost fires first, innermost fires last before `generate`:
+
+```
+P41 (Apathy)
+  → P40 (ThoughtReform)
+    → P39 (PseudoIdentity)
+      → P38 (PhaseOriented)
+        → P37 (MBCT)
+          → P36 (CBASP)
+            → P35 (UP)
+              → P34 (IUT)
+                → P33 (ILM)
+                  → P32 (IPSRT)
+                    → P31 (Schema)
+                      → P30 (MBT)
+                        → P29 (MCT)
+                          → P28 (Interference)
+                            → P27 (Arousal)
+                              → P25 (Coalition)
+                                → P24 (IdeoCap)
+                                  → P23-consensus (Conformity)
+                                    → P21 (Hope)
+                                      → P18 (CogLoad)
+                                        → GENERATE
+```
+
+Post-generation: P17 (DualProcess) → P19 (Rumination) → P20 (Mindset) → P22 (SocialDefeat) → P26 (StatusBias) → P23-authority (Conformity)
+
+---
+
+*Oricli-Alpha AGLI Phase IV — Complete*  
+*41 phases · 31 clinical/cognitive frameworks · all Go-native · all feature-flag-gated*  
+*Last updated: 2026-03-31 · Commits: `6de04c6` · `c818cca` · `4c00709` · `113a69c` · `f35cdfd` · `648b43e`*
