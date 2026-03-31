@@ -36,6 +36,8 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/audit"
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/chronos"
+	"github.com/thynaptic/oricli-go/pkg/science"
+	"github.com/thynaptic/oricli-go/pkg/searchintent"
 )
 
 func bootstrapAPIKey(st *memory.MemoryStore) string {
@@ -566,6 +568,32 @@ func main() {
 		log.Printf("[Chronos] Temporal Grounding active — 30-min decay scan + 6-hour snapshot pass")
 	}
 
+	// ── Science: Phase 10 Active Science (opt-in via ORICLI_SCIENCE_ENABLED=true) ──
+	if os.Getenv("ORICLI_SCIENCE_ENABLED") == "true" {
+		sciHypothesisStore := science.NewHypothesisStore("/home/mike/Mavaia/data/science/hypotheses.json")
+
+		// SearXNG adapter — thin closure over the searxng instance from CuriosityDaemon
+		var sciSearcher science.SearXNGAdapter
+		if curiosity.SearXNG != nil {
+			sciSearcher = &scienceSearchAdapter{searcher: curiosity.SearXNG}
+		}
+
+		sciTester := science.NewTester(genService, sciSearcher, nil /* PAD adapter optional */)
+		sciEngine := science.NewScienceEngine(sciTester, sciHypothesisStore, nil /* knowledge writer optional */, nil /* WSHub optional */)
+		sciFormulator := science.NewFormulator(genService)
+		sciDaemon := science.NewScienceDaemon(sciFormulator, sciEngine, sciHypothesisStore)
+
+		apiServer.ScienceDaemon = sciDaemon
+		sciDaemon.StartDaemon(context.Background())
+
+		// Bridge Phase 9→10: wire ScienceDaemon as Chronos curiosity seeder
+		if apiServer.ChronosDaemon != nil {
+			apiServer.ChronosDaemon.SetCuriositySeeder(sciDaemon)
+		}
+
+		log.Printf("[Science] Phase 10 Active Science online — hypothesis engine + 2h re-test loop")
+	}
+
 	go apiServer.Start()
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)
 
@@ -605,4 +633,29 @@ ID:        session.ID,
 Synthesis: session.Synthesis,
 Status:    string(session.Status),
 }, nil
+}
+
+// ---------------------------------------------------------------------------
+// scienceSearchAdapter — wraps *service.SearXNGSearcher to satisfy science.SearXNGAdapter
+// ---------------------------------------------------------------------------
+
+type scienceSearchAdapter struct {
+searcher *service.SearXNGSearcher
+}
+
+func (a *scienceSearchAdapter) Search(query string) ([]string, error) {
+results, err := a.searcher.SearchWithURLs(searchintent.SearchQuery{
+RawTopic:       query,
+FormattedQuery: query,
+MaxPasses:      1,
+Category:       searchintent.CategoryGeneral,
+})
+if err != nil {
+return nil, err
+}
+out := make([]string, 0, len(results))
+for _, r := range results {
+out = append(out, r.Title+": "+r.Snippet)
+}
+return out, nil
 }

@@ -48,6 +48,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/audit"
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/chronos"
+	"github.com/thynaptic/oricli-go/pkg/science"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
@@ -125,6 +126,8 @@ type ServerV2 struct {
 	// ChronosIndex + ChronosDaemon: Phase 9 Temporal Grounding
 	ChronosIndex  *chronos.ChronosIndex
 	ChronosDaemon *chronos.TemporalGroundingDaemon
+	// ScienceDaemon: Phase 10 Active Science
+	ScienceDaemon *science.ScienceDaemon
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -513,6 +516,13 @@ func (s *ServerV2) setupRoutes() {
 			chronosRoutes.GET("/changes", s.handleChronosChanges)
 			chronosRoutes.POST("/decay-scan", s.handleChronosDecayScan)
 			chronosRoutes.POST("/snapshot", s.handleChronosForceSnapshot)
+		}
+		scienceRoutes := protected.Group("/science")
+		{
+			scienceRoutes.GET("/hypotheses", s.handleScienceList)
+			scienceRoutes.GET("/hypotheses/:id", s.handleScienceGet)
+			scienceRoutes.POST("/test", s.handleScienceSubmit)
+			scienceRoutes.GET("/stats", s.handleScienceStats)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3766,4 +3776,62 @@ return
 }
 diff := s.ChronosDaemon.ForceSnapshot()
 c.JSON(http.StatusOK, diff)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10 — Active Science handlers
+// ---------------------------------------------------------------------------
+
+// GET /v1/science/hypotheses?status=confirmed&n=50
+func (s *ServerV2) handleScienceList(c *gin.Context) {
+if s.ScienceDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
+return
+}
+statusFilter := science.HypothesisStatus(c.Query("status"))
+list := s.ScienceDaemon.Store().List(statusFilter)
+c.JSON(http.StatusOK, gin.H{"hypotheses": list, "count": len(list)})
+}
+
+// GET /v1/science/hypotheses/:id
+func (s *ServerV2) handleScienceGet(c *gin.Context) {
+if s.ScienceDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
+return
+}
+id := c.Param("id")
+h := s.ScienceDaemon.Store().Get(id)
+if h == nil {
+c.JSON(http.StatusNotFound, gin.H{"error": "hypothesis not found"})
+return
+}
+c.JSON(http.StatusOK, h)
+}
+
+// POST /v1/science/test
+// Body: { "topic": "...", "fact_summary": "..." }
+func (s *ServerV2) handleScienceSubmit(c *gin.Context) {
+if s.ScienceDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
+return
+}
+var body struct {
+Topic       string `json:"topic"`
+FactSummary string `json:"fact_summary"`
+}
+if err := c.ShouldBindJSON(&body); err != nil || body.Topic == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "topic is required"})
+return
+}
+s.ScienceDaemon.Submit(body.Topic, body.FactSummary)
+c.JSON(http.StatusAccepted, gin.H{"status": "queued", "topic": body.Topic})
+}
+
+// GET /v1/science/stats
+func (s *ServerV2) handleScienceStats(c *gin.Context) {
+if s.ScienceDaemon == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
+return
+}
+c.JSON(http.StatusOK, s.ScienceDaemon.Stats())
 }

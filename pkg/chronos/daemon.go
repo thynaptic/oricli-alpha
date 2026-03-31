@@ -73,6 +73,12 @@ snapshotInterval: 6 * time.Hour,
 }
 
 // StartDaemon launches the background loops.
+// SetCuriositySeeder injects a CuriositySeeder after construction (e.g. Phase 10 ScienceDaemon).
+// Safe to call from main.go after both Chronos and Science daemons are booted.
+func (d *TemporalGroundingDaemon) SetCuriositySeeder(s CuriositySeeder) {
+	d.seeder = s
+}
+
 func (d *TemporalGroundingDaemon) StartDaemon(ctx context.Context) {
 log.Printf("[Chronos] Temporal Grounding active — decay: %s, snapshot: %s",
 d.decayInterval, d.snapshotInterval)
