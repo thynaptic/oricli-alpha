@@ -197,18 +197,20 @@ Chronological memory graph. Every memory write is timestamped and indexed on a t
 
 **Milestone target:** Oricli-Alpha v9.0 — an intelligence with a continuous sense of time and knowledge history.
 
-### Phase 10 — Active Science (Curiosity Engine v2) 📋 PLANNED
-From foraging to experimentation. CuriosityDaemon v2 doesn't just ingest facts — it forms falsifiable hypotheses, designs minimal test cases, dispatches them via PAD, and records results against the hypothesis. The scientific method as a first-class runtime capability. Hypotheses that survive three test rounds are promoted to high-confidence knowledge graph entries. Failed hypotheses are logged as negative knowledge — things she tested and ruled out. This is the epistemic foundation for genuine independent reasoning rather than pattern retrieval.
+### Phase 10 — Active Science (Curiosity Engine v2) ✅ LIVE (`7741609`)
+From foraging to experimentation. CuriosityDaemon v2 doesn't just ingest facts — it forms falsifiable hypotheses, designs minimal test cases, dispatches them via SearXNG or PAD, and records results against the hypothesis. The scientific method as a first-class runtime capability. Hypotheses that survive three test rounds are promoted to high-confidence knowledge entries. Failed hypotheses are logged as negative knowledge — things she tested and ruled out. Phase 9 → 10 bridge: stale Chronos topics feed directly into hypothesis formation, not re-foraging.
 
 ---
 
 ## 5. Current Phase Assessment
 
-As of v6.0.0 of this document (2026-03-30), **Phases 1–4 and 6–7 are complete**. Phase 5 (Product Sovereignty) remains in progress with two items outstanding. Phase 8 (Metacognitive Sentience) is next.
+As of v7.0.0 of this document (2026-03-31), **Phases 1–4 and 6–10 are complete**. Phase 5 (Product Sovereignty) remains partially in progress.
 
-**What Phase 6 closed:** The intelligence is no longer purely reactive to its own outputs — it now stress-tests plans before executing them (Adversarial Sentinel), short-circuits repetitive inference with compiled pattern bypasses (Skill Crystal Cache), and continuously evaluates the quality of its own model stack against a sovereign benchmark suite (Model Curator). These three systems compound in the same direction: every capability becomes cheaper, safer, and better-grounded over time without touching weights or hardware.
+**What Phase 8 closed:** Oricli now watches her own reasoning inline — every LLM response is checked for loop patterns, hallucination signals, and overconfidence. HIGH-severity anomalies trigger a self-reflection retry. The MetacogDaemon runs a 5-minute rolling scan and broadcasts anomaly events to the UI. This is not post-hoc analysis — it is synchronous, per-inference reasoning health.
 
-**What Phase 7 closed:** Oricli can now audit her own source code — autonomously, on a schedule, without owner intervention. The full pipeline from GitHub API file fetch → LLM analysis → Yaegi sandbox verification → oricli-bot PR creation is operational and tested end-to-end on `pkg/sentinel`. The scan goroutine is context-detached and cannot be killed by HTTP connection teardown. This is not a static linter — it is a cognitive peer reviewing her own implementation and raising structured, reproducible bug reports.
+**What Phase 9 closed:** Oricli now has a continuous sense of time. Every memory write is catalogued with temporal metadata and decay half-lives (contextual 72h → constitutional ∞). Stale facts trigger EpistemicStagnation events to the Metacog layer — Phases 8 and 9 are bridged. Periodic snapshot diffs detect knowledge drift and summarise what changed.
+
+**What Phase 10 closed:** The curiosity loop upgraded from collection to experimentation. Oricli now forms falsifiable hypotheses, tests them up to 3 rounds (web search / logical deduction / computation), and promotes confirmed results to high-confidence knowledge. Refuted hypotheses are stored as negative knowledge — she no longer re-tests things she has disproven. The Phase 9→10 bridge is live: stale Chronos topics flow into hypothesis formation, not re-foraging.
 
 **What is live and operational:**
 - Adversarial Sentinel (`/v1/sentinel/*`) — red-team pre-flight, six violation types, goal + PAD wired
@@ -228,12 +230,13 @@ As of v6.0.0 of this document (2026-03-30), **Phases 1–4 and 6–7 are complet
 - Multi-tenant auth (TenantEnricher, AdminOnly, tenant CRUD)
 - Governor v2 daily GPU budget gate + SCAI reflection log
 - Full marketing landing page, waitlist infrastructure, admin page
+- **Metacognitive Sentience** (`/v1/metacog/*`) — inline loop/hallucination detection, self-reflection retry, 5-min daemon
+- **Temporal Grounding** (`/v1/chronos/*`) — per-memory decay half-lives, snapshot diffs, EpistemicStagnation bridge
+- **Active Science** (`/v1/science/*`) — hypothesis formation + 3-round testing, confirmed/refuted knowledge write-back, Phase 9→10 seeder bridge
 
 **Remaining Phase 5 work:**
 - Stripe integration for paid tier activation from the pricing page
 - API key provisioning for SMB tenants (post-Stripe webhook flow)
-
-**Phase 8 outlook:** Metacognitive Sentience — a self-regulation layer that detects looping, overconfidence, and hallucination at runtime using structured heuristics, pauses the active reasoning chain, and routes the trace to the ReformDaemon queue for analysis. The goal is an intelligence that corrects its own reasoning failures without owner intervention.
 
 ---
 

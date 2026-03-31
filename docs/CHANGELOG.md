@@ -10,6 +10,36 @@ Versions track `VERSION` file. Commits listed for traceability.
 
 ---
 
+## [7.0.0] — 2026-03-31
+
+### Added — Phase 10: Active Science (Curiosity Engine v2) (`7741609`)
+- **`pkg/science/`** — new package: hypothesis formation, testing, conclusion engine
+  - `hypothesis.go`: `Hypothesis` struct with `HypothesisStore` (100-entry ring + JSON persistence)
+  - `formulator.go`: LLM-driven structured hypothesis formation with labeled-line parser
+  - `tester.go`: 3-method tester (WEB_SEARCH / LOGICAL / COMPUTATION) + LLM judge (CONFIRMED / REFUTED / INCONCLUSIVE)
+  - `engine.go`: 3-round confirmation loop — ≥2/3 pass → `confirmed`; ≥2/3 fail → `refuted`; split → `inconclusive` + 2h re-queue
+  - `daemon.go`: `ScienceDaemon` implements `chronos.CuriositySeeder` — stale Chronos topics feed directly into hypothesis testing
+- **Phase 9 → 10 bridge**: `TemporalGroundingDaemon.SetCuriositySeeder(sciDaemon)` — stale facts trigger hypothesis formation, not just re-foraging
+- **Phase 10 API** (`/v1/science/`): `GET /hypotheses`, `GET /hypotheses/:id`, `POST /test`, `GET /stats`
+- `ORICLI_SCIENCE_ENABLED=true` feature flag (systemd unit updated)
+
+### Added — Phase 9: Temporal Grounding (`0703642`)
+- **`pkg/chronos/`** — time-awareness layer over MemoryBank
+  - Decay half-lives by category: contextual 72h, factual 168h, procedural 2160h, constitutional ∞
+  - 30-min decay scans, 6-hour snapshot diffs with LLM change-summaries
+  - `EpistemicStagnation` events emitted to MetacogLog when a topic stale ≥3 consecutive scans
+- **Phase 8 → 9 bridge**: stale memories trigger Metacognitive Sentience events
+- **Phase 9 API** (`/v1/chronos/`): entries, snapshot, changes, decay-scan, force-snapshot
+
+### Added — Phase 8: Metacognitive Sentience (`012765f`)
+- **`pkg/metacog/`** — inline anomaly detection post every LLM response
+  - FNV-32 loop detection (window=12), hallucination pattern matching, overconfidence regex
+  - HIGH-severity events trigger single self-reflection retry (recursion-guarded)
+  - 5-min rolling scan daemon; WS broadcast on anomaly
+- **Phase 8 API** (`/v1/metacog/`): events, stats, scan
+
+---
+
 ## [4.0.0] — 2026-03-30
 
 ### Added
