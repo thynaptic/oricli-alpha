@@ -56,6 +56,9 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/mastery":
 		return runMastery(client), true
 
+	case "/compute":
+		return runCompute(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -220,6 +223,44 @@ func runMastery(c *Client) string {
 	return sb.String()
 }
 
+func runCompute(c *Client) string {
+	stats, err := c.GetComputeBidStats()
+	if err != nil {
+		return styleDanger.Render("✗ " + err.Error())
+	}
+	decisions, err2 := c.GetComputeGovernor(10)
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Sovereign Compute Bidding") + "\n")
+	sb.WriteString(styleAccent.Render("  Tier Confidence Scores:") + "\n")
+	if conf, ok := stats["confidence"].(map[string]interface{}); ok {
+		for k, v := range conf {
+			sb.WriteString(fmt.Sprintf("  %s  %.2f\n", styleKeyVal.Render(padRight(k, 26)), v))
+		}
+	} else {
+		sb.WriteString(prettyJSON(stats))
+	}
+	sb.WriteString("\n" + styleAccent.Render("  Recent Decisions:") + "\n")
+	if err2 == nil {
+		if decs, ok := decisions["recent_decisions"].([]interface{}); ok {
+			if len(decs) == 0 {
+				sb.WriteString(styleDim.Render("  No decisions yet\n"))
+			}
+			for _, d := range decs {
+				if dm, ok := d.(map[string]interface{}); ok {
+					tier := fmt.Sprintf("%v", dm["winner_tier"])
+					rationale := fmt.Sprintf("%v", dm["rationale"])
+					tierColor := styleSuccess
+					if tier == "remote" {
+						tierColor = styleWarning
+					}
+					sb.WriteString(fmt.Sprintf("  %s  %s\n", tierColor.Render(padRight(tier, 10)), styleDim.Render(rationale)))
+				}
+			}
+		}
+	}
+	return sb.String()
+}
+
 func runGoals(c *Client) string {
 	data, err := c.GetGoals()
 	if err != nil {
@@ -248,6 +289,7 @@ func renderHelp() string {
 		{"/metrics", "Runtime metrics"},
 		{"/therapy", "Therapy stats + session formulation"},
 		{"/mastery", "Mastery log — topic class success rates"},
+		{"/compute", "Compute bid stats + recent governor decisions"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},

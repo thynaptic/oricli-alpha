@@ -248,3 +248,21 @@ func parseSSE(body io.ReadCloser, ch chan<- StreamToken) {
 		ch <- StreamToken{Error: err}
 	}
 }
+
+// GetComputeBidStats fetches compute bidding statistics from the server.
+func (c *Client) GetComputeBidStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/compute/bids/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetComputeGovernor fetches recent BidGovernor decisions from the server.
+func (c *Client) GetComputeGovernor(n int) (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get(fmt.Sprintf("/v1/compute/governor?n=%d", n), &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

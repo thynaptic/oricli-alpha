@@ -48,6 +48,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/audit"
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/chronos"
+	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/science"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 )
@@ -140,6 +141,10 @@ type ServerV2 struct {
 	TherapyHelpless  *therapy.HelplessnessDetector
 	TherapyMastery   *therapy.MasteryLog
 	TherapyRetrainer *therapy.AttributionalRetrainer
+
+	// Phase 12: Sovereign Compute Bidding
+	BidGovernor   *compute.BidGovernor
+	FeedbackLedger *compute.FeedbackLedger
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -550,6 +555,12 @@ func (s *ServerV2) setupRoutes() {
 			therapyRoutes.GET("/mastery", s.handleTherapyMastery)
 			therapyRoutes.POST("/helplessness/check", s.handleTherapyHelplessnessCheck)
 			therapyRoutes.GET("/helplessness/stats", s.handleTherapyHelplessnessStats)
+		}
+		// Phase 12: Sovereign Compute Bidding
+		computeRoutes := v1.Group("/compute")
+		{
+			computeRoutes.GET("/bids/stats", s.handleComputeBidStats)
+			computeRoutes.GET("/governor", s.handleComputeGovernor)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -4083,4 +4094,30 @@ func (s *ServerV2) handleTherapyHelplessnessStats(c *gin.Context) {
 		"helplessness_count": f.HelplessnessCount,
 		"schema_active":      schemaActive,
 	})
+}
+
+// ── Phase 12: Sovereign Compute Bidding handlers ─────────────────────────────
+
+func (s *ServerV2) handleComputeBidStats(c *gin.Context) {
+if s.FeedbackLedger == nil {
+c.JSON(503, gin.H{"error": "compute bidding not enabled"})
+return
+}
+c.JSON(200, s.FeedbackLedger.Stats())
+}
+
+func (s *ServerV2) handleComputeGovernor(c *gin.Context) {
+if s.BidGovernor == nil {
+c.JSON(503, gin.H{"error": "compute bidding not enabled"})
+return
+}
+n := 20
+if nStr := c.Query("n"); nStr != "" {
+if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
+n = parsed
+}
+}
+c.JSON(200, gin.H{
+"recent_decisions": s.BidGovernor.RecentDecisions(n),
+})
 }

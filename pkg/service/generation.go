@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
@@ -35,6 +36,8 @@ type GenerationService struct {
 	CrystalCache   *scl.CrystalCache        // Skill Crystallization — LLM-bypass for proven patterns
 	MetacogDetector *metacog.Detector        // Phase 8: inline metacognitive anomaly detection
 	Therapy         *TherapyKit              // Phase 15: DBT/CBT/REBT therapeutic cognition stack
+	BidGovernor     *compute.BidGovernor     // Phase 12: Sovereign Compute Bidding
+	FeedbackLedger  *compute.FeedbackLedger  // Phase 12: outcome feedback → confidence EMA
 }
 
 // TherapyKit groups Phase 15+16 components injected from main.go.
@@ -351,6 +354,10 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 			}
 
 			s.recordMastery(promptForCheck, true)
+			// Phase 12: record bid outcome — no anomaly = success, anomalyScore=0
+			if _, isBidded := options["_bid_tier"].(string); isBidded {
+				s.recordBidOutcome(options["_bid_tier"].(string), inferBidTaskClass(messages), 0, 0.0, true)
+			}
 			return map[string]interface{}{"success": true, "text": content, "model": model, "method": "go_ollama_chat", "confidence": 0.95}, nil
 		}
 	}
@@ -365,13 +372,46 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 	useResearch := false
 	useCode := false
 
-	// ── Complexity routing — auto-escalate hard tasks to RunPod ──────────
-	// Runs before explicit tier checks so it can upgrade an unclassified
-	// request. Explicit model/tier overrides from the caller still win.
-	if IsComplexityRoutingEnabled() {
+	// ── Sovereign Compute Bidding (Phase 12) — select best tier via market ──
+	// BidGovernor replaces the static complexity threshold when wired in.
+	// Falls back to the legacy heuristic when not configured.
+	if s.BidGovernor != nil {
+		taskClass := inferBidTaskClass(messages)
+		complexity := ClassifyComplexity(messages)
+		budgetUSD := 0.0
+		if s.Governor != nil {
+			budgetUSD = s.Governor.RemainingBudget()
+		}
+		// Streaming chat: high latency weight, moderate cost weight
+		cw, lw := compute.DefaultWeights()
+		if bg, ok := options["_background_task"].(bool); ok && bg {
+			cw, lw = compute.BackgroundWeights()
+		}
+		bidReq := compute.BidRequest{
+			TaskClass:     taskClass,
+			Complexity:    complexity.Score,
+			EstTokens:     estimateTokens(messages),
+			BudgetUSD:     budgetUSD,
+			CostWeight:    cw,
+			LatencyWeight: lw,
+		}
+		result := s.BidGovernor.Adjudicate(bidReq)
+		log.Printf("[BidGovernor] %s", result.Rationale)
+		switch result.Winner.TierID {
+		case compute.TierMedium:
+			options["use_code_model"] = true
+			options["_bid_tier"] = compute.TierMedium
+		case compute.TierRemote:
+			options["_escalate_to_runpod"] = true
+			options["_complexity_tier"] = "heavy"
+			options["_bid_tier"] = compute.TierRemote
+		default:
+			options["_bid_tier"] = compute.TierLocal
+		}
+	} else if IsComplexityRoutingEnabled() {
+		// Legacy heuristic fallback
 		complexity := ClassifyComplexity(messages)
 		if complexity.Tier > TierLocal {
-			// Governor hard-cap: if daily budget is exhausted, stay local.
 			estimatedCost := EstimateRunPodCost(1)
 			if s.Governor != nil && !s.Governor.CanSpend(estimatedCost) {
 				log.Printf("[GenerationService] CostGovernor: daily cap hit — forcing TierLocal (was %s)", complexity.Tier)
@@ -734,4 +774,43 @@ return
 }
 topicClass := therapy.InferTopicClass(query)
 s.Therapy.Mastery.Record(topicClass, query, success)
+}
+
+// ── Phase 12: Bid Feedback helpers ───────────────────────────────────────────
+
+// recordBidOutcome records the result of a generation to the FeedbackLedger.
+// anomalyScore: 0.0 = clean, 1.0 = HIGH anomaly. success = !error && no high anomaly.
+func (s *GenerationService) recordBidOutcome(tierID, taskClass string, latencyMs int, anomalyScore float64, success bool) {
+if s.FeedbackLedger == nil {
+return
+}
+s.FeedbackLedger.Record(compute.TierOutcome{
+TierID:          tierID,
+TaskClass:       taskClass,
+ActualLatencyMs: latencyMs,
+AnomalyScore:    anomalyScore,
+Success:         success,
+Timestamp:       time.Now(),
+})
+}
+
+// inferBidTaskClass maps a message list to a compute bid task class.
+// Uses the last user message content via therapy.InferTopicClass.
+func inferBidTaskClass(messages []map[string]string) string {
+for i := len(messages) - 1; i >= 0; i-- {
+if messages[i]["role"] == "user" {
+return therapy.InferTopicClass(messages[i]["content"])
+}
+}
+return "general"
+}
+
+// estimateTokens provides a rough token count estimate from message content length.
+// Assumes ~4 chars per token on average.
+func estimateTokens(messages []map[string]string) int {
+total := 0
+for _, m := range messages {
+total += len(m["content"])
+}
+return total / 4
 }
