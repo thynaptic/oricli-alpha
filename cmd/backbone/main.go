@@ -38,6 +38,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/chronos"
 	"github.com/thynaptic/oricli-go/pkg/science"
 	"github.com/thynaptic/oricli-go/pkg/compute"
+	"github.com/thynaptic/oricli-go/pkg/dualprocess"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
 )
@@ -665,6 +666,24 @@ func main() {
 		apiServer.BidGovernor = bidGovernor
 		apiServer.FeedbackLedger = feedbackLedger
 		log.Printf("[Compute] Phase 12 Sovereign Compute Bidding online — local/medium/remote tiers, EMA feedback ledger")
+	}
+
+	// ── Phase 17: Dual Process Engine (opt-in via ORICLI_DUALPROCESS_ENABLED=true) ──
+	if os.Getenv("ORICLI_DUALPROCESS_ENABLED") == "true" {
+		os.MkdirAll("data/dualprocess", 0755)
+		dpClassifier := dualprocess.NewProcessClassifier()
+		dpAuditor := dualprocess.NewProcessAuditor()
+		dpOverride := dualprocess.NewProcessOverride()
+		dpStats := dualprocess.NewProcessStats("data/dualprocess/stats.json")
+		genService.DualProcess = &service.DualProcessKit{
+			Classifier: dpClassifier,
+			Auditor:    dpAuditor,
+			Override:   dpOverride,
+			Stats:      dpStats,
+		}
+		apiServer.DualProcessClassifier = dpClassifier
+		apiServer.DualProcessStats = dpStats
+		log.Printf("[DualProcess] Phase 17 Dual Process Engine online — S1/S2 classifier, post-gen auditor, S2 override injection")
 	}
 
 	go apiServer.Start()

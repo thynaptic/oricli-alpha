@@ -266,3 +266,12 @@ func (c *Client) GetComputeGovernor(n int) (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetProcessStats fetches dual process mismatch stats from the server.
+func (c *Client) GetProcessStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/process/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

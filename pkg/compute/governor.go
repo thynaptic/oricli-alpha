@@ -137,8 +137,23 @@ func (g *BidGovernor) score(bid Bid, req BidRequest) float64 {
 	costPenalty := bid.EstimatedCostUSD * req.CostWeight
 	latencyNorm := float64(bid.EstimatedLatencyMs) / 10000.0
 	latencyPenalty := latencyNorm * req.LatencyWeight
+
+	// Phase 17: S2 demand boosts higher-capability tiers.
+	// Local tier gets penalised when S2 is needed; remote gets a bonus.
+	s2Bonus := 0.0
+	if req.S2DemandScore > 0.4 {
+		switch bid.TierID {
+		case TierRemote:
+			s2Bonus = req.S2DemandScore * 0.15
+		case TierMedium:
+			s2Bonus = req.S2DemandScore * 0.08
+		case TierLocal:
+			s2Bonus = -req.S2DemandScore * 0.10 // soft penalty — local loses ground on hard tasks
+		}
+	}
+
 	denom := 1.0 + costPenalty + latencyPenalty
-	return bid.ConfidenceScore / denom
+	return (bid.ConfidenceScore + s2Bonus) / denom
 }
 
 // ── Internal ──────────────────────────────────────────────────────────────────

@@ -59,6 +59,9 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/compute":
 		return runCompute(client), true
 
+	case "/process":
+		return runProcess(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -261,6 +264,44 @@ func runCompute(c *Client) string {
 	return sb.String()
 }
 
+func runProcess(c *Client) string {
+	data, err := c.GetProcessStats()
+	if err != nil {
+		return styleDanger.Render("✗ " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Dual Process Engine — S1/S2 Mismatch Rates") + "\n")
+	if stats, ok := data["stats"].([]interface{}); ok {
+		if len(stats) == 0 {
+			sb.WriteString(styleDim.Render("  No process data yet — accumulates after first audited responses\n"))
+		}
+		for _, s := range stats {
+			if sm, ok := s.(map[string]interface{}); ok {
+				class := fmt.Sprintf("%v", sm["task_class"])
+				total := fmt.Sprintf("%.0f", sm["total"])
+				rate := 0.0
+				if r, ok := sm["mismatch_rate"].(float64); ok {
+					rate = r
+				}
+				rateStr := fmt.Sprintf("%.0f%%", rate*100)
+				rateStyle := styleSuccess
+				if rate > 0.3 {
+					rateStyle = styleDanger
+				} else if rate > 0.15 {
+					rateStyle = styleWarning
+				}
+				sb.WriteString(fmt.Sprintf("  %s  %s mismatches  %s\n",
+					styleKeyVal.Render(padRight(class, 20)),
+					styleDim.Render(total+" total,"),
+					rateStyle.Render(rateStr)))
+			}
+		}
+	} else {
+		sb.WriteString(prettyJSON(data))
+	}
+	return sb.String()
+}
+
 func runGoals(c *Client) string {
 	data, err := c.GetGoals()
 	if err != nil {
@@ -290,6 +331,7 @@ func renderHelp() string {
 		{"/therapy", "Therapy stats + session formulation"},
 		{"/mastery", "Mastery log — topic class success rates"},
 		{"/compute", "Compute bid stats + recent governor decisions"},
+		{"/process", "Dual Process stats — S1/S2 mismatch rates per topic class"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},

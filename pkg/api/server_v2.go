@@ -49,6 +49,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/chronos"
 	"github.com/thynaptic/oricli-go/pkg/compute"
+	"github.com/thynaptic/oricli-go/pkg/dualprocess"
 	"github.com/thynaptic/oricli-go/pkg/science"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 )
@@ -143,8 +144,12 @@ type ServerV2 struct {
 	TherapyRetrainer *therapy.AttributionalRetrainer
 
 	// Phase 12: Sovereign Compute Bidding
-	BidGovernor   *compute.BidGovernor
+	BidGovernor    *compute.BidGovernor
 	FeedbackLedger *compute.FeedbackLedger
+
+	// Phase 17: Dual Process Engine
+	DualProcessClassifier *dualprocess.ProcessClassifier
+	DualProcessStats      *dualprocess.ProcessStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -561,6 +566,12 @@ func (s *ServerV2) setupRoutes() {
 		{
 			computeRoutes.GET("/bids/stats", s.handleComputeBidStats)
 			computeRoutes.GET("/governor", s.handleComputeGovernor)
+		}
+		// Phase 17: Dual Process Engine
+		cognitionRoutes := v1.Group("/cognition")
+		{
+			cognitionRoutes.GET("/process/stats", s.handleProcessStats)
+			cognitionRoutes.POST("/process/classify", s.handleProcessClassify)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -4120,4 +4131,43 @@ n = parsed
 c.JSON(200, gin.H{
 "recent_decisions": s.BidGovernor.RecentDecisions(n),
 })
+}
+
+
+// ── Phase 17: Dual Process Engine handlers ────────────────────────────────────
+
+func (s *ServerV2) handleProcessStats(c *gin.Context) {
+	if s.DualProcessStats == nil {
+		c.JSON(503, gin.H{"error": "dual process engine not enabled"})
+		return
+	}
+	c.JSON(200, gin.H{"stats": s.DualProcessStats.Stats()})
+}
+
+func (s *ServerV2) handleProcessClassify(c *gin.Context) {
+	if s.DualProcessClassifier == nil {
+		c.JSON(503, gin.H{"error": "dual process engine not enabled"})
+		return
+	}
+	var req struct {
+		Query     string `json:"query"`
+		TaskClass string `json:"task_class"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if req.TaskClass == "" {
+		req.TaskClass = "general"
+	}
+	demand := s.DualProcessClassifier.Classify(req.Query, req.TaskClass)
+	c.JSON(200, gin.H{
+		"tier":          demand.Tier.String(),
+		"score":         demand.Score,
+		"novelty":       demand.Novelty,
+		"abstraction":   demand.Abstraction,
+		"multi_step":    demand.MultiStep,
+		"contradiction": demand.Contradiction,
+		"reasons":       demand.Reasons,
+	})
 }

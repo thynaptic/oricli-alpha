@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/thynaptic/oricli-go/pkg/compute"
+	"github.com/thynaptic/oricli-go/pkg/dualprocess"
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
@@ -38,6 +39,15 @@ type GenerationService struct {
 	Therapy         *TherapyKit              // Phase 15: DBT/CBT/REBT therapeutic cognition stack
 	BidGovernor     *compute.BidGovernor     // Phase 12: Sovereign Compute Bidding
 	FeedbackLedger  *compute.FeedbackLedger  // Phase 12: outcome feedback → confidence EMA
+	DualProcess     *DualProcessKit          // Phase 17: System 1 / System 2 process classifier
+}
+
+// DualProcessKit groups Phase 17 components injected from main.go.
+type DualProcessKit struct {
+	Classifier *dualprocess.ProcessClassifier
+	Auditor    *dualprocess.ProcessAuditor
+	Override   *dualprocess.ProcessOverride
+	Stats      *dualprocess.ProcessStats
 }
 
 // TherapyKit groups Phase 15+16 components injected from main.go.
@@ -358,6 +368,32 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 			if _, isBidded := options["_bid_tier"].(string); isBidded {
 				s.recordBidOutcome(options["_bid_tier"].(string), inferBidTaskClass(messages), 0, 0.0, true)
 			}
+
+			// Phase 17: Dual Process audit — check if S1 fired on an S2 demand
+			if s.DualProcess != nil {
+				if _, isRetry := options["_dualprocess_retry"]; !isRetry {
+					taskClass := inferBidTaskClass(messages)
+					demand := s.DualProcess.Classifier.Classify(promptForCheck, taskClass)
+					audit := s.DualProcess.Auditor.Audit(promptForCheck, content, demand)
+					s.DualProcess.Stats.Record(demand, audit)
+					if audit.Mismatch() {
+						log.Printf("[DualProcess] S1/S2 mismatch on class=%s score=%.2f — injecting S2 override", demand.TaskClass, demand.Score)
+						overrideMsg := map[string]string{"role": "system", "content": s.DualProcess.Override.Inject(demand, audit)}
+						retryMsgs := append([]map[string]string{overrideMsg}, messages...)
+						retryOpts := make(map[string]interface{})
+						for k, v := range options {
+							retryOpts[k] = v
+						}
+						retryOpts["_dualprocess_retry"] = true
+						retryOpts["use_code_model"] = dualprocess.EscalationTier(demand) == "medium"
+						retryOpts["_escalate_to_runpod"] = dualprocess.EscalationTier(demand) == "remote"
+						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
+							return retry, nil
+						}
+					}
+				}
+			}
+
 			return map[string]interface{}{"success": true, "text": content, "model": model, "method": "go_ollama_chat", "confidence": 0.95}, nil
 		}
 	}
@@ -382,10 +418,17 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		if s.Governor != nil {
 			budgetUSD = s.Governor.RemainingBudget()
 		}
-		// Streaming chat: high latency weight, moderate cost weight
 		cw, lw := compute.DefaultWeights()
 		if bg, ok := options["_background_task"].(bool); ok && bg {
 			cw, lw = compute.BackgroundWeights()
+		}
+		// Phase 17: incorporate S2 demand into bid if DualProcess is wired
+		s2Score := 0.0
+		if s.DualProcess != nil {
+			if prompt := lastUserMessage(messages); prompt != "" {
+				demand := s.DualProcess.Classifier.Classify(prompt, taskClass)
+				s2Score = demand.Score
+			}
 		}
 		bidReq := compute.BidRequest{
 			TaskClass:     taskClass,
@@ -394,6 +437,7 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 			BudgetUSD:     budgetUSD,
 			CostWeight:    cw,
 			LatencyWeight: lw,
+			S2DemandScore: s2Score,
 		}
 		result := s.BidGovernor.Adjudicate(bidReq)
 		log.Printf("[BidGovernor] %s", result.Rationale)
@@ -813,4 +857,14 @@ for _, m := range messages {
 total += len(m["content"])
 }
 return total / 4
+}
+
+// lastUserMessage returns the content of the last user-role message.
+func lastUserMessage(messages []map[string]string) string {
+for i := len(messages) - 1; i >= 0; i-- {
+if messages[i]["role"] == "user" {
+return messages[i]["content"]
+}
+}
+return ""
 }

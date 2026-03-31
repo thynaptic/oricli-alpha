@@ -36,6 +36,7 @@ type BidRequest struct {
 	BudgetUSD       float64   `json:"budget_usd"`        // remaining daily budget
 	CostWeight      float64   `json:"cost_weight"`       // governor tuning — higher = cheaper wins
 	LatencyWeight   float64   `json:"latency_weight"`    // governor tuning — higher = faster wins
+	S2DemandScore   float64   `json:"s2_demand_score"`   // Phase 17: 0–1, higher = needs deliberate reasoning
 	Timestamp       time.Time `json:"timestamp"`
 }
 
