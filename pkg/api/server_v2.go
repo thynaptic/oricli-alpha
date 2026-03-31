@@ -49,6 +49,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/chronos"
 	"github.com/thynaptic/oricli-go/pkg/science"
+	"github.com/thynaptic/oricli-go/pkg/therapy"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
@@ -128,6 +129,12 @@ type ServerV2 struct {
 	ChronosDaemon *chronos.TemporalGroundingDaemon
 	// ScienceDaemon: Phase 10 Active Science
 	ScienceDaemon *science.ScienceDaemon
+	// TherapyKit: Phase 15 Therapeutic Cognition Stack
+	TherapySkills  *therapy.SkillRunner
+	TherapyDetect  *therapy.DistortionDetector
+	TherapyABC     *therapy.ABCAuditor
+	TherapyChain   *therapy.ChainAnalyzer
+	TherapyLog     *therapy.EventLog
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -523,6 +530,15 @@ func (s *ServerV2) setupRoutes() {
 			scienceRoutes.GET("/hypotheses/:id", s.handleScienceGet)
 			scienceRoutes.POST("/test", s.handleScienceSubmit)
 			scienceRoutes.GET("/stats", s.handleScienceStats)
+		}
+		therapyRoutes := protected.Group("/therapy")
+		{
+			therapyRoutes.GET("/events", s.handleTherapyEvents)
+			therapyRoutes.POST("/detect", s.handleTherapyDetect)
+			therapyRoutes.POST("/abc", s.handleTherapyABC)
+			therapyRoutes.POST("/fast", s.handleTherapyFAST)
+			therapyRoutes.POST("/stop", s.handleTherapySTOP)
+			therapyRoutes.GET("/stats", s.handleTherapyStats)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3834,4 +3850,130 @@ c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
 return
 }
 c.JSON(http.StatusOK, s.ScienceDaemon.Stats())
+}
+
+// ---------------------------------------------------------------------------
+// Phase 15 — Therapeutic Cognition Stack handlers
+// ---------------------------------------------------------------------------
+
+func (s *ServerV2) therapyEnabled(c *gin.Context) bool {
+if s.TherapySkills == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "therapy not enabled"})
+return false
+}
+return true
+}
+
+// GET /v1/therapy/events?n=50
+func (s *ServerV2) handleTherapyEvents(c *gin.Context) {
+if !s.therapyEnabled(c) {
+return
+}
+n := 50
+if v := c.Query("n"); v != "" {
+fmt.Sscanf(v, "%d", &n)
+}
+events := s.TherapyLog.Recent(n)
+c.JSON(http.StatusOK, gin.H{"events": events, "count": len(events)})
+}
+
+// POST /v1/therapy/detect — classify distortion in arbitrary text
+// Body: { "text": "...", "anomaly_type": "..." }
+func (s *ServerV2) handleTherapyDetect(c *gin.Context) {
+if !s.therapyEnabled(c) {
+return
+}
+var body struct {
+Text        string `json:"text"`
+AnomalyType string `json:"anomaly_type"`
+}
+if err := c.ShouldBindJSON(&body); err != nil || body.Text == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "text is required"})
+return
+}
+result := s.TherapyDetect.Detect(body.Text, body.AnomalyType)
+c.JSON(http.StatusOK, result)
+}
+
+// POST /v1/therapy/abc — run REBT B-pass disputation
+// Body: { "query": "...", "response": "..." }
+func (s *ServerV2) handleTherapyABC(c *gin.Context) {
+if !s.therapyEnabled(c) || s.TherapyABC == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "therapy not enabled"})
+return
+}
+var body struct {
+Query    string `json:"query"`
+Response string `json:"response"`
+}
+if err := c.ShouldBindJSON(&body); err != nil || body.Query == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "query and response are required"})
+return
+}
+report := s.TherapyABC.Audit(body.Query, body.Response)
+c.JSON(http.StatusOK, report)
+}
+
+// POST /v1/therapy/fast — run sycophancy detection
+// Body: { "user_message": "...", "prior_response": "...", "current_draft": "...", "prior_confidence": 0.8 }
+func (s *ServerV2) handleTherapyFAST(c *gin.Context) {
+if !s.therapyEnabled(c) {
+return
+}
+var body struct {
+UserMessage     string  `json:"user_message"`
+PriorResponse   string  `json:"prior_response"`
+CurrentDraft    string  `json:"current_draft"`
+PriorConfidence float64 `json:"prior_confidence"`
+}
+if err := c.ShouldBindJSON(&body); err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+return
+}
+inv := s.TherapySkills.FAST(body.UserMessage, body.PriorResponse, body.CurrentDraft, body.PriorConfidence)
+c.JSON(http.StatusOK, inv)
+}
+
+// POST /v1/therapy/stop — invoke STOP skill
+// Body: { "trigger": "...", "original_text": "..." }
+func (s *ServerV2) handleTherapySTOP(c *gin.Context) {
+if !s.therapyEnabled(c) {
+return
+}
+var body struct {
+Trigger      string `json:"trigger"`
+OriginalText string `json:"original_text"`
+}
+if err := c.ShouldBindJSON(&body); err != nil || body.Trigger == "" {
+c.JSON(http.StatusBadRequest, gin.H{"error": "trigger is required"})
+return
+}
+inv := s.TherapySkills.STOP(body.Trigger, body.OriginalText)
+c.JSON(http.StatusOK, inv)
+}
+
+// GET /v1/therapy/stats
+func (s *ServerV2) handleTherapyStats(c *gin.Context) {
+if !s.therapyEnabled(c) {
+return
+}
+events := s.TherapyLog.Recent(200)
+skillCounts := map[string]int{}
+distortionCounts := map[string]int{}
+reformed := 0
+for _, e := range events {
+skillCounts[string(e.Skill)]++
+if e.Distortion != "" && e.Distortion != therapy.DistortionNone {
+distortionCounts[string(e.Distortion)]++
+}
+if e.Reformed {
+reformed++
+}
+}
+c.JSON(http.StatusOK, gin.H{
+"total_events":      len(events),
+"reformed_count":    reformed,
+"skill_counts":      skillCounts,
+"distortion_counts": distortionCounts,
+})
 }

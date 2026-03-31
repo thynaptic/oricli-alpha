@@ -37,6 +37,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/chronos"
 	"github.com/thynaptic/oricli-go/pkg/science"
+	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
 )
 
@@ -594,6 +595,25 @@ func main() {
 		log.Printf("[Science] Phase 10 Active Science online — hypothesis engine + 2h re-test loop")
 	}
 
+	// ── Therapy: Phase 15 Therapeutic Cognition Stack (opt-in via ORICLI_THERAPY_ENABLED=true) ──
+	if os.Getenv("ORICLI_THERAPY_ENABLED") == "true" {
+		therapyGen := &therapyGenAdapter{gen: genService}
+
+		therapyLog := therapy.NewEventLog(200)
+		therapyDetect := therapy.NewDistortionDetector(therapyGen)
+		therapySkills := therapy.NewSkillRunner(therapyGen, therapyLog)
+		therapyABC := therapy.NewABCAuditor(therapyGen)
+		therapyChain := therapy.NewChainAnalyzer(therapyGen, 20)
+
+		apiServer.TherapyLog = therapyLog
+		apiServer.TherapyDetect = therapyDetect
+		apiServer.TherapySkills = therapySkills
+		apiServer.TherapyABC = therapyABC
+		apiServer.TherapyChain = therapyChain
+
+		log.Printf("[Therapy] Phase 15 Therapeutic Cognition Stack online — distortion detector, DBT skills, REBT auditor, chain analysis")
+	}
+
 	go apiServer.Start()
 	log.Printf("[Main] Sovereign Gateway active on port %d", apiPort)
 
@@ -658,4 +678,19 @@ for _, r := range results {
 out = append(out, r.Title+": "+r.Snippet)
 }
 return out, nil
+}
+
+// therapyGenAdapter — wraps *service.GenerationService to satisfy therapy.LLMGenerator.
+type therapyGenAdapter struct {
+gen *service.GenerationService
+}
+
+func (a *therapyGenAdapter) Generate(prompt string, params map[string]interface{}) (map[string]interface{}, error) {
+resp, err := a.gen.Chat([]map[string]string{
+{"role": "user", "content": prompt},
+}, params)
+if err != nil {
+return nil, err
+}
+return resp, nil
 }
