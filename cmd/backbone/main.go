@@ -51,6 +51,10 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/mct"
 	"github.com/thynaptic/oricli-go/pkg/mbt"
 	"github.com/thynaptic/oricli-go/pkg/schema"
+	"github.com/thynaptic/oricli-go/pkg/ipsrt"
+	"github.com/thynaptic/oricli-go/pkg/ilm"
+	"github.com/thynaptic/oricli-go/pkg/iut"
+	"github.com/thynaptic/oricli-go/pkg/up"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
@@ -757,7 +761,51 @@ func main() {
 		}
 	}
 
-	// ── Phase 31: Schema Therapy + TFP Splitting (opt-in via ORICLI_SCHEMA_ENABLED=true) ──
+	// ── Phase 35: Unified Protocol — ARC Cycle Detector (opt-in via ORICLI_UP_ENABLED=true) ──
+	if os.Getenv("ORICLI_UP_ENABLED") == "true" {
+		os.MkdirAll("data/up", 0755)
+		arcDetector := up.NewARCCycleDetector()
+		arcInterruptor := up.NewARCInterruptor()
+		upStats := up.NewUPStats("data/up/stats.json")
+		genService.UP = &service.UPKit{Detector: arcDetector, Interruptor: arcInterruptor, Stats: upStats}
+		apiServer.UPStats = upStats
+		log.Printf("[UP] Phase 35 Unified Protocol online — ARC cycle detector (Barlow transdiagnostic)")
+	}
+
+	// ── Phase 34: Intolerance of Uncertainty Therapy (opt-in via ORICLI_IUT_ENABLED=true) ──
+	if os.Getenv("ORICLI_IUT_ENABLED") == "true" {
+		os.MkdirAll("data/iut", 0755)
+		iutDetector := iut.NewUncertaintyIntoleranceDetector()
+		iutBuilder := iut.NewUncertaintyToleranceBuilder()
+		iutStats := iut.NewIUStats("data/iut/stats.json")
+		genService.IUT = &service.IUTKit{Detector: iutDetector, Builder: iutBuilder, Stats: iutStats}
+		apiServer.IUTStats = iutStats
+		log.Printf("[IUT] Phase 34 Intolerance of Uncertainty Therapy online — uncertainty aversion detector (Dugas)")
+	}
+
+	// ── Phase 33: Inhibitory Learning Model (opt-in via ORICLI_ILM_ENABLED=true) ──
+	if os.Getenv("ORICLI_ILM_ENABLED") == "true" {
+		os.MkdirAll("data/ilm", 0755)
+		ilmDetector := ilm.NewSafetyBehaviorDetector()
+		ilmViolator := ilm.NewExpectancyViolator()
+		ilmStats := ilm.NewILMStats("data/ilm/stats.json")
+		genService.ILM = &service.ILMKit{Detector: ilmDetector, Violator: ilmViolator, Stats: ilmStats}
+		apiServer.ILMStats = ilmStats
+		log.Printf("[ILM] Phase 33 Inhibitory Learning Model online — safety behavior + expectancy violation (Craske)")
+	}
+
+	// ── Phase 32: Social Rhythm Therapy / IPSRT (opt-in via ORICLI_IPSRT_ENABLED=true) ──
+	if os.Getenv("ORICLI_IPSRT_ENABLED") == "true" {
+		os.MkdirAll("data/ipsrt", 0755)
+		rhythmDetector := ipsrt.NewRhythmDisruptionDetector()
+		rhythmStabilizer := ipsrt.NewRhythmStabilizer()
+		rhythmStats := ipsrt.NewRhythmStats("data/ipsrt/stats.json")
+		genService.IPSRT = &service.IPSRTKit{Detector: rhythmDetector, Stabilizer: rhythmStabilizer, Stats: rhythmStats}
+		apiServer.IPSRTStats = rhythmStats
+		log.Printf("[IPSRT] Phase 32 Social Rhythm Therapy online — circadian disruption detector (Frank IPSRT)")
+	}
+
+		// ── Phase 31: Schema Therapy + TFP Splitting (opt-in via ORICLI_SCHEMA_ENABLED=true) ──
 	if os.Getenv("ORICLI_SCHEMA_ENABLED") == "true" {
 		os.MkdirAll("data/schema", 0755)
 		schemaModes := schema.NewSchemaModeDetector()

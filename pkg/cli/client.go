@@ -410,3 +410,39 @@ func (c *Client) GetSchemaStats() (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetIPSRTStats returns Phase 32 IPSRT social rhythm stats.
+func (c *Client) GetIPSRTStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/ipsrt/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetILMStats returns Phase 33 ILM safety behavior stats.
+func (c *Client) GetILMStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/ilm/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetIUTStats returns Phase 34 IUT uncertainty intolerance stats.
+func (c *Client) GetIUTStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/iut/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetUPStats returns Phase 35 Unified Protocol ARC cycle stats.
+func (c *Client) GetUPStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/up/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

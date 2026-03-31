@@ -104,6 +104,18 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/schema":
 		return runSchema(client), true
 
+	case "/ipsrt":
+		return runIPSRT(client), true
+
+	case "/ilm":
+		return runILM(client), true
+
+	case "/iut":
+		return runIUT(client), true
+
+	case "/up":
+		return runUP(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -452,6 +464,10 @@ func renderHelp() string {
 		{"/mct", "Metacognitive Therapy stats — meta-belief detections + detached mindfulness injections (Wells MCT)"},
 		{"/mbt", "Mentalization-Based Treatment stats — mentalizing failure types + interventions (Bateman & Fonagy)"},
 		{"/schema", "Schema Therapy + TFP Splitting stats — active mode + split type breakdown (Young + Kernberg)"},
+		{"/ipsrt", "Social Rhythm Therapy stats — circadian/routine disruption types + stabilizations (Frank IPSRT)"},
+		{"/ilm", "Inhibitory Learning Model stats — safety behavior types + expectancy violations (Craske ILM)"},
+		{"/iut", "Intolerance of Uncertainty Therapy stats — uncertainty aversion signals + tolerance builds (Dugas)"},
+		{"/up", "Unified Protocol stats — ARC cycle detections + interruptions (Barlow UP)"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
@@ -973,4 +989,128 @@ func runSchema(client *Client) string {
 		}
 	}
 	return sb.String()
+}
+
+func runIPSRT(client *Client) string {
+data, err := client.GetIPSRTStats()
+if err != nil {
+return styleDanger.Render("Error fetching IPSRT stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Social Rhythm Therapy / IPSRT (Frank)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["disruptions_detected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Disruptions", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["type_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Types:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 22)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runILM(client *Client) string {
+data, err := client.GetILMStats()
+if err != nil {
+return styleDanger.Render("Error fetching ILM stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Inhibitory Learning Model / ILM (Craske)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["type_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Behavior Types:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 26)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runIUT(client *Client) string {
+data, err := client.GetIUTStats()
+if err != nil {
+return styleDanger.Render("Error fetching IUT stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Intolerance of Uncertainty Therapy / IUT (Dugas)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["type_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Aversion Types:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 24)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runUP(client *Client) string {
+data, err := client.GetUPStats()
+if err != nil {
+return styleDanger.Render("Error fetching UP stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Unified Protocol / UP — ARC Cycle (Barlow)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["cycles_detected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Cycles Detected", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if comps, ok := data["component_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  ARC Components:\n"))
+for k, v := range comps {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 20)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
 }

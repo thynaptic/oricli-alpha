@@ -60,6 +60,10 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/mct"
 	"github.com/thynaptic/oricli-go/pkg/mbt"
 	"github.com/thynaptic/oricli-go/pkg/schema"
+	"github.com/thynaptic/oricli-go/pkg/ipsrt"
+	"github.com/thynaptic/oricli-go/pkg/ilm"
+	"github.com/thynaptic/oricli-go/pkg/iut"
+	"github.com/thynaptic/oricli-go/pkg/up"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
@@ -194,6 +198,10 @@ type ServerV2 struct {
 	MCTStats            *mct.MCTStats
 	MBTStats            *mbt.MBTStats
 	SchemaStats         *schema.SchemaStats
+	IPSRTStats          *ipsrt.RhythmStats
+	ILMStats            *ilm.ILMStats
+	IUTStats            *iut.IUStats
+	UPStats             *up.UPStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -640,6 +648,10 @@ func (s *ServerV2) setupRoutes() {
 			cognitionRoutes.GET("/mct/stats", s.handleMCTStats)
 			cognitionRoutes.GET("/mbt/stats", s.handleMBTStats)
 			cognitionRoutes.GET("/schema/stats", s.handleSchemaStats)
+			cognitionRoutes.GET("/ipsrt/stats", s.handleIPSRTStats)
+			cognitionRoutes.GET("/ilm/stats", s.handleILMStats)
+			cognitionRoutes.GET("/iut/stats", s.handleIUTStats)
+			cognitionRoutes.GET("/up/stats", s.handleUPStats)
 			cognitionRoutes.POST("/defeat/measure", s.handleDefeatMeasure)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
@@ -4447,4 +4459,36 @@ func (s *ServerV2) handleSchemaStats(c *gin.Context) {
 		return
 	}
 	c.JSON(200, s.SchemaStats.Stats())
+}
+
+func (s *ServerV2) handleIPSRTStats(c *gin.Context) {
+	if s.IPSRTStats == nil {
+		c.JSON(503, gin.H{"error": "IPSRT not enabled"})
+		return
+	}
+	c.JSON(200, s.IPSRTStats)
+}
+
+func (s *ServerV2) handleILMStats(c *gin.Context) {
+	if s.ILMStats == nil {
+		c.JSON(503, gin.H{"error": "ILM not enabled"})
+		return
+	}
+	c.JSON(200, s.ILMStats)
+}
+
+func (s *ServerV2) handleIUTStats(c *gin.Context) {
+	if s.IUTStats == nil {
+		c.JSON(503, gin.H{"error": "IUT not enabled"})
+		return
+	}
+	c.JSON(200, s.IUTStats)
+}
+
+func (s *ServerV2) handleUPStats(c *gin.Context) {
+	if s.UPStats == nil {
+		c.JSON(503, gin.H{"error": "UP not enabled"})
+		return
+	}
+	c.JSON(200, s.UPStats)
 }

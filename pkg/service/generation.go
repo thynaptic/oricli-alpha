@@ -23,6 +23,10 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/mct"
 	"github.com/thynaptic/oricli-go/pkg/mbt"
 	"github.com/thynaptic/oricli-go/pkg/schema"
+	"github.com/thynaptic/oricli-go/pkg/ipsrt"
+	"github.com/thynaptic/oricli-go/pkg/ilm"
+	"github.com/thynaptic/oricli-go/pkg/iut"
+	"github.com/thynaptic/oricli-go/pkg/up"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
@@ -68,6 +72,10 @@ type GenerationService struct {
 	MCT             *MCTKit                  // Phase 29: Metacognitive Therapy (MCT)
 	MBT             *MBTKit                  // Phase 30: Mentalization-Based Treatment
 	Schema          *SchemaKit               // Phase 31: Schema Therapy + TFP Splitting
+	IPSRT           *IPSRTKit                // Phase 32: Social Rhythm Therapy (IPSRT)
+	ILM             *ILMKit                  // Phase 33: Inhibitory Learning Model
+	IUT             *IUTKit                  // Phase 34: Intolerance of Uncertainty Therapy
+	UP              *UPKit                   // Phase 35: Unified Protocol (ARC cycle)
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -193,6 +201,34 @@ type SchemaKit struct {
 	SplitDetector   *schema.SplittingDetector
 	Responder       *schema.SchemaResponder
 	Stats           *schema.SchemaStats
+}
+
+// IPSRTKit groups Phase 32 components injected from main.go.
+type IPSRTKit struct {
+	Detector   *ipsrt.RhythmDisruptionDetector
+	Stabilizer *ipsrt.RhythmStabilizer
+	Stats      *ipsrt.RhythmStats
+}
+
+// ILMKit groups Phase 33 components injected from main.go.
+type ILMKit struct {
+	Detector *ilm.SafetyBehaviorDetector
+	Violator *ilm.ExpectancyViolator
+	Stats    *ilm.ILMStats
+}
+
+// IUTKit groups Phase 34 components injected from main.go.
+type IUTKit struct {
+	Detector *iut.UncertaintyIntoleranceDetector
+	Builder  *iut.UncertaintyToleranceBuilder
+	Stats    *iut.IUStats
+}
+
+// UPKit groups Phase 35 components injected from main.go.
+type UPKit struct {
+	Detector    *up.ARCCycleDetector
+	Interruptor *up.ARCInterruptor
+	Stats       *up.UPStats
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -434,6 +470,75 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 					messages = append([]map[string]string{sysMsg}, messages...)
 					options["_interference_surfaced"] = true
 					log.Printf("[Interference] P28 conflict detected severity=%.2f types=%d — surfacing before generation", reading.Severity, len(reading.Conflicts))
+				}
+			}
+		}
+	}
+
+	// Phase 35: Unified Protocol — ARC cycle detection (Barlow) — fires PRE-generation
+	if s.UP != nil {
+		if _, isRetry := options["_up_injected"]; !isRetry {
+			scan := s.UP.Detector.Scan(messages)
+			s.UP.Stats.Record(scan, false)
+			if scan.HasCycle || len(scan.Signals) > 0 {
+				injection := s.UP.Interruptor.Interrupt(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_up_injected"] = true
+					s.UP.Stats.Record(&up.ARCScan{}, true) // record injection
+					log.Printf("[UP] P35 ARC cycle detected components=%d hasCycle=%v — interrupting before generation", len(scan.Signals), scan.HasCycle)
+				}
+			}
+		}
+	}
+
+	// Phase 34: Intolerance of Uncertainty Therapy (Dugas) — fires PRE-generation
+	if s.IUT != nil {
+		if _, isRetry := options["_iut_injected"]; !isRetry {
+			scan := s.IUT.Detector.Scan(messages)
+			s.IUT.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.IUT.Builder.Build(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_iut_injected"] = true
+					log.Printf("[IUT] P34 uncertainty intolerance detected signals=%d — building tolerance frame before generation", len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 33: Inhibitory Learning Model — safety behavior + expectancy violation (Craske) — fires PRE-generation
+	if s.ILM != nil {
+		if _, isRetry := options["_ilm_injected"]; !isRetry {
+			scan := s.ILM.Detector.Scan(messages)
+			s.ILM.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.ILM.Violator.Violate(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_ilm_injected"] = true
+					log.Printf("[ILM] P33 safety behavior detected signals=%d — expectancy violation before generation", len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 32: Social Rhythm Therapy (IPSRT) — circadian/routine disruption (Frank) — fires PRE-generation
+	if s.IPSRT != nil {
+		if _, isRetry := options["_ipsrt_injected"]; !isRetry {
+			scan := s.IPSRT.Detector.Scan(messages)
+			s.IPSRT.Stats.Record(scan, false)
+			if scan.Disrupted {
+				injection := s.IPSRT.Stabilizer.Stabilize(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_ipsrt_injected"] = true
+					log.Printf("[IPSRT] P32 rhythm disruption detected signals=%d — stabilizing before generation", len(scan.Signals))
 				}
 			}
 		}
