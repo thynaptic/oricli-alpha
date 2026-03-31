@@ -1,9 +1,9 @@
 # AGLI Phase II: The Next Trajectory
 
-**Document Type:** Strategic Vision — Phase II Planning  
+**Document Type:** Strategic Vision — Phase II  
 **Date:** 2026-03-31  
-**Version:** v0.3.0  
-**Status:** 🔄 IN PROGRESS — Phase 15 ✅ COMPLETE; Phases 11–14 pending design sessions  
+**Version:** v1.0.0  
+**Status:** ✅ PHASE II COMPLETE — all planned phases shipped; Phase 17 whiteboard pending  
 **Prerequisite:** `AGLI_VISION.md` (Phase I Complete)  
 
 ---
@@ -330,22 +330,27 @@ Whatever Phase II becomes, it must respect these constraints from Phase I:
 
 ## 5. Open Questions for the Whiteboard
 
-1. What order do Phases 11–15 ship? Phase 11 (Subconscious Field) is a substrate for Phase 15 (Therapy Stack) — they may need to be co-designed
-2. ~~Which DBT/CBT/REBT skills ship in v1 of Phase 15 vs later iterations?~~ **RESOLVED** — all 12 skills shipped: STOP, TIPP, RadicalAcceptance, TurningTheMind, CheckTheFacts, OppositeAction, PLEASE, FAST, DEARMAN, BeginnersMind, DescribeNoJudge, CognitiveDefusion
-3. Does the Session Supervisor require a new storage layer or can Chronos handle it?
-4. How do we measure therapeutic efficacy? What does "less sycophancy" look like as a benchmark metric?
-5. ~~Does Phase 15 warrant its own evaluation test suite (`oricli_core/evaluation/test_data/therapy/`)?~~ **RESOLVED** — 5 integration tests live in `pkg/therapy/session_supervisor_test.go`
+~~1. What order do Phases 11–15 ship? Phase 11 (Subconscious Field) is a substrate for Phase 15 (Therapy Stack) — they may need to be co-designed~~ **RESOLVED** — all phases shipped.  
+2. ~~Which DBT/CBT/REBT skills ship in v1 of Phase 15 vs later iterations?~~ **RESOLVED** — all 12 skills shipped: STOP, TIPP, RadicalAcceptance, TurningTheMind, CheckTheFacts, OppositeAction, PLEASE, FAST, DEARMAN, BeginnersMind, DescribeNoJudge, CognitiveDefusion  
+3. ~~Does the Session Supervisor require a new storage layer or can Chronos handle it?~~ **RESOLVED** — SessionSupervisor uses PocketBase memory layer.  
+4. ~~How do we measure therapeutic efficacy? What does "less sycophancy" look like as a benchmark metric?~~ **RESOLVED** — HelplessnessDetector + MasteryLog provide quantified refusal-rate and topic-class success rates.  
+5. ~~Does Phase 15 warrant its own evaluation test suite (`oricli_core/evaluation/test_data/therapy/`)?~~ **RESOLVED** — 5 integration tests live in `pkg/therapy/session_supervisor_test.go`; 6 in `pkg/therapy/helplessness_test.go`
+
+**Open for Phase 17 whiteboard:** TBD.
 
 ---
 
 ## 6. Status
 
-| Phase | Name | Status |
-|---|---|---|
-| 11 | Subconscious Field | 🔲 Whiteboard |
-| 12 | Sovereign Compute Bidding | 🔲 Whiteboard |
-| 13 | Temporal Goal Chains | 🔲 Whiteboard |
-| 14 | NAS Lite — Routing Topology Self-Modification | 🔲 Whiteboard |
-| 15 | **Therapeutic Cognition Stack** | ✅ Complete |
+| Phase | Name | Commit | Status |
+|---|---|---|---|
+| 11 | Subconscious Field (`pkg/service/subconscious.go`) | `d27d903` | ✅ Complete |
+| 12 | Sovereign Compute Bidding (`pkg/compute/`) | `632b5d1` | ✅ Complete |
+| 13 | FineTune Orchestrator — automated LoRA via RunPod | `4c1de38` | ✅ Complete |
+| 14 | Adversarial Sentinel + ReformDaemon | `807fa40` / `160…` | ✅ Complete |
+| 15 | **Therapeutic Cognition Stack** | `ffc934a` / `cfd8eb0` | ✅ Complete |
+| 16 | Learned Helplessness Prevention (Attributional Resilience) | `219ae97` | ✅ Complete |
+| — | Oricli CLI (interactive REPL + one-shot mode) | `6e1746e` | ✅ Shipped |
+| 17 | **TBD** | — | 🔲 Whiteboard |
 
-_This document will be updated as design sessions conclude._
+_Phase 17 whiteboard pending. Phase II trajectory fully complete as of `632b5d1` (2026-03-31)._
