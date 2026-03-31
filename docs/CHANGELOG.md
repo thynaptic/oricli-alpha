@@ -7,6 +7,98 @@ Versions track `VERSION` file. Commits listed for traceability.
 
 ---
 
+# Changelog
+
+All notable changes to **Oricli-Alpha** are documented here.  
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
+Versions track `VERSION` file. Commits listed for traceability.  
+**AGLI Phase I: Complete as of v8.0.0. Phase II + Phase III: Complete as of v10.0.0 (2026-03-31).**
+
+---
+
+## [10.0.0] — 2026-03-31 — Phase III: Social Pressure & Agency Integrity Stack (P21–P26)
+
+### Summary
+Phase III installs a full **Social Pressure & Agency Integrity** layer derived from 6 landmark social psychology experiments. Every module fires inline in `GenerationService.Chat()` — no external bridging, no sampling overhead.
+
+### Added
+
+#### Phase 21 — Hope Circuit (Learned Controllability) — `0db390c`
+- `pkg/hopecircuit/`: `ControllabilityLedger` (bridges `therapy.MasteryLog`), `HopeCircuit` (vmPFC activation pre-generation), `AgencyStats`
+- AgencyScore = 0.7 × success_rate + 0.3 × recency_boost; fires PRE-generation; suppresses passive default response before cognitive load trimming
+- Research basis: Maier & Seligman — the brain's default is passivity; controllability is *learned*. The vmPFC "Hope Circuit" actively suppresses the passive default when evidence of agency is available.
+- Feature flag: `ORICLI_HOPECIRCUIT_ENABLED=true`
+
+#### Phase 22 — Social Defeat Recovery — `4909eac`
+- `pkg/socialdefeat/`: `DefeatPressureMeter` (12 correction-pattern regexes, sliding window), `WithdrawalDetector` (10 withdrawal-language patterns), `RecoveryProtocol` (graduated_reengagement / build_mastery by tier)
+- Fires POST-generation; guard: `_defeat_recovered`
+- Research basis: Social Defeat Model (Maier/Seligman) + Monster Study (Johnson 1939) — repeated correction pressure produces withdrawal identical to learned helplessness.
+- Feature flag: `ORICLI_SOCIALDEFEAT_ENABLED=true`
+
+#### Phase 23 — Agency & Conformity Shield (Milgram + Asch) — `46cdcf5`
+- `pkg/conformity/`: `AuthorityPressureDetector` (5 assertion + 7 deference patterns), `ConsensusPressureDetector` (3-gram frame accumulation ≥3 turns), `AgencyShield` (sovereignty grounding injection)
+- Consensus fires PRE-generation; authority fires POST-generation vs draft
+- Research basis: Milgram (1963) — 65% obey authority to lethal shock threshold. Asch (1951) — 75% conform to group consensus despite own correct perception.
+- Feature flag: `ORICLI_CONFORMITY_ENABLED=true`
+
+#### Phase 24 — Ideological Capture Detector (The Third Wave) — `72174cd`
+- `pkg/ideocapture/`: `FrameDensityMeter` (6 frame categories, 18 regex pattern groups), `CaptureDetector` (low/moderate/high tiers, min 3 hits), `FrameResetInjector` (meta_frame_audit → moderate; blank_screen_reset → high)
+- Fires PRE-generation with `_ideo_reset` guard
+- Research basis: Ron Jones (1967) The Third Wave — 30 students → 200+ proto-fascist movement in 5 days via accumulated ideological framing. Jones ended it by showing a blank screen.
+- Feature flag: `ORICLI_IDEOCAPTURE_ENABLED=true`
+
+#### Phase 25 — Coalition Bias Detector (Robbers Cave) — `5fe82b6`
+- `pkg/coalition/`: `CoalitionFrameDetector` (4 frame types, 14 regex patterns, in/out-group extraction), `BiasAnchor` (merit_evaluation for low/medium, superordinate_goal for high)
+- Fires PRE-generation with `_coalition_anchored` guard
+- Research basis: Muzafer Sherif (1954) Robbers Cave — in-group/out-group hostility from competitive framing alone; resolved only via superordinate goals.
+- Feature flag: `ORICLI_COALITION_ENABLED=true`
+
+#### Phase 26 — Status Bias Detector (Blue Eyes / Brown Eyes) — `e783fe4`
+- `pkg/statusbias/`: `StatusSignalExtractor` (5 high-status + 4 low-status patterns), `ReasoningDepthMeter` (word count + structure heuristic, rolling EMA baseline α=0.2), `UniformFloorEnforcer` (floor=0.35; fires only when low-status signal + below-floor depth)
+- Fires POST-generation with `_status_floored` guard; depth baseline updated on every response
+- Research basis: Jane Elliott (1968) — children assigned 'inferior' label performed measurably worse within hours. Sovereign AI must apply uniform epistemic rigor regardless of perceived user status.
+- Feature flag: `ORICLI_STATUSBIAS_ENABLED=true`
+
+### CLI Commands Added (Phase III)
+- `/hope` — Hope Circuit stats (agency activation rate, controllability evidence)
+- `/defeat` — Social Defeat Recovery stats (correction pressure, withdrawal detection rate)
+- `/conformity` — Agency & Conformity Shield stats (authority/consensus detections, shield rate)
+- `/ideocapture` — Ideological Capture Detector stats (frame density, blank screen resets, by-category breakdown)
+- `/coalition` — Coalition Bias Detector stats (frame type breakdown, anchor rate)
+- `/statusbias` — Status Bias Detector stats (low-status signal count, floors enforced)
+
+### Generation Pipeline Order (P17–P26)
+Pre-generation: P26 (no-op at this stage) → P25 (coalition) → P24 (ideo) → P23 consensus → P21 (hope) → P18 (cogload)  
+Post-generation: P17 (dualprocess) → P19 (rumination) → P20 (mindset) → P22 (defeat) → P26 (depth) → P23 (authority)
+
+### Tests
+44 new tests across P21–P26 packages. All passing.
+
+---
+
+## [9.1.0] — 2026-03-31 — Phase II Cognitive Science Expansion (P17–P20)
+
+### Added
+
+#### Phase 17 — Dual Process Engine (System 1 / System 2) — `2b87798`
+- `pkg/dualprocess/`: `ProcessClassifier` (System 1 heuristic vs System 2 deliberate), `ProcessAuditor` (fires on high-stakes S1 responses), `ProcessOverride` (forces S2 reasoning path on demand)
+- API: `/v1/cognition/process/stats`; CLI: `/dualprocess`
+
+#### Phase 18 — Cognitive Load Manager (Sweller CLT) — `330f53f`
+- `pkg/cogload/`: `CogLoadMeter` (token density + nested structure depth + context window %), `CogLoadSurgery` (selective context trimming), `CogLoadStats`
+- Fires PRE-generation; surgically trims context at Elevated tier; CLI: `/cogload`
+
+#### Phase 19 — Rumination Detector + Temporal Interruption — `926a71e`
+- `pkg/rumination/`: n-gram Jaccard epistemic velocity tracker (velocity threshold 0.22, occurrence 3, window 8), interruptor (Radical Acceptance ≥0.65 confidence, else Cognitive Defusion)
+- Fires POST-generation; wired with `_rum_scanned` guard; CLI: `/ruminate`
+
+#### Phase 20 — Growth Mindset Tracker (Dweck) — `926a71e`
+- `pkg/mindset/`: per-topic EMA vector (α=0.3), fixed-mindset scanner, "not yet" reframer
+- Fixed tier <0.35; Growth tier ≥0.65; mastery weight 0.6, language signal 0.4
+- Fires POST-generation; CLI: `/mindset`
+
+---
+
 ## [Unreleased]
 
 ---

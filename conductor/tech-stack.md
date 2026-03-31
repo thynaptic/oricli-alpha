@@ -1,6 +1,6 @@
 # Technology Stack: Oricli-Alpha Core
 
-> Last updated: 2026-03-22 — reflects v2.2.0 Go-native architecture.
+> Last updated: 2026-03-31 — reflects v10.0.0 Go-native architecture. Phase II + III complete.
 > **Before introducing a new stack-level dependency, update this file first.**
 
 ## Primary Language & Runtime
@@ -56,6 +56,24 @@ Used only for the UI proxy and optional cognitive sidecars. Not in the critical 
 - **JAX & Flax**: Specific reasoning architecture experiments.
 - **HTTPX / Requests**: Network communication in Python sidecars.
 - **Black / Ruff / MyPy**: Python code formatting, linting, and type checking.
+
+## Cognitive Science Stack (Pure Go — No External Deps)
+
+All packages below are pure Go, compile-time only, zero external dependencies. Each is feature-flag-gated via `ORICLI_*_ENABLED=true` in `oricli-api.service`.
+
+| Package | Phase | Research Basis |
+|---|---|---|
+| `pkg/therapy/` | 15–16 | DBT / CBT / REBT / ACT — inline therapeutic cognition |
+| `pkg/dualprocess/` | P17 | Kahneman System 1 vs System 2 |
+| `pkg/cogload/` | P18 | Sweller Cognitive Load Theory |
+| `pkg/rumination/` | P19 | ACT / Temporal Interruption |
+| `pkg/mindset/` | P20 | Dweck Growth Mindset |
+| `pkg/hopecircuit/` | P21 | Maier & Seligman — vmPFC Learned Controllability |
+| `pkg/socialdefeat/` | P22 | Social Defeat Model + Monster Study |
+| `pkg/conformity/` | P23 | Milgram (Authority) + Asch (Consensus) |
+| `pkg/ideocapture/` | P24 | Ron Jones — The Third Wave |
+| `pkg/coalition/` | P25 | Muzafer Sherif — Robbers Cave |
+| `pkg/statusbias/` | P26 | Jane Elliott — Blue Eyes / Brown Eyes |
 
 ## Infrastructure & DevOps
 

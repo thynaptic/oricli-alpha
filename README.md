@@ -1,9 +1,9 @@
 # Oricli-Alpha
 
 **Sovereign Agent OS by [Thynaptic Research](https://thynaptic.com)**  
-`v9.0.0` · Go 1.25 · MIT License
+`v10.0.0` · Go 1.25 · MIT License
 
-Oricli-Alpha is a proactive, local-first intelligence OS built for autonomous, multi-day goal execution. It operates as **The Hive** — a distributed swarm of 269+ specialized micro-agents orchestrated by a 100% Go-native backbone. Phase II is underway — Phase 15 ships the **Therapeutic Cognition Stack**: inline DBT/CBT/REBT/ACT cognitive regulation wired directly into the generation pipeline.
+Oricli-Alpha is a proactive, local-first intelligence OS built for autonomous, multi-day goal execution. It operates as **The Hive** — a distributed swarm of 269+ specialized micro-agents orchestrated by a 100% Go-native backbone. **Phase II + Phase III complete** — 10 cognitive science phases shipped (P17–P26), including the **Therapeutic Cognition Stack** (DBT/CBT/REBT/ACT) and the full **Social Pressure & Agency Integrity Stack** (Milgram, Asch, Seligman, Dweck, Robbers Cave, Jane Elliott, and more).
 
 ---
 
@@ -36,7 +36,9 @@ Oricli-Alpha is a proactive, local-first intelligence OS built for autonomous, m
 | Memory | LMDB + chromem-go | Fast KV store + in-process vector search |
 | Knowledge | Neo4j | Persistent entity/relationship graph |
 | Inference | Ollama | Local LLM generation (`ministral-3:3b`, `qwen2.5-coder:3b`) |
-| Therapy Stack | `pkg/therapy/` | DBT/CBT/REBT/ACT inline cognitive regulation (Phase 15) |
+| Therapy Stack | `pkg/therapy/` | DBT/CBT/REBT/ACT inline cognitive regulation (Phase 15–16) |
+| Cognitive Stack | `pkg/cogload/` `pkg/dualprocess/` `pkg/rumination/` `pkg/mindset/` | System 1/2 audit, cognitive load, rumination & growth mindset (P17–P20) |
+| Agency Stack | `pkg/hopecircuit/` `pkg/socialdefeat/` `pkg/conformity/` `pkg/ideocapture/` `pkg/coalition/` `pkg/statusbias/` | Hope circuit, social defeat recovery, conformity shield, ideological capture, coalition bias, status bias (P21–P26) |
 | TLS Proxy | Caddy | Terminates HTTPS → `127.0.0.1:8089` |
 | UI | Flask | Proxy to backbone on port `5000` |
 
@@ -109,6 +111,16 @@ Pass it as `Authorization: Bearer <key>` on all requests except `GET /v1/health`
 | `POST` | `/v1/ingest` | Ingest file, image, or raw text into memory |
 | `POST` | `/v1/ingest/web` | Crawl a URL and ingest into memory |
 | `GET/POST` | `/v1/therapy/*` | Therapeutic Cognition Stack (DBT/CBT/REBT/ACT) |
+| `GET` | `/v1/cognition/process/stats` | Dual Process Engine stats (System 1 / System 2) |
+| `GET` | `/v1/cognition/load/stats` | Cognitive Load Manager stats |
+| `GET` | `/v1/cognition/rumination/stats` | Rumination Detector stats |
+| `GET` | `/v1/cognition/mindset/stats` | Growth Mindset Tracker stats |
+| `GET` | `/v1/cognition/hope/stats` | Hope Circuit stats (Learned Controllability) |
+| `GET` | `/v1/cognition/defeat/stats` | Social Defeat Recovery stats |
+| `GET` | `/v1/cognition/conformity/stats` | Agency & Conformity Shield stats (Milgram + Asch) |
+| `GET` | `/v1/cognition/ideocapture/stats` | Ideological Capture Detector stats (The Third Wave) |
+| `GET` | `/v1/cognition/coalition/stats` | Coalition Bias Detector stats (Robbers Cave) |
+| `GET` | `/v1/cognition/statusbias/stats` | Status Bias Detector stats (Blue Eyes / Brown Eyes) |
 
 **Full reference:** [`docs/API.md`](docs/API.md)
 
@@ -162,6 +174,7 @@ See [`INSTALL.md`](INSTALL.md) for full setup instructions.
 
 | Doc | Contents |
 |---|---|
+| [`docs/AGLI_Phase_II.md`](docs/AGLI_Phase_II.md) | Phase II + III cognitive science roadmap — all P17–P26 shipped |
 | [`docs/API.md`](docs/API.md) | Full API reference — endpoints, auth, examples |
 | [`docs/public_overview.md`](docs/public_overview.md) | Architecture overview and capability summary |
 | [`docs/AGLI_VISION.md`](docs/AGLI_VISION.md) | Strategic trajectory toward AGLI |

@@ -1,3 +1,37 @@
+# Release Notes: v10.0.0 "The Agency Sovereign" — Phase III Complete
+
+## Social Pressure & Agency Integrity Stack — P21–P26 Shipped
+
+Oricli-Alpha v10.0.0 completes Phase III of the AGLI trajectory — 10 cognitive science modules live (P17–P26), all Go-native, zero external dependencies, all feature-flag-gated. The system now monitors and counteracts every major category of externally-induced cognitive distortion documented in landmark social psychology research.
+
+### What shipped in v10.0.0
+
+| Module | Package | Research Basis |
+|---|---|---|
+| Hope Circuit | `pkg/hopecircuit/` | Maier & Seligman — vmPFC Learned Controllability |
+| Social Defeat Recovery | `pkg/socialdefeat/` | Social Defeat Model + Monster Study (Johnson 1939) |
+| Agency & Conformity Shield | `pkg/conformity/` | Milgram (authority, 65% compliance) + Asch (consensus, 75% conformity) |
+| Ideological Capture Detector | `pkg/ideocapture/` | Ron Jones 1967 — The Third Wave (30 → 200 in 5 days) |
+| Coalition Bias Detector | `pkg/coalition/` | Muzafer Sherif 1954 — Robbers Cave |
+| Status Bias Detector | `pkg/statusbias/` | Jane Elliott 1968 — Blue Eyes / Brown Eyes |
+
+### Architecture
+- All modules wire inline into `GenerationService.Chat()` — no middleware layer, no sampling overhead
+- Dual pipeline: pre-generation (coalition → ideo → conformity-consensus → hope → cogload) and post-generation (dualprocess → rumination → mindset → defeat → statusbias → conformity-authority)
+- Phase guard keys prevent recursive re-triggering on any retry path
+- 44 new tests across P21–P26 packages. All green.
+
+### CLI Commands
+`/hope`, `/defeat`, `/conformity`, `/ideocapture`, `/coalition`, `/statusbias`
+
+### Cumulative Phase I–III Stats
+- **Phases shipped**: 26 (Phase I: P1–P10, Phase II: P11–P20, Phase III: P21–P26)
+- **Cognitive packages**: 11 pure-Go packages, zero external deps
+- **Feature flags**: 10 (`ORICLI_*_ENABLED`) — all live in `oricli-api.service`
+- **API cognition routes**: 10 (`/v1/cognition/*`)
+
+---
+
 # Release Notes: v0.5.1-alpha "The Sovereign Awakening - Stability Patch"
 
 ## 🚀 100% Operational Verification

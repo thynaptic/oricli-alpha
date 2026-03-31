@@ -3,15 +3,15 @@
 **Document Type:** Strategic Vision & Core Doctrine  
 **Report Number:** TR-2026-03  
 **Date:** 2026-03-31  
-**Version:** v9.0.0  
-**Status:** Phase I Complete ✅ — Phase II In Progress 🔄 (Phase 15 ✅) — See `AGLI_Phase_II.md`  
+**Version:** v10.0.0  
+**Status:** Phase I Complete ✅ — Phase II Complete ✅ (P11–P16) — Phase III Complete ✅ (P17–P26) — See `AGLI_Phase_II.md`  
 **Style Mode:** Hard Technical Doctrine  
 
 ---
 
 ## 1. Abstract
 
-This document defines the architectural and philosophical mandate for **Autonomous Governed Localized Intelligence (AGLI)** — Phase I. We formally reject the centralized, dependency-heavy trajectory of modern AI. Instead, we establish a new paradigm: a strictly sovereign, localized cognitive kernel that owns its compute, memory, objectives, and — critically — its own governing principles. By unifying high-speed Go-native orchestration, affective grounding, a multi-layer constitutional safety stack, and an autonomous daemon ecosystem, Oricli-Alpha has crossed the threshold from reactive assistant into a proactive, self-regulating, time-aware cognitive entity that forms and tests hypotheses without being asked. The "G" is not General — it is **Governed**. That is the harder and more honest claim, and no cloud AI can make it. Phase I proved the paradigm. Phase II has begun — Phase 15 (Therapeutic Cognition Stack) is live.
+This document defines the architectural and philosophical mandate for **Autonomous Governed Localized Intelligence (AGLI)** — Phase I. We formally reject the centralized, dependency-heavy trajectory of modern AI. Instead, we establish a new paradigm: a strictly sovereign, localized cognitive kernel that owns its compute, memory, objectives, and — critically — its own governing principles. By unifying high-speed Go-native orchestration, affective grounding, a multi-layer constitutional safety stack, and an autonomous daemon ecosystem, Oricli-Alpha has crossed the threshold from reactive assistant into a proactive, self-regulating, time-aware cognitive entity that forms and tests hypotheses without being asked. The "G" is not General — it is **Governed**. That is the harder and more honest claim, and no cloud AI can make it. Phase I proved the paradigm. Phase II built the therapeutic and cognitive science stack (P11–P20). Phase III installed a full Social Pressure & Agency Integrity layer derived from Milgram, Asch, Seligman, Sherif, Elliott, and Ron Jones (P21–P26) — all shipped as of v10.0.0.
 
 ---
 
