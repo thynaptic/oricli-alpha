@@ -71,6 +71,9 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/mindset":
 		return runMindset(client), true
 
+	case "/hope":
+		return runHope(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -408,6 +411,7 @@ func renderHelp() string {
 		{"/cogload", "Cognitive Load stats — avg load components + surgery rate"},
 		{"/ruminate", "Rumination Detector stats — loop detection rate + interrupt rate"},
 		{"/mindset", "Growth Mindset stats — per-topic mindset vectors (Dweck)"},
+		{"/hope", "Hope Circuit stats — agency activation rate + controllability evidence"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
@@ -545,6 +549,38 @@ func runMindset(c *Client) string {
 				}
 			}
 		}
+	}
+	return sb.String()
+}
+
+func runHope(c *Client) string {
+	data, err := c.GetHopeStats()
+	if err != nil {
+		return styleDanger.Render("✗ " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Hope Circuit (Learned Controllability — Maier & Seligman)") + "\n")
+	if total, _ := data["total_checks"].(float64); total == 0 {
+		sb.WriteString(styleDim.Render("  No data yet — accumulates after first requests\n"))
+		return sb.String()
+	}
+	fields := []struct{ key, label string }{
+		{"total_checks", "Total Checks"},
+		{"activations", "Activations"},
+	}
+	for _, f := range fields {
+		if v, ok := data[f.key].(float64); ok {
+			sb.WriteString(fmt.Sprintf("  %s  %s\n",
+				styleKeyVal.Render(padRight(f.label, 20)),
+				styleDim.Render(fmt.Sprintf("%.0f", v))))
+		}
+	}
+	if ar, ok := data["activation_rate"].(float64); ok {
+		color := styleDim
+		if ar > 0.3 { color = styleSuccess }
+		sb.WriteString(fmt.Sprintf("  %s  %s\n",
+			styleKeyVal.Render(padRight("Activation Rate", 20)),
+			color.Render(fmt.Sprintf("%.0f%%", ar*100))))
 	}
 	return sb.String()
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
+	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
@@ -46,6 +47,7 @@ type GenerationService struct {
 	CogLoad         *CogLoadKit              // Phase 18: Cognitive Load Manager
 	Rumination      *RuminationKit           // Phase 19: Rumination Detector
 	Mindset         *MindsetKit              // Phase 20: Growth Mindset Tracker
+	HopeCircuit     *HopeCircuitKit          // Phase 21: Learned Controllability
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -67,6 +69,13 @@ type MindsetKit struct {
 	Tracker  *mindset.MindsetTracker
 	Reframer *mindset.GrowthReframer
 	Stats    *mindset.MindsetStats
+}
+
+// HopeCircuitKit groups Phase 21 components injected from main.go.
+type HopeCircuitKit struct {
+	Ledger  *hopecircuit.ControllabilityLedger
+	Circuit *hopecircuit.HopeCircuit
+	Stats   *hopecircuit.AgencyStats
 }
 
 // DualProcessKit groups Phase 17 components injected from main.go.
@@ -308,6 +317,22 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 	model := s.DefaultModel
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
+	}
+
+	// Phase 21: Hope Circuit — proactive agency activation (fires before CogLoad + generation)
+	if s.HopeCircuit != nil {
+		if _, isRetry := options["_hope_checked"]; !isRetry {
+			topicClass := inferBidTaskClass(messages)
+			activation := s.HopeCircuit.Circuit.Activate(topicClass)
+			s.HopeCircuit.Stats.Record(activation)
+			if activation.Activated {
+				log.Printf("[HopeCircuit] P21 agency activated topic=%s score=%.2f evidence=%d — suppressing passive default",
+					activation.TopicClass, activation.AgencyScore, activation.EvidenceCount)
+				hopeMsg := map[string]string{"role": "system", "content": activation.InjectedContext}
+				messages = append([]map[string]string{hopeMsg}, messages...)
+				options["_hope_checked"] = true
+			}
+		}
 	}
 
 	// Phase 18: Cognitive Load Manager — measure and surgically trim before generation

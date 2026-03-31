@@ -311,3 +311,12 @@ func (c *Client) GetMindsetVectors() (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetHopeStats fetches Hope Circuit (P21) stats from the server.
+func (c *Client) GetHopeStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/hope/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

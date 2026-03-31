@@ -41,6 +41,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
 	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
+	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
@@ -723,6 +724,27 @@ func main() {
 		apiServer.MindsetTracker = msTracker
 		apiServer.MindsetStats = msStats
 		log.Printf("[Mindset] Phase 20 Growth Mindset Tracker online — Dweck growth/fixed classifier, not-yet reframer")
+	}
+
+	// ── Phase 21: Hope Circuit (opt-in via ORICLI_HOPECIRCUIT_ENABLED=true) ──
+	if os.Getenv("ORICLI_HOPECIRCUIT_ENABLED") == "true" {
+		os.MkdirAll("data/hopecircuit", 0755)
+		// Bridge to MasteryLog from Therapy kit (P16 evidence substrate)
+		var masteryBridge *therapy.MasteryLog
+		if genService.Therapy != nil {
+			masteryBridge = genService.Therapy.Mastery
+		}
+		if masteryBridge != nil {
+			hcLedger := hopecircuit.NewControllabilityLedger(masteryBridge)
+			hcCircuit := hopecircuit.NewHopeCircuit(hcLedger)
+			hcStats := hopecircuit.NewAgencyStats("data/hopecircuit/stats.json")
+			genService.HopeCircuit = &service.HopeCircuitKit{Ledger: hcLedger, Circuit: hcCircuit, Stats: hcStats}
+			apiServer.HopeCircuit = hcCircuit
+			apiServer.AgencyStats = hcStats
+			log.Printf("[HopeCircuit] Phase 21 Hope Circuit online — vmPFC active, passivity suppressed, agency default engaged")
+		} else {
+			log.Printf("[HopeCircuit] Phase 21 skipped — requires Therapy kit (ORICLI_THERAPY_ENABLED=true)")
+		}
 	}
 
 	go apiServer.Start()

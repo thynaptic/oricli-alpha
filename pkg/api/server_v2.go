@@ -50,6 +50,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/chronos"
 	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
+	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
@@ -165,6 +166,10 @@ type ServerV2 struct {
 	// Phase 20: Growth Mindset Tracker
 	MindsetTracker *mindset.MindsetTracker
 	MindsetStats   *mindset.MindsetStats
+
+	// Phase 21: Hope Circuit
+	HopeCircuit *hopecircuit.HopeCircuit
+	AgencyStats *hopecircuit.AgencyStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -596,6 +601,9 @@ func (s *ServerV2) setupRoutes() {
 			// Phase 20: Growth Mindset
 			cognitionRoutes.GET("/mindset/stats", s.handleMindsetStats)
 			cognitionRoutes.GET("/mindset/vectors", s.handleMindsetVectors)
+			// Phase 21: Hope Circuit
+			cognitionRoutes.GET("/hope/stats", s.handleHopeStats)
+			cognitionRoutes.POST("/hope/activate", s.handleHopeActivate)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -4274,4 +4282,30 @@ func (s *ServerV2) handleMindsetVectors(c *gin.Context) {
 	}
 	vectors := s.MindsetTracker.All()
 	c.JSON(200, gin.H{"vectors": vectors, "count": len(vectors)})
+}
+
+// ─── Phase 21: Hope Circuit handlers ─────────────────────────────────────────
+
+func (s *ServerV2) handleHopeStats(c *gin.Context) {
+	if s.AgencyStats == nil {
+		c.JSON(200, gin.H{"activations": 0, "total_checks": 0, "activation_rate": 0, "message": "Phase 21 not enabled"})
+		return
+	}
+	c.JSON(200, s.AgencyStats.Stats())
+}
+
+func (s *ServerV2) handleHopeActivate(c *gin.Context) {
+	if s.HopeCircuit == nil {
+		c.JSON(503, gin.H{"error": "Phase 21 not enabled"})
+		return
+	}
+	var body struct {
+		TopicClass string `json:"topic_class"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.TopicClass == "" {
+		c.JSON(400, gin.H{"error": "topic_class required"})
+		return
+	}
+	activation := s.HopeCircuit.Activate(body.TopicClass)
+	c.JSON(200, activation)
 }
