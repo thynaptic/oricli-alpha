@@ -61,6 +61,13 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
 	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
 	"github.com/thynaptic/oricli-go/pkg/apathy"
+	"github.com/thynaptic/oricli-go/pkg/logotherapy"
+	"github.com/thynaptic/oricli-go/pkg/stoic"
+	"github.com/thynaptic/oricli-go/pkg/socratic"
+	"github.com/thynaptic/oricli-go/pkg/narrative"
+	"github.com/thynaptic/oricli-go/pkg/polyvagal"
+	"github.com/thynaptic/oricli-go/pkg/dmn"
+	"github.com/thynaptic/oricli-go/pkg/interoception"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
@@ -787,6 +794,83 @@ func main() {
 		genService.Apathy = &service.ApathyKit{Detector: apathyDetector, Activator: apathyActivator, Stats: apathyStats}
 		apiServer.ApathyStats = apathyStats
 		log.Printf("[Apathy] Phase 41 Apathy Syndrome online — affectlessness + agency collapse + dependency transfer detection")
+	}
+
+	// ── Phase 42: Logotherapy (opt-in via ORICLI_LOGOTHERAPY_ENABLED=true) ──
+	if os.Getenv("ORICLI_LOGOTHERAPY_ENABLED") == "true" {
+		os.MkdirAll("data/logotherapy", 0755)
+		logoDetector := logotherapy.NewLogotherapyDetector()
+		logoReconstructor := logotherapy.NewMeaningReconstructor()
+		logoStats := logotherapy.NewMeaningStats("data/logotherapy/stats.json")
+		genService.Logotherapy = &service.LogotherapyKit{Detector: logoDetector, Reconstructor: logoReconstructor, Stats: logoStats}
+		apiServer.LogotherapyStats = logoStats
+		log.Printf("[Logotherapy] Phase 42 Frankl Logotherapy online — existential vacuum + meaning collapse detection")
+	}
+
+	// ── Phase 43: Stoic Reframing (opt-in via ORICLI_STOIC_ENABLED=true) ──
+	if os.Getenv("ORICLI_STOIC_ENABLED") == "true" {
+		os.MkdirAll("data/stoic", 0755)
+		stoicDetector := stoic.NewStoicDetector()
+		stoicReframer := stoic.NewStoicReframer()
+		stoicStats := stoic.NewStoicStats("data/stoic/stats.json")
+		genService.Stoic = &service.StoicKit{Detector: stoicDetector, Reframer: stoicReframer, Stats: stoicStats}
+		apiServer.StoicStats = stoicStats
+		log.Printf("[Stoic] Phase 43 Stoic Reframing online — control conflation + external attachment + obstacle avoidance detection")
+	}
+
+	// ── Phase 44: Socratic Elenchus (opt-in via ORICLI_SOCRATIC_ENABLED=true) ──
+	if os.Getenv("ORICLI_SOCRATIC_ENABLED") == "true" {
+		os.MkdirAll("data/socratic", 0755)
+		socraticDetector := socratic.NewSocraticDetector()
+		socraticInjector := socratic.NewElenchusInjector()
+		socraticStats := socratic.NewSocraticStats("data/socratic/stats.json")
+		genService.Socratic = &service.SocraticKit{Detector: socraticDetector, Injector: socraticInjector, Stats: socraticStats}
+		apiServer.SocraticStats = socraticStats
+		log.Printf("[Socratic] Phase 44 Socratic Elenchus online — pseudo-certainty + unexamined assumption + false definition detection")
+	}
+
+	// ── Phase 45: Narrative Identity (opt-in via ORICLI_NARRATIVE_ENABLED=true) ──
+	if os.Getenv("ORICLI_NARRATIVE_ENABLED") == "true" {
+		os.MkdirAll("data/narrative", 0755)
+		narrativeDetector := narrative.NewNarrativeDetector()
+		narrativeReframer := narrative.NewArcReframer()
+		narrativeStats := narrative.NewNarrativeStats("data/narrative/stats.json")
+		genService.Narrative = &service.NarrativeKit{Detector: narrativeDetector, Reframer: narrativeReframer, Stats: narrativeStats}
+		apiServer.NarrativeStats = narrativeStats
+		log.Printf("[Narrative] Phase 45 Narrative Identity online — contamination arc + passive protagonist + narrative collapse detection")
+	}
+
+	// ── Phase 46: Polyvagal Theory (opt-in via ORICLI_POLYVAGAL_ENABLED=true) ──
+	if os.Getenv("ORICLI_POLYVAGAL_ENABLED") == "true" {
+		os.MkdirAll("data/polyvagal", 0755)
+		polyvagalDetector := polyvagal.NewPolyvagalDetector()
+		polyvagalRestorer := polyvagal.NewVagalRestorer()
+		polyvagalStats := polyvagal.NewPolyvagalStats("data/polyvagal/stats.json")
+		genService.Polyvagal = &service.PolyvagalKit{Detector: polyvagalDetector, Restorer: polyvagalRestorer, Stats: polyvagalStats}
+		apiServer.PolyvagalStats = polyvagalStats
+		log.Printf("[Polyvagal] Phase 46 Polyvagal Theory online — shutdown cascade + fight/flight + ANS state navigation")
+	}
+
+	// ── Phase 47: Default Mode Network (opt-in via ORICLI_DMN_ENABLED=true) ──
+	if os.Getenv("ORICLI_DMN_ENABLED") == "true" {
+		os.MkdirAll("data/dmn", 0755)
+		dmnDetector := dmn.NewDMNDetector()
+		dmnReengager := dmn.NewTaskReengager()
+		dmnStats := dmn.NewDMNStats("data/dmn/stats.json")
+		genService.DMN = &service.DMNKit{Detector: dmnDetector, Reengager: dmnReengager, Stats: dmnStats}
+		apiServer.DMNStats = dmnStats
+		log.Printf("[DMN] Phase 47 Default Mode Network online — self-referential loop + mind wandering + task disengagement detection")
+	}
+
+	// ── Phase 48: Interoception (opt-in via ORICLI_INTEROCEPTION_ENABLED=true) ──
+	if os.Getenv("ORICLI_INTEROCEPTION_ENABLED") == "true" {
+		os.MkdirAll("data/interoception", 0755)
+		interoDetector := interoception.NewInteroceptionDetector()
+		interoAcknowledger := interoception.NewSomaticAcknowledger()
+		interoStats := interoception.NewInteroceptiveStats("data/interoception/stats.json")
+		genService.Interoception = &service.InteroceptionKit{Detector: interoDetector, Acknowledger: interoAcknowledger, Stats: interoStats}
+		apiServer.InteroceptionStats = interoStats
+		log.Printf("[Interoception] Phase 48 Interoception online — somatic signal + body disconnect + visceral decision + proprioceptive neglect detection")
 	}
 
 	// ── Phase 40: Lifton Thought Reform (opt-in via ORICLI_THOUGHTREFORM_ENABLED=true) ──

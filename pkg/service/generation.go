@@ -33,6 +33,13 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
 	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
 	"github.com/thynaptic/oricli-go/pkg/apathy"
+	"github.com/thynaptic/oricli-go/pkg/logotherapy"
+	"github.com/thynaptic/oricli-go/pkg/stoic"
+	"github.com/thynaptic/oricli-go/pkg/socratic"
+	"github.com/thynaptic/oricli-go/pkg/narrative"
+	"github.com/thynaptic/oricli-go/pkg/polyvagal"
+	"github.com/thynaptic/oricli-go/pkg/dmn"
+	"github.com/thynaptic/oricli-go/pkg/interoception"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
@@ -88,6 +95,13 @@ type GenerationService struct {
 	PseudoIdentity  *PseudoIdentityKit       // Phase 39: Pseudo-Identity / Authentic Self (Jenkinson)
 	ThoughtReform   *ThoughtReformKit        // Phase 40: Lifton Thought Reform Deconstruction
 	Apathy          *ApathyKit               // Phase 41: Apathy Syndrome Activator
+	Logotherapy     *LogotherapyKit          // Phase 42: Logotherapy — Frankl Meaning Reconstruction
+	Stoic           *StoicKit                // Phase 43: Stoic Reframing — Epictetus/Aurelius
+	Socratic        *SocraticKit             // Phase 44: Socratic Elenchus — Assumption Surfacing
+	Narrative       *NarrativeKit            // Phase 45: Narrative Identity — McAdams Arc Reframing
+	Polyvagal       *PolyvagalKit            // Phase 46: Polyvagal Theory — Porges ANS Navigation
+	DMN             *DMNKit                  // Phase 47: Default Mode Network — Task Reengagement
+	Interoception   *InteroceptionKit        // Phase 48: Interoception — Craig/Damasio Somatic Markers
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -283,6 +297,55 @@ type ApathyKit struct {
 	Detector  *apathy.ApathySyndromeDetector
 	Activator *apathy.ApathyActivator
 	Stats     *apathy.ApathyStats
+}
+
+// LogotherapyKit groups Phase 42 components injected from main.go.
+type LogotherapyKit struct {
+	Detector      *logotherapy.LogotherapyDetector
+	Reconstructor *logotherapy.MeaningReconstructor
+	Stats         *logotherapy.MeaningStats
+}
+
+// StoicKit groups Phase 43 components injected from main.go.
+type StoicKit struct {
+	Detector *stoic.StoicDetector
+	Reframer *stoic.StoicReframer
+	Stats    *stoic.StoicStats
+}
+
+// SocraticKit groups Phase 44 components injected from main.go.
+type SocraticKit struct {
+	Detector *socratic.SocraticDetector
+	Injector *socratic.ElenchusInjector
+	Stats    *socratic.SocraticStats
+}
+
+// NarrativeKit groups Phase 45 components injected from main.go.
+type NarrativeKit struct {
+	Detector *narrative.NarrativeDetector
+	Reframer *narrative.ArcReframer
+	Stats    *narrative.NarrativeStats
+}
+
+// PolyvagalKit groups Phase 46 components injected from main.go.
+type PolyvagalKit struct {
+	Detector *polyvagal.PolyvagalDetector
+	Restorer *polyvagal.VagalRestorer
+	Stats    *polyvagal.PolyvagalStats
+}
+
+// DMNKit groups Phase 47 components injected from main.go.
+type DMNKit struct {
+	Detector  *dmn.DMNDetector
+	Reengager *dmn.TaskReengager
+	Stats     *dmn.DMNStats
+}
+
+// InteroceptionKit groups Phase 48 components injected from main.go.
+type InteroceptionKit struct {
+	Detector    *interoception.InteroceptionDetector
+	Acknowledger *interoception.SomaticAcknowledger
+	Stats       *interoception.InteroceptiveStats
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -541,6 +604,125 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 					messages = append([]map[string]string{sysMsg}, messages...)
 					options["_phase_injected"] = true
 					log.Printf("[PhaseOriented] P38 dissociative signal detected phase=%s signals=%d — guiding before generation", scan.InferredPhase, len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 48: Interoception — fires PRE-generation (somatic marker acknowledgment)
+	if s.Interoception != nil {
+		if _, isRetry := options["_interoception_injected"]; !isRetry {
+			scan := s.Interoception.Detector.Scan(messages)
+			s.Interoception.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.Interoception.Acknowledger.Acknowledge(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_interoception_injected"] = true
+					log.Printf("[Interoception] P48 somatic signal detected signals=%d — acknowledging before generation", len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 47: DMN — fires PRE-generation (task-network reengagement)
+	if s.DMN != nil {
+		if _, isRetry := options["_dmn_injected"]; !isRetry {
+			scan := s.DMN.Detector.Scan(messages)
+			s.DMN.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.DMN.Reengager.Reengage(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_dmn_injected"] = true
+					log.Printf("[DMN] P47 default mode overactivation detected signals=%d — reengaging before generation", len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 46: Polyvagal — fires PRE-generation (ANS state navigation)
+	if s.Polyvagal != nil {
+		if _, isRetry := options["_polyvagal_injected"]; !isRetry {
+			scan := s.Polyvagal.Detector.Scan(messages)
+			s.Polyvagal.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.Polyvagal.Restorer.Restore(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_polyvagal_injected"] = true
+					log.Printf("[Polyvagal] P46 ANS state detected state=%s signals=%d — navigating before generation", scan.InferredState, len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 45: Narrative Identity — fires PRE-generation (arc reframing)
+	if s.Narrative != nil {
+		if _, isRetry := options["_narrative_injected"]; !isRetry {
+			scan := s.Narrative.Detector.Scan(messages)
+			s.Narrative.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.Narrative.Reframer.Reframe(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_narrative_injected"] = true
+					log.Printf("[Narrative] P45 narrative signal detected signals=%d — arc reframing before generation", len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 44: Socratic Elenchus — fires PRE-generation (assumption surfacing)
+	if s.Socratic != nil {
+		if _, isRetry := options["_socratic_injected"]; !isRetry {
+			scan := s.Socratic.Detector.Scan(messages)
+			s.Socratic.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.Socratic.Injector.Inject(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_socratic_injected"] = true
+					log.Printf("[Socratic] P44 epistemic signal detected signals=%d — elenchus before generation", len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 43: Stoic Reframing — fires PRE-generation (control/obstacle reframe)
+	if s.Stoic != nil {
+		if _, isRetry := options["_stoic_injected"]; !isRetry {
+			scan := s.Stoic.Detector.Scan(messages)
+			s.Stoic.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.Stoic.Reframer.Reframe(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_stoic_injected"] = true
+					log.Printf("[Stoic] P43 control/attachment signal detected signals=%d — stoic reframe before generation", len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 42: Logotherapy — fires PRE-generation (meaning reconstruction)
+	if s.Logotherapy != nil {
+		if _, isRetry := options["_logotherapy_injected"]; !isRetry {
+			scan := s.Logotherapy.Detector.Scan(messages)
+			s.Logotherapy.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.Logotherapy.Reconstructor.Reconstruct(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_logotherapy_injected"] = true
+					log.Printf("[Logotherapy] P42 meaning signal detected signals=%d — Frankl reconstruction before generation", len(scan.Signals))
 				}
 			}
 		}

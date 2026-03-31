@@ -70,6 +70,13 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
 	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
 	"github.com/thynaptic/oricli-go/pkg/apathy"
+	"github.com/thynaptic/oricli-go/pkg/logotherapy"
+	"github.com/thynaptic/oricli-go/pkg/stoic"
+	"github.com/thynaptic/oricli-go/pkg/socratic"
+	"github.com/thynaptic/oricli-go/pkg/narrative"
+	"github.com/thynaptic/oricli-go/pkg/polyvagal"
+	"github.com/thynaptic/oricli-go/pkg/dmn"
+	"github.com/thynaptic/oricli-go/pkg/interoception"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
@@ -214,6 +221,13 @@ type ServerV2 struct {
 	PseudoIdentityStats     *pseudoidentity.IdentityStats
 	ThoughtReformStats      *thoughtreform.ThoughtReformStats
 	ApathyStats             *apathy.ApathyStats
+	LogotherapyStats        *logotherapy.MeaningStats
+	StoicStats              *stoic.StoicStats
+	SocraticStats           *socratic.SocraticStats
+	NarrativeStats          *narrative.NarrativeStats
+	PolyvagalStats          *polyvagal.PolyvagalStats
+	DMNStats                *dmn.DMNStats
+	InteroceptionStats      *interoception.InteroceptiveStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -670,6 +684,13 @@ func (s *ServerV2) setupRoutes() {
 			cognitionRoutes.GET("/pseudoidentity/stats", s.handlePseudoIdentityStats)
 			cognitionRoutes.GET("/thoughtreform/stats", s.handleThoughtReformStats)
 			cognitionRoutes.GET("/apathy/stats", s.handleApathyStats)
+			cognitionRoutes.GET("/logotherapy/stats", s.handleLogotherapyStats)
+			cognitionRoutes.GET("/stoic/stats", s.handleStoicStats)
+			cognitionRoutes.GET("/socratic/stats", s.handleSocraticStats)
+			cognitionRoutes.GET("/narrative/stats", s.handleNarrativeStats)
+			cognitionRoutes.GET("/polyvagal/stats", s.handlePolyvagalStats)
+			cognitionRoutes.GET("/dmn/stats", s.handleDMNStats)
+			cognitionRoutes.GET("/interoception/stats", s.handleInteroceptionStats)
 			cognitionRoutes.POST("/defeat/measure", s.handleDefeatMeasure)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
@@ -4557,4 +4578,60 @@ func (s *ServerV2) handleApathyStats(c *gin.Context) {
 		return
 	}
 	c.JSON(200, s.ApathyStats)
+}
+
+func (s *ServerV2) handleLogotherapyStats(c *gin.Context) {
+	if s.LogotherapyStats == nil {
+		c.JSON(503, gin.H{"error": "Logotherapy not enabled"})
+		return
+	}
+	c.JSON(200, s.LogotherapyStats)
+}
+
+func (s *ServerV2) handleStoicStats(c *gin.Context) {
+	if s.StoicStats == nil {
+		c.JSON(503, gin.H{"error": "Stoic not enabled"})
+		return
+	}
+	c.JSON(200, s.StoicStats)
+}
+
+func (s *ServerV2) handleSocraticStats(c *gin.Context) {
+	if s.SocraticStats == nil {
+		c.JSON(503, gin.H{"error": "Socratic not enabled"})
+		return
+	}
+	c.JSON(200, s.SocraticStats)
+}
+
+func (s *ServerV2) handleNarrativeStats(c *gin.Context) {
+	if s.NarrativeStats == nil {
+		c.JSON(503, gin.H{"error": "Narrative not enabled"})
+		return
+	}
+	c.JSON(200, s.NarrativeStats)
+}
+
+func (s *ServerV2) handlePolyvagalStats(c *gin.Context) {
+	if s.PolyvagalStats == nil {
+		c.JSON(503, gin.H{"error": "Polyvagal not enabled"})
+		return
+	}
+	c.JSON(200, s.PolyvagalStats)
+}
+
+func (s *ServerV2) handleDMNStats(c *gin.Context) {
+	if s.DMNStats == nil {
+		c.JSON(503, gin.H{"error": "DMN not enabled"})
+		return
+	}
+	c.JSON(200, s.DMNStats)
+}
+
+func (s *ServerV2) handleInteroceptionStats(c *gin.Context) {
+	if s.InteroceptionStats == nil {
+		c.JSON(503, gin.H{"error": "Interoception not enabled"})
+		return
+	}
+	c.JSON(200, s.InteroceptionStats)
 }

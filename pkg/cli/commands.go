@@ -134,6 +134,27 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/apathy":
 		return runApathy(client), true
 
+	case "/logotherapy":
+		return runLogotherapy(client), true
+
+	case "/stoic":
+		return runStoic(client), true
+
+	case "/socratic":
+		return runSocratic(client), true
+
+	case "/narrative":
+		return runNarrative(client), true
+
+	case "/polyvagal":
+		return runPolyvagal(client), true
+
+	case "/dmn":
+		return runDMN(client), true
+
+	case "/interoception":
+		return runInteroception(client), true
+
 		return runGoals(client), true
 
 	case "/goal":
@@ -1300,6 +1321,223 @@ return styleDanger.Render("Error fetching Apathy stats: " + err.Error())
 }
 var sb strings.Builder
 sb.WriteString(styleLabel.Render("● Apathy Syndrome — Agency Collapse + Affectlessness Activator") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["type_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Signal Types:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 30)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runLogotherapy(client *Client) string {
+data, err := client.GetLogotherapyStats()
+if err != nil {
+return styleDanger.Render("Error fetching Logotherapy stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Logotherapy — Frankl Meaning Reconstruction (P42)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["type_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Signal Types:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 30)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runStoic(client *Client) string {
+data, err := client.GetStoicStats()
+if err != nil {
+return styleDanger.Render("Error fetching Stoic stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Stoic Reframing — Epictetus/Aurelius (P43)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["type_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Signal Types:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 30)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runSocratic(client *Client) string {
+data, err := client.GetSocraticStats()
+if err != nil {
+return styleDanger.Render("Error fetching Socratic stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Socratic Elenchus — Assumption Surfacing (P44)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["type_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Signal Types:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 30)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runNarrative(client *Client) string {
+data, err := client.GetNarrativeStats()
+if err != nil {
+return styleDanger.Render("Error fetching Narrative stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Narrative Identity — McAdams Arc Reframing (P45)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["type_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Signal Types:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 30)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runPolyvagal(client *Client) string {
+data, err := client.GetPolyvagalStats()
+if err != nil {
+return styleDanger.Render("Error fetching Polyvagal stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Polyvagal Theory — Porges ANS Navigation (P46)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["state_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  ANS States:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 30)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runDMN(client *Client) string {
+data, err := client.GetDMNStats()
+if err != nil {
+return styleDanger.Render("Error fetching DMN stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Default Mode Network — Task Reengagement (P47)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+if v, ok := data["total_scanned"].(float64); ok {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["triggered_count"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Triggered", 24)), styleWarning.Render(fmt.Sprintf("%.0f", v))))
+}
+if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+}
+if types, ok := data["type_counts"].(map[string]interface{}); ok {
+sb.WriteString(styleDim.Render("  Signal Types:\n"))
+for k, v := range types {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 30)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
+}
+
+func runInteroception(client *Client) string {
+data, err := client.GetInteroceptionStats()
+if err != nil {
+return styleDanger.Render("Error fetching Interoception stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Interoception — Craig/Damasio Somatic Markers (P48)") + "\n")
 if total, _ := data["total_scanned"].(float64); total == 0 {
 sb.WriteString(styleDim.Render("  No data yet\n"))
 return sb.String()

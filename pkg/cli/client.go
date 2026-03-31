@@ -500,3 +500,66 @@ return nil, err
 }
 return result, nil
 }
+
+// GetLogotherapyStats returns Phase 42 Logotherapy stats.
+func (c *Client) GetLogotherapyStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/logotherapy/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetStoicStats returns Phase 43 Stoic Reframing stats.
+func (c *Client) GetStoicStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/stoic/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetSocraticStats returns Phase 44 Socratic Elenchus stats.
+func (c *Client) GetSocraticStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/socratic/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetNarrativeStats returns Phase 45 Narrative Identity stats.
+func (c *Client) GetNarrativeStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/narrative/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetPolyvagalStats returns Phase 46 Polyvagal Theory stats.
+func (c *Client) GetPolyvagalStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/polyvagal/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetDMNStats returns Phase 47 Default Mode Network stats.
+func (c *Client) GetDMNStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/dmn/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetInteroceptionStats returns Phase 48 Interoception stats.
+func (c *Client) GetInteroceptionStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/interoception/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
