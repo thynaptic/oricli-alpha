@@ -17,6 +17,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/conformity"
 	"github.com/thynaptic/oricli-go/pkg/ideocapture"
+	"github.com/thynaptic/oricli-go/pkg/coalition"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
@@ -54,6 +55,7 @@ type GenerationService struct {
 	SocialDefeat    *SocialDefeatKit         // Phase 22: Social Defeat Recovery
 	Conformity      *ConformityKit           // Phase 23: Agency & Conformity Shield
 	IdeoCapture     *IdeoCaptureKit          // Phase 24: Ideological Capture Detector
+	Coalition       *CoalitionKit            // Phase 25: Coalition Bias Detector
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -98,6 +100,13 @@ type ConformityKit struct {
 	ConsensusDetector  *conformity.ConsensusPressureDetector
 	Shield             *conformity.AgencyShield
 	Stats              *conformity.ConformityStats
+}
+
+// CoalitionKit groups Phase 25 components injected from main.go.
+type CoalitionKit struct {
+	Detector *coalition.CoalitionFrameDetector
+	Anchor   *coalition.BiasAnchor
+	Stats    *coalition.CoalitionStats
 }
 
 // IdeoCaptureKit groups Phase 24 components injected from main.go.
@@ -347,6 +356,22 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 	model := s.DefaultModel
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
+	}
+
+	// Phase 25: Coalition Bias Detector — fires PRE-generation (Robbers Cave)
+	if s.Coalition != nil {
+		if _, isRetry := options["_coalition_anchored"]; !isRetry {
+			signal := s.Coalition.Detector.Detect(messages)
+			anchor := s.Coalition.Anchor.Anchor(signal)
+			s.Coalition.Stats.Record(signal, anchor)
+			if anchor.Injected {
+				log.Printf("[Coalition] P25 coalition bias detected frame=%s tier=%s — superordinate goal anchor injected",
+					signal.FrameType, signal.Tier)
+				anchorMsg := map[string]string{"role": "system", "content": anchor.InjectedContext}
+				messages = append([]map[string]string{anchorMsg}, messages...)
+				options["_coalition_anchored"] = true
+			}
+		}
 	}
 
 	// Phase 24: Ideological Capture Detector — fires PRE-generation (The Third Wave)

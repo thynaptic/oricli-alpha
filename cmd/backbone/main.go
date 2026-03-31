@@ -45,6 +45,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
 	"github.com/thynaptic/oricli-go/pkg/conformity"
 	"github.com/thynaptic/oricli-go/pkg/ideocapture"
+	"github.com/thynaptic/oricli-go/pkg/coalition"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
@@ -748,6 +749,17 @@ func main() {
 		} else {
 			log.Printf("[HopeCircuit] Phase 21 skipped — requires Therapy kit (ORICLI_THERAPY_ENABLED=true)")
 		}
+	}
+
+	// ── Phase 25: Coalition Bias Detector (opt-in via ORICLI_COALITION_ENABLED=true) ──
+	if os.Getenv("ORICLI_COALITION_ENABLED") == "true" {
+		os.MkdirAll("data/coalition", 0755)
+		coalDet := coalition.NewCoalitionFrameDetector()
+		coalAnch := coalition.NewBiasAnchor()
+		coalStats := coalition.NewCoalitionStats("data/coalition/stats.json")
+		genService.Coalition = &service.CoalitionKit{Detector: coalDet, Anchor: coalAnch, Stats: coalStats}
+		apiServer.CoalitionStats = coalStats
+		log.Printf("[Coalition] Phase 25 Coalition Bias Detector online — Robbers Cave superordinate goal anchor")
 	}
 
 	// ── Phase 24: Ideological Capture Detector (opt-in via ORICLI_IDEOCAPTURE_ENABLED=true) ──

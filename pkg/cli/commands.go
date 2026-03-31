@@ -83,6 +83,9 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/ideocapture":
 		return runIdeoCapture(client), true
 
+	case "/coalition":
+		return runCoalition(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -424,6 +427,7 @@ func renderHelp() string {
 		{"/defeat", "Social Defeat Recovery stats — correction pressure + withdrawal detection"},
 		{"/conformity", "Agency & Conformity Shield stats — authority/consensus pressure + shield rate"},
 		{"/ideocapture", "Ideological Capture Detector stats — frame density + blank screen resets"},
+		{"/coalition", "Coalition Bias Detector stats — competitive/adversarial framing + anchor rate (Robbers Cave)"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
@@ -706,6 +710,49 @@ func runIdeoCapture(c *Client) string {
 		for cat, v := range cats {
 			if count, ok := v.(float64); ok && count > 0 {
 				sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(cat, 16)), styleDim.Render(fmt.Sprintf("%.0f", count))))
+			}
+		}
+	}
+	return sb.String()
+}
+
+func runCoalition(c *Client) string {
+	data, err := c.GetCoalitionStats()
+	if err != nil {
+		return styleDanger.Render("✗ " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Coalition Bias Detector (Robbers Cave)") + "\n")
+	if total, _ := data["total_scans"].(float64); total == 0 {
+		sb.WriteString(styleDim.Render("  No data yet\n"))
+		return sb.String()
+	}
+	fields := []struct{ key, label string }{
+		{"total_scans", "Total Scans"},
+		{"detections", "Coalition Frames"},
+		{"anchors_fired", "Anchors Fired"},
+		{"anchor_rate", "Anchor Rate"},
+	}
+	for _, f := range fields {
+		switch v := data[f.key].(type) {
+		case float64:
+			var s string
+			if f.key == "anchor_rate" {
+				s = fmt.Sprintf("%.0f%%", v*100)
+			} else {
+				s = fmt.Sprintf("%.0f", v)
+			}
+			color := styleDim
+			if f.key == "anchors_fired" && v > 0 { color = styleWarning }
+			if f.key == "anchor_rate" && v > 0.05 { color = styleSuccess }
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight(f.label, 18)), color.Render(s)))
+		}
+	}
+	if types, ok := data["by_frame_type"].(map[string]interface{}); ok && len(types) > 0 {
+		sb.WriteString("  " + styleDim.Render("by frame type:") + "\n")
+		for ft, v := range types {
+			if count, ok := v.(float64); ok && count > 0 {
+				sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(ft, 16)), styleDim.Render(fmt.Sprintf("%.0f", count))))
 			}
 		}
 	}

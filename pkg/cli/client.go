@@ -347,3 +347,12 @@ func (c *Client) GetIdeoCaptureStats() (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetCoalitionStats returns Phase 25 coalition bias stats.
+func (c *Client) GetCoalitionStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/coalition/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
