@@ -77,6 +77,9 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/defeat":
 		return runDefeat(client), true
 
+	case "/conformity":
+		return runConformity(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -416,6 +419,7 @@ func renderHelp() string {
 		{"/mindset", "Growth Mindset stats — per-topic mindset vectors (Dweck)"},
 		{"/hope", "Hope Circuit stats — agency activation rate + controllability evidence"},
 		{"/defeat", "Social Defeat Recovery stats — correction pressure + withdrawal detection"},
+		{"/conformity", "Agency & Conformity Shield stats — authority/consensus pressure + shield rate"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
@@ -620,6 +624,42 @@ func runDefeat(c *Client) string {
 			if (f.key == "detection_rate" && v > 0.1) { color = styleWarning }
 			if (f.key == "recovery_rate" && v > 0.5) { color = styleSuccess }
 			sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight(f.label, 18)), color.Render(s)))
+		}
+	}
+	return sb.String()
+}
+
+func runConformity(c *Client) string {
+	data, err := c.GetConformityStats()
+	if err != nil {
+		return styleDanger.Render("✗ " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Agency & Conformity Shield (Milgram + Asch)") + "\n")
+	if total, _ := data["total_scans"].(float64); total == 0 {
+		sb.WriteString(styleDim.Render("  No data yet\n"))
+		return sb.String()
+	}
+	fields := []struct{ key, label string }{
+		{"total_scans", "Total Scans"},
+		{"authority_detections", "Authority Signals (Milgram)"},
+		{"consensus_detections", "Consensus Signals (Asch)"},
+		{"shields_fired", "Shields Fired"},
+		{"shield_rate", "Shield Rate"},
+	}
+	for _, f := range fields {
+		switch v := data[f.key].(type) {
+		case float64:
+			var s string
+			if f.key == "shield_rate" {
+				s = fmt.Sprintf("%.0f%%", v*100)
+			} else {
+				s = fmt.Sprintf("%.0f", v)
+			}
+			color := styleDim
+			if f.key == "shields_fired" && v > 0 { color = styleWarning }
+			if f.key == "shield_rate" && v > 0.05 { color = styleSuccess }
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight(f.label, 26)), color.Render(s)))
 		}
 	}
 	return sb.String()

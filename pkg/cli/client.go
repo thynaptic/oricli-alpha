@@ -329,3 +329,12 @@ func (c *Client) GetDefeatStats() (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetConformityStats returns Phase 23 agency shield statistics.
+func (c *Client) GetConformityStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/conformity/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

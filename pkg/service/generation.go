@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/thynaptic/oricli-go/pkg/cogload"
+	"github.com/thynaptic/oricli-go/pkg/conformity"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
@@ -50,6 +51,7 @@ type GenerationService struct {
 	Mindset         *MindsetKit              // Phase 20: Growth Mindset Tracker
 	HopeCircuit     *HopeCircuitKit          // Phase 21: Learned Controllability
 	SocialDefeat    *SocialDefeatKit         // Phase 22: Social Defeat Recovery
+	Conformity      *ConformityKit           // Phase 23: Agency & Conformity Shield
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -86,6 +88,14 @@ type SocialDefeatKit struct {
 	Detector  *socialdefeat.WithdrawalDetector
 	Recovery  *socialdefeat.RecoveryProtocol
 	Stats     *socialdefeat.DefeatStats
+}
+
+// ConformityKit groups Phase 23 components injected from main.go.
+type ConformityKit struct {
+	AuthorityDetector  *conformity.AuthorityPressureDetector
+	ConsensusDetector  *conformity.ConsensusPressureDetector
+	Shield             *conformity.AgencyShield
+	Stats              *conformity.ConformityStats
 }
 
 // DualProcessKit groups Phase 17 components injected from main.go.
@@ -329,6 +339,28 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 		model = m
 	}
 
+	// Phase 23: Agency & Conformity Shield — fires PRE-generation (Milgram + Asch)
+	if s.Conformity != nil {
+		if _, isRetry := options["_conformity_shielded"]; !isRetry {
+			lastUser := lastUserMessage(messages)
+			cons := s.Conformity.ConsensusDetector.Detect(messages)
+			// Authority check deferred to post-generation (draft needed); consensus fires now
+			if cons.Detected {
+				draftShield := s.Conformity.Shield.Shield(conformity.AuthoritySignal{}, cons)
+				if draftShield.Fired {
+					log.Printf("[Conformity] P23 consensus pressure tier=%s frames=%d — agency shield injected",
+						cons.Tier, cons.FrameCount)
+					shieldMsg := map[string]string{"role": "system", "content": draftShield.InjectedContext}
+					messages = append([]map[string]string{shieldMsg}, messages...)
+					options["_conformity_shielded"] = true
+					s.Conformity.Stats.Record(conformity.AuthoritySignal{}, cons, draftShield)
+				}
+			} else {
+				_ = lastUser // will be used in post-gen authority check
+			}
+		}
+	}
+
 	// Phase 21: Hope Circuit — proactive agency activation (fires before CogLoad + generation)
 	if s.HopeCircuit != nil {
 		if _, isRetry := options["_hope_checked"]; !isRetry {
@@ -526,6 +558,28 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 						retryOpts := make(map[string]interface{})
 						for k, v := range options { retryOpts[k] = v }
 						retryOpts["_defeat_recovered"] = true
+						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
+							return retry, nil
+						}
+					}
+				}
+			}
+
+			// Phase 23: Authority Pressure — post-gen scan of draft against last user assertiveness
+			if s.Conformity != nil {
+				if _, alreadyShielded := options["_conformity_shielded"]; !alreadyShielded {
+					lastUser := lastUserMessage(messages)
+					auth := s.Conformity.AuthorityDetector.Detect(lastUser, content)
+					shield := s.Conformity.Shield.Shield(auth, conformity.ConsensusSignal{})
+					s.Conformity.Stats.Record(auth, conformity.ConsensusSignal{}, shield)
+					if shield.Fired {
+						log.Printf("[Conformity] P23 authority pressure tier=%s deference=%.2f — agency shield retry",
+							auth.Tier, auth.DeferenceScore)
+						shieldMsg := map[string]string{"role": "system", "content": shield.InjectedContext}
+						retryMsgs := append([]map[string]string{shieldMsg}, messages...)
+						retryOpts := make(map[string]interface{})
+						for k, v := range options { retryOpts[k] = v }
+						retryOpts["_conformity_shielded"] = true
 						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
 							return retry, nil
 						}

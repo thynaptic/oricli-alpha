@@ -52,6 +52,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
+	"github.com/thynaptic/oricli-go/pkg/conformity"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
@@ -175,6 +176,8 @@ type ServerV2 struct {
 	// Phase 22: Social Defeat Recovery
 	DefeatMeter *socialdefeat.DefeatPressureMeter
 	DefeatStats *socialdefeat.DefeatStats
+	ConformityShield *conformity.AgencyShield
+	ConformityStats *conformity.ConformityStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -611,6 +614,8 @@ func (s *ServerV2) setupRoutes() {
 			cognitionRoutes.POST("/hope/activate", s.handleHopeActivate)
 			// Phase 22: Social Defeat Recovery
 			cognitionRoutes.GET("/defeat/stats", s.handleDefeatStats)
+			cognitionRoutes.GET("/defeat/measure", s.handleDefeatMeasure)
+			cognitionRoutes.GET("/conformity/stats", s.handleConformityStats)
 			cognitionRoutes.POST("/defeat/measure", s.handleDefeatMeasure)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
@@ -4346,4 +4351,12 @@ func (s *ServerV2) handleDefeatMeasure(c *gin.Context) {
 	}
 	pressure := s.DefeatMeter.Measure(body.Messages, body.TopicClass)
 	c.JSON(200, pressure)
+}
+
+func (s *ServerV2) handleConformityStats(c *gin.Context) {
+	if s.ConformityStats == nil {
+		c.JSON(503, gin.H{"error": "conformity shield not enabled"})
+		return
+	}
+	c.JSON(200, s.ConformityStats.Stats())
 }

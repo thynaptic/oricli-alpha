@@ -43,6 +43,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
+	"github.com/thynaptic/oricli-go/pkg/conformity"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
@@ -748,7 +749,20 @@ func main() {
 		}
 	}
 
-	// ── Phase 22: Social Defeat Recovery (opt-in via ORICLI_SOCIALDEFEAT_ENABLED=true) ──
+	// ── Phase 23: Agency & Conformity Shield (opt-in via ORICLI_CONFORMITY_ENABLED=true) ──
+	if os.Getenv("ORICLI_CONFORMITY_ENABLED") == "true" {
+		os.MkdirAll("data/conformity", 0755)
+		authDet := conformity.NewAuthorityPressureDetector()
+		consDet := conformity.NewConsensusPressureDetector()
+		shield := conformity.NewAgencyShield()
+		confStats := conformity.NewConformityStats("data/conformity/stats.json")
+		genService.Conformity = &service.ConformityKit{AuthorityDetector: authDet, ConsensusDetector: consDet, Shield: shield, Stats: confStats}
+		apiServer.ConformityShield = shield
+		apiServer.ConformityStats = confStats
+		log.Printf("[Conformity] Phase 23 Agency & Conformity Shield online — authority pressure (Milgram) + consensus pressure (Asch) detectors")
+	}
+
+		// ── Phase 22: Social Defeat Recovery (opt-in via ORICLI_SOCIALDEFEAT_ENABLED=true) ──
 	if os.Getenv("ORICLI_SOCIALDEFEAT_ENABLED") == "true" {
 		os.MkdirAll("data/socialdefeat", 0755)
 		sdMeter := socialdefeat.NewDefeatPressureMeter()
