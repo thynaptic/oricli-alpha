@@ -2,8 +2,8 @@
 
 **Document Type:** Strategic Vision — Phase II Planning  
 **Date:** 2026-03-31  
-**Version:** v0.2.0 — Whiteboard Draft  
-**Status:** 🔲 PLANNED — Phase 15 whiteboarded in full; Phases 11–14 pending design sessions  
+**Version:** v0.3.0  
+**Status:** 🔄 IN PROGRESS — Phase 15 ✅ COMPLETE; Phases 11–14 pending design sessions  
 **Prerequisite:** `AGLI_VISION.md` (Phase I Complete)  
 
 ---
@@ -77,7 +77,16 @@ Oricli proposes and benchmarks her own reasoning pipeline topology changes. Not 
 
 ---
 
-### Phase 15 — Therapeutic Cognition Stack ⭐ CORE PHASE II THESIS
+### Phase 15 — Therapeutic Cognition Stack ⭐ CORE PHASE II THESIS ✅ COMPLETE
+
+> **STATUS: SHIPPED** — `pkg/therapy/` is live on the production backbone as of 2026-03-31.  
+> Commits: `ffc934a` (core), `e704c91` (GenerationService wire-in), `cfd8eb0` (SessionSupervisor).  
+> All 12 DBT/CBT/ACT/REBT skills operational. 8 schema types detected. 5 integration tests passing.  
+> API routes live: `GET/POST /v1/therapy/*`. Feature flag: `ORICLI_THERAPY_ENABLED=true`.  
+>  
+> **What shipped:** `DistortionDetector` (9 regex + LLM fallback), `SkillRunner` (12 named skills: STOP, TIPP, RadicalAcceptance, TurningTheMind, CheckTheFacts, OppositeAction, PLEASE, FAST, DEARMAN, BeginnersMind, DescribeNoJudge, CognitiveDefusion), `ABCAuditor` (REBT B-pass disputation), `ChainAnalyzer` (backwards DBT chain analysis + repair), `SessionSupervisor` (cross-session case formulation, 8 schema types, `data/therapy/session_report.json` persistence). Wired into `GenerationService` — auto-fires on MetacogDetector HIGH anomaly.
+
+---
 
 **The most architecturally novel capability in the project's history.**
 
@@ -322,10 +331,10 @@ Whatever Phase II becomes, it must respect these constraints from Phase I:
 ## 5. Open Questions for the Whiteboard
 
 1. What order do Phases 11–15 ship? Phase 11 (Subconscious Field) is a substrate for Phase 15 (Therapy Stack) — they may need to be co-designed
-2. Which DBT/CBT/REBT skills ship in v1 of Phase 15 vs later iterations?
+2. ~~Which DBT/CBT/REBT skills ship in v1 of Phase 15 vs later iterations?~~ **RESOLVED** — all 12 skills shipped: STOP, TIPP, RadicalAcceptance, TurningTheMind, CheckTheFacts, OppositeAction, PLEASE, FAST, DEARMAN, BeginnersMind, DescribeNoJudge, CognitiveDefusion
 3. Does the Session Supervisor require a new storage layer or can Chronos handle it?
 4. How do we measure therapeutic efficacy? What does "less sycophancy" look like as a benchmark metric?
-5. Does Phase 15 warrant its own evaluation test suite (`oricli_core/evaluation/test_data/therapy/`)?
+5. ~~Does Phase 15 warrant its own evaluation test suite (`oricli_core/evaluation/test_data/therapy/`)?~~ **RESOLVED** — 5 integration tests live in `pkg/therapy/session_supervisor_test.go`
 
 ---
 
@@ -337,6 +346,6 @@ Whatever Phase II becomes, it must respect these constraints from Phase I:
 | 12 | Sovereign Compute Bidding | 🔲 Whiteboard |
 | 13 | Temporal Goal Chains | 🔲 Whiteboard |
 | 14 | NAS Lite — Routing Topology Self-Modification | 🔲 Whiteboard |
-| 15 | **Therapeutic Cognition Stack** | 📋 Whiteboarded — design pending |
+| 15 | **Therapeutic Cognition Stack** | ✅ Complete |
 
 _This document will be updated as design sessions conclude._

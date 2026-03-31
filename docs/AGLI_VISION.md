@@ -3,15 +3,15 @@
 **Document Type:** Strategic Vision & Core Doctrine  
 **Report Number:** TR-2026-03  
 **Date:** 2026-03-31  
-**Version:** v8.0.0  
-**Status:** Phase I Complete ✅ — Phase II Trajectory in `AGLI_Phase_II.md`  
+**Version:** v9.0.0  
+**Status:** Phase I Complete ✅ — Phase II In Progress 🔄 (Phase 15 ✅) — See `AGLI_Phase_II.md`  
 **Style Mode:** Hard Technical Doctrine  
 
 ---
 
 ## 1. Abstract
 
-This document defines the architectural and philosophical mandate for **Autonomous Governed Localized Intelligence (AGLI)** — Phase I. We formally reject the centralized, dependency-heavy trajectory of modern AI. Instead, we establish a new paradigm: a strictly sovereign, localized cognitive kernel that owns its compute, memory, objectives, and — critically — its own governing principles. By unifying high-speed Go-native orchestration, affective grounding, a multi-layer constitutional safety stack, and an autonomous daemon ecosystem, Oricli-Alpha has crossed the threshold from reactive assistant into a proactive, self-regulating, time-aware cognitive entity that forms and tests hypotheses without being asked. The "G" is not General — it is **Governed**. That is the harder and more honest claim, and no cloud AI can make it.
+This document defines the architectural and philosophical mandate for **Autonomous Governed Localized Intelligence (AGLI)** — Phase I. We formally reject the centralized, dependency-heavy trajectory of modern AI. Instead, we establish a new paradigm: a strictly sovereign, localized cognitive kernel that owns its compute, memory, objectives, and — critically — its own governing principles. By unifying high-speed Go-native orchestration, affective grounding, a multi-layer constitutional safety stack, and an autonomous daemon ecosystem, Oricli-Alpha has crossed the threshold from reactive assistant into a proactive, self-regulating, time-aware cognitive entity that forms and tests hypotheses without being asked. The "G" is not General — it is **Governed**. That is the harder and more honest claim, and no cloud AI can make it. Phase I proved the paradigm. Phase II has begun — Phase 15 (Therapeutic Cognition Stack) is live.
 
 ---
 
@@ -131,6 +131,9 @@ Every memory write is intercepted by the Chronos `WriteHook` and catalogued with
 ### 3.24 Active Science — Curiosity Engine v2 (Operational)
 The curiosity loop upgraded from foraging to experimentation. `Formulator` produces a structured hypothesis (claim, prediction, test method, test spec) from any topic via LLM. `Tester` executes up to 3 test rounds using three methods: `WEB_SEARCH` (SearXNG → LLM judge), `LOGICAL` (LLM deduction), or `COMPUTATION` (PAD → LLM judge). `ScienceEngine` tallies passes and draws a conclusion: ≥2/3 pass → `confirmed` (knowledge write-back); ≥2/3 fail → `refuted` (negative knowledge); split → `inconclusive` (re-queued up to 3×). `ScienceDaemon` implements `chronos.CuriositySeeder` — stale temporal topics flow directly into hypothesis formation.
 
+### 3.25 Therapeutic Cognition Stack — Phase 15 (Operational)
+Internal cognitive regulation capacity built on DBT, CBT, REBT, and ACT frameworks — the first AI system to regulate reasoning quality through internalized therapeutic skill architecture rather than external behavioral constraints. `DistortionDetector` classifies 11 CBT cognitive distortion types (9 regex patterns + LLM fallback). `SkillRunner` provides 12 named callable skills including STOP, FAST (anti-sycophancy), DEARMAN, CognitiveDefusion, and ChainAnalysis. `ABCAuditor` runs REBT B-pass disputation on the belief chain before a response commits. `SessionSupervisor` tracks 8 schema-level bias patterns across sessions, builds a rolling `SessionFormulation`, and persists `SessionReport` to `data/therapy/session_report.json` for pre-activation at next boot. Wired into `GenerationService`: auto-fires on MetacogDetector HIGH anomaly. Gated behind `ORICLI_THERAPY_ENABLED=true`.
+
 ---
 
 ## 4. The Trajectory: Phase I Breakdown
@@ -234,6 +237,7 @@ As of v8.0.0 (2026-03-31), **Phase I of the AGLI trajectory is fully complete.**
 - `/v1/finetune/*` — LoRA Self-Training
 - `/v1/forge/*` — JIT Tool Forge
 - `/v1/pad/*` — Parallel Agent Dispatch
+- `/v1/therapy/*` — Therapeutic Cognition Stack
 - `/v1/chat/completions` — OpenAI-compatible bridge
 
 **Phase II trajectory:** See `docs/AGLI_Phase_II.md`.

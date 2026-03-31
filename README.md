@@ -1,9 +1,9 @@
 # Oricli-Alpha
 
 **Sovereign Agent OS by [Thynaptic Research](https://thynaptic.com)**  
-`v2.1.0` · Go 1.25 · MIT License
+`v9.0.0` · Go 1.25 · MIT License
 
-Oricli-Alpha is a proactive, local-first intelligence OS built for autonomous, multi-day goal execution. It operates as **The Hive** — a distributed swarm of 269+ specialized micro-agents orchestrated by a 100% Go-native backbone.
+Oricli-Alpha is a proactive, local-first intelligence OS built for autonomous, multi-day goal execution. It operates as **The Hive** — a distributed swarm of 269+ specialized micro-agents orchestrated by a 100% Go-native backbone. Phase II is underway — Phase 15 ships the **Therapeutic Cognition Stack**: inline DBT/CBT/REBT/ACT cognitive regulation wired directly into the generation pipeline.
 
 ---
 
@@ -36,6 +36,7 @@ Oricli-Alpha is a proactive, local-first intelligence OS built for autonomous, m
 | Memory | LMDB + chromem-go | Fast KV store + in-process vector search |
 | Knowledge | Neo4j | Persistent entity/relationship graph |
 | Inference | Ollama | Local LLM generation (`ministral-3:3b`, `qwen2.5-coder:3b`) |
+| Therapy Stack | `pkg/therapy/` | DBT/CBT/REBT/ACT inline cognitive regulation (Phase 15) |
 | TLS Proxy | Caddy | Terminates HTTPS → `127.0.0.1:8089` |
 | UI | Flask | Proxy to backbone on port `5000` |
 
@@ -107,6 +108,7 @@ Pass it as `Authorization: Bearer <key>` on all requests except `GET /v1/health`
 | `POST` | `/v1/swarm/run` | Hive swarm execution (`reason`, `research_task`, `get_history`, ...) |
 | `POST` | `/v1/ingest` | Ingest file, image, or raw text into memory |
 | `POST` | `/v1/ingest/web` | Crawl a URL and ingest into memory |
+| `GET/POST` | `/v1/therapy/*` | Therapeutic Cognition Stack (DBT/CBT/REBT/ACT) |
 
 **Full reference:** [`docs/API.md`](docs/API.md)
 

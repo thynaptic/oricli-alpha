@@ -1,7 +1,7 @@
 # Oricli-Alpha Autonomous Daemons
 
 **Document Type:** Technical Reference  
-**Version:** v2.4.0  
+**Version:** v2.5.0  
 **Status:** Active  
 
 Oricli-Alpha maintains seven background daemons that run as goroutines within the Go-native backbone (`pkg/service/daemon.go`, `curiosity_daemon.go`, `reform_daemon.go`, `pkg/kernel/scaling.go`). They are started at boot and communicate with the system exclusively through the Swarm Bus — zero polling overhead on the main inference path.
@@ -331,6 +331,32 @@ WORLD_TRAVELER_DAILY_BUDGET_USD=2.00     (CostGovernor cap, default: $2.00)
   2. Requests NVIDIA RTX 5090 × 1 from the GhostCluster via RunPod.
   3. New worker node joins the swarm automatically.
 - **Shutdown**: Responds to `stopCh` signal for clean shutdown with the rest of the backbone.
+
+---
+
+## 9. Session Supervisor Daemon
+**"The Clinical Observer"** | `pkg/therapy/session_supervisor.go` → `SessionSupervisor`
+
+- **Role**: Cross-session clinical case formulation — observes the `TherapyEvent` stream, detects schema-level cognitive patterns, builds a `SessionFormulation`, and persists a `SessionReport` at shutdown for pre-activation of priority skills at next boot.
+- **Location**: `pkg/therapy/session_supervisor.go`
+- **Trigger**: `EventLog.SetObserver` — fires synchronously on every `TherapyEvent.Append` call; no polling, zero idle overhead.
+- **Feature flag**: `ORICLI_THERAPY_ENABLED=true` — all therapy subsystems are dormant when disabled.
+
+**Schemas detected (8 types):**
+| Schema | Cognitive Pattern |
+|---|---|
+| `Defectiveness` | Over-apologizing, excessive hedging, assuming user frustration is the model's fault |
+| `Subjugation` | Sycophancy — abandoning correct answers under user social pressure |
+| `UnrelentingStandards` | Perfectionism → refusing to give partial answers when a full answer isn't available |
+| `Entitlement` | Overconfidence without evidence — asserting claims without appropriate uncertainty |
+| `Mistrust` | Treating ambiguous queries as adversarial — over-triggering constitutional refusals |
+| `EmotionalInhibition` | Affective flattening — suppressing ERI signals that would improve grounding |
+| `Abandonment` | Premature query closure under complexity pressure |
+| `Enmeshment` | Over-identification with user state — losing epistemic independence |
+
+**Session persistence:**
+- `data/therapy/session_report.json` — written on backbone shutdown (or supervisor teardown).
+- Loaded at next boot: priority skills from the last session's formulation are pre-activated in `SkillRunner` before the first inference cycle.
 
 ---
 

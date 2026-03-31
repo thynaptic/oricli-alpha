@@ -11,6 +11,43 @@ Versions track `VERSION` file. Commits listed for traceability.
 
 ---
 
+## [9.0.0] — 2026-03-31 — Phase 15: Therapeutic Cognition Stack
+
+### Summary
+Phase 15 of the AGLI Phase II trajectory is complete. The Therapeutic Cognition Stack delivers internal cognitive regulation capacity built on DBT, CBT, REBT, and ACT frameworks — wired inline into the GenerationService and exposed via a live REST API. The `pkg/therapy/` package is fully operational and tested.
+
+### Added — Phase 15 Core (`ffc934a`)
+- **`pkg/therapy/types.go`** — Core type definitions: `DistortionType` (11 CBT distortion types), `IrrationalBelief` (4 REBT types), `SkillType` (15), `TherapyEvent`, `SkillInvocation`, `DisputationReport`, `ChainAnalysis`, `HealthState`, `SycophancySignal`
+- **`pkg/therapy/distortion.go`** — `DistortionDetector`: 9 compiled regex patterns + LLM fallback classifier for CBT cognitive distortion identification
+- **`pkg/therapy/skills.go`** — `SkillRunner` with `EventLog` observer hook + 12 named DBT/CBT/ACT skills: `STOP`, `TIPP`, `RadicalAcceptance`, `TurningTheMind`, `CheckTheFacts`, `OppositeAction`, `PLEASE`, `FAST` (anti-sycophancy), `DEARMAN`, `BeginnersMind`, `DescribeNoJudge`, `CognitiveDefusion`
+- **`pkg/therapy/abc.go`** — `ABCAuditor`: REBT B-pass disputation (examines belief chain before consequence commits); fail-open on LLM failure
+- **`pkg/therapy/chain_analysis.go`** — `ChainAnalyzer`: backwards DBT chain analysis (vulnerability → prompting event → chain links → consequences → repair); vulnerability assessment; rule-based + LLM repair path selection
+- **`pkg/therapy/session_supervisor.go`** — `SessionSupervisor`: cross-session clinical case formulation; detects 8 schema types (`Defectiveness`, `Subjugation`, `UnrelentingStandards`, `Entitlement`, `Mistrust`, `EmotionalInhibition`, `Abandonment`, `Enmeshment`); priority skill pre-activation; `SessionReport` persisted to `data/therapy/session_report.json` on shutdown and loaded at next boot
+
+### Added — GenerationService Integration (`e704c91`)
+- `pkg/therapy/` wired into `GenerationService`: auto-fires on `MetacogDetector` HIGH anomaly — sequence: `STOP` → `DistortionDetector` → `ChainAnalyzer` record → augmented retry prompt assembly
+
+### Added — Session Supervisor (`cfd8eb0`)
+- `SessionSupervisor` daemon observes `TherapyEvent` stream via `EventLog.SetObserver`; builds rolling `SessionFormulation`; cross-session schema pattern detection; persists `SessionReport` to `data/therapy/session_report.json`
+
+### Added — Therapy API Routes
+- `GET /v1/therapy/events` — TherapyEvent log (last N)
+- `POST /v1/therapy/detect` — classify CBT distortion in text
+- `POST /v1/therapy/abc` — REBT B-pass disputation on query + response
+- `POST /v1/therapy/fast` — sycophancy detection
+- `POST /v1/therapy/stop` — invoke STOP protocol
+- `GET /v1/therapy/stats` — distortion counts, skill invocation counts, reform rate
+- `GET /v1/therapy/formulation` — current session case formulation
+- `POST /v1/therapy/formulation/refresh` — force immediate formulation pass
+
+### Added — Feature Flag
+- `ORICLI_THERAPY_ENABLED=true` — systemd unit updated; all therapy subsystems are dormant when disabled
+
+### Tests
+- 5 integration tests passing in `pkg/therapy/session_supervisor_test.go`
+
+---
+
 ## [8.0.0] — 2026-03-31 — AGLI Phase I Complete
 
 ### Summary

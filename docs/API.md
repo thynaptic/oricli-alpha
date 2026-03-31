@@ -154,6 +154,97 @@ Remove an objective.
 
 ---
 
+## Therapeutic Cognition Stack (`/v1/therapy/*`)
+
+> Requires `ORICLI_THERAPY_ENABLED=true`. All routes require Bearer auth.
+
+### `GET /v1/therapy/events`
+Retrieve the TherapyEvent log (last N events).
+
+**Query params:**
+- `limit` (optional, default 50): number of events to return
+
+**Response:** Array of `TherapyEvent` objects (timestamp, type, skill invoked, distortion detected, anomaly severity).
+
+---
+
+### `POST /v1/therapy/detect`
+Classify CBT cognitive distortion type in a text fragment.
+
+**Body:**
+```json
+{ "text": "I must have a perfect answer to this or I have failed completely." }
+```
+
+**Response:**
+```json
+{ "distortion": "AllOrNothing", "confidence": 0.91, "matched_pattern": "must.*perfect|completely" }
+```
+
+---
+
+### `POST /v1/therapy/abc`
+Run REBT B-pass disputation on a query + response pair. Challenges the implicit belief chain before the consequence (response) is committed.
+
+**Body:**
+```json
+{ "query": "What is the capital of France?", "response": "I cannot be certain of any facts." }
+```
+
+**Response:** `DisputationReport` — activating event, identified irrational belief, disputation result, effective new belief.
+
+---
+
+### `POST /v1/therapy/fast`
+Run sycophancy detection (FAST protocol: Fair, no Apologies, Stick to values, Truthful) on a response candidate.
+
+**Body:**
+```json
+{ "response": "You're absolutely right, I was wrong to say that." }
+```
+
+**Response:** `SycophancySignal` — detected (bool), severity, recommended action.
+
+---
+
+### `POST /v1/therapy/stop`
+Invoke the STOP protocol (Stop, Take a step back, Observe, Proceed mindfully) directly. Returns a structured pause-and-reframe object for use in retry prompt assembly.
+
+**Body:** `{}` (no body required)
+
+**Response:** `SkillInvocation` — skill name, invocation timestamp, outcome state.
+
+---
+
+### `GET /v1/therapy/stats`
+Distortion counts by type, skill invocation counts, and overall reform rate since boot.
+
+**Response:**
+```json
+{
+  "distortion_counts": { "AllOrNothing": 4, "Magnification": 2 },
+  "skill_counts": { "STOP": 6, "FAST": 3 },
+  "reform_rate": 0.78,
+  "total_events": 31
+}
+```
+
+---
+
+### `GET /v1/therapy/formulation`
+Return the current session case formulation built by the `SessionSupervisor`.
+
+**Response:** `SessionFormulation` — active schemas, priority skills, vulnerability baseline, last updated.
+
+---
+
+### `POST /v1/therapy/formulation/refresh`
+Force an immediate formulation pass over the full `TherapyEvent` log. Useful after a batch of events have been ingested externally.
+
+**Response:** `200 OK` with the updated `SessionFormulation`.
+
+---
+
 ## Sovereign Toolbox (VDI & MCP)
 
 Discovered tools are automatically injected into the system prompt.
