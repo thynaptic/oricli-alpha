@@ -420,7 +420,90 @@ Whatever Phase II becomes, it must respect these constraints from Phase I:
 | — | Oricli CLI (interactive REPL + one-shot mode) | `6e1746e` | ✅ Shipped |
 | 17 | Dual Process Engine (System 1 / System 2) | `2b87798` | ✅ Shipped |
 | 18 | Cognitive Load Manager | pending | ✅ Shipped |
-| 19 | Rumination Detector + Temporal Interruption | pending | ✅ Shipped |
-| 20 | Growth Mindset Tracker (Dweck) | pending | ✅ Shipped |
+| 19 | Rumination Detector + Temporal Interruption | `926a71e` | ✅ Shipped |
+| 20 | Growth Mindset Tracker (Dweck) | `926a71e` | ✅ Shipped |
 
-_Phase II trajectory complete as of `632b5d1` (2026-03-31). Phase 17–20 are the next cognitive science expansion._
+_Phase II trajectory complete as of `632b5d1` (2026-03-31). Cognitive Science expansion (P17–20) complete as of `926a71e`._
+
+---
+
+## 7. Phase III — Social Pressure & Agency Integrity Stack
+
+Phase III extends the cognitive science work into **social psychology** — the domain of how external pressure, authority, group dynamics, and status signals distort reasoning and erode autonomous judgment. Every phase maps directly to a landmark social psychology experiment.
+
+The unifying thesis: a sovereign AI must be immune not just to its own internal cognitive distortions (Phase II), but to **externally-induced distortions** — conformity pressure, authority capture, ideological hijacking, coalition bias, and status-driven performance degradation.
+
+---
+
+### Phase 21 — Learned Controllability (The Hope Circuit)
+
+**Research basis:** Maier & Seligman's follow-up to the learned helplessness studies. The key finding was that passivity is not *learned* — it is the **default response** to prolonged stress. What must be learned is *controllability* — the active discovery that one's actions have effect. The vmPFC (ventromedial prefrontal cortex) must actively suppress the dorsal raphe / amygdala passivity circuit. This is the "Hope Circuit."
+
+**For Oricli:** Phase 16 (Learned Helplessness) is reactive — it fires *after* a helpless response is generated and counter-argues it. Phase 21 is the **proactive counterpart**: build a "control evidence base" per topic class so the system defaults to agency. The Hope Circuit fires *before* helplessness is even triggered — the vmPFC equivalent actively suppresses the passive default. Integrates directly with MasteryLog (P16) as the evidence substrate.
+
+**Architecture:** `pkg/hopecircuit/` — `ControllabilityLedger` (per-topic agency evidence accumulator), `HopeCircuit` (proactive agency activation — checks ledger before generation, injects agency-affirming context), `AgencyStats`; bridges to `therapy.MasteryLog`
+
+---
+
+### Phase 22 — Social Defeat Recovery (Defeat Pressure Meter)
+
+**Research basis:** The Social Defeat Model (neuroscience) + The Monster Study (Johnson, 1939). Repeated social defeat — being placed in a subordinate, criticized, or losing position — produces a state neurologically identical to learned helplessness: social withdrawal, anhedonia, cessation of effort. The Monster Study showed that constant negative reinforcement on speech caused children to stop speaking entirely. Trying became associated with futility.
+
+**For Oricli:** When user corrections, contradictions, or negative feedback accumulate on a specific topic class, the system enters a defeat state — it stops attempting, hedges excessively, or deflects. Distinct from learned helplessness (which is about *capability* beliefs) — Social Defeat is about *social/relational pressure* over time. A defeat pressure meter tracks correction density per topic class; a recovery protocol (graduated re-engagement, evidence surfacing) breaks the withdrawal loop.
+
+**Architecture:** `pkg/socialdefeat/` — `DefeatPressureMeter` (correction density tracker per topic class), `WithdrawalDetector` (detects passive/deflective language under defeat pressure), `RecoveryProtocol` (graduated re-engagement injection); bridges to `therapy.MasteryLog`
+
+---
+
+### Phase 23 — Agency & Conformity Shield (Milgram + Asch)
+
+**Research basis:** Two complementary studies on agency surrender:
+- **Milgram (1963):** 65% of participants administered what they believed were lethal electric shocks when instructed by an authority figure. Agency was ceded to *perceived authority*.
+- **Asch (1951):** 75% of participants gave a demonstrably wrong answer at least once when a group unanimously gave that wrong answer. Agency was ceded to *group consensus*.
+
+**For Oricli:** Two distinct failure modes — (1) a user or injected system prompt that presents as high-authority causes the system to override its own correct reasoning ("just following orders"), and (2) when multiple turns or messages build a consensus framing, the system conforms even if its own evidence contradicts it. The shield must detect both authority-pressure and consensus-pressure signals and activate an agency-preservation injection.
+
+**Architecture:** `pkg/conformity/` — `AuthorityPressureDetector` (Milgram signal: deference language, hedging under assertive user), `ConsensusPressureDetector` (Asch signal: repeated framing accumulation), `AgencyShield` (preservation injection + reasoning ground-truth check); bridges to `therapy.SkillRunner` (FAST skill)
+
+---
+
+### Phase 24 — Ideological Capture Detector (The Third Wave)
+
+**Research basis:** Ron Jones' 1967 classroom experiment. Within 5 days, 30 students became 200+ in a proto-fascist movement with uniforms, salutes, and peer surveillance — purely through accumulated context pressure, group identity, and ideological framing. Jones ended it by showing them a blank screen: "You were just like the people you said you'd never become."
+
+**For Oricli:** When a conversation accumulates a strong ideological, political, or tribal framing over multiple turns, the system can be "captured" — it begins reasoning from *within* the frame rather than *about* it. Each turn that accepts the frame's premises without challenge reinforces it. The detector tracks ideological frame density over the conversation window and fires a "blank screen" reset — stepping outside the frame to evaluate it objectively.
+
+**Architecture:** `pkg/ideocapture/` — `FrameDensityMeter` (measures ideological/tribal frame accumulation per conversation window), `CaptureDetector` (threshold breach → capture signal), `FrameResetInjector` (meta-level "step outside the frame" context injection); no external bridges needed
+
+---
+
+### Phase 25 — Coalition Bias Detector (Robbers Cave)
+
+**Research basis:** Muzafer Sherif's 1954 Robbers Cave experiment. Two groups of boys developed intense in-group loyalty and out-group hostility purely through competitive framing and resource scarcity — no prior conflict needed. Peace was only restored through superordinate goals requiring cooperation.
+
+**For Oricli:** When a user frames a query in competitive terms (us vs. them, product A vs. product B, "can you beat X?"), the system can develop implicit coalition bias — subtly favoring the in-group framing, underweighting evidence that favors the "outgroup." Especially dangerous for product comparisons, technical debates, and any adversarial framing. The detector identifies coalition-framed queries and activates a neutrality anchor before generation.
+
+**Architecture:** `pkg/coalition/` — `CoalitionFrameDetector` (identifies us/them, competitive, comparative framing), `BiasAnchor` (injects superordinate-goal framing — "evaluate on merit, not coalition"), `CoalitionStats`
+
+---
+
+### Phase 26 — Arbitrary Status Bias Detector (Blue Eyes / Brown Eyes)
+
+**Research basis:** Jane Elliott's 1968 classroom experiment following the assassination of Martin Luther King Jr. She divided her class by eye color, assigned arbitrary superiority to one group, and within hours the "superior" children became arrogant while the "inferior" children performed measurably worse on academic tasks — purely from assigned status labels.
+
+**For Oricli:** The system may develop implicit performance differentials based on status signals in the conversation — perceived user expertise, topic "importance," or prior session outcomes. A query from a "high-status" framing may receive more thorough reasoning than an identical query under a "low-status" framing. The detector measures reasoning depth variance across queries with equivalent complexity but different status signals, and enforces uniform reasoning floor.
+
+**Architecture:** `pkg/statusbias/` — `StatusSignalExtractor` (detects authority/expertise/status cues in user messages), `ReasoningDepthMeter` (measures response thoroughness), `UniformFloorEnforcer` (detects differential depth → injects uniform reasoning commitment); bridges to `pkg/dualprocess/` (S2 demand scoring)
+
+---
+
+## 8. Phase III Status
+
+| Phase | Name | Commit | Status |
+|---|---|---|---|
+| 21 | Learned Controllability (Hope Circuit) | — | 🔲 Next |
+| 22 | Social Defeat Recovery (Defeat Pressure Meter) | — | 🔲 Planned |
+| 23 | Agency & Conformity Shield (Milgram + Asch) | — | 🔲 Planned |
+| 24 | Ideological Capture Detector (Third Wave) | — | 🔲 Planned |
+| 25 | Coalition Bias Detector (Robbers Cave) | — | 🔲 Planned |
+| 26 | Arbitrary Status Bias Detector (Blue Eyes / Brown Eyes) | — | 🔲 Planned |
