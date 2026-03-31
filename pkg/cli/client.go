@@ -1,0 +1,250 @@
+package cli
+
+import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+)
+
+// Client is a thin HTTP client targeting the Oricli backbone API.
+type Client struct {
+	cfg    *Config
+	http   *http.Client
+}
+
+// NewClient creates a Client from config.
+func NewClient(cfg *Config) *Client {
+	return &Client{
+		cfg:  cfg,
+		http: &http.Client{Timeout: 120 * time.Second},
+	}
+}
+
+// SetTarget overrides the API target mid-session.
+func (c *Client) SetTarget(target string) {
+	c.cfg.Target = target
+}
+
+func (c *Client) url(path string) string {
+	return strings.TrimRight(c.cfg.Target, "/") + path
+}
+
+func (c *Client) auth(req *http.Request) {
+	if c.cfg.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
+	}
+}
+
+// get performs an authenticated GET and decodes JSON into dst.
+func (c *Client) get(path string, dst interface{}) error {
+	req, err := http.NewRequest("GET", c.url(path), nil)
+	if err != nil {
+		return err
+	}
+	c.auth(req)
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+	return json.NewDecoder(resp.Body).Decode(dst)
+}
+
+// post sends JSON and decodes response.
+func (c *Client) post(path string, payload, dst interface{}) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", c.url(path), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	c.auth(req)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(b))
+	}
+	if dst != nil {
+		return json.NewDecoder(resp.Body).Decode(dst)
+	}
+	return nil
+}
+
+// ── Endpoint wrappers ─────────────────────────────────────────────────────────
+
+func (c *Client) GetHealth() (map[string]interface{}, error) {
+	var out map[string]interface{}
+	return out, c.get("/v1/health", &out)
+}
+
+func (c *Client) GetModels() (map[string]interface{}, error) {
+	var out map[string]interface{}
+	return out, c.get("/v1/curator/models", &out)
+}
+
+func (c *Client) GetModules() (map[string]interface{}, error) {
+	var out map[string]interface{}
+	return out, c.get("/v1/modules", &out)
+}
+
+func (c *Client) GetMetrics() (map[string]interface{}, error) {
+	var out map[string]interface{}
+	return out, c.get("/v1/metrics", &out)
+}
+
+func (c *Client) GetTherapyStats() (map[string]interface{}, error) {
+	var out map[string]interface{}
+	return out, c.get("/v1/therapy/stats", &out)
+}
+
+func (c *Client) GetFormulation() (map[string]interface{}, error) {
+	var out map[string]interface{}
+	return out, c.get("/v1/therapy/formulation", &out)
+}
+
+func (c *Client) GetMastery() (map[string]interface{}, error) {
+	var out map[string]interface{}
+	return out, c.get("/v1/therapy/mastery", &out)
+}
+
+func (c *Client) GetGoals() (map[string]interface{}, error) {
+	var out map[string]interface{}
+	return out, c.get("/v1/goals", &out)
+}
+
+func (c *Client) PostGoal(description string) (map[string]interface{}, error) {
+	var out map[string]interface{}
+	return out, c.post("/v1/goals", map[string]string{"description": description}, &out)
+}
+
+// ── Streaming chat ────────────────────────────────────────────────────────────
+
+// StreamToken is a single token chunk from SSE.
+type StreamToken struct {
+	Content string
+	Done    bool
+	Error   error
+}
+
+// StreamChat sends a chat request and streams tokens into the returned channel.
+// The channel is closed when the stream ends or errors.
+func (c *Client) StreamChat(messages []map[string]string, model string) (<-chan StreamToken, error) {
+	payload := map[string]interface{}{
+		"model":    model,
+		"messages": messages,
+		"stream":   true,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest("POST", c.url("/v1/chat/completions"), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	c.auth(req)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+
+	// Use a client without timeout for streaming
+	streamHTTP := &http.Client{}
+	resp, err := streamHTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("stream request failed: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(b))
+	}
+
+	ch := make(chan StreamToken, 64)
+	go parseSSE(resp.Body, ch)
+	return ch, nil
+}
+
+// BlockingChat sends a non-streaming chat and returns the full response text.
+func (c *Client) BlockingChat(messages []map[string]string, model string) (string, error) {
+	var out map[string]interface{}
+	err := c.post("/v1/chat/completions", map[string]interface{}{
+		"model":    model,
+		"messages": messages,
+		"stream":   false,
+	}, &out)
+	if err != nil {
+		return "", err
+	}
+	// OpenAI-compatible response
+	if choices, ok := out["choices"].([]interface{}); ok && len(choices) > 0 {
+		if choice, ok := choices[0].(map[string]interface{}); ok {
+			if msg, ok := choice["message"].(map[string]interface{}); ok {
+				if content, ok := msg["content"].(string); ok {
+					return content, nil
+				}
+			}
+		}
+	}
+	// Fallback: direct text field
+	if text, ok := out["text"].(string); ok {
+		return text, nil
+	}
+	return fmt.Sprintf("%v", out), nil
+}
+
+// parseSSE reads an SSE stream and sends tokens to ch.
+func parseSSE(body io.ReadCloser, ch chan<- StreamToken) {
+	defer body.Close()
+	defer close(ch)
+
+	scanner := bufio.NewScanner(body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			ch <- StreamToken{Done: true}
+			return
+		}
+		var chunk map[string]interface{}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue
+		}
+		// Extract token from OpenAI-compatible delta
+		if choices, ok := chunk["choices"].([]interface{}); ok && len(choices) > 0 {
+			if choice, ok := choices[0].(map[string]interface{}); ok {
+				if delta, ok := choice["delta"].(map[string]interface{}); ok {
+					if content, ok := delta["content"].(string); ok && content != "" {
+						ch <- StreamToken{Content: content}
+					}
+				}
+				// Check finish_reason
+				if reason, ok := choice["finish_reason"].(string); ok && reason == "stop" {
+					ch <- StreamToken{Done: true}
+					return
+				}
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		ch <- StreamToken{Error: err}
+	}
+}
