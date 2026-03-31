@@ -275,3 +275,12 @@ func (c *Client) GetProcessStats() (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetCogLoadStats fetches cognitive load stats from the server.
+func (c *Client) GetCogLoadStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/load/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

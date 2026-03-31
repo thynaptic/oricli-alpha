@@ -39,6 +39,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/science"
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
+	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
 )
@@ -684,6 +685,18 @@ func main() {
 		apiServer.DualProcessClassifier = dpClassifier
 		apiServer.DualProcessStats = dpStats
 		log.Printf("[DualProcess] Phase 17 Dual Process Engine online — S1/S2 classifier, post-gen auditor, S2 override injection")
+	}
+
+	// ── Phase 18: Cognitive Load Manager (opt-in via ORICLI_COGLOAD_ENABLED=true) ──
+	if os.Getenv("ORICLI_COGLOAD_ENABLED") == "true" {
+		os.MkdirAll("data/cogload", 0755)
+		clMeter := cogload.NewLoadMeter()
+		clSurgery := cogload.NewContextSurgery(clMeter)
+		clStats := cogload.NewCogLoadStats("data/cogload/stats.json")
+		genService.CogLoad = &service.CogLoadKit{Meter: clMeter, Surgery: clSurgery, Stats: clStats}
+		apiServer.CogLoadMeter = clMeter
+		apiServer.CogLoadStats = clStats
+		log.Printf("[CogLoad] Phase 18 Cognitive Load Manager online — CLT meter, context surgery, load stats")
 	}
 
 	go apiServer.Start()

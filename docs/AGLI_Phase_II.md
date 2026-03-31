@@ -418,8 +418,8 @@ Whatever Phase II becomes, it must respect these constraints from Phase I:
 | 15 | **Therapeutic Cognition Stack** | `ffc934a` / `cfd8eb0` | ✅ Complete |
 | 16 | Learned Helplessness Prevention (Attributional Resilience) | `219ae97` | ✅ Complete |
 | — | Oricli CLI (interactive REPL + one-shot mode) | `6e1746e` | ✅ Shipped |
-| 17 | Dual Process Engine (System 1 / System 2) | — | 🔲 In Design |
-| 18 | Cognitive Load Manager | — | 🔲 Whiteboard |
+| 17 | Dual Process Engine (System 1 / System 2) | `2b87798` | ✅ Shipped |
+| 18 | Cognitive Load Manager | pending | ✅ Shipped |
 | 19 | Rumination Detector + Temporal Interruption | — | 🔲 Whiteboard |
 | 20 | Growth Mindset Tracker (Dweck) | — | 🔲 Whiteboard |
 

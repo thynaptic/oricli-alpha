@@ -62,6 +62,9 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/process":
 		return runProcess(client), true
 
+	case "/cogload":
+		return runCogLoad(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -264,6 +267,70 @@ func runCompute(c *Client) string {
 	return sb.String()
 }
 
+func runCogLoad(c *Client) string {
+	data, err := c.GetCogLoadStats()
+	if err != nil {
+		return styleDanger.Render("✗ " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Cognitive Load Manager (Sweller CLT)") + "\n")
+	if m, ok := data["measurements"].(float64); ok && m == 0 {
+		sb.WriteString(styleDim.Render("  No load data yet — accumulates after first requests\n"))
+		return sb.String()
+	}
+	fields := []struct{ key, label string }{
+		{"avg_intrinsic", "Avg Intrinsic"},
+		{"avg_extraneous", "Avg Extraneous"},
+		{"avg_germane", "Avg Germane"},
+		{"avg_total_load", "Avg Total Load"},
+	}
+	for _, f := range fields {
+		if v, ok := data[f.key].(float64); ok {
+			bar := loadBar(v)
+			color := styleSuccess
+			if v > 0.6 {
+				color = styleWarning
+			}
+			if v > 0.9 {
+				color = styleDanger
+			}
+			sb.WriteString(fmt.Sprintf("  %s  %s %s\n",
+				styleKeyVal.Render(padRight(f.label, 18)),
+				color.Render(bar),
+				styleDim.Render(fmt.Sprintf("%.2f", v))))
+		}
+	}
+	if sr, ok := data["surgery_rate"].(float64); ok {
+		sb.WriteString(fmt.Sprintf("  %s  %s\n",
+			styleKeyVal.Render(padRight("Surgery Rate", 18)),
+			styleAccent.Render(fmt.Sprintf("%.0f%%", sr*100))))
+	}
+	if m, ok := data["measurements"].(float64); ok {
+		sb.WriteString(fmt.Sprintf("  %s  %s\n",
+			styleKeyVal.Render(padRight("Measurements", 18)),
+			styleDim.Render(fmt.Sprintf("%.0f", m))))
+	}
+	return sb.String()
+}
+
+// loadBar renders a mini ASCII bar for a [0-1] load score.
+func loadBar(v float64) string {
+	total := 10
+	filled := int(v * float64(total))
+	if filled > total {
+		filled = total
+	}
+	bar := ""
+	for i := 0; i < total; i++ {
+		if i < filled {
+			bar += "█"
+		} else {
+			bar += "░"
+		}
+	}
+	return bar
+}
+
 func runProcess(c *Client) string {
 	data, err := c.GetProcessStats()
 	if err != nil {
@@ -332,6 +399,7 @@ func renderHelp() string {
 		{"/mastery", "Mastery log — topic class success rates"},
 		{"/compute", "Compute bid stats + recent governor decisions"},
 		{"/process", "Dual Process stats — S1/S2 mismatch rates per topic class"},
+		{"/cogload", "Cognitive Load stats — avg load components + surgery rate"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
