@@ -49,6 +49,8 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/statusbias"
 	"github.com/thynaptic/oricli-go/pkg/arousal"
 	"github.com/thynaptic/oricli-go/pkg/mct"
+	"github.com/thynaptic/oricli-go/pkg/mbt"
+	"github.com/thynaptic/oricli-go/pkg/schema"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
@@ -755,7 +757,30 @@ func main() {
 		}
 	}
 
-	// ── Phase 29: Metacognitive Therapy (opt-in via ORICLI_MCT_ENABLED=true) ──
+	// ── Phase 31: Schema Therapy + TFP Splitting (opt-in via ORICLI_SCHEMA_ENABLED=true) ──
+	if os.Getenv("ORICLI_SCHEMA_ENABLED") == "true" {
+		os.MkdirAll("data/schema", 0755)
+		schemaModes := schema.NewSchemaModeDetector()
+		schemaSplits := schema.NewSplittingDetector()
+		schemaResp := schema.NewSchemaResponder()
+		schemaStats := schema.NewSchemaStats("data/schema/stats.json")
+		genService.Schema = &service.SchemaKit{ModeDetector: schemaModes, SplitDetector: schemaSplits, Responder: schemaResp, Stats: schemaStats}
+		apiServer.SchemaStats = schemaStats
+		log.Printf("[Schema] Phase 31 Schema Therapy + TFP Splitting online — mode detector (Young) + splitting detector (Kernberg)")
+	}
+
+	// ── Phase 30: Mentalization-Based Treatment (opt-in via ORICLI_MBT_ENABLED=true) ──
+	if os.Getenv("ORICLI_MBT_ENABLED") == "true" {
+		os.MkdirAll("data/mbt", 0755)
+		mbtDetector := mbt.NewMentalizingDetector()
+		mbtPrompt := mbt.NewMentalizingPrompt()
+		mbtStats := mbt.NewMBTStats("data/mbt/stats.json")
+		genService.MBT = &service.MBTKit{Detector: mbtDetector, Prompt: mbtPrompt, Stats: mbtStats}
+		apiServer.MBTStats = mbtStats
+		log.Printf("[MBT] Phase 30 Mentalization-Based Treatment online — mentalizing failure detector (Bateman & Fonagy)")
+	}
+
+		// ── Phase 29: Metacognitive Therapy (opt-in via ORICLI_MCT_ENABLED=true) ──
 	if os.Getenv("ORICLI_MCT_ENABLED") == "true" {
 		os.MkdirAll("data/mct", 0755)
 		mctDetector := mct.NewMetaBeliefDetector()

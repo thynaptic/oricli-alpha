@@ -58,6 +58,8 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/statusbias"
 	"github.com/thynaptic/oricli-go/pkg/arousal"
 	"github.com/thynaptic/oricli-go/pkg/mct"
+	"github.com/thynaptic/oricli-go/pkg/mbt"
+	"github.com/thynaptic/oricli-go/pkg/schema"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
@@ -190,6 +192,8 @@ type ServerV2 struct {
 	ArousalStats        *arousal.ArousalStats
 	InterferenceStats   *interference.InterferenceStats
 	MCTStats            *mct.MCTStats
+	MBTStats            *mbt.MBTStats
+	SchemaStats         *schema.SchemaStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -634,6 +638,8 @@ func (s *ServerV2) setupRoutes() {
 			cognitionRoutes.GET("/arousal/stats", s.handleArousalStats)
 			cognitionRoutes.GET("/interference/stats", s.handleInterferenceStats)
 			cognitionRoutes.GET("/mct/stats", s.handleMCTStats)
+			cognitionRoutes.GET("/mbt/stats", s.handleMBTStats)
+			cognitionRoutes.GET("/schema/stats", s.handleSchemaStats)
 			cognitionRoutes.POST("/defeat/measure", s.handleDefeatMeasure)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
@@ -4425,4 +4431,20 @@ func (s *ServerV2) handleMCTStats(c *gin.Context) {
 		return
 	}
 	c.JSON(200, s.MCTStats.Stats())
+}
+
+func (s *ServerV2) handleMBTStats(c *gin.Context) {
+	if s.MBTStats == nil {
+		c.JSON(503, gin.H{"error": "MBT not enabled"})
+		return
+	}
+	c.JSON(200, s.MBTStats.Stats())
+}
+
+func (s *ServerV2) handleSchemaStats(c *gin.Context) {
+	if s.SchemaStats == nil {
+		c.JSON(503, gin.H{"error": "schema therapy not enabled"})
+		return
+	}
+	c.JSON(200, s.SchemaStats.Stats())
 }

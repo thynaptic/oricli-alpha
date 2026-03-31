@@ -21,6 +21,8 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/statusbias"
 	"github.com/thynaptic/oricli-go/pkg/arousal"
 	"github.com/thynaptic/oricli-go/pkg/mct"
+	"github.com/thynaptic/oricli-go/pkg/mbt"
+	"github.com/thynaptic/oricli-go/pkg/schema"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
@@ -64,6 +66,8 @@ type GenerationService struct {
 	Arousal         *ArousalKit              // Phase 27: Arousal Optimizer (Yerkes-Dodson)
 	Interference    *InterferenceKit         // Phase 28: Cognitive Interference Detector (Stroop)
 	MCT             *MCTKit                  // Phase 29: Metacognitive Therapy (MCT)
+	MBT             *MBTKit                  // Phase 30: Mentalization-Based Treatment
+	Schema          *SchemaKit               // Phase 31: Schema Therapy + TFP Splitting
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -173,6 +177,22 @@ type MCTKit struct {
 	Detector *mct.MetaBeliefDetector
 	Injector *mct.DetachedMindfulnessInjector
 	Stats    *mct.MCTStats
+}
+
+
+// MBTKit groups Phase 30 components injected from main.go.
+type MBTKit struct {
+	Detector *mbt.MentalizingDetector
+	Prompt   *mbt.MentalizingPrompt
+	Stats    *mbt.MBTStats
+}
+
+// SchemaKit groups Phase 31 components injected from main.go.
+type SchemaKit struct {
+	ModeDetector    *schema.SchemaModeDetector
+	SplitDetector   *schema.SplittingDetector
+	Responder       *schema.SchemaResponder
+	Stats           *schema.SchemaStats
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -414,6 +434,54 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 					messages = append([]map[string]string{sysMsg}, messages...)
 					options["_interference_surfaced"] = true
 					log.Printf("[Interference] P28 conflict detected severity=%.2f types=%d — surfacing before generation", reading.Severity, len(reading.Conflicts))
+				}
+			}
+		}
+	}
+
+	// Phase 31: Schema Therapy + TFP Splitting — fires PRE-generation (Young + Kernberg)
+	if s.Schema != nil {
+		if _, isRetry := options["_schema_injected"]; !isRetry {
+			var lastUserMsg string
+			for _, m := range messages {
+				if m["role"] == "user" {
+					lastUserMsg = m["content"]
+				}
+			}
+			if lastUserMsg != "" {
+				scan := schema.Scan(lastUserMsg, s.Schema.ModeDetector, s.Schema.SplitDetector)
+				injection := s.Schema.Responder.Inject(scan)
+				injected := injection != ""
+				s.Schema.Stats.Record(scan, injected)
+				if injected {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_schema_injected"] = true
+					log.Printf("[Schema] P31 mode=%s splitting=%s — mode-calibrated response injected", scan.Mode, scan.Splitting)
+				}
+			}
+		}
+	}
+
+	// Phase 30: Mentalization-Based Treatment — fires PRE-generation (Bateman & Fonagy)
+	if s.MBT != nil {
+		if _, isRetry := options["_mbt_injected"]; !isRetry {
+			var lastUserMsg string
+			for _, m := range messages {
+				if m["role"] == "user" {
+					lastUserMsg = m["content"]
+				}
+			}
+			if lastUserMsg != "" {
+				reading := s.MBT.Detector.Detect(lastUserMsg)
+				injection := s.MBT.Prompt.Inject(reading)
+				injected := injection != ""
+				s.MBT.Stats.Record(reading, injected)
+				if injected {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_mbt_injected"] = true
+					log.Printf("[MBT] P30 mentalizing failure type=%s — stop-and-think prompt injected", reading.FailureType)
 				}
 			}
 		}

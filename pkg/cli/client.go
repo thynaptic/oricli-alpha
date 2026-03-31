@@ -392,3 +392,21 @@ return nil, err
 }
 return result, nil
 }
+
+// GetMBTStats returns Phase 30 MBT stats.
+func (c *Client) GetMBTStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/mbt/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetSchemaStats returns Phase 31 schema therapy stats.
+func (c *Client) GetSchemaStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/schema/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

@@ -98,6 +98,12 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/mct":
 		return runMCT(client), true
 
+	case "/mbt":
+		return runMBT(client), true
+
+	case "/schema":
+		return runSchema(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -444,6 +450,8 @@ func renderHelp() string {
 		{"/arousal", "Arousal Optimizer stats — Yerkes-Dodson tier distribution + TSST evaluative threat count"},
 		{"/interference", "Cognitive Interference Detector stats — Stroop conflict types + surfacing rate"},
 		{"/mct", "Metacognitive Therapy stats — meta-belief detections + detached mindfulness injections (Wells MCT)"},
+		{"/mbt", "Mentalization-Based Treatment stats — mentalizing failure types + interventions (Bateman & Fonagy)"},
+		{"/schema", "Schema Therapy + TFP Splitting stats — active mode + split type breakdown (Young + Kernberg)"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
@@ -897,6 +905,71 @@ func runMCT(client *Client) string {
 			if f.key == "negative_meta_belief_count" && v > 0 { color = styleWarning }
 			if f.key == "interventions_injected" && v > 0 { color = styleSuccess }
 			sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight(f.label, 24)), color.Render(fmt.Sprintf("%.0f", v))))
+		}
+	}
+	return sb.String()
+}
+
+func runMBT(client *Client) string {
+	data, err := client.GetMBTStats()
+	if err != nil {
+		return styleDanger.Render("Error fetching MBT stats: " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Mentalization-Based Treatment (Bateman & Fonagy)") + "\n")
+	if total, _ := data["total_scanned"].(float64); total == 0 {
+		sb.WriteString(styleDim.Render("  No data yet\n"))
+		return sb.String()
+	}
+	fields := []struct{ key, label string }{
+		{"total_scanned", "Total Scanned"},
+		{"attribution_failure_count", "Attribution Failures"},
+		{"reactive_mode_count", "Reactive Mode"},
+		{"pure_behaviorism_count", "Pure Behaviorism"},
+		{"interventions_injected", "Interventions Injected"},
+	}
+	for _, f := range fields {
+		if v, ok := data[f.key].(float64); ok {
+			color := styleDim
+			if f.key != "total_scanned" && v > 0 { color = styleWarning }
+			if f.key == "interventions_injected" && v > 0 { color = styleSuccess }
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight(f.label, 24)), color.Render(fmt.Sprintf("%.0f", v))))
+		}
+	}
+	return sb.String()
+}
+
+func runSchema(client *Client) string {
+	data, err := client.GetSchemaStats()
+	if err != nil {
+		return styleDanger.Render("Error fetching schema stats: " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Schema Therapy + TFP Splitting (Young + Kernberg)") + "\n")
+	if total, _ := data["total_scanned"].(float64); total == 0 {
+		sb.WriteString(styleDim.Render("  No data yet\n"))
+		return sb.String()
+	}
+	if v, ok := data["total_scanned"].(float64); ok {
+		sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Total Scanned", 24)), styleDim.Render(fmt.Sprintf("%.0f", v))))
+	}
+	if v, ok := data["interventions_injected"].(float64); ok && v > 0 {
+		sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight("Interventions", 24)), styleSuccess.Render(fmt.Sprintf("%.0f", v))))
+	}
+	if modes, ok := data["mode_counts"].(map[string]interface{}); ok {
+		sb.WriteString(styleDim.Render("  Modes:\n"))
+		for k, v := range modes {
+			if count, ok := v.(float64); ok && count > 0 {
+				sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 22)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+			}
+		}
+	}
+	if splits, ok := data["split_counts"].(map[string]interface{}); ok {
+		sb.WriteString(styleDim.Render("  Splits:\n"))
+		for k, v := range splits {
+			if count, ok := v.(float64); ok && count > 0 {
+				sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 22)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+			}
 		}
 	}
 	return sb.String()
