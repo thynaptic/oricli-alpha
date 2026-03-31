@@ -365,3 +365,21 @@ func (c *Client) GetStatusBiasStats() (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetArousalStats returns Phase 27 arousal optimizer stats.
+func (c *Client) GetArousalStats() (map[string]interface{}, error) {
+var result map[string]interface{}
+if err := c.get("/v1/cognition/arousal/stats", &result); err != nil {
+return nil, err
+}
+return result, nil
+}
+
+// GetInterferenceStats returns Phase 28 cognitive interference stats.
+func (c *Client) GetInterferenceStats() (map[string]interface{}, error) {
+var result map[string]interface{}
+if err := c.get("/v1/cognition/interference/stats", &result); err != nil {
+return nil, err
+}
+return result, nil
+}

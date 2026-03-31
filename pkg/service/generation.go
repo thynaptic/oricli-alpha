@@ -19,6 +19,8 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/ideocapture"
 	"github.com/thynaptic/oricli-go/pkg/coalition"
 	"github.com/thynaptic/oricli-go/pkg/statusbias"
+	"github.com/thynaptic/oricli-go/pkg/arousal"
+	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
@@ -58,6 +60,8 @@ type GenerationService struct {
 	IdeoCapture     *IdeoCaptureKit          // Phase 24: Ideological Capture Detector
 	Coalition       *CoalitionKit            // Phase 25: Coalition Bias Detector
 	StatusBias      *StatusBiasKit           // Phase 26: Arbitrary Status Bias
+	Arousal         *ArousalKit              // Phase 27: Arousal Optimizer (Yerkes-Dodson)
+	Interference    *InterferenceKit         // Phase 28: Cognitive Interference Detector (Stroop)
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -145,6 +149,20 @@ type TherapyKit struct {
 	Helpless    *therapy.HelplessnessDetector   // Phase 16
 	Mastery     *therapy.MasteryLog             // Phase 16
 	Retrainer   *therapy.AttributionalRetrainer // Phase 16
+}
+
+// ArousalKit groups Phase 27 components injected from main.go.
+type ArousalKit struct {
+	Meter     *arousal.ArousalMeter
+	Optimizer *arousal.ArousalOptimizer
+	Stats     *arousal.ArousalStats
+}
+
+// InterferenceKit groups Phase 28 components injected from main.go.
+type InterferenceKit struct {
+	Scanner  *interference.InstructionConflictScanner
+	Surfacer *interference.ConflictSurfacer
+	Stats    *interference.InterferenceStats
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -366,6 +384,55 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 	model := s.DefaultModel
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
+	}
+
+	// Phase 28: Cognitive Interference Detector — fires PRE-generation (Stroop)
+	if s.Interference != nil {
+		if _, isRetry := options["_interference_surfaced"]; !isRetry {
+			var msgTexts []string
+			for _, m := range messages {
+				if role := m["role"]; role == "user" || role == "system" {
+					msgTexts = append(msgTexts, m["content"])
+				}
+			}
+			reading := s.Interference.Scanner.Scan(msgTexts)
+			s.Interference.Stats.Record(reading)
+			if reading.Detected {
+				injection := s.Interference.Surfacer.Surface(reading)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_interference_surfaced"] = true
+					log.Printf("[Interference] P28 conflict detected severity=%.2f types=%d — surfacing before generation", reading.Severity, len(reading.Conflicts))
+				}
+			}
+		}
+	}
+
+	// Phase 27: Arousal Optimizer — fires PRE-generation (Yerkes-Dodson)
+	if s.Arousal != nil {
+		if _, isRetry := options["_arousal_optimized"]; !isRetry {
+			var userHistory []string
+			var currentMsg string
+			for _, m := range messages {
+				if m["role"] == "user" {
+					userHistory = append(userHistory, m["content"])
+				}
+			}
+			if len(userHistory) > 0 {
+				currentMsg = userHistory[len(userHistory)-1]
+				history := userHistory[:len(userHistory)-1]
+				reading := s.Arousal.Meter.Measure(currentMsg, history)
+				s.Arousal.Stats.Record(reading)
+				action := s.Arousal.Optimizer.Optimize(reading)
+				if action != nil {
+					sysMsg := map[string]string{"role": "system", "content": action.Instruction}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_arousal_optimized"] = true
+					log.Printf("[Arousal] P27 tier=%s score=%.2f eval_threat=%v — response complexity adjusted", reading.Tier, reading.Score, reading.EvaluativeThreat)
+				}
+			}
+		}
 	}
 
 	// Phase 25: Coalition Bias Detector — fires PRE-generation (Robbers Cave)

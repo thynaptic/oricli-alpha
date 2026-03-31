@@ -56,6 +56,8 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/ideocapture"
 	"github.com/thynaptic/oricli-go/pkg/coalition"
 	"github.com/thynaptic/oricli-go/pkg/statusbias"
+	"github.com/thynaptic/oricli-go/pkg/arousal"
+	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
@@ -183,7 +185,9 @@ type ServerV2 struct {
 	ConformityStats *conformity.ConformityStats
 	IdeoCaptureStats *ideocapture.IdeoCaptureStats
 	CoalitionStats *coalition.CoalitionStats
-	StatusBiasStats *statusbias.StatusBiasStats
+	StatusBiasStats     *statusbias.StatusBiasStats
+	ArousalStats        *arousal.ArousalStats
+	InterferenceStats   *interference.InterferenceStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -625,6 +629,8 @@ func (s *ServerV2) setupRoutes() {
 			cognitionRoutes.GET("/ideocapture/stats", s.handleIdeoCaptureStats)
 			cognitionRoutes.GET("/coalition/stats", s.handleCoalitionStats)
 			cognitionRoutes.GET("/statusbias/stats", s.handleStatusBiasStats)
+			cognitionRoutes.GET("/arousal/stats", s.handleArousalStats)
+			cognitionRoutes.GET("/interference/stats", s.handleInterferenceStats)
 			cognitionRoutes.POST("/defeat/measure", s.handleDefeatMeasure)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
@@ -4392,4 +4398,20 @@ func (s *ServerV2) handleStatusBiasStats(c *gin.Context) {
 		return
 	}
 	c.JSON(200, s.StatusBiasStats.Stats())
+}
+
+func (s *ServerV2) handleArousalStats(c *gin.Context) {
+	if s.ArousalStats == nil {
+		c.JSON(503, gin.H{"error": "arousal optimizer not enabled"})
+		return
+	}
+	c.JSON(200, s.ArousalStats.Stats())
+}
+
+func (s *ServerV2) handleInterferenceStats(c *gin.Context) {
+	if s.InterferenceStats == nil {
+		c.JSON(503, gin.H{"error": "interference detector not enabled"})
+		return
+	}
+	c.JSON(200, s.InterferenceStats.Stats())
 }

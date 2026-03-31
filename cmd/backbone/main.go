@@ -47,6 +47,8 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/ideocapture"
 	"github.com/thynaptic/oricli-go/pkg/coalition"
 	"github.com/thynaptic/oricli-go/pkg/statusbias"
+	"github.com/thynaptic/oricli-go/pkg/arousal"
+	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
@@ -752,7 +754,29 @@ func main() {
 		}
 	}
 
-	// ── Phase 26: Status Bias Detector (opt-in via ORICLI_STATUSBIAS_ENABLED=true) ──
+	// ── Phase 28: Cognitive Interference Detector (opt-in via ORICLI_INTERFERENCE_ENABLED=true) ──
+	if os.Getenv("ORICLI_INTERFERENCE_ENABLED") == "true" {
+		os.MkdirAll("data/interference", 0755)
+		ifScanner := interference.NewInstructionConflictScanner()
+		ifSurfacer := interference.NewConflictSurfacer()
+		ifStats := interference.NewInterferenceStats("data/interference/stats.json")
+		genService.Interference = &service.InterferenceKit{Scanner: ifScanner, Surfacer: ifSurfacer, Stats: ifStats}
+		apiServer.InterferenceStats = ifStats
+		log.Printf("[Interference] Phase 28 Cognitive Interference Detector online — Stroop conflict surfacer")
+	}
+
+	// ── Phase 27: Arousal Optimizer (opt-in via ORICLI_AROUSAL_ENABLED=true) ──
+	if os.Getenv("ORICLI_AROUSAL_ENABLED") == "true" {
+		os.MkdirAll("data/arousal", 0755)
+		arMeter := arousal.NewArousalMeter()
+		arOptimizer := arousal.NewArousalOptimizer()
+		arStats := arousal.NewArousalStats("data/arousal/stats.json")
+		genService.Arousal = &service.ArousalKit{Meter: arMeter, Optimizer: arOptimizer, Stats: arStats}
+		apiServer.ArousalStats = arStats
+		log.Printf("[Arousal] Phase 27 Arousal Optimizer online — Yerkes-Dodson inverted-U, TSST evaluative threat detection")
+	}
+
+		// ── Phase 26: Status Bias Detector (opt-in via ORICLI_STATUSBIAS_ENABLED=true) ──
 	if os.Getenv("ORICLI_STATUSBIAS_ENABLED") == "true" {
 		os.MkdirAll("data/statusbias", 0755)
 		sbExtractor := statusbias.NewStatusSignalExtractor()

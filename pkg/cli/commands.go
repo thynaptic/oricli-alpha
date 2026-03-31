@@ -89,6 +89,12 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/statusbias":
 		return runStatusBias(client), true
 
+	case "/arousal":
+		return runArousal(client), true
+
+	case "/interference":
+		return runInterference(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -432,6 +438,8 @@ func renderHelp() string {
 		{"/ideocapture", "Ideological Capture Detector stats — frame density + blank screen resets"},
 		{"/coalition", "Coalition Bias Detector stats — competitive/adversarial framing + anchor rate (Robbers Cave)"},
 		{"/statusbias", "Status Bias Detector stats — reasoning depth variance + uniform floor (Blue Eyes/Brown Eyes)"},
+		{"/arousal", "Arousal Optimizer stats — Yerkes-Dodson tier distribution + TSST evaluative threat count"},
+		{"/interference", "Cognitive Interference Detector stats — Stroop conflict types + surfacing rate"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
@@ -796,4 +804,67 @@ func runStatusBias(c *Client) string {
 		}
 	}
 	return sb.String()
+}
+
+func runArousal(client *Client) string {
+data, err := client.GetArousalStats()
+if err != nil {
+return styleDanger.Render("Error fetching arousal stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Arousal Optimizer (Yerkes-Dodson / TSST)") + "\n")
+if total, _ := data["total_measured"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+fields := []struct{ key, label string }{
+{"total_measured", "Total Measured"},
+{"under_count", "Under-Arousal"},
+{"optimal_count", "Optimal"},
+{"over_count", "Over-Arousal"},
+{"evaluative_threat_count", "Eval Threat (TSST)"},
+}
+for _, f := range fields {
+if v, ok := data[f.key].(float64); ok {
+color := styleDim
+if f.key == "over_count" && v > 0 { color = styleWarning }
+if f.key == "evaluative_threat_count" && v > 0 { color = styleWarning }
+if f.key == "optimal_count" && v > 0 { color = styleSuccess }
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight(f.label, 24)), color.Render(fmt.Sprintf("%.0f", v))))
+}
+}
+return sb.String()
+}
+
+func runInterference(client *Client) string {
+data, err := client.GetInterferenceStats()
+if err != nil {
+return styleDanger.Render("Error fetching interference stats: " + err.Error())
+}
+var sb strings.Builder
+sb.WriteString(styleLabel.Render("● Cognitive Interference Detector (Stroop)") + "\n")
+if total, _ := data["total_scanned"].(float64); total == 0 {
+sb.WriteString(styleDim.Render("  No data yet\n"))
+return sb.String()
+}
+fields := []struct{ key, label string }{
+{"total_scanned", "Total Scanned"},
+{"conflicts_found", "Conflicts Found"},
+}
+for _, f := range fields {
+if v, ok := data[f.key].(float64); ok {
+color := styleDim
+if f.key == "conflicts_found" && v > 0 { color = styleWarning }
+sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight(f.label, 20)), color.Render(fmt.Sprintf("%.0f", v))))
+}
+}
+if byType, ok := data["by_type"].(map[string]interface{}); ok && len(byType) > 0 {
+sb.WriteString(styleDim.Render("  By type:\n"))
+for k, v := range byType {
+if count, ok := v.(float64); ok && count > 0 {
+sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 24)), styleWarning.Render(fmt.Sprintf("%.0f", count))))
+}
+}
+}
+return sb.String()
 }
