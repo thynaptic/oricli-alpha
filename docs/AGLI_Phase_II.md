@@ -501,9 +501,9 @@ The unifying thesis: a sovereign AI must be immune not just to its own internal 
 
 | Phase | Name | Commit | Status |
 |---|---|---|---|
-| 21 | Learned Controllability (Hope Circuit) | — | 🔲 Next |
+| 21 | Learned Controllability (Hope Circuit) | `0db390c` | ✅ Shipped |
 | 22 | Social Defeat Recovery (Defeat Pressure Meter) | `4909eac` | ✅ Shipped |
 | 23 | Agency & Conformity Shield (Milgram + Asch) | `46cdcf5` | ✅ Shipped |
-| 24 | Ideological Capture Detector (Third Wave) | — | 🔲 Planned |
-| 25 | Coalition Bias Detector (Robbers Cave) | — | 🔲 Planned |
-| 26 | Arbitrary Status Bias Detector (Blue Eyes / Brown Eyes) | — | 🔲 Planned |
+| 24 | Ideological Capture Detector (Third Wave) | `72174cd` | ✅ Shipped |
+| 25 | Coalition Bias Detector (Robbers Cave) | `5fe82b6` | ✅ Shipped |
+| 26 | Arbitrary Status Bias Detector (Blue Eyes / Brown Eyes) | `e783fe4` | ✅ Shipped |
