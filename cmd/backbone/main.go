@@ -604,12 +604,17 @@ func main() {
 		therapySkills := therapy.NewSkillRunner(therapyGen, therapyLog)
 		therapyABC := therapy.NewABCAuditor(therapyGen)
 		therapyChain := therapy.NewChainAnalyzer(therapyGen, 20)
+		therapySupervisor := therapy.NewSessionSupervisor(therapyLog, therapyGen, "data/therapy/session_report.json", 10)
+
+		// Wire observer: every TherapyEvent automatically feeds the SessionSupervisor
+		therapyLog.SetObserver(therapySupervisor.Ingest)
 
 		apiServer.TherapyLog = therapyLog
 		apiServer.TherapyDetect = therapyDetect
 		apiServer.TherapySkills = therapySkills
 		apiServer.TherapyABC = therapyABC
 		apiServer.TherapyChain = therapyChain
+		apiServer.TherapySupervisor = therapySupervisor
 
 		// Wire into GenerationService — therapy fires automatically on MetacogDetector HIGH anomaly
 		genService.Therapy = &service.TherapyKit{
@@ -620,7 +625,15 @@ func main() {
 			Log:    therapyLog,
 		}
 
-		log.Printf("[Therapy] Phase 15 Therapeutic Cognition Stack online — distortion detector, DBT skills, REBT auditor, chain analysis")
+		// Persist session report on clean shutdown
+		go func() {
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, os.Interrupt)
+			<-sigCh
+			therapySupervisor.Close()
+		}()
+
+		log.Printf("[Therapy] Phase 15 Therapeutic Cognition Stack online — distortion detector, DBT skills, REBT auditor, chain analysis, session supervisor")
 	}
 
 	go apiServer.Start()

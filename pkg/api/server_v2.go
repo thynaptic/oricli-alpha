@@ -134,6 +134,7 @@ type ServerV2 struct {
 	TherapyDetect  *therapy.DistortionDetector
 	TherapyABC     *therapy.ABCAuditor
 	TherapyChain   *therapy.ChainAnalyzer
+	TherapySupervisor *therapy.SessionSupervisor
 	TherapyLog     *therapy.EventLog
 }
 
@@ -539,6 +540,8 @@ func (s *ServerV2) setupRoutes() {
 			therapyRoutes.POST("/fast", s.handleTherapyFAST)
 			therapyRoutes.POST("/stop", s.handleTherapySTOP)
 			therapyRoutes.GET("/stats", s.handleTherapyStats)
+			therapyRoutes.GET("/formulation", s.handleTherapyFormulation)
+			therapyRoutes.POST("/formulation/refresh", s.handleTherapyFormulationRefresh)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -3976,4 +3979,30 @@ c.JSON(http.StatusOK, gin.H{
 "skill_counts":      skillCounts,
 "distortion_counts": distortionCounts,
 })
+}
+
+// GET /v1/therapy/formulation — current session case formulation
+func (s *ServerV2) handleTherapyFormulation(c *gin.Context) {
+if !s.therapyEnabled(c) {
+return
+}
+if s.TherapySupervisor == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "session supervisor not enabled"})
+return
+}
+f := s.TherapySupervisor.Formulation()
+c.JSON(http.StatusOK, f)
+}
+
+// POST /v1/therapy/formulation/refresh — force immediate formulation pass
+func (s *ServerV2) handleTherapyFormulationRefresh(c *gin.Context) {
+if !s.therapyEnabled(c) {
+return
+}
+if s.TherapySupervisor == nil {
+c.JSON(http.StatusServiceUnavailable, gin.H{"error": "session supervisor not enabled"})
+return
+}
+f := s.TherapySupervisor.ForceFormulation()
+c.JSON(http.StatusOK, f)
 }

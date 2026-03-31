@@ -17,10 +17,11 @@ const defaultEventLogSize = 200
 
 // EventLog is a thread-safe ring buffer of TherapyEvents.
 type EventLog struct {
-	mu      sync.RWMutex
-	entries []*TherapyEvent
-	maxSize int
-	seq     uint64
+	mu       sync.RWMutex
+	entries  []*TherapyEvent
+	maxSize  int
+	seq      uint64
+	observer func(TherapyEvent) // optional: called on every Append
 }
 
 // NewEventLog creates an EventLog with the given capacity.
@@ -34,13 +35,24 @@ func NewEventLog(maxSize int) *EventLog {
 // Append adds a TherapyEvent to the log.
 func (l *EventLog) Append(e *TherapyEvent) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	l.seq++
 	e.ID = fmt.Sprintf("te-%d", l.seq)
 	if len(l.entries) >= l.maxSize {
 		l.entries = l.entries[1:]
 	}
 	l.entries = append(l.entries, e)
+	obs := l.observer
+	l.mu.Unlock()
+	if obs != nil {
+		obs(*e)
+	}
+}
+
+// SetObserver registers a callback invoked on every Append (after the lock is released).
+func (l *EventLog) SetObserver(fn func(TherapyEvent)) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.observer = fn
 }
 
 // Recent returns the last n events.
