@@ -51,6 +51,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
+	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
@@ -170,6 +171,10 @@ type ServerV2 struct {
 	// Phase 21: Hope Circuit
 	HopeCircuit *hopecircuit.HopeCircuit
 	AgencyStats *hopecircuit.AgencyStats
+
+	// Phase 22: Social Defeat Recovery
+	DefeatMeter *socialdefeat.DefeatPressureMeter
+	DefeatStats *socialdefeat.DefeatStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -604,6 +609,9 @@ func (s *ServerV2) setupRoutes() {
 			// Phase 21: Hope Circuit
 			cognitionRoutes.GET("/hope/stats", s.handleHopeStats)
 			cognitionRoutes.POST("/hope/activate", s.handleHopeActivate)
+			// Phase 22: Social Defeat Recovery
+			cognitionRoutes.GET("/defeat/stats", s.handleDefeatStats)
+			cognitionRoutes.POST("/defeat/measure", s.handleDefeatMeasure)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -4308,4 +4316,34 @@ func (s *ServerV2) handleHopeActivate(c *gin.Context) {
 	}
 	activation := s.HopeCircuit.Activate(body.TopicClass)
 	c.JSON(200, activation)
+}
+
+// ─── Phase 22: Social Defeat Recovery handlers ───────────────────────────────
+
+func (s *ServerV2) handleDefeatStats(c *gin.Context) {
+	if s.DefeatStats == nil {
+		c.JSON(200, gin.H{"detections": 0, "total_scans": 0, "message": "Phase 22 not enabled"})
+		return
+	}
+	c.JSON(200, s.DefeatStats.Stats())
+}
+
+func (s *ServerV2) handleDefeatMeasure(c *gin.Context) {
+	if s.DefeatMeter == nil {
+		c.JSON(503, gin.H{"error": "Phase 22 not enabled"})
+		return
+	}
+	var body struct {
+		Messages   []map[string]string `json:"messages"`
+		TopicClass string              `json:"topic_class"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || len(body.Messages) == 0 {
+		c.JSON(400, gin.H{"error": "messages and topic_class required"})
+		return
+	}
+	if body.TopicClass == "" {
+		body.TopicClass = "general"
+	}
+	pressure := s.DefeatMeter.Measure(body.Messages, body.TopicClass)
+	c.JSON(200, pressure)
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
+	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
@@ -48,6 +49,7 @@ type GenerationService struct {
 	Rumination      *RuminationKit           // Phase 19: Rumination Detector
 	Mindset         *MindsetKit              // Phase 20: Growth Mindset Tracker
 	HopeCircuit     *HopeCircuitKit          // Phase 21: Learned Controllability
+	SocialDefeat    *SocialDefeatKit         // Phase 22: Social Defeat Recovery
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -76,6 +78,14 @@ type HopeCircuitKit struct {
 	Ledger  *hopecircuit.ControllabilityLedger
 	Circuit *hopecircuit.HopeCircuit
 	Stats   *hopecircuit.AgencyStats
+}
+
+// SocialDefeatKit groups Phase 22 components injected from main.go.
+type SocialDefeatKit struct {
+	Meter     *socialdefeat.DefeatPressureMeter
+	Detector  *socialdefeat.WithdrawalDetector
+	Recovery  *socialdefeat.RecoveryProtocol
+	Stats     *socialdefeat.DefeatStats
 }
 
 // DualProcessKit groups Phase 17 components injected from main.go.
@@ -496,8 +506,30 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 				s.Mindset.Stats.Record(signal, &reframe)
 				if reframe.Reframed {
 					log.Printf("[Mindset] P20 fixed-mindset phrase=%q — injecting %s reframe", reframe.Original, reframe.Technique)
-					// Prepend reframe prefix to the response so the generation model sees it on next turn
 					content = reframe.Replacement + content
+				}
+			}
+
+			// Phase 22: Social Defeat Recovery — scan draft for withdrawal under correction pressure
+			if s.SocialDefeat != nil {
+				if _, isRetry := options["_defeat_recovered"]; !isRetry {
+					topicClass := inferBidTaskClass(messages)
+					pressure := s.SocialDefeat.Meter.Measure(messages, topicClass)
+					signal := s.SocialDefeat.Detector.Detect(content, pressure)
+					recovery := s.SocialDefeat.Recovery.Recover(pressure, signal)
+					s.SocialDefeat.Stats.Record(pressure, signal, recovery)
+					if recovery.Injected {
+						log.Printf("[SocialDefeat] P22 withdrawal detected topic=%s tier=%s — technique=%s",
+							pressure.TopicClass, pressure.Tier, recovery.Technique)
+						recoveryMsg := map[string]string{"role": "system", "content": recovery.InjectedContext}
+						retryMsgs := append([]map[string]string{recoveryMsg}, messages...)
+						retryOpts := make(map[string]interface{})
+						for k, v := range options { retryOpts[k] = v }
+						retryOpts["_defeat_recovered"] = true
+						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
+							return retry, nil
+						}
+					}
 				}
 			}
 

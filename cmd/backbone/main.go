@@ -42,6 +42,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
+	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
@@ -745,6 +746,19 @@ func main() {
 		} else {
 			log.Printf("[HopeCircuit] Phase 21 skipped — requires Therapy kit (ORICLI_THERAPY_ENABLED=true)")
 		}
+	}
+
+	// ── Phase 22: Social Defeat Recovery (opt-in via ORICLI_SOCIALDEFEAT_ENABLED=true) ──
+	if os.Getenv("ORICLI_SOCIALDEFEAT_ENABLED") == "true" {
+		os.MkdirAll("data/socialdefeat", 0755)
+		sdMeter := socialdefeat.NewDefeatPressureMeter()
+		sdDetector := socialdefeat.NewWithdrawalDetector()
+		sdRecovery := socialdefeat.NewRecoveryProtocol()
+		sdStats := socialdefeat.NewDefeatStats("data/socialdefeat/stats.json")
+		genService.SocialDefeat = &service.SocialDefeatKit{Meter: sdMeter, Detector: sdDetector, Recovery: sdRecovery, Stats: sdStats}
+		apiServer.DefeatMeter = sdMeter
+		apiServer.DefeatStats = sdStats
+		log.Printf("[SocialDefeat] Phase 22 Social Defeat Recovery online — correction pressure meter, withdrawal detector, re-engagement protocol")
 	}
 
 	go apiServer.Start()

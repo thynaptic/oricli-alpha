@@ -74,6 +74,9 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/hope":
 		return runHope(client), true
 
+	case "/defeat":
+		return runDefeat(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -412,6 +415,7 @@ func renderHelp() string {
 		{"/ruminate", "Rumination Detector stats — loop detection rate + interrupt rate"},
 		{"/mindset", "Growth Mindset stats — per-topic mindset vectors (Dweck)"},
 		{"/hope", "Hope Circuit stats — agency activation rate + controllability evidence"},
+		{"/defeat", "Social Defeat Recovery stats — correction pressure + withdrawal detection"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
@@ -581,6 +585,42 @@ func runHope(c *Client) string {
 		sb.WriteString(fmt.Sprintf("  %s  %s\n",
 			styleKeyVal.Render(padRight("Activation Rate", 20)),
 			color.Render(fmt.Sprintf("%.0f%%", ar*100))))
+	}
+	return sb.String()
+}
+
+func runDefeat(c *Client) string {
+	data, err := c.GetDefeatStats()
+	if err != nil {
+		return styleDanger.Render("✗ " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Social Defeat Recovery (Social Defeat Model + Monster Study)") + "\n")
+	if total, _ := data["total_scans"].(float64); total == 0 {
+		sb.WriteString(styleDim.Render("  No data yet\n"))
+		return sb.String()
+	}
+	fields := []struct{ key, label string }{
+		{"total_scans", "Total Scans"},
+		{"detections", "Defeat Signals"},
+		{"recoveries", "Recoveries"},
+		{"detection_rate", "Detection Rate"},
+		{"recovery_rate", "Recovery Rate"},
+	}
+	for _, f := range fields {
+		switch v := data[f.key].(type) {
+		case float64:
+			var s string
+			if f.key == "detection_rate" || f.key == "recovery_rate" {
+				s = fmt.Sprintf("%.0f%%", v*100)
+			} else {
+				s = fmt.Sprintf("%.0f", v)
+			}
+			color := styleDim
+			if (f.key == "detection_rate" && v > 0.1) { color = styleWarning }
+			if (f.key == "recovery_rate" && v > 0.5) { color = styleSuccess }
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight(f.label, 18)), color.Render(s)))
+		}
 	}
 	return sb.String()
 }

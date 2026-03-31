@@ -320,3 +320,12 @@ func (c *Client) GetHopeStats() (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetDefeatStats fetches Social Defeat (P22) stats from the server.
+func (c *Client) GetDefeatStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/defeat/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
