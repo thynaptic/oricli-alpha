@@ -65,6 +65,12 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/cogload":
 		return runCogLoad(client), true
 
+	case "/ruminate":
+		return runRumination(client), true
+
+	case "/mindset":
+		return runMindset(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -400,6 +406,8 @@ func renderHelp() string {
 		{"/compute", "Compute bid stats + recent governor decisions"},
 		{"/process", "Dual Process stats — S1/S2 mismatch rates per topic class"},
 		{"/cogload", "Cognitive Load stats — avg load components + surgery rate"},
+		{"/ruminate", "Rumination Detector stats — loop detection rate + interrupt rate"},
+		{"/mindset", "Growth Mindset stats — per-topic mindset vectors (Dweck)"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
@@ -449,4 +457,94 @@ func padRight(s string, n int) string {
 		return s
 	}
 	return s + strings.Repeat(" ", n-len(s))
+}
+
+func runRumination(c *Client) string {
+	data, err := c.GetRuminationStats()
+	if err != nil {
+		return styleDanger.Render("✗ " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Rumination Detector (ACT / Temporal Interruption)") + "\n")
+	if total, _ := data["total_scans"].(float64); total == 0 {
+		sb.WriteString(styleDim.Render("  No data yet\n"))
+		return sb.String()
+	}
+	fields := []struct{ key, label string }{
+		{"total_scans", "Total Scans"},
+		{"detections", "Detections"},
+		{"interruptions", "Interruptions"},
+	}
+	for _, f := range fields {
+		if v, ok := data[f.key].(float64); ok {
+			sb.WriteString(fmt.Sprintf("  %s  %s\n",
+				styleKeyVal.Render(padRight(f.label, 18)),
+				styleDim.Render(fmt.Sprintf("%.0f", v))))
+		}
+	}
+	if dr, ok := data["detection_rate"].(float64); ok {
+		sb.WriteString(fmt.Sprintf("  %s  %s\n",
+			styleKeyVal.Render(padRight("Detection Rate", 18)),
+			styleAccent.Render(fmt.Sprintf("%.0f%%", dr*100))))
+	}
+	if ir, ok := data["interrupt_rate"].(float64); ok {
+		sb.WriteString(fmt.Sprintf("  %s  %s\n",
+			styleKeyVal.Render(padRight("Interrupt Rate", 18)),
+			styleSuccess.Render(fmt.Sprintf("%.0f%%", ir*100))))
+	}
+	return sb.String()
+}
+
+func runMindset(c *Client) string {
+	data, err := c.GetMindsetStats()
+	if err != nil {
+		return styleDanger.Render("✗ " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Growth Mindset Tracker (Dweck)") + "\n")
+	if total, _ := data["total_scans"].(float64); total == 0 {
+		sb.WriteString(styleDim.Render("  No data yet\n"))
+		// Still try to show vectors
+	}
+	fields := []struct{ key, label string }{
+		{"total_scans", "Total Scans"},
+		{"detections", "Fixed Signals"},
+		{"reframes", "Reframes"},
+		{"detection_rate", "Detection Rate"},
+		{"reframe_rate", "Reframe Rate"},
+	}
+	for _, f := range fields {
+		switch v := data[f.key].(type) {
+		case float64:
+			var s string
+			if f.key == "detection_rate" || f.key == "reframe_rate" {
+				s = fmt.Sprintf("%.0f%%", v*100)
+			} else {
+				s = fmt.Sprintf("%.0f", v)
+			}
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight(f.label, 18)), styleDim.Render(s)))
+		}
+	}
+	// Show vectors
+	vdata, verr := c.GetMindsetVectors()
+	if verr == nil {
+		if vecs, ok := vdata["vectors"].([]interface{}); ok && len(vecs) > 0 {
+			sb.WriteString(styleLabel.Render("\n  Topic Vectors:") + "\n")
+			for _, vi := range vecs {
+				if vm, ok := vi.(map[string]interface{}); ok {
+					topic, _ := vm["topic_class"].(string)
+					tier, _ := vm["tier"].(string)
+					score, _ := vm["growth_score"].(float64)
+					color := styleDim
+					if tier == "growth" { color = styleSuccess }
+					if tier == "fixed" { color = styleDanger }
+					sb.WriteString(fmt.Sprintf("    %s  %s  %s\n",
+						styleDim.Render(padRight(topic, 20)),
+						color.Render(padRight(tier, 8)),
+						styleDim.Render(fmt.Sprintf("%.2f", score))))
+				}
+			}
+		}
+	}
+	return sb.String()
 }

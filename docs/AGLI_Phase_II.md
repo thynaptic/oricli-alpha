@@ -420,7 +420,7 @@ Whatever Phase II becomes, it must respect these constraints from Phase I:
 | — | Oricli CLI (interactive REPL + one-shot mode) | `6e1746e` | ✅ Shipped |
 | 17 | Dual Process Engine (System 1 / System 2) | `2b87798` | ✅ Shipped |
 | 18 | Cognitive Load Manager | pending | ✅ Shipped |
-| 19 | Rumination Detector + Temporal Interruption | — | 🔲 Whiteboard |
-| 20 | Growth Mindset Tracker (Dweck) | — | 🔲 Whiteboard |
+| 19 | Rumination Detector + Temporal Interruption | pending | ✅ Shipped |
+| 20 | Growth Mindset Tracker (Dweck) | pending | ✅ Shipped |
 
 _Phase II trajectory complete as of `632b5d1` (2026-03-31). Phase 17–20 are the next cognitive science expansion._

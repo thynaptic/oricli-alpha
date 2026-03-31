@@ -284,3 +284,30 @@ func (c *Client) GetCogLoadStats() (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetRuminationStats fetches rumination detector stats from the server.
+func (c *Client) GetRuminationStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/rumination/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetMindsetStats fetches growth mindset stats from the server.
+func (c *Client) GetMindsetStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/mindset/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetMindsetVectors fetches per-topic mindset vectors from the server.
+func (c *Client) GetMindsetVectors() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/mindset/vectors", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

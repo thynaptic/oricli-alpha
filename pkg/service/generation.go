@@ -14,6 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thynaptic/oricli-go/pkg/cogload"
+	"github.com/thynaptic/oricli-go/pkg/rumination"
+	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
 	"github.com/thynaptic/oricli-go/pkg/metacog"
@@ -40,6 +43,30 @@ type GenerationService struct {
 	BidGovernor     *compute.BidGovernor     // Phase 12: Sovereign Compute Bidding
 	FeedbackLedger  *compute.FeedbackLedger  // Phase 12: outcome feedback → confidence EMA
 	DualProcess     *DualProcessKit          // Phase 17: System 1 / System 2 process classifier
+	CogLoad         *CogLoadKit              // Phase 18: Cognitive Load Manager
+	Rumination      *RuminationKit           // Phase 19: Rumination Detector
+	Mindset         *MindsetKit              // Phase 20: Growth Mindset Tracker
+}
+
+// CogLoadKit groups Phase 18 components injected from main.go.
+type CogLoadKit struct {
+	Meter   *cogload.LoadMeter
+	Surgery *cogload.ContextSurgery
+	Stats   *cogload.CogLoadStats
+}
+
+// RuminationKit groups Phase 19 components injected from main.go.
+type RuminationKit struct {
+	Tracker     *rumination.RuminationTracker
+	Interruptor *rumination.TemporalInterruptor
+	Stats       *rumination.RuminationStats
+}
+
+// MindsetKit groups Phase 20 components injected from main.go.
+type MindsetKit struct {
+	Tracker  *mindset.MindsetTracker
+	Reframer *mindset.GrowthReframer
+	Stats    *mindset.MindsetStats
 }
 
 // DualProcessKit groups Phase 17 components injected from main.go.
@@ -282,6 +309,24 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
 	}
+
+	// Phase 18: Cognitive Load Manager — measure and surgically trim before generation
+	if s.CogLoad != nil {
+		if _, isRetry := options["_cogload_trimmed"]; !isRetry {
+			profile := s.CogLoad.Meter.Measure(messages)
+			if profile.Tier >= cogload.LoadElevated {
+				trimmed, surgery := s.CogLoad.Surgery.Trim(messages, profile)
+				s.CogLoad.Stats.Record(profile, &surgery)
+				if surgery.RemovedMsgs > 0 || surgery.CharsRemoved > 0 {
+					log.Printf("[CogLoad] %s load (%.2f) — surgery: %v", profile.TierLabel, profile.TotalLoad, surgery.Actions)
+					options["_cogload_trimmed"] = true
+					messages = trimmed
+				}
+			} else {
+				s.CogLoad.Stats.Record(profile, nil)
+			}
+		}
+	}
 	
 	// Prepare messages for Ollama (including potential images in the last message)
 	ollamaMessages := make([]map[string]interface{}, len(messages))
@@ -394,6 +439,43 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 				}
 			}
 
+			// Phase 19: Rumination Detector — scan window for low-velocity topic loops
+			if s.Rumination != nil {
+				if _, isRetry := options["_rum_scanned"]; !isRetry {
+					signal := s.Rumination.Tracker.Detect(messages)
+					interrupt := s.Rumination.Interruptor.Inject(signal)
+					s.Rumination.Stats.Record(signal, &interrupt)
+					if interrupt.Injected {
+						log.Printf("[Rumination] P19 loop detected topic=%s occ=%d vel=%.2f — technique=%s",
+							signal.TopicKey, signal.Occurrences, signal.AvgVelocity, interrupt.Technique)
+						injMsg := map[string]string{"role": "system", "content": interrupt.InjectedPrefix}
+						retryMsgs := append([]map[string]string{injMsg}, messages...)
+						retryOpts := make(map[string]interface{})
+						for k, v := range options { retryOpts[k] = v }
+						retryOpts["_rum_scanned"] = true
+						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
+							return retry, nil
+						}
+					}
+				}
+			}
+
+			// Phase 20: Growth Mindset — scan draft for fixed-mindset language
+			if s.Mindset != nil {
+				topicClass := inferBidTaskClass(messages)
+				vector := s.Mindset.Tracker.Get(topicClass)
+				langScore := mindset.ScoreLanguage(content)
+				s.Mindset.Tracker.Update(topicClass, -1, langScore)
+				signal := s.Mindset.Reframer.Scan(content, topicClass, vector)
+				reframe := s.Mindset.Reframer.Reframe(signal)
+				s.Mindset.Stats.Record(signal, &reframe)
+				if reframe.Reframed {
+					log.Printf("[Mindset] P20 fixed-mindset phrase=%q — injecting %s reframe", reframe.Original, reframe.Technique)
+					// Prepend reframe prefix to the response so the generation model sees it on next turn
+					content = reframe.Replacement + content
+				}
+			}
+
 			return map[string]interface{}{"success": true, "text": content, "model": model, "method": "go_ollama_chat", "confidence": 0.95}, nil
 		}
 	}
@@ -407,6 +489,24 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 	model := s.DefaultModel
 	useResearch := false
 	useCode := false
+
+	// Phase 18: Cognitive Load Manager — measure and trim before routing
+	if s.CogLoad != nil {
+		if _, isRetry := options["_cogload_trimmed"]; !isRetry {
+			profile := s.CogLoad.Meter.Measure(messages)
+			if profile.Tier >= cogload.LoadElevated {
+				trimmed, surgery := s.CogLoad.Surgery.Trim(messages, profile)
+				s.CogLoad.Stats.Record(profile, &surgery)
+				if surgery.RemovedMsgs > 0 || surgery.CharsRemoved > 0 {
+					log.Printf("[CogLoad] %s load (%.2f) — surgery: %v", profile.TierLabel, profile.TotalLoad, surgery.Actions)
+					options["_cogload_trimmed"] = true
+					messages = trimmed
+				}
+			} else {
+				s.CogLoad.Stats.Record(profile, nil)
+			}
+		}
+	}
 
 	// ── Sovereign Compute Bidding (Phase 12) — select best tier via market ──
 	// BidGovernor replaces the static complexity threshold when wired in.

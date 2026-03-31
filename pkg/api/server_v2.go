@@ -48,6 +48,9 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/audit"
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/chronos"
+	"github.com/thynaptic/oricli-go/pkg/cogload"
+	"github.com/thynaptic/oricli-go/pkg/rumination"
+	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
 	"github.com/thynaptic/oricli-go/pkg/science"
@@ -150,6 +153,18 @@ type ServerV2 struct {
 	// Phase 17: Dual Process Engine
 	DualProcessClassifier *dualprocess.ProcessClassifier
 	DualProcessStats      *dualprocess.ProcessStats
+
+	// Phase 18: Cognitive Load Manager
+	CogLoadMeter *cogload.LoadMeter
+	CogLoadStats *cogload.CogLoadStats
+
+	// Phase 19: Rumination Detector
+	RuminationTracker  *rumination.RuminationTracker
+	RuminationStats    *rumination.RuminationStats
+
+	// Phase 20: Growth Mindset Tracker
+	MindsetTracker *mindset.MindsetTracker
+	MindsetStats   *mindset.MindsetStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -572,6 +587,15 @@ func (s *ServerV2) setupRoutes() {
 		{
 			cognitionRoutes.GET("/process/stats", s.handleProcessStats)
 			cognitionRoutes.POST("/process/classify", s.handleProcessClassify)
+			// Phase 18: Cognitive Load
+			cognitionRoutes.GET("/load/stats", s.handleCogLoadStats)
+			cognitionRoutes.POST("/load/measure", s.handleCogLoadMeasure)
+			// Phase 19: Rumination Detector
+			cognitionRoutes.GET("/rumination/stats", s.handleRuminationStats)
+			cognitionRoutes.POST("/rumination/detect", s.handleRuminationDetect)
+			// Phase 20: Growth Mindset
+			cognitionRoutes.GET("/mindset/stats", s.handleMindsetStats)
+			cognitionRoutes.GET("/mindset/vectors", s.handleMindsetVectors)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -4170,4 +4194,84 @@ func (s *ServerV2) handleProcessClassify(c *gin.Context) {
 		"contradiction": demand.Contradiction,
 		"reasons":       demand.Reasons,
 	})
+}
+
+// ── Phase 18: Cognitive Load Manager handlers ─────────────────────────────────
+
+func (s *ServerV2) handleCogLoadStats(c *gin.Context) {
+	if s.CogLoadStats == nil {
+		c.JSON(503, gin.H{"error": "cognitive load manager not enabled"})
+		return
+	}
+	c.JSON(200, s.CogLoadStats.Stats())
+}
+
+func (s *ServerV2) handleCogLoadMeasure(c *gin.Context) {
+	if s.CogLoadMeter == nil {
+		c.JSON(503, gin.H{"error": "cognitive load manager not enabled"})
+		return
+	}
+	var req struct {
+		Messages []map[string]string `json:"messages"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	profile := s.CogLoadMeter.Measure(req.Messages)
+	c.JSON(200, gin.H{
+		"tier":         profile.TierLabel,
+		"total_load":   profile.TotalLoad,
+		"intrinsic":    profile.Intrinsic,
+		"extraneous":   profile.Extraneous,
+		"germane":      profile.Germane,
+		"reasons":      profile.Reasons,
+		"message_count": profile.MessageCount,
+		"total_chars":   profile.TotalChars,
+	})
+}
+
+// ─── Phase 19: Rumination Detector handlers ──────────────────────────────────
+
+func (s *ServerV2) handleRuminationStats(c *gin.Context) {
+	if s.RuminationStats == nil {
+		c.JSON(200, gin.H{"detections": 0, "total_scans": 0, "detection_rate": 0, "interrupt_rate": 0, "message": "Phase 19 not enabled"})
+		return
+	}
+	c.JSON(200, s.RuminationStats.Stats())
+}
+
+func (s *ServerV2) handleRuminationDetect(c *gin.Context) {
+	if s.RuminationTracker == nil {
+		c.JSON(503, gin.H{"error": "Phase 19 not enabled"})
+		return
+	}
+	var body struct {
+		Messages []map[string]string `json:"messages"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || len(body.Messages) == 0 {
+		c.JSON(400, gin.H{"error": "messages required"})
+		return
+	}
+	signal := s.RuminationTracker.Detect(body.Messages)
+	c.JSON(200, signal)
+}
+
+// ─── Phase 20: Growth Mindset handlers ───────────────────────────────────────
+
+func (s *ServerV2) handleMindsetStats(c *gin.Context) {
+	if s.MindsetStats == nil {
+		c.JSON(200, gin.H{"detections": 0, "total_scans": 0, "detection_rate": 0, "message": "Phase 20 not enabled"})
+		return
+	}
+	c.JSON(200, s.MindsetStats.Stats())
+}
+
+func (s *ServerV2) handleMindsetVectors(c *gin.Context) {
+	if s.MindsetTracker == nil {
+		c.JSON(503, gin.H{"error": "Phase 20 not enabled"})
+		return
+	}
+	vectors := s.MindsetTracker.All()
+	c.JSON(200, gin.H{"vectors": vectors, "count": len(vectors)})
 }

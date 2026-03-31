@@ -40,6 +40,8 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
 	"github.com/thynaptic/oricli-go/pkg/cogload"
+	"github.com/thynaptic/oricli-go/pkg/rumination"
+	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
 )
@@ -697,6 +699,30 @@ func main() {
 		apiServer.CogLoadMeter = clMeter
 		apiServer.CogLoadStats = clStats
 		log.Printf("[CogLoad] Phase 18 Cognitive Load Manager online — CLT meter, context surgery, load stats")
+	}
+
+	// ── Phase 19: Rumination Detector (opt-in via ORICLI_RUMINATION_ENABLED=true) ──
+	if os.Getenv("ORICLI_RUMINATION_ENABLED") == "true" {
+		os.MkdirAll("data/rumination", 0755)
+		rumTracker := rumination.NewRuminationTracker()
+		rumInterruptor := rumination.NewTemporalInterruptor()
+		rumStats := rumination.NewRuminationStats("data/rumination/stats.json")
+		genService.Rumination = &service.RuminationKit{Tracker: rumTracker, Interruptor: rumInterruptor, Stats: rumStats}
+		apiServer.RuminationTracker = rumTracker
+		apiServer.RuminationStats = rumStats
+		log.Printf("[Rumination] Phase 19 Rumination Detector online — epistemic velocity meter, ACT defusion injection")
+	}
+
+	// ── Phase 20: Growth Mindset Tracker (opt-in via ORICLI_MINDSET_ENABLED=true) ──
+	if os.Getenv("ORICLI_MINDSET_ENABLED") == "true" {
+		os.MkdirAll("data/mindset", 0755)
+		msTracker := mindset.NewMindsetTracker("data/mindset/vectors.json")
+		msReframer := mindset.NewGrowthReframer()
+		msStats := mindset.NewMindsetStats("data/mindset/stats.json")
+		genService.Mindset = &service.MindsetKit{Tracker: msTracker, Reframer: msReframer, Stats: msStats}
+		apiServer.MindsetTracker = msTracker
+		apiServer.MindsetStats = msStats
+		log.Printf("[Mindset] Phase 20 Growth Mindset Tracker online — Dweck growth/fixed classifier, not-yet reframer")
 	}
 
 	go apiServer.Start()
