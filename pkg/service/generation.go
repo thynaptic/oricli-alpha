@@ -37,14 +37,16 @@ type GenerationService struct {
 	Therapy         *TherapyKit              // Phase 15: DBT/CBT/REBT therapeutic cognition stack
 }
 
-// TherapyKit groups Phase 15 components injected from main.go.
-// Using a wrapper struct avoids a large number of optional fields.
+// TherapyKit groups Phase 15+16 components injected from main.go.
 type TherapyKit struct {
-	Skills  *therapy.SkillRunner
-	Detect  *therapy.DistortionDetector
-	ABC     *therapy.ABCAuditor
-	Chain   *therapy.ChainAnalyzer
-	Log     *therapy.EventLog
+	Skills      *therapy.SkillRunner
+	Detect      *therapy.DistortionDetector
+	ABC         *therapy.ABCAuditor
+	Chain       *therapy.ChainAnalyzer
+	Log         *therapy.EventLog
+	Helpless    *therapy.HelplessnessDetector   // Phase 16
+	Mastery     *therapy.MasteryLog             // Phase 16
+	Retrainer   *therapy.AttributionalRetrainer // Phase 16
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -301,16 +303,16 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 	}
 	if msg, ok := data["message"].(map[string]interface{}); ok {
 		if content, ok := msg["content"].(string); ok {
+			promptForCheck := ""
+			if len(messages) > 0 {
+				promptForCheck = messages[len(messages)-1]["content"]
+			}
+
+			// Phase 15: MetacogDetector HIGH anomaly → therapy augmented retry
 			if s.MetacogDetector != nil {
-				// Derive a representative prompt from the last user message
-				promptForCheck := ""
-				if len(messages) > 0 {
-					promptForCheck = messages[len(messages)-1]["content"]
-				}
 				if evt := s.MetacogDetector.Check(promptForCheck, content); evt != nil && evt.Severity == "HIGH" {
 					log.Printf("[Metacog] %s in Chat — retrying with self-reflection prefix", evt.Type)
 					therapyCtx := s.therapyAugment(promptForCheck, content, evt.ID, string(evt.Type))
-					// Prepend self-reflection as a new system message + replay conversation
 					reflectContent := metacog.SelfReflectPrompt(evt) + therapyCtx
 					reflectMsg := map[string]string{"role": "system", "content": reflectContent}
 					retryMsgs := append([]map[string]string{reflectMsg}, messages...)
@@ -318,14 +320,37 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 					for k, v := range options {
 						retryOpts[k] = v
 					}
-					retryOpts["_metacog_retry"] = true // prevent infinite recursion
+					retryOpts["_metacog_retry"] = true
 					if _, isRetry := options["_metacog_retry"]; !isRetry {
 						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
+							s.recordMastery(promptForCheck, true)
 							return retry, nil
 						}
 					}
 				}
 			}
+
+			// Phase 16: Learned helplessness check — fires on refusal language
+			// Only runs when NOT already in a retry (prevent double-intervention)
+			if _, isRetry := options["_metacog_retry"]; !isRetry {
+				if signal := s.helplessnessCheck(promptForCheck, content); signal != nil {
+					log.Printf("[Helplessness] detected on topic class %s (rate %.0f%%) — retraining", signal.TopicClass, signal.HistoricalRate*100)
+					retrainCtx := s.Therapy.Retrainer.Retrain(signal)
+					retrainMsg := map[string]string{"role": "system", "content": retrainCtx}
+					retryMsgs := append([]map[string]string{retrainMsg}, messages...)
+					retryOpts := make(map[string]interface{})
+					for k, v := range options {
+						retryOpts[k] = v
+					}
+					retryOpts["_metacog_retry"] = true
+					if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
+						s.recordMastery(promptForCheck, true)
+						return retry, nil
+					}
+				}
+			}
+
+			s.recordMastery(promptForCheck, true)
 			return map[string]interface{}{"success": true, "text": content, "model": model, "method": "go_ollama_chat", "confidence": 0.95}, nil
 		}
 	}
@@ -691,4 +716,22 @@ return "Attribute causes accurately. Avoid taking on responsibility that belongs
 default:
 return "Apply Describe-No-Judge: state observations without evaluative framing."
 }
+}
+
+// helplessnessCheck runs Phase 16 learned helplessness detection on a draft response.
+// Returns nil if therapy kit not wired or no signal detected.
+func (s *GenerationService) helplessnessCheck(query, draft string) *therapy.HelplessnessSignal {
+if s.Therapy == nil || s.Therapy.Helpless == nil {
+return nil
+}
+return s.Therapy.Helpless.Check(query, draft)
+}
+
+// recordMastery logs a completion to the MasteryLog for future helplessness detection.
+func (s *GenerationService) recordMastery(query string, success bool) {
+if s.Therapy == nil || s.Therapy.Mastery == nil {
+return
+}
+topicClass := therapy.InferTopicClass(query)
+s.Therapy.Mastery.Record(topicClass, query, success)
 }

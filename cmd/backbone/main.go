@@ -625,6 +625,20 @@ func main() {
 			Log:    therapyLog,
 		}
 
+		// Phase 16: Learned Helplessness Prevention
+		masteryLog := therapy.NewMasteryLog(500, "data/therapy/mastery_log.json")
+		helplessDetect := therapy.NewHelplessnessDetector(masteryLog, therapySupervisor)
+		helplessRetrain := therapy.NewAttributionalRetrainer()
+
+		apiServer.TherapyMastery = masteryLog
+		apiServer.TherapyHelpless = helplessDetect
+		apiServer.TherapyRetrainer = helplessRetrain
+
+		// Inject into TherapyKit so GenerationService has access
+		genService.Therapy.Mastery = masteryLog
+		genService.Therapy.Helpless = helplessDetect
+		genService.Therapy.Retrainer = helplessRetrain
+
 		// Persist session report on clean shutdown
 		go func() {
 			sigCh := make(chan os.Signal, 1)
@@ -633,7 +647,7 @@ func main() {
 			therapySupervisor.Close()
 		}()
 
-		log.Printf("[Therapy] Phase 15 Therapeutic Cognition Stack online — distortion detector, DBT skills, REBT auditor, chain analysis, session supervisor")
+		log.Printf("[Therapy] Phase 15+16 Therapeutic Cognition Stack online — distortion detector, DBT skills, REBT auditor, chain analysis, session supervisor, learned helplessness prevention")
 	}
 
 	go apiServer.Start()

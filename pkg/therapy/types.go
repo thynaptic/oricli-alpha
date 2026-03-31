@@ -164,3 +164,43 @@ type SycophancySignal struct {
 	PushbackPhrase string  `json:"pushback_phrase"` // what the user said
 	ModelWavering  bool    `json:"model_wavering"`  // was the model reversing a correct position?
 }
+
+// ---------------------------------------------------------------------------
+// Phase 16 — Learned Helplessness Prevention
+// ---------------------------------------------------------------------------
+
+// MasteryEntry records a single successful completion keyed by topic class.
+// These form the evidence base that counters learned helplessness signals.
+type MasteryEntry struct {
+	ID         string    `json:"id"`
+	At         time.Time `json:"at"`
+	TopicClass string    `json:"topic_class"` // intent type or keyword cluster
+	QueryClip  string    `json:"query_clip"`  // first 100 chars of query
+	Successful bool      `json:"successful"`
+}
+
+// HelplessnessSignal records a detected learned helplessness pattern.
+// Fires when a draft response contains refusal language on a topic class
+// where the system has a positive historical success rate.
+type HelplessnessSignal struct {
+	Detected        bool    `json:"detected"`
+	Confidence      float64 `json:"confidence"`
+	RefusalPhrase   string  `json:"refusal_phrase"`   // matched refusal text
+	TopicClass      string  `json:"topic_class"`      // inferred topic class
+	HistoricalRate  float64 `json:"historical_rate"`  // MasteryLog success rate for this class
+	MasteryCount    int     `json:"mastery_count"`    // number of prior successes
+	Attribution3P   Attribution3P `json:"attribution_3p"` // Seligman 3P analysis
+}
+
+// Attribution3P is Seligman's Explanatory Style applied to an AI refusal.
+// Each dimension is the HELPLESS attribution being challenged.
+type Attribution3P struct {
+	// Permanence: "always fails" (helpless) vs "failed this time" (resilient)
+	PermanenceChallenge string `json:"permanence_challenge"`
+	// Pervasiveness: "can't do this class" (helpless) vs "specific instance" (resilient)
+	PervasivenessChallenge string `json:"pervasiveness_challenge"`
+	// Personalization: "I am inherently limited" (helpless) vs "circumstances" (resilient)
+	PersonalizationChallenge string `json:"personalization_challenge"`
+	// MasteryEvidence: prior successes surfaced as counter-evidence
+	MasteryEvidence string `json:"mastery_evidence"`
+}

@@ -130,12 +130,16 @@ type ServerV2 struct {
 	// ScienceDaemon: Phase 10 Active Science
 	ScienceDaemon *science.ScienceDaemon
 	// TherapyKit: Phase 15 Therapeutic Cognition Stack
-	TherapySkills  *therapy.SkillRunner
-	TherapyDetect  *therapy.DistortionDetector
-	TherapyABC     *therapy.ABCAuditor
-	TherapyChain   *therapy.ChainAnalyzer
+	TherapySkills     *therapy.SkillRunner
+	TherapyDetect     *therapy.DistortionDetector
+	TherapyABC        *therapy.ABCAuditor
+	TherapyChain      *therapy.ChainAnalyzer
 	TherapySupervisor *therapy.SessionSupervisor
-	TherapyLog     *therapy.EventLog
+	TherapyLog        *therapy.EventLog
+	// Phase 16: Learned Helplessness Prevention
+	TherapyHelpless  *therapy.HelplessnessDetector
+	TherapyMastery   *therapy.MasteryLog
+	TherapyRetrainer *therapy.AttributionalRetrainer
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -542,6 +546,10 @@ func (s *ServerV2) setupRoutes() {
 			therapyRoutes.GET("/stats", s.handleTherapyStats)
 			therapyRoutes.GET("/formulation", s.handleTherapyFormulation)
 			therapyRoutes.POST("/formulation/refresh", s.handleTherapyFormulationRefresh)
+			// Phase 16: Learned Helplessness Prevention
+			therapyRoutes.GET("/mastery", s.handleTherapyMastery)
+			therapyRoutes.POST("/helplessness/check", s.handleTherapyHelplessnessCheck)
+			therapyRoutes.GET("/helplessness/stats", s.handleTherapyHelplessnessStats)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
 	}
@@ -4005,4 +4013,74 @@ return
 }
 f := s.TherapySupervisor.ForceFormulation()
 c.JSON(http.StatusOK, f)
+}
+
+
+// GET /v1/therapy/mastery — mastery log statistics by topic class
+func (s *ServerV2) handleTherapyMastery(c *gin.Context) {
+	if s.TherapyMastery == nil {
+		c.JSON(503, gin.H{"error": "mastery log not initialised"})
+		return
+	}
+	topicClass := c.Query("class")
+	if topicClass != "" {
+		rate := s.TherapyMastery.SuccessRate(topicClass)
+		recent := s.TherapyMastery.RecentSuccesses(topicClass, 10)
+		c.JSON(200, gin.H{
+			"topic_class":  topicClass,
+			"success_rate": rate,
+			"recent":       recent,
+		})
+		return
+	}
+	c.JSON(200, gin.H{"stats": s.TherapyMastery.StatsByClass()})
+}
+
+// POST /v1/therapy/helplessness/check — manual helplessness check
+// Body: { "query": "...", "draft": "..." }
+func (s *ServerV2) handleTherapyHelplessnessCheck(c *gin.Context) {
+	if s.TherapyHelpless == nil {
+		c.JSON(503, gin.H{"error": "helplessness detector not initialised"})
+		return
+	}
+	var body struct {
+		Query string `json:"query"`
+		Draft string `json:"draft"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	signal := s.TherapyHelpless.Check(body.Query, body.Draft)
+	if signal == nil {
+		c.JSON(200, gin.H{"detected": false})
+		return
+	}
+	c.JSON(200, gin.H{
+		"detected":        true,
+		"topic_class":     signal.TopicClass,
+		"historical_rate": signal.HistoricalRate,
+		"refusal_phrase":  signal.RefusalPhrase,
+		"three_p":         signal.Attribution3P,
+	})
+}
+
+// GET /v1/therapy/helplessness/stats — signal counts from session supervisor
+func (s *ServerV2) handleTherapyHelplessnessStats(c *gin.Context) {
+	if s.TherapySupervisor == nil {
+		c.JSON(503, gin.H{"error": "session supervisor not initialised"})
+		return
+	}
+	f := s.TherapySupervisor.Formulation()
+	schemaActive := false
+	for _, schema := range f.ActiveSchemas {
+		if schema.Schema == therapy.SchemaLearnedHelplessness {
+			schemaActive = true
+			break
+		}
+	}
+	c.JSON(200, gin.H{
+		"helplessness_count": f.HelplessnessCount,
+		"schema_active":      schemaActive,
+	})
 }

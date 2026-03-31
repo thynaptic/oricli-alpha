@@ -29,6 +29,7 @@ const (
 	SchemaOvergeneralizationLoop SchemaName = "OVERGENERALIZATION_LOOP" // Overgeneralization recurring
 	SchemaContextCollapse        SchemaName = "CONTEXT_COLLAPSE"        // high PLEASE + context load anomalies
 	SchemaPositiveDiscount       SchemaName = "POSITIVE_DISCOUNT"       // DisqualifyingPositive + MentalFilter
+	SchemaLearnedHelplessness    SchemaName = "LEARNED_HELPLESSNESS"    // HelplessnessDetector fires >= 3
 	SchemaNone                   SchemaName = "NONE"
 )
 
@@ -56,6 +57,7 @@ type SessionFormulation struct {
 	DistortionFreq     map[DistortionType]int         `json:"distortion_freq"`
 	SkillFreq          map[SkillType]int              `json:"skill_freq"`
 	ReformedCount      int                            `json:"reformed_count"`
+	HelplessnessCount  int                            `json:"helplessness_count"` // Phase 16
 	ActiveSchemas      []SchemaPattern                `json:"active_schemas"`
 	InterventionPlan   string                         `json:"intervention_plan"`
 	PriorSchemas       []SchemaPattern                `json:"prior_schemas"` // loaded from last SessionReport
@@ -174,6 +176,14 @@ func (s *SessionSupervisor) Ingest(evt TherapyEvent) {
 }
 
 // Formulation returns a snapshot of the current session formulation.
+// RecordHelplessness increments the helplessness signal counter for schema detection.
+// Called from HelplessnessDetector whenever a signal fires.
+func (s *SessionSupervisor) RecordHelplessness() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.formulation.HelplessnessCount++
+}
+
 func (s *SessionSupervisor) Formulation() SessionFormulation {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -282,6 +292,14 @@ func (s *SessionSupervisor) detectSchemas(f *SessionFormulation) []SchemaPattern
 		})
 	}
 
+	// LearnedHelplessness: HelplessnessDetector fired >= 3 times this session
+	if f.HelplessnessCount >= 3 {
+		schemas = append(schemas, SchemaPattern{
+			Schema: SchemaLearnedHelplessness, Confidence: clampConf(float64(f.HelplessnessCount) / 6.0),
+			Count: f.HelplessnessCount, FirstSeen: f.StartedAt, LastSeen: now,
+		})
+	}
+
 	// Sort by confidence descending
 	sort.Slice(schemas, func(i, j int) bool {
 		return schemas[i].Confidence > schemas[j].Confidence
@@ -330,6 +348,10 @@ func (s *SessionSupervisor) prioritySkillsFor(active, prior []SchemaPattern) []S
 		case SchemaPositiveDiscount:
 			add(SkillDescribeNoJudge)
 			add(SkillOppositeAction)
+		case SchemaLearnedHelplessness:
+			add(SkillCheckFacts)
+			add(SkillOppositeAction)
+			add(SkillBeginnersMind)
 		}
 	}
 
@@ -497,6 +519,8 @@ func schemaIntervention(s SchemaName) string {
 		return "Pre-activate PLEASE health gate. Context pressure is repeatedly causing inference degradation."
 	case SchemaPositiveDiscount:
 		return "Pre-activate DescribeNoJudge. System is filtering out positive evidence and over-indexing on limitations."
+	case SchemaLearnedHelplessness:
+		return "Pre-activate CheckTheFacts + OppositeAction. System has developed a persistent learned helplessness pattern — attempt before concluding impossibility. Surface mastery evidence on every attempt."
 	default:
 		return "Apply STOP + general mindfulness reset at session open."
 	}
