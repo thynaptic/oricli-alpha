@@ -313,6 +313,73 @@ This is not a safety layer. This is a cognitive architecture. The distinction wi
 
 ---
 
+### Phase 17 — Dual Process Engine (System 1 / System 2) ⭐ NEXT
+
+> **STATUS: IN DESIGN**
+
+Kahneman's foundational insight: cognition operates on two tracks. **System 1** is fast, automatic, pattern-matching — cheap but error-prone on novel problems. **System 2** is slow, deliberate, effortful — expensive but accurate when activated.
+
+The biggest class of AI reasoning failures is S1 firing on S2 problems: a complex multi-step question gets pattern-matched to a superficially similar training example instead of being reasoned through. The MetacogDetector catches the symptom (loop, hallucination, overconfidence). Phase 17 treats the cause — classifying which cognitive system *should* have been engaged and forcing a switch when there's a mismatch.
+
+**The AI mapping:**
+| Human | Oricli-Alpha |
+|---|---|
+| System 1 — fast, heuristic, low-effort | Local Ollama 3B, cached responses, template fills |
+| System 2 — slow, deliberate, effortful | MCTS reasoning, PAD multi-agent dispatch, RunPod GPU, chain-of-thought |
+| S1/S2 mismatch | Confident wrong answer on novel problem; shallow response on complex query |
+
+**Architecture:**
+- `ProcessClassifier` — scores incoming query on S1/S2 demand dimensions: novelty, abstraction depth, multi-step dependency count, contradiction potential
+- `ProcessAuditor` — post-generation, checks if the *response pattern* matches the *required process tier*. Fast confident response on high-S2-demand query = mismatch flag
+- `ProcessOverride` — when mismatch detected, injects a S2-activation prefix (slow down, enumerate unknowns, check assumptions) and retries via appropriate compute tier
+- Integrates with `BidGovernor` (Phase 12): S2 demand score becomes a first-class bid input
+- Integrates with `MetacogDetector` (Phase 8): mismatch events are also MetacogEvents so the audit trail is unified
+
+**New package:** `pkg/dualprocess/`
+**API routes:** `GET /v1/cognition/process/stats`, `POST /v1/cognition/process/classify`
+**Feature flag:** `ORICLI_DUALPROCESS_ENABLED=true`
+
+---
+
+### Phase 18 — Cognitive Load Manager
+
+Sweller's Cognitive Load Theory: working memory has a capacity ceiling. Beyond it, performance degrades regardless of intelligence. Three load types:
+- **Intrinsic load** — inherent task complexity (can't be eliminated, only managed via chunking)
+- **Extraneous load** — noise, redundant context, poorly structured prompts (wasteful, should be cut)
+- **Germane load** — effortful processing that builds schemas (valuable, should be preserved)
+
+For Oricli, this means: long conversation histories and bloated system prompts create extraneous load that crowds out the intrinsic load of the actual task. Phase 18 builds a load meter that estimates all three components from context content, then trims/restructures context before generation when total load exceeds a configured ceiling. She stops degrading on long conversations because she manages her own cognitive budget.
+
+**Architecture:** `pkg/cogload/` — `LoadMeter`, `ContextSurgery`, load-aware context assembly in `GenerationService`
+
+> **Whiteboard:** _[design pending — load estimation heuristics, chunking strategy, threshold tuning]_
+
+---
+
+### Phase 19 — Rumination Detector + Temporal Interruption
+
+MetacogDetector catches *intra-response* loops. Rumination is the cross-session pattern: repeatedly engaging the same unresolved problem with no forward movement, no new information, no delta. It's the cognitive equivalent of spinning wheels — activity without progress.
+
+Chronos (Phase 9) gives us temporal grounding across sessions. Phase 19 wires Chronos into a rumination detector that identifies topic-time clusters with flat epistemic velocity — same topic, N sessions, zero advancement. When detected, an ACT-style defusion + Radical Acceptance prompt is injected, and the SessionSupervisor logs it as a rumination event for long-term tracking.
+
+**Architecture:** `pkg/rumination/` — `RuminationTracker`, `EpistemicVelocityMeter`, Chronos bridge; new SessionSupervisor schema `RUMINATION_PATTERN`
+
+> **Whiteboard:** _[design pending — velocity metric definition, session clustering, intervention escalation ladder]_
+
+---
+
+### Phase 20 — Growth Mindset Tracker (Dweck)
+
+Natural extension of Phase 16 (Learned Helplessness). Seligman tells us *when* she gives up (3P attributions). Dweck tells us *why* she was vulnerable in the first place — a fixed mindset belief that capability in a domain is static rather than learnable.
+
+Phase 20 tracks a mindset vector per topic class: does she approach novel problems in that domain as inherently learnable (growth) or as fixed-ceiling (fixed)? The MasteryLog (Phase 16) provides the raw success rate data. Phase 20 adds the interpretive layer — distinguishing "low success rate because domain is new + growing" from "low success rate because she's pattern-matching failure as ceiling." Fixed-mindset attributions get reframed via a "not yet" injection before the helplessness detector even fires.
+
+**Architecture:** `pkg/mindset/` — `MindsetTracker`, `GrowthReframer`; bridges to `MasteryLog` and `HelplessnessDetector`
+
+> **Whiteboard:** _[design pending — mindset signal extraction, "not yet" reframe templates, threshold for fixed vs growth classification]_
+
+---
+
 ## 4. Design Constraints
 
 Whatever Phase II becomes, it must respect these constraints from Phase I:
@@ -336,7 +403,7 @@ Whatever Phase II becomes, it must respect these constraints from Phase I:
 4. ~~How do we measure therapeutic efficacy? What does "less sycophancy" look like as a benchmark metric?~~ **RESOLVED** — HelplessnessDetector + MasteryLog provide quantified refusal-rate and topic-class success rates.  
 5. ~~Does Phase 15 warrant its own evaluation test suite (`oricli_core/evaluation/test_data/therapy/`)?~~ **RESOLVED** — 5 integration tests live in `pkg/therapy/session_supervisor_test.go`; 6 in `pkg/therapy/helplessness_test.go`
 
-**Open for Phase 17 whiteboard:** TBD.
+**Open for Phase 17–20 whiteboard:** See Phase 17–20 entries in Section 3.
 
 ---
 
@@ -351,6 +418,9 @@ Whatever Phase II becomes, it must respect these constraints from Phase I:
 | 15 | **Therapeutic Cognition Stack** | `ffc934a` / `cfd8eb0` | ✅ Complete |
 | 16 | Learned Helplessness Prevention (Attributional Resilience) | `219ae97` | ✅ Complete |
 | — | Oricli CLI (interactive REPL + one-shot mode) | `6e1746e` | ✅ Shipped |
-| 17 | **TBD** | — | 🔲 Whiteboard |
+| 17 | Dual Process Engine (System 1 / System 2) | — | 🔲 In Design |
+| 18 | Cognitive Load Manager | — | 🔲 Whiteboard |
+| 19 | Rumination Detector + Temporal Interruption | — | 🔲 Whiteboard |
+| 20 | Growth Mindset Tracker (Dweck) | — | 🔲 Whiteboard |
 
-_Phase 17 whiteboard pending. Phase II trajectory fully complete as of `632b5d1` (2026-03-31)._
+_Phase II trajectory complete as of `632b5d1` (2026-03-31). Phase 17–20 are the next cognitive science expansion._
