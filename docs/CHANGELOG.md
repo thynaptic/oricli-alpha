@@ -1,12 +1,27 @@
 # Changelog
 
-All notable changes to **ORI Studio / ORI Studio** are documented here.  
+All notable changes to **Oricli-Alpha** are documented here.  
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
-Versions track `VERSION` file. Commits listed for traceability.
+Versions track `VERSION` file. Commits listed for traceability.  
+**AGLI Phase I: Complete as of v8.0.0 (2026-03-31).**
 
 ---
 
 ## [Unreleased]
+
+---
+
+## [8.0.0] — 2026-03-31 — AGLI Phase I Complete
+
+### Summary
+Phase I of the AGLI trajectory is complete. All ten phases shipped and live on the production backbone. See `docs/AGLI_VISION.md` for the full doctrine. `docs/AGLI_Phase_II.md` opens the next trajectory.
+
+### Changed
+- `docs/AGLI_VISION.md` — stripped all SMB/product content; AGLI-only doctrine; Phase I declared complete; Phase 8+9 status corrected to ✅ COMPLETE; all 3.x sections updated to include Phases 8–10 subsystems; Phase I summary table added
+- `docs/CHANGELOG.md` — header updated to reflect Phase I completion; title corrected to Oricli-Alpha
+
+### Added
+- `docs/AGLI_Phase_II.md` — new trajectory document; Phase II whiteboard baseline
 
 ---
 
