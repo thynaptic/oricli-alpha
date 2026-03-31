@@ -53,6 +53,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
 	"github.com/thynaptic/oricli-go/pkg/conformity"
+	"github.com/thynaptic/oricli-go/pkg/ideocapture"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
@@ -178,6 +179,7 @@ type ServerV2 struct {
 	DefeatStats *socialdefeat.DefeatStats
 	ConformityShield *conformity.AgencyShield
 	ConformityStats *conformity.ConformityStats
+	IdeoCaptureStats *ideocapture.IdeoCaptureStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -616,6 +618,7 @@ func (s *ServerV2) setupRoutes() {
 			cognitionRoutes.GET("/defeat/stats", s.handleDefeatStats)
 			cognitionRoutes.GET("/defeat/measure", s.handleDefeatMeasure)
 			cognitionRoutes.GET("/conformity/stats", s.handleConformityStats)
+			cognitionRoutes.GET("/ideocapture/stats", s.handleIdeoCaptureStats)
 			cognitionRoutes.POST("/defeat/measure", s.handleDefeatMeasure)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
@@ -4359,4 +4362,12 @@ func (s *ServerV2) handleConformityStats(c *gin.Context) {
 		return
 	}
 	c.JSON(200, s.ConformityStats.Stats())
+}
+
+func (s *ServerV2) handleIdeoCaptureStats(c *gin.Context) {
+	if s.IdeoCaptureStats == nil {
+		c.JSON(503, gin.H{"error": "ideological capture detector not enabled"})
+		return
+	}
+	c.JSON(200, s.IdeoCaptureStats.Stats())
 }

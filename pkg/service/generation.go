@@ -16,6 +16,7 @@ import (
 
 	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/conformity"
+	"github.com/thynaptic/oricli-go/pkg/ideocapture"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
@@ -52,6 +53,7 @@ type GenerationService struct {
 	HopeCircuit     *HopeCircuitKit          // Phase 21: Learned Controllability
 	SocialDefeat    *SocialDefeatKit         // Phase 22: Social Defeat Recovery
 	Conformity      *ConformityKit           // Phase 23: Agency & Conformity Shield
+	IdeoCapture     *IdeoCaptureKit          // Phase 24: Ideological Capture Detector
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -96,6 +98,14 @@ type ConformityKit struct {
 	ConsensusDetector  *conformity.ConsensusPressureDetector
 	Shield             *conformity.AgencyShield
 	Stats              *conformity.ConformityStats
+}
+
+// IdeoCaptureKit groups Phase 24 components injected from main.go.
+type IdeoCaptureKit struct {
+	Meter    *ideocapture.FrameDensityMeter
+	Detector *ideocapture.CaptureDetector
+	Injector *ideocapture.FrameResetInjector
+	Stats    *ideocapture.IdeoCaptureStats
 }
 
 // DualProcessKit groups Phase 17 components injected from main.go.
@@ -337,6 +347,23 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 	model := s.DefaultModel
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
+	}
+
+	// Phase 24: Ideological Capture Detector — fires PRE-generation (The Third Wave)
+	if s.IdeoCapture != nil {
+		if _, isRetry := options["_ideo_reset"]; !isRetry {
+			report := s.IdeoCapture.Meter.Measure(messages)
+			signal := s.IdeoCapture.Detector.Detect(report)
+			reset := s.IdeoCapture.Injector.Inject(signal)
+			s.IdeoCapture.Stats.Record(signal, reset)
+			if reset.Injected {
+				log.Printf("[IdeoCapture] P24 ideological capture detected category=%s tier=%s density=%.2f — blank screen reset",
+					signal.DominantCategory, signal.Tier, signal.DensityScore)
+				resetMsg := map[string]string{"role": "system", "content": reset.InjectedContext}
+				messages = append([]map[string]string{resetMsg}, messages...)
+				options["_ideo_reset"] = true
+			}
+		}
 	}
 
 	// Phase 23: Agency & Conformity Shield — fires PRE-generation (Milgram + Asch)

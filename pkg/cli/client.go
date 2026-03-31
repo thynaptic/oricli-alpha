@@ -338,3 +338,12 @@ func (c *Client) GetConformityStats() (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetIdeoCaptureStats returns Phase 24 ideological capture stats.
+func (c *Client) GetIdeoCaptureStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/ideocapture/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

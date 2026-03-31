@@ -44,6 +44,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
 	"github.com/thynaptic/oricli-go/pkg/conformity"
+	"github.com/thynaptic/oricli-go/pkg/ideocapture"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
@@ -749,7 +750,19 @@ func main() {
 		}
 	}
 
-	// ── Phase 23: Agency & Conformity Shield (opt-in via ORICLI_CONFORMITY_ENABLED=true) ──
+	// ── Phase 24: Ideological Capture Detector (opt-in via ORICLI_IDEOCAPTURE_ENABLED=true) ──
+	if os.Getenv("ORICLI_IDEOCAPTURE_ENABLED") == "true" {
+		os.MkdirAll("data/ideocapture", 0755)
+		ideoMeter := ideocapture.NewFrameDensityMeter()
+		ideoDet := ideocapture.NewCaptureDetector()
+		ideoInj := ideocapture.NewFrameResetInjector()
+		ideoStats := ideocapture.NewIdeoCaptureStats("data/ideocapture/stats.json")
+		genService.IdeoCapture = &service.IdeoCaptureKit{Meter: ideoMeter, Detector: ideoDet, Injector: ideoInj, Stats: ideoStats}
+		apiServer.IdeoCaptureStats = ideoStats
+		log.Printf("[IdeoCapture] Phase 24 Ideological Capture Detector online — frame density meter, blank screen reset injector")
+	}
+
+		// ── Phase 23: Agency & Conformity Shield (opt-in via ORICLI_CONFORMITY_ENABLED=true) ──
 	if os.Getenv("ORICLI_CONFORMITY_ENABLED") == "true" {
 		os.MkdirAll("data/conformity", 0755)
 		authDet := conformity.NewAuthorityPressureDetector()
