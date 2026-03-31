@@ -446,3 +446,30 @@ func (c *Client) GetUPStats() (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetCBASPStats returns Phase 36 CBASP interpersonal disconnection stats.
+func (c *Client) GetCBASPStats() (map[string]interface{}, error) {
+var result map[string]interface{}
+if err := c.get("/v1/cognition/cbasp/stats", &result); err != nil {
+return nil, err
+}
+return result, nil
+}
+
+// GetMBCTStats returns Phase 37 MBCT decentering stats.
+func (c *Client) GetMBCTStats() (map[string]interface{}, error) {
+var result map[string]interface{}
+if err := c.get("/v1/cognition/mbct/stats", &result); err != nil {
+return nil, err
+}
+return result, nil
+}
+
+// GetPhaseOrientedStats returns Phase 38 Phase-Oriented Treatment stats.
+func (c *Client) GetPhaseOrientedStats() (map[string]interface{}, error) {
+var result map[string]interface{}
+if err := c.get("/v1/cognition/phaseoriented/stats", &result); err != nil {
+return nil, err
+}
+return result, nil
+}

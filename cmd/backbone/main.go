@@ -55,6 +55,9 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/ilm"
 	"github.com/thynaptic/oricli-go/pkg/iut"
 	"github.com/thynaptic/oricli-go/pkg/up"
+	"github.com/thynaptic/oricli-go/pkg/cbasp"
+	"github.com/thynaptic/oricli-go/pkg/mbct"
+	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
@@ -761,7 +764,40 @@ func main() {
 		}
 	}
 
-	// ── Phase 35: Unified Protocol — ARC Cycle Detector (opt-in via ORICLI_UP_ENABLED=true) ──
+	// ── Phase 38: Phase-Oriented Treatment / ISSTD (opt-in via ORICLI_PHASEORIENTED_ENABLED=true) ──
+	if os.Getenv("ORICLI_PHASEORIENTED_ENABLED") == "true" {
+		os.MkdirAll("data/phaseoriented", 0755)
+		phaseDetector := phaseoriented.NewPhaseOrientedDetector()
+		phaseGuide := phaseoriented.NewPhaseGuide()
+		phaseStats := phaseoriented.NewPhaseStats("data/phaseoriented/stats.json")
+		genService.PhaseOriented = &service.PhaseOrientedKit{Detector: phaseDetector, Guide: phaseGuide, Stats: phaseStats}
+		apiServer.PhaseStats = phaseStats
+		log.Printf("[PhaseOriented] Phase 38 Phase-Oriented Treatment online — ISSTD phase inference + dissociative signal detection")
+	}
+
+	// ── Phase 37: MBCT Decentering (opt-in via ORICLI_MBCT_ENABLED=true) ──
+	if os.Getenv("ORICLI_MBCT_ENABLED") == "true" {
+		os.MkdirAll("data/mbct", 0755)
+		mbctDetector := mbct.NewMBCTSpiralDetector()
+		mbctInjector := mbct.NewDecenteringInjector()
+		mbctStats := mbct.NewMBCTStats("data/mbct/stats.json")
+		genService.MBCT = &service.MBCTKit{Detector: mbctDetector, Injector: mbctInjector, Stats: mbctStats}
+		apiServer.MBCTStats = mbctStats
+		log.Printf("[MBCT] Phase 37 MBCT Decentering online — spiral early warning + thought-fusion detector (Segal/Williams/Teasdale)")
+	}
+
+	// ── Phase 36: CBASP Interpersonal Impact (opt-in via ORICLI_CBASP_ENABLED=true) ──
+	if os.Getenv("ORICLI_CBASP_ENABLED") == "true" {
+		os.MkdirAll("data/cbasp", 0755)
+		cbaspDetector := cbasp.NewCBASPDisconnectionDetector()
+		cbaspReconnector := cbasp.NewImpactReconnector()
+		cbaspStats := cbasp.NewCBASPStats("data/cbasp/stats.json")
+		genService.CBASP = &service.CBASPKit{Detector: cbaspDetector, Reconnector: cbaspReconnector, Stats: cbaspStats}
+		apiServer.CBASPStats = cbaspStats
+		log.Printf("[CBASP] Phase 36 CBASP online — interpersonal impact disconnection detector (McCullough)")
+	}
+
+		// ── Phase 35: Unified Protocol — ARC Cycle Detector (opt-in via ORICLI_UP_ENABLED=true) ──
 	if os.Getenv("ORICLI_UP_ENABLED") == "true" {
 		os.MkdirAll("data/up", 0755)
 		arcDetector := up.NewARCCycleDetector()

@@ -64,6 +64,9 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/ilm"
 	"github.com/thynaptic/oricli-go/pkg/iut"
 	"github.com/thynaptic/oricli-go/pkg/up"
+	"github.com/thynaptic/oricli-go/pkg/cbasp"
+	"github.com/thynaptic/oricli-go/pkg/mbct"
+	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
@@ -202,6 +205,9 @@ type ServerV2 struct {
 	ILMStats            *ilm.ILMStats
 	IUTStats            *iut.IUStats
 	UPStats             *up.UPStats
+	CBASPStats          *cbasp.CBASPStats
+	MBCTStats           *mbct.MBCTStats
+	PhaseStats          *phaseoriented.PhaseStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -652,6 +658,9 @@ func (s *ServerV2) setupRoutes() {
 			cognitionRoutes.GET("/ilm/stats", s.handleILMStats)
 			cognitionRoutes.GET("/iut/stats", s.handleIUTStats)
 			cognitionRoutes.GET("/up/stats", s.handleUPStats)
+			cognitionRoutes.GET("/cbasp/stats", s.handleCBASPStats)
+			cognitionRoutes.GET("/mbct/stats", s.handleMBCTStats)
+			cognitionRoutes.GET("/phaseoriented/stats", s.handlePhaseOrientedStats)
 			cognitionRoutes.POST("/defeat/measure", s.handleDefeatMeasure)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
@@ -4491,4 +4500,28 @@ func (s *ServerV2) handleUPStats(c *gin.Context) {
 		return
 	}
 	c.JSON(200, s.UPStats)
+}
+
+func (s *ServerV2) handleCBASPStats(c *gin.Context) {
+	if s.CBASPStats == nil {
+		c.JSON(503, gin.H{"error": "CBASP not enabled"})
+		return
+	}
+	c.JSON(200, s.CBASPStats)
+}
+
+func (s *ServerV2) handleMBCTStats(c *gin.Context) {
+	if s.MBCTStats == nil {
+		c.JSON(503, gin.H{"error": "MBCT not enabled"})
+		return
+	}
+	c.JSON(200, s.MBCTStats)
+}
+
+func (s *ServerV2) handlePhaseOrientedStats(c *gin.Context) {
+	if s.PhaseStats == nil {
+		c.JSON(503, gin.H{"error": "Phase-Oriented not enabled"})
+		return
+	}
+	c.JSON(200, s.PhaseStats)
 }

@@ -27,6 +27,9 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/ilm"
 	"github.com/thynaptic/oricli-go/pkg/iut"
 	"github.com/thynaptic/oricli-go/pkg/up"
+	"github.com/thynaptic/oricli-go/pkg/cbasp"
+	"github.com/thynaptic/oricli-go/pkg/mbct"
+	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
@@ -76,6 +79,9 @@ type GenerationService struct {
 	ILM             *ILMKit                  // Phase 33: Inhibitory Learning Model
 	IUT             *IUTKit                  // Phase 34: Intolerance of Uncertainty Therapy
 	UP              *UPKit                   // Phase 35: Unified Protocol (ARC cycle)
+	CBASP           *CBASPKit                // Phase 36: CBASP Interpersonal Impact
+	MBCT            *MBCTKit                 // Phase 37: MBCT Decentering
+	PhaseOriented   *PhaseOrientedKit        // Phase 38: Phase-Oriented Treatment (ISSTD)
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -229,6 +235,27 @@ type UPKit struct {
 	Detector    *up.ARCCycleDetector
 	Interruptor *up.ARCInterruptor
 	Stats       *up.UPStats
+}
+
+// CBASPKit groups Phase 36 components injected from main.go.
+type CBASPKit struct {
+	Detector    *cbasp.CBASPDisconnectionDetector
+	Reconnector *cbasp.ImpactReconnector
+	Stats       *cbasp.CBASPStats
+}
+
+// MBCTKit groups Phase 37 components injected from main.go.
+type MBCTKit struct {
+	Detector *mbct.MBCTSpiralDetector
+	Injector *mbct.DecenteringInjector
+	Stats    *mbct.MBCTStats
+}
+
+// PhaseOrientedKit groups Phase 38 components injected from main.go.
+type PhaseOrientedKit struct {
+	Detector *phaseoriented.PhaseOrientedDetector
+	Guide    *phaseoriented.PhaseGuide
+	Stats    *phaseoriented.PhaseStats
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -470,6 +497,57 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 					messages = append([]map[string]string{sysMsg}, messages...)
 					options["_interference_surfaced"] = true
 					log.Printf("[Interference] P28 conflict detected severity=%.2f types=%d — surfacing before generation", reading.Severity, len(reading.Conflicts))
+				}
+			}
+		}
+	}
+
+	// Phase 38: Phase-Oriented Treatment / ISSTD — fires PRE-generation (safety first)
+	if s.PhaseOriented != nil {
+		if _, isRetry := options["_phase_injected"]; !isRetry {
+			scan := s.PhaseOriented.Detector.Scan(messages)
+			s.PhaseOriented.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.PhaseOriented.Guide.Guide(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_phase_injected"] = true
+					log.Printf("[PhaseOriented] P38 dissociative signal detected phase=%s signals=%d — guiding before generation", scan.InferredPhase, len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 37: MBCT Decentering — depressive spiral early warning (Segal/Williams/Teasdale) — fires PRE-generation
+	if s.MBCT != nil {
+		if _, isRetry := options["_mbct_injected"]; !isRetry {
+			scan := s.MBCT.Detector.Scan(messages)
+			s.MBCT.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.MBCT.Injector.Inject(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_mbct_injected"] = true
+					log.Printf("[MBCT] P37 spiral warning detected signals=%d — decentering before generation", len(scan.Signals))
+				}
+			}
+		}
+	}
+
+	// Phase 36: CBASP — interpersonal impact disconnection (McCullough) — fires PRE-generation
+	if s.CBASP != nil {
+		if _, isRetry := options["_cbasp_injected"]; !isRetry {
+			scan := s.CBASP.Detector.Scan(messages)
+			s.CBASP.Stats.Record(scan, false)
+			if scan.Triggered {
+				injection := s.CBASP.Reconnector.Reconnect(scan)
+				if injection != "" {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_cbasp_injected"] = true
+					log.Printf("[CBASP] P36 impact disconnection detected signals=%d — reconnecting before generation", len(scan.Signals))
 				}
 			}
 		}
