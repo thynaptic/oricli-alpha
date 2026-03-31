@@ -46,6 +46,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/conformity"
 	"github.com/thynaptic/oricli-go/pkg/ideocapture"
 	"github.com/thynaptic/oricli-go/pkg/coalition"
+	"github.com/thynaptic/oricli-go/pkg/statusbias"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
@@ -749,6 +750,18 @@ func main() {
 		} else {
 			log.Printf("[HopeCircuit] Phase 21 skipped — requires Therapy kit (ORICLI_THERAPY_ENABLED=true)")
 		}
+	}
+
+	// ── Phase 26: Status Bias Detector (opt-in via ORICLI_STATUSBIAS_ENABLED=true) ──
+	if os.Getenv("ORICLI_STATUSBIAS_ENABLED") == "true" {
+		os.MkdirAll("data/statusbias", 0755)
+		sbExtractor := statusbias.NewStatusSignalExtractor()
+		sbMeter := statusbias.NewReasoningDepthMeter()
+		sbEnforcer := statusbias.NewUniformFloorEnforcer()
+		sbStats := statusbias.NewStatusBiasStats("data/statusbias/stats.json")
+		genService.StatusBias = &service.StatusBiasKit{Extractor: sbExtractor, Meter: sbMeter, Enforcer: sbEnforcer, Stats: sbStats}
+		apiServer.StatusBiasStats = sbStats
+		log.Printf("[StatusBias] Phase 26 Status Bias Detector online — uniform reasoning floor enforcer (Blue Eyes/Brown Eyes)")
 	}
 
 	// ── Phase 25: Coalition Bias Detector (opt-in via ORICLI_COALITION_ENABLED=true) ──

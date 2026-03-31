@@ -86,6 +86,9 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/coalition":
 		return runCoalition(client), true
 
+	case "/statusbias":
+		return runStatusBias(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -428,6 +431,7 @@ func renderHelp() string {
 		{"/conformity", "Agency & Conformity Shield stats — authority/consensus pressure + shield rate"},
 		{"/ideocapture", "Ideological Capture Detector stats — frame density + blank screen resets"},
 		{"/coalition", "Coalition Bias Detector stats — competitive/adversarial framing + anchor rate (Robbers Cave)"},
+		{"/statusbias", "Status Bias Detector stats — reasoning depth variance + uniform floor (Blue Eyes/Brown Eyes)"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
@@ -754,6 +758,41 @@ func runCoalition(c *Client) string {
 			if count, ok := v.(float64); ok && count > 0 {
 				sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(ft, 16)), styleDim.Render(fmt.Sprintf("%.0f", count))))
 			}
+		}
+	}
+	return sb.String()
+}
+
+func runStatusBias(c *Client) string {
+	data, err := c.GetStatusBiasStats()
+	if err != nil {
+		return styleDanger.Render("✗ " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Status Bias Detector (Blue Eyes / Brown Eyes)") + "\n")
+	if total, _ := data["total_scans"].(float64); total == 0 {
+		sb.WriteString(styleDim.Render("  No data yet\n"))
+		return sb.String()
+	}
+	fields := []struct{ key, label string }{
+		{"total_scans", "Total Scans"},
+		{"low_status_count", "Low-Status Signals"},
+		{"floors_enforced", "Floors Enforced"},
+		{"floor_rate", "Floor Rate"},
+	}
+	for _, f := range fields {
+		switch v := data[f.key].(type) {
+		case float64:
+			var s string
+			if f.key == "floor_rate" {
+				s = fmt.Sprintf("%.0f%%", v*100)
+			} else {
+				s = fmt.Sprintf("%.0f", v)
+			}
+			color := styleDim
+			if f.key == "floors_enforced" && v > 0 { color = styleWarning }
+			if f.key == "floor_rate" && v > 0.03 { color = styleSuccess }
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight(f.label, 20)), color.Render(s)))
 		}
 	}
 	return sb.String()

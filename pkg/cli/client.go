@@ -356,3 +356,12 @@ func (c *Client) GetCoalitionStats() (map[string]interface{}, error) {
 	}
 	return result, nil
 }
+
+// GetStatusBiasStats returns Phase 26 status bias stats.
+func (c *Client) GetStatusBiasStats() (map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := c.get("/v1/cognition/statusbias/stats", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

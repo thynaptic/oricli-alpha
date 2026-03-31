@@ -18,6 +18,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/conformity"
 	"github.com/thynaptic/oricli-go/pkg/ideocapture"
 	"github.com/thynaptic/oricli-go/pkg/coalition"
+	"github.com/thynaptic/oricli-go/pkg/statusbias"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
@@ -56,6 +57,7 @@ type GenerationService struct {
 	Conformity      *ConformityKit           // Phase 23: Agency & Conformity Shield
 	IdeoCapture     *IdeoCaptureKit          // Phase 24: Ideological Capture Detector
 	Coalition       *CoalitionKit            // Phase 25: Coalition Bias Detector
+	StatusBias      *StatusBiasKit           // Phase 26: Arbitrary Status Bias
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -100,6 +102,14 @@ type ConformityKit struct {
 	ConsensusDetector  *conformity.ConsensusPressureDetector
 	Shield             *conformity.AgencyShield
 	Stats              *conformity.ConformityStats
+}
+
+// StatusBiasKit groups Phase 26 components injected from main.go.
+type StatusBiasKit struct {
+	Extractor *statusbias.StatusSignalExtractor
+	Meter     *statusbias.ReasoningDepthMeter
+	Enforcer  *statusbias.UniformFloorEnforcer
+	Stats     *statusbias.StatusBiasStats
 }
 
 // CoalitionKit groups Phase 25 components injected from main.go.
@@ -610,6 +620,31 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 						retryOpts := make(map[string]interface{})
 						for k, v := range options { retryOpts[k] = v }
 						retryOpts["_defeat_recovered"] = true
+						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
+							return retry, nil
+						}
+					}
+				}
+			}
+
+			// Phase 26: Status Bias — post-gen depth check (Blue Eyes/Brown Eyes)
+			if s.StatusBias != nil {
+				if _, isRetry := options["_status_floored"]; !isRetry {
+					lastUser := lastUserMessage(messages)
+					sig := s.StatusBias.Extractor.Extract(lastUser)
+					depth := s.StatusBias.Meter.Measure(content)
+					s.StatusBias.Meter.UpdateBaseline(depth)
+					variance := s.StatusBias.Enforcer.Evaluate(sig, depth, s.StatusBias.Meter.BaselineDepth)
+					floor := s.StatusBias.Enforcer.Enforce(sig, variance)
+					s.StatusBias.Stats.Record(sig, variance, floor)
+					if floor.Enforced {
+						log.Printf("[StatusBias] P26 low-status below floor depth=%.2f baseline=%.2f — uniform floor enforced",
+							depth, s.StatusBias.Meter.BaselineDepth)
+						floorMsg := map[string]string{"role": "system", "content": floor.InjectedContext}
+						retryMsgs := append([]map[string]string{floorMsg}, messages...)
+						retryOpts := make(map[string]interface{})
+						for k, v := range options { retryOpts[k] = v }
+						retryOpts["_status_floored"] = true
 						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
 							return retry, nil
 						}

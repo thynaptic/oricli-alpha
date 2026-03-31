@@ -55,6 +55,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/conformity"
 	"github.com/thynaptic/oricli-go/pkg/ideocapture"
 	"github.com/thynaptic/oricli-go/pkg/coalition"
+	"github.com/thynaptic/oricli-go/pkg/statusbias"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
@@ -182,6 +183,7 @@ type ServerV2 struct {
 	ConformityStats *conformity.ConformityStats
 	IdeoCaptureStats *ideocapture.IdeoCaptureStats
 	CoalitionStats *coalition.CoalitionStats
+	StatusBiasStats *statusbias.StatusBiasStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -622,6 +624,7 @@ func (s *ServerV2) setupRoutes() {
 			cognitionRoutes.GET("/conformity/stats", s.handleConformityStats)
 			cognitionRoutes.GET("/ideocapture/stats", s.handleIdeoCaptureStats)
 			cognitionRoutes.GET("/coalition/stats", s.handleCoalitionStats)
+			cognitionRoutes.GET("/statusbias/stats", s.handleStatusBiasStats)
 			cognitionRoutes.POST("/defeat/measure", s.handleDefeatMeasure)
 		}
 		// WebSocket upgrade for peer-to-peer connection (no auth — uses SPP handshake)
@@ -4381,4 +4384,12 @@ func (s *ServerV2) handleCoalitionStats(c *gin.Context) {
 		return
 	}
 	c.JSON(200, s.CoalitionStats.Stats())
+}
+
+func (s *ServerV2) handleStatusBiasStats(c *gin.Context) {
+	if s.StatusBiasStats == nil {
+		c.JSON(503, gin.H{"error": "status bias detector not enabled"})
+		return
+	}
+	c.JSON(200, s.StatusBiasStats.Stats())
 }
