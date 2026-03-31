@@ -20,6 +20,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/coalition"
 	"github.com/thynaptic/oricli-go/pkg/statusbias"
 	"github.com/thynaptic/oricli-go/pkg/arousal"
+	"github.com/thynaptic/oricli-go/pkg/mct"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
@@ -62,6 +63,7 @@ type GenerationService struct {
 	StatusBias      *StatusBiasKit           // Phase 26: Arbitrary Status Bias
 	Arousal         *ArousalKit              // Phase 27: Arousal Optimizer (Yerkes-Dodson)
 	Interference    *InterferenceKit         // Phase 28: Cognitive Interference Detector (Stroop)
+	MCT             *MCTKit                  // Phase 29: Metacognitive Therapy (MCT)
 }
 
 // CogLoadKit groups Phase 18 components injected from main.go.
@@ -163,6 +165,14 @@ type InterferenceKit struct {
 	Scanner  *interference.InstructionConflictScanner
 	Surfacer *interference.ConflictSurfacer
 	Stats    *interference.InterferenceStats
+}
+
+
+// MCTKit groups Phase 29 components injected from main.go.
+type MCTKit struct {
+	Detector *mct.MetaBeliefDetector
+	Injector *mct.DetachedMindfulnessInjector
+	Stats    *mct.MCTStats
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -404,6 +414,30 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 					messages = append([]map[string]string{sysMsg}, messages...)
 					options["_interference_surfaced"] = true
 					log.Printf("[Interference] P28 conflict detected severity=%.2f types=%d — surfacing before generation", reading.Severity, len(reading.Conflicts))
+				}
+			}
+		}
+	}
+
+	// Phase 29: Metacognitive Therapy — fires PRE-generation (Adrian Wells MCT)
+	if s.MCT != nil {
+		if _, isRetry := options["_mct_injected"]; !isRetry {
+			var lastUserMsg string
+			for _, m := range messages {
+				if m["role"] == "user" {
+					lastUserMsg = m["content"]
+				}
+			}
+			if lastUserMsg != "" {
+				reading := s.MCT.Detector.Detect(lastUserMsg)
+				injection := s.MCT.Injector.Inject(reading)
+				injected := injection != ""
+				s.MCT.Stats.Record(reading, injected)
+				if injected {
+					sysMsg := map[string]string{"role": "system", "content": injection}
+					messages = append([]map[string]string{sysMsg}, messages...)
+					options["_mct_injected"] = true
+					log.Printf("[MCT] P29 meta-belief detected type=%s conf=%.2f — detached mindfulness injected", reading.Type, reading.Confidence)
 				}
 			}
 		}

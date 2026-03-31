@@ -95,6 +95,9 @@ func handleSlashCommand(input string, client *Client, cfg *Config, history *[]ma
 	case "/interference":
 		return runInterference(client), true
 
+	case "/mct":
+		return runMCT(client), true
+
 	case "/goals":
 		return runGoals(client), true
 
@@ -440,6 +443,7 @@ func renderHelp() string {
 		{"/statusbias", "Status Bias Detector stats — reasoning depth variance + uniform floor (Blue Eyes/Brown Eyes)"},
 		{"/arousal", "Arousal Optimizer stats — Yerkes-Dodson tier distribution + TSST evaluative threat count"},
 		{"/interference", "Cognitive Interference Detector stats — Stroop conflict types + surfacing rate"},
+		{"/mct", "Metacognitive Therapy stats — meta-belief detections + detached mindfulness injections (Wells MCT)"},
 		{"/goals", "List sovereign goals"},
 		{"/goal <desc>", "Create a new sovereign goal"},
 		{"/target <url>", "Switch API target (e.g. http://localhost:8089)"},
@@ -867,4 +871,33 @@ sb.WriteString(fmt.Sprintf("    %s  %s\n", styleKeyVal.Render(padRight(k, 24)), 
 }
 }
 return sb.String()
+}
+
+func runMCT(client *Client) string {
+	data, err := client.GetMCTStats()
+	if err != nil {
+		return styleDanger.Render("Error fetching MCT stats: " + err.Error())
+	}
+	var sb strings.Builder
+	sb.WriteString(styleLabel.Render("● Metacognitive Therapy (MCT — Adrian Wells)") + "\n")
+	if total, _ := data["total_scanned"].(float64); total == 0 {
+		sb.WriteString(styleDim.Render("  No data yet\n"))
+		return sb.String()
+	}
+	fields := []struct{ key, label string }{
+		{"total_scanned", "Total Scanned"},
+		{"positive_meta_belief_count", "Positive Meta-Beliefs"},
+		{"negative_meta_belief_count", "Negative Meta-Beliefs"},
+		{"interventions_injected", "Interventions Injected"},
+	}
+	for _, f := range fields {
+		if v, ok := data[f.key].(float64); ok {
+			color := styleDim
+			if f.key == "positive_meta_belief_count" && v > 0 { color = styleWarning }
+			if f.key == "negative_meta_belief_count" && v > 0 { color = styleWarning }
+			if f.key == "interventions_injected" && v > 0 { color = styleSuccess }
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", styleKeyVal.Render(padRight(f.label, 24)), color.Render(fmt.Sprintf("%.0f", v))))
+		}
+	}
+	return sb.String()
 }

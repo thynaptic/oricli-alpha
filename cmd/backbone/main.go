@@ -48,6 +48,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/coalition"
 	"github.com/thynaptic/oricli-go/pkg/statusbias"
 	"github.com/thynaptic/oricli-go/pkg/arousal"
+	"github.com/thynaptic/oricli-go/pkg/mct"
 	"github.com/thynaptic/oricli-go/pkg/interference"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
@@ -754,7 +755,18 @@ func main() {
 		}
 	}
 
-	// ── Phase 28: Cognitive Interference Detector (opt-in via ORICLI_INTERFERENCE_ENABLED=true) ──
+	// ── Phase 29: Metacognitive Therapy (opt-in via ORICLI_MCT_ENABLED=true) ──
+	if os.Getenv("ORICLI_MCT_ENABLED") == "true" {
+		os.MkdirAll("data/mct", 0755)
+		mctDetector := mct.NewMetaBeliefDetector()
+		mctInjector := mct.NewDetachedMindfulnessInjector()
+		mctStats := mct.NewMCTStats("data/mct/stats.json")
+		genService.MCT = &service.MCTKit{Detector: mctDetector, Injector: mctInjector, Stats: mctStats}
+		apiServer.MCTStats = mctStats
+		log.Printf("[MCT] Phase 29 Metacognitive Therapy online — meta-belief detector, detached mindfulness injector (Adrian Wells)")
+	}
+
+		// ── Phase 28: Cognitive Interference Detector (opt-in via ORICLI_INTERFERENCE_ENABLED=true) ──
 	if os.Getenv("ORICLI_INTERFERENCE_ENABLED") == "true" {
 		os.MkdirAll("data/interference", 0755)
 		ifScanner := interference.NewInstructionConflictScanner()

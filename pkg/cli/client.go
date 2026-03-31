@@ -383,3 +383,12 @@ return nil, err
 }
 return result, nil
 }
+
+// GetMCTStats returns Phase 29 metacognitive therapy stats.
+func (c *Client) GetMCTStats() (map[string]interface{}, error) {
+var result map[string]interface{}
+if err := c.get("/v1/cognition/mct/stats", &result); err != nil {
+return nil, err
+}
+return result, nil
+}
