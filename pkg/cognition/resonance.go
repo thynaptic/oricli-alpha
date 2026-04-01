@@ -86,7 +86,42 @@ func (r *ResonanceService) mapMusicalState() {
 	}
 }
 
-// GetStateDescription returns a human-readable "Mood" for the OS logs.
+// UpdateFromInference updates ERI after a sovereign pipeline run.
+// Uses LLM-appropriate scaling — inference durations are 1-60s, not sub-50ms swarm bus latencies.
+// Fast (<5s)  → low volatility, high pacing  → ERI climbs toward 1.0
+// Slow (>30s) → high volatility, low pacing  → ERI drifts toward 0.3
+// Errors      → coherence drops              → ERI falls fast
+func (r *ResonanceService) UpdateFromInference(duration time.Duration, success bool) {
+	secs := duration.Seconds()
+
+	// Pacing: 1.0 at ≤3s, 0.0 at ≥45s — linear decay
+	pacing := float32(1.0 - math.Min(1.0, math.Max(0.0, (secs-3.0)/42.0)))
+
+	// Volatility: 0.0 at ≤5s, 1.0 at ≥35s — linear growth
+	volatility := float32(math.Min(1.0, math.Max(0.0, (secs-5.0)/30.0)))
+
+	// Coherence: exponential moving average — errors pull it down hard, successes recover slowly
+	prevCoherence := float64(r.Current.Coherence)
+	if prevCoherence == 0 {
+		prevCoherence = 1.0 // cold-start: assume healthy
+	}
+	if success {
+		prevCoherence = prevCoherence*0.8 + 1.0*0.2
+	} else {
+		prevCoherence = prevCoherence * 0.5
+	}
+
+	r.Current.Pacing    = pacing
+	r.Current.Volatility = volatility
+	r.Current.Coherence = float32(prevCoherence)
+	r.Current.ERI       = (r.Current.Coherence * 0.4) + ((1.0 - volatility) * 0.3) + (pacing * 0.3)
+	r.Current.ERS       = r.Current.ERI
+
+	r.mapMusicalState()
+	r.LastUpdate = time.Now()
+}
+
+
 func (r *ResonanceService) GetStateDescription() string {
 	if r.Current.ERI > 0.7 {
 		return "Symphonic: Swarm is in perfect harmony."

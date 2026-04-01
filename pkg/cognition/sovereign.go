@@ -552,7 +552,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// --- Sovereign Level: read owner auth level from context ---
+	inferenceStart := time.Now()
 	sovLevel := 0
 	if v, ok := ctx.Value(sovereignContextKey{}).(int); ok {
 		sovLevel = v
@@ -858,6 +858,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		reasoningMethod, budget.Complexity, budget.ScaledNumPredict(), e.CurrentHealth.GetSummary())
 
 	// 10.1 Real-Time WebSocket Synchronization (Push)
+	e.Resonance.UpdateFromInference(time.Since(inferenceStart), true)
 	if e.WSHub != nil {
 		go e.WSHub.BroadcastEvent("resonance_sync", e.Resonance.Current)
 		go e.WSHub.BroadcastEvent("sensory_sync", e.CurrentSensory)
