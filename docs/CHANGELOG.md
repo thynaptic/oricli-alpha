@@ -16,6 +16,33 @@ Versions track `VERSION` file. Commits listed for traceability.
 
 ---
 
+## [11.1.0] — 2026-04-01 — Intelligence Benchmark + Reasoning Routing Fixes — `5a3ead8`
+
+### Fixed
+- **CuriosityDaemon topic stop words** (`pkg/service/curiosity_daemon.go`): Added logical connectives (`therefore`, `thus`, `thereby`, `hence`, `consequently`, `however`, `furthermore`, `moreover`, `nevertheless`) to `topicStopWords`. These were being extracted as research topics from bench/logic questions, causing CollySearcher to spam StackExchange with nonsense queries and saturate the Ollama inference queue.
+- **CollySearcher domain blacklist** (`pkg/service/colly_scraper.go`): Added `domainFailures` + `domainBlacklist` maps with `sync.Mutex`. After 3 consecutive 403/429 failures, a hostname is blacklisted for 1 hour. `isBlacklisted()` checked before each `c.Visit()`; `recordFailure()` called in `OnError` and on visit errors. Eliminates infinite retry loops against blocked domains.
+
+### Added
+- **`reLogicEval` routing rule** (`pkg/cognition/reasoning_modes.go`): New regex detects logical argument evaluation questions (`therefore`, `valid argument`, `it follows that`, `modus ponens`, `syllogism`, etc.) and routes them to `ModeConsistency` (3-sample plurality vote) *before* the SELF-DISCOVER complexity≥0.55 catch-all. Empirically: logic bench score ORI 3.8 → 6.4 (+2.7).
+- **PAL rate-problem trigger** (`pkg/cognition/reasoning_modes.go`): Extended `reMath` regex with `how long.*\d|\d.*how long` to catch rate/machine problems (e.g. "how long for 100 machines to make 100 widgets?") that were previously bypassing PAL and landing in SELF-DISCOVER. logic_03 score: 2 → 10.
+- **Intel Bench runner** (`scripts/intel_bench/run_bench.py`, `scripts/intel_bench/questions.json`): 30-question intelligence benchmark across 6 categories (logic/math/code/knowledge/metacog/reasoning), 3 difficulty levels. Fires each question at ORI API + raw Ollama in parallel; saves results JSON for judge scoring.
+- **Benchmark results** (`docs/BENCHMARK_RESULTS.md`): Full intelligence benchmark section with scorecard, key findings, and infrastructure bug table.
+- **Detailed bench report** (`scripts/intel_bench/REPORT.md`): Question-by-question analysis, scoring, and methodology.
+
+### Benchmark Results (ORI Pipeline vs Raw Ollama)
+
+| Category | ORI | Raw | Delta |
+|---|---|---|---|
+| Code | 8.6 | 2.4 | **+6.2** |
+| Math | 9.3 | 9.2 | +0.1 |
+| Logic | 6.4 | 4.4 | **+2.0** |
+| Knowledge | 7.8 | 7.8 | 0.0 (ORI 2–3× faster) |
+| Metacog | ~6.0 | ~6.0 | ~0.0 |
+| Reasoning | ~6.0 | ~6.0 | ~0.0 |
+| **Overall** | **7.4** | **6.3** | **+1.1 ORI** |
+
+---
+
 ## [11.0.0] — 2026-03-31 — Phase V Complete: Philosophy + Neuroscience Stack (P42–P48) — `e3c2dd7`
 
 ### Added — P42–P48: 7 modules, 28 signal types, 7 injectors

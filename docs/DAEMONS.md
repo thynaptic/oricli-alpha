@@ -80,6 +80,8 @@ Every user message is scanned by `SeedFromMessage(msg)` — pure regex, <1ms, no
 
 Seeds are deduplicated into a persistent `seenKeys` map (never cleared — prevents re-researching known topics in the same session). Seeds from PocketBase `knowledge_fragments` are pre-loaded at each burst start to skip topics researched in prior sessions.
 
+**Topic stop words:** A `topicStopWords` map filters extracted seeds before they enter the queue. This prevents logical connectives, question fragments, and common function words from being seeded as research topics. The filter includes: `therefore`, `thus`, `thereby`, `hence`, `consequently`, `however`, `furthermore`, `moreover`, `nevertheless`, plus common stop words (`the`, `is`, `and`, `that`, etc.). Without this filter, questions containing logical connectives (e.g. *"Therefore, do all roses fade quickly?"*) would seed the connective itself as a topic, causing CollySearcher to spam domains like StackExchange with nonsense queries.
+
 `NotifyActivity()` is called on every chat request to record the last active timestamp (atomic int64 UnixNano).
 
 ### Phase 2 — Idle-Burst Research (idle-only, interruptible)
@@ -115,7 +117,7 @@ Each topic goes through the same search-extract-commit pipeline:
 1. `ClassifySearchIntent(topic)` → intent type (8 types, <1ms)
 2. `SearXNG SearchWithURLs()` → structured results with real URLs
 3. `VDI.NavigateAndExtract()` on top-2 URLs (parallel, 5s timeout) → rich article text
-4. Fallback: `SearXNG SearchWithIntent()` → snippets; then Colly DDG as last resort
+4. Fallback: `SearXNG SearchWithIntent()` → snippets; then Colly DDG as last resort. **CollySearcher domain blacklist**: after 3 consecutive 403/429 failures from a hostname, that domain is auto-blacklisted for 1 hour (`domainBlacklist map[string]time.Time`). `isBlacklisted()` is checked before each `c.Visit()` call; `recordFailure()` is called in the `OnError` handler and on visit errors. This prevents CuriosityDaemon from hammering blocked domains (e.g. StackExchange returns 403 to crawlers) and saturating the Ollama inference queue.
 5. Intent-tailored extraction prompt → `GenerationService.Generate()` (90s deadline, `ministral-3:3b`)
 6. Commit 3–5 extracted facts to `WorkingMemoryGraph.UpdateEntity()`
 7. **`MemoryBank.WriteKnowledgeFragment(topic, intent, factSummary, 0.7)`** — persists finding to PocketBase under Oricli's analyst account (author=oricli)

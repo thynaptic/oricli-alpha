@@ -30,15 +30,25 @@ All inference passes route through `ClassifyReasoningMode()` in `pkg/cognition/r
 |------|----------|----------------|
 | Standard | `ModeStandard` | Default / low complexity |
 | Case-Based Reasoning | `ModeCBR` | Familiar pattern, provenance match |
-| Program-Aided Language | `ModePAL` | Math, logic, code execution required |
+| Program-Aided Language | `ModePAL` | Math, formulae, rate problems (`how long` + digit), code execution |
 | Active Prompting | `ModeActive` | Knowledge gaps detected |
 | Least-to-Most | `ModeLeastToMost` | Ordered decomposition needed |
 | Self-Refine | `ModeSelfRefine` | Draft critique → refinement |
 | ReAct | `ModeReAct` | Tool-use / observation loop |
 | Multi-Agent Debate | `ModeDebate` | High-stakes or contested claim |
 | Causal Chain | `ModeCausal` | WHY / WHAT-IF / HOW queries |
-| SELF-DISCOVER | `ModeDiscover` | Novel task structure |
-| Self-Consistency | `ModeConsistency` | Parallel sampling + consensus vote |
+| SELF-DISCOVER | `ModeDiscover` | Novel task structure (complexity ≥ 0.55) |
+| Self-Consistency | `ModeConsistency` | Logical argument evaluation (syllogisms, deduction validity); medium-complexity factual |
+
+**Routing priority order** (first match wins in `ClassifyReasoningMode()`):
+1. **PAL** — `reMath` match (arithmetic, `how long.*\d`, formula, etc.)
+2. **LogicEval → Consistency** — `reLogicEval` match (`therefore`, `valid argument`, `it follows that`, `modus ponens`, etc.)
+3. **SELF-DISCOVER** — complexity ≥ 0.55
+4. **Causal / Debate / ReAct / LeastToMost / SelfRefine** — keyword + complexity gate
+5. **CBR** — complexity > 0.45
+6. **Consistency** — complexity ≥ 0.30
+7. **Active** — uncertainty detected
+8. **Standard** — fallback
 
 ---
 
@@ -75,6 +85,7 @@ All inference passes route through `ClassifyReasoningMode()` in `pkg/cognition/r
 
 ### 6) Program-Aided Language (PAL)
 **Purpose:** Offload math, logic, and deterministic computation to a Python3 subprocess — zero hallucinated arithmetic.  
+**Trigger:** `reMath` regex: arithmetic expressions, unit conversions, `how long.*\d` / `\d.*how long` (rate/machine problems), formulas, equations.  
 **Implementation:** PAL runner spawns a sandboxed Python3 process; result is injected back into response context.  
 **References:** `pkg/cognition/pal.go`, `pkg/cognition/reasoning_engines.go`
 
@@ -115,6 +126,8 @@ All inference passes route through `ClassifyReasoningMode()` in `pkg/cognition/r
 
 ### 14) Self-Consistency
 **Purpose:** Generate N parallel candidate answers, then consensus-vote to select the most stable response.  
+**Trigger:** Two paths: (1) `reLogicEval` match — syllogisms, deductive argument validity, logical fallacy questions (fires before SELF-DISCOVER catch-all); (2) medium-complexity factual queries (0.30 ≤ complexity < 0.45, below CBR threshold).  
+**Logic rationale:** Small models (≤3B) fail on argument validity with single-path generation. 3 independent samples at varying temperature (0.5/0.6/0.7) + plurality vote provides error-correction that SELF-DISCOVER cannot — diversity of reasoning paths surfaces the correct answer even when any individual path fails.  
 **Implementation:** Parallel sampling with diversity injection; majority-vote or embedding-similarity consensus.  
 **References:** `pkg/cognition/reasoning_engines.go`, `pkg/cognition/verification.go`
 
