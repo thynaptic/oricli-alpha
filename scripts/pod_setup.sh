@@ -37,19 +37,15 @@ fi
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
-# ── AWS CLI config ────────────────────────────────────────────────────────────
+# ── AWS CLI config — use env vars, no profile/credentials file needed ─────────
 setup_aws() {
-  mkdir -p ~/.aws
-  cat > ~/.aws/credentials << EOF
-[runpod]
-aws_access_key_id = ${S3_KEY}
-aws_secret_access_key = ${S3_SECRET}
-EOF
-  chmod 600 ~/.aws/credentials
+  export AWS_ACCESS_KEY_ID="$S3_KEY"
+  export AWS_SECRET_ACCESS_KEY="$S3_SECRET"
+  export AWS_DEFAULT_REGION="$REGION"
 }
 
 s3() {
-  aws s3 "$@" --profile runpod --region "$REGION" --endpoint-url "$S3_ENDPOINT"
+  aws s3 "$@" --region "$REGION" --endpoint-url "$S3_ENDPOINT"
 }
 
 # ── Ollama ────────────────────────────────────────────────────────────────────

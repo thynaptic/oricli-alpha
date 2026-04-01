@@ -161,21 +161,26 @@ fi
 # ── Sync updated Modelfiles to S3 ────────────────────────────────────────────
 S3_ENDPOINT="${ORI_S3_ENDPOINT:-https://s3api-eu-ro-1.runpod.io}"
 S3_BUCKET="${ORI_S3_BUCKET:-s2uvk5nvun}"
-S3_PROFILE="${ORI_S3_PROFILE:-runpod}"
 
-if aws s3 ls "s3://${S3_BUCKET}/" --profile "$S3_PROFILE" --region eu-ro-1 \
+# Use credentials file profile if present, otherwise fall back to env vars
+_S3_AUTH=""
+if grep -q "\[runpod\]" ~/.aws/credentials 2>/dev/null; then
+  _S3_AUTH="--profile runpod"
+fi
+
+if aws s3 ls "s3://${S3_BUCKET}/" $_S3_AUTH --region eu-ro-1 \
     --endpoint-url "$S3_ENDPOINT" > /dev/null 2>&1; then
   echo ""
   echo "→ Syncing Modelfiles to S3 ..."
   for f in "$MODELS_DIR"/Modelfile.ori-*; do
     name="$(basename "$f")"
     aws s3 cp "$f" "s3://${S3_BUCKET}/modelfiles/${name}" \
-      --profile "$S3_PROFILE" --region eu-ro-1 --endpoint-url "$S3_ENDPOINT" \
+      $_S3_AUTH --region eu-ro-1 --endpoint-url "$S3_ENDPOINT" \
       --quiet && echo "  ✓ $name → s3://${S3_BUCKET}/modelfiles/${name}"
   done
 else
   echo ""
-  echo "  ⏭  S3 not reachable — skipping Modelfile sync (set RUNPOD_S3_* env vars)"
+  echo "  ⏭  S3 not reachable — skipping Modelfile sync (set ORI_S3_* env vars)"
 fi
 
 echo ""
