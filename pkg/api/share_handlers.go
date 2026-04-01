@@ -112,6 +112,36 @@ func (s *ServerV2) handleGetShare(c *gin.Context) {
 	}
 }
 
+// handleListShares returns the most recent shared artifacts.
+// GET /v1/shares
+func (s *ServerV2) handleListShares(c *gin.Context) {
+	pbClient := pb.NewClientFromEnv()
+	resp, err := pbClient.QueryRecords(c.Request.Context(), sharesCollection, "", "-created", 30)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	type ShareItem struct {
+		ShareID  string `json:"share_id"`
+		Title    string `json:"title"`
+		DocType  string `json:"doc_type"`
+		Language string `json:"language"`
+		Created  string `json:"created"`
+	}
+	shares := make([]ShareItem, 0, len(resp.Items))
+	for _, r := range resp.Items {
+		shares = append(shares, ShareItem{
+			ShareID:  fmt.Sprint(r["share_id"]),
+			Title:    fmt.Sprint(r["title"]),
+			DocType:  fmt.Sprint(r["doc_type"]),
+			Language: fmt.Sprint(r["language"]),
+			Created:  fmt.Sprint(r["created"]),
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"shares": shares, "count": len(shares)})
+}
+
 func newShareID() string {
 	b := make([]byte, 6) // 12 hex chars — short but collision-resistant enough
 	_, _ = rand.Read(b)
@@ -131,11 +161,11 @@ func markdownSharePage(title, content string) string {
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
          max-width: 780px; margin: 48px auto; padding: 0 24px;
          color: #e8e3d8; background: #0f0f0f; line-height: 1.7; }
-  h1,h2,h3 { color: #c4a44a; }
+  h1,h2,h3 { color: #E5004C; }
   code { background: #1a1a1a; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
   pre  { background: #1a1a1a; padding: 16px; border-radius: 8px; overflow-x: auto; }
-  a    { color: #c4a44a; }
-  blockquote { border-left: 3px solid #c4a44a; margin: 0; padding-left: 16px; color: #999; }
+  a    { color: #E5004C; }
+  blockquote { border-left: 3px solid #E5004C; margin: 0; padding-left: 16px; color: #999; }
 </style>
 </head>
 <body>
@@ -163,9 +193,9 @@ func codeSharePage(title, lang, content string) string {
   body { margin: 0; background: #0f0f0f; color: #e8e3d8;
          font-family: "JetBrains Mono", "Fira Code", monospace; }
   .header { padding: 16px 24px; background: #1a1a1a; border-bottom: 1px solid #2a2a2a;
-            font-size: 13px; color: #c4a44a; display: flex; gap: 12px; align-items: center; }
-  .lang   { font-size: 11px; background: rgba(196,164,74,0.1); padding: 2px 8px;
-            border-radius: 10px; color: #c4a44a; text-transform: uppercase; }
+            font-size: 13px; color: #E5004C; display: flex; gap: 12px; align-items: center; }
+  .lang   { font-size: 11px; background: rgba(229,0,76,0.1); padding: 2px 8px;
+            border-radius: 10px; color: #E5004C; text-transform: uppercase; }
   pre     { margin: 0; padding: 32px 24px; font-size: 14px; line-height: 1.6;
             white-space: pre-wrap; word-break: break-word; }
 </style>

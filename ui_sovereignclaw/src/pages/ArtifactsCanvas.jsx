@@ -8,7 +8,7 @@ import {
   Plus, X, Send, Square, Copy, Check, Edit3, Eye, History,
   Download, Trash2, Wand2, Minimize2, Maximize2, FileCode2,
   FileText, Table2, Code2, Globe, GitCommit, RotateCcw, ExternalLink,
-  RefreshCw, Pencil, ImageIcon, Loader2, AlertCircle, Share2,
+  RefreshCw, Pencil, ImageIcon, Loader2, AlertCircle, Share2, BookOpen,
 } from 'lucide-react';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -448,6 +448,84 @@ function SelectionPopup({ text, rect, onAction, streaming, onClose }) {
 
 // ─── Version history panel ────────────────────────────────────────────────────
 
+// ─── Share History Panel ──────────────────────────────────────────────────────
+
+function ShareHistoryPanel({ onClose }) {
+  const [shares, setShares] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(null);
+
+  useEffect(() => {
+    fetch('/api/v1/shares')
+      .then(r => r.ok ? r.json() : { shares: [] })
+      .then(d => { setShares(d.shares ?? []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const copyUrl = async (shareId) => {
+    const url = `https://oristudio.thynaptic.com/share/${shareId}`;
+    await navigator.clipboard.writeText(url);
+    setCopied(shareId);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const typeIcon = (t) => t === 'html' ? '🌐' : t === 'markdown' ? '📝' : '💻';
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+      <div style={{
+        position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 40,
+        background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)',
+        borderRadius: 10, width: 320, maxHeight: 380, display: 'flex', flexDirection: 'column',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+      }}>
+        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--color-sc-border)', fontSize: 11, fontWeight: 600, color: 'var(--color-sc-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
+          Shared Artifacts
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {loading && <div style={{ padding: '20px 14px', fontSize: 13, color: 'var(--color-sc-text-dim)', textAlign: 'center' }}>Loading…</div>}
+          {!loading && !shares.length && (
+            <div style={{ padding: '20px 14px', fontSize: 13, color: 'var(--color-sc-text-dim)', textAlign: 'center' }}>No shared artifacts yet</div>
+          )}
+          {shares.map(s => (
+            <div key={s.share_id} style={{
+              padding: '9px 14px', borderBottom: '1px solid var(--color-sc-border)',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <span style={{ fontSize: 14 }}>{typeIcon(s.doc_type)}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, color: 'var(--color-sc-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {s.title || 'Untitled'}
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--color-sc-text-muted)', marginTop: 2 }}>
+                  {s.doc_type} · {s.created ? new Date(s.created).toLocaleDateString() : '—'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                <button onClick={() => copyUrl(s.share_id)} title="Copy link" style={{
+                  background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px',
+                  borderRadius: 5, color: copied === s.share_id ? 'var(--color-sc-success)' : 'var(--color-sc-text-muted)',
+                }}>
+                  {copied === s.share_id ? <Check size={12} /> : <Copy size={12} />}
+                </button>
+                <a href={`https://oristudio.thynaptic.com/share/${s.share_id}`} target="_blank" rel="noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', padding: '4px 6px', borderRadius: 5, color: 'var(--color-sc-text-muted)', textDecoration: 'none' }}
+                  title="Open share"
+                >
+                  <ExternalLink size={12} />
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Version History Panel ────────────────────────────────────────────────────
+
 function VersionPanel({ doc, onRestore, onClose }) {
   return (
     <>
@@ -660,6 +738,7 @@ function ImageGenPanel({ onInsertToCanvas }) {
 function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
   const [mode, setMode] = useState('preview'); // 'preview' | 'edit' | 'image'
   const [showVersions, setShowVersions] = useState(false);
+  const [showShareHistory, setShowShareHistory] = useState(false);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [previewSel, setPreviewSel] = useState({ text: '', rect: null });
   const [copied, setCopied] = useState(false);
@@ -754,6 +833,12 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
                 <History size={13} />
               </button>
               {showVersions && <VersionPanel doc={doc} onRestore={c => { onUpdate({ content: c }); onAddVersion(c, 'Restored'); }} onClose={() => setShowVersions(false)} />}
+            </div>
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setShowShareHistory(v => !v)} title="Shared artifacts" style={{ padding: '5px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: showShareHistory ? 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)' : 'transparent', color: showShareHistory ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex' }}>
+                <BookOpen size={13} />
+              </button>
+              {showShareHistory && <ShareHistoryPanel onClose={() => setShowShareHistory(false)} />}
             </div>
             <button onClick={copy} title="Copy" style={{ padding: '5px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: 'transparent', color: copied ? 'var(--color-sc-success)' : 'var(--color-sc-text-muted)', display: 'flex' }}>
               {copied ? <Check size={13} /> : <Copy size={13} />}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Target, Zap, CheckCircle2, XCircle, Clock, RefreshCw, Plus, Trash2, ChevronRight, Activity, MoreHorizontal } from 'lucide-react';
+import { Target, Zap, CheckCircle2, XCircle, Clock, RefreshCw, Plus, Trash2, ChevronRight, Activity, MoreHorizontal, Network, ChevronDown } from 'lucide-react';
 
 const API = '/api/v1';
 const GOLD = 'var(--color-sc-gold)';
@@ -292,21 +292,212 @@ function AddGoalModal({ onClose, onAdd }) {
   );
 }
 
+// ── Sovereign Goal (DAG) components ───────────────────────────────────────────
+
+const SG_STATUS = {
+  pending:   { color: 'rgba(120,120,160,0.9)', bg: 'rgba(120,120,160,0.08)', Icon: Clock, label: 'Pending' },
+  running:   { color: 'color-mix(in srgb, var(--color-sc-gold) 95%, transparent)', bg: goldBg(8), Icon: Zap, label: 'Running' },
+  completed: { color: 'rgba(80,200,120,0.9)',  bg: 'rgba(80,200,120,0.08)',  Icon: CheckCircle2, label: 'Done' },
+  failed:    { color: 'rgba(220,80,80,0.9)',   bg: 'rgba(220,80,80,0.08)',   Icon: XCircle, label: 'Failed' },
+  cancelled: { color: 'rgba(160,120,120,0.9)', bg: 'rgba(160,120,120,0.08)', Icon: XCircle, label: 'Cancelled' },
+};
+
+function SovereignGoalCard({ dag, onCancel }) {
+  const [open, setOpen] = useState(false);
+  const sg = SG_STATUS[dag.status] ?? SG_STATUS.pending;
+  const SgIcon = sg.Icon;
+  const done = dag.nodes?.filter(n => n.status === 'completed').length ?? 0;
+  const total = dag.nodes?.length ?? 0;
+
+  return (
+    <div style={{
+      background: 'var(--color-sc-surface)', border: `1px solid ${open ? goldBg(20) : 'var(--color-sc-border)'}`,
+      borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.15s',
+    }}>
+      {/* Header */}
+      <div onClick={() => setOpen(o => !o)} style={{
+        padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 12,
+      }}>
+        <SgIcon size={16} style={{ color: sg.color, flexShrink: 0, marginTop: 2 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-sc-text)', marginBottom: 4, lineHeight: 1.4 }}>
+            {dag.objective}
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10.5, padding: '2px 7px', borderRadius: 8, background: sg.bg, color: sg.color, fontWeight: 600 }}>
+              {sg.label}
+            </span>
+            {total > 0 && (
+              <span style={{ fontSize: 10.5, color: 'var(--color-sc-text-muted)' }}>
+                {done}/{total} steps
+              </span>
+            )}
+            {dag.tick_count > 0 && (
+              <span style={{ fontSize: 10.5, color: 'var(--color-sc-text-dim)' }}>
+                {dag.tick_count} ticks
+              </span>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+          {dag.status === 'running' || dag.status === 'pending' ? (
+            <button onClick={e => { e.stopPropagation(); onCancel(dag.id); }} title="Cancel plan"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '3px 6px', borderRadius: 5, color: 'var(--color-sc-text-muted)', fontSize: 11 }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--color-sc-danger)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--color-sc-text-muted)'}
+            >
+              <XCircle size={13} />
+            </button>
+          ) : null}
+          <ChevronDown size={14} style={{ color: 'var(--color-sc-text-muted)', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }} />
+        </div>
+      </div>
+
+      {/* Execution timeline */}
+      {open && dag.nodes?.length > 0 && (
+        <div style={{ borderTop: '1px solid var(--color-sc-border)', padding: '12px 16px 16px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {dag.nodes.map((node, i) => {
+            const ns = SG_STATUS[node.status] ?? SG_STATUS.pending;
+            const NIcon = ns.Icon;
+            const isLast = i === dag.nodes.length - 1;
+            return (
+              <div key={node.id} style={{ display: 'flex', gap: 12 }}>
+                {/* Connector line */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 16, flexShrink: 0 }}>
+                  <div style={{
+                    width: 16, height: 16, borderRadius: '50%', background: ns.bg,
+                    border: `1.5px solid ${ns.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0, marginTop: 2,
+                  }}>
+                    <NIcon size={8} style={{ color: ns.color }} />
+                  </div>
+                  {!isLast && <div style={{ width: 1.5, flex: 1, background: 'var(--color-sc-border)', minHeight: 12 }} />}
+                </div>
+                {/* Node content */}
+                <div style={{ flex: 1, paddingBottom: isLast ? 0 : 10 }}>
+                  <div style={{ fontSize: 12.5, color: 'var(--color-sc-text)', lineHeight: 1.45 }}>
+                    {node.description}
+                  </div>
+                  {node.result && (
+                    <div style={{ fontSize: 11.5, color: 'var(--color-sc-text-muted)', marginTop: 4, background: 'var(--color-sc-bg)', padding: '4px 8px', borderRadius: 5, fontFamily: 'var(--font-mono)' }}>
+                      {node.result.length > 120 ? node.result.slice(0, 120) + '…' : node.result}
+                    </div>
+                  )}
+                  {node.depends_on?.length > 0 && (
+                    <div style={{ fontSize: 10.5, color: 'var(--color-sc-text-dim)', marginTop: 3 }}>
+                      depends on: {node.depends_on.join(', ')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {dag.final_answer && (
+            <div style={{ marginTop: 12, padding: '10px 12px', background: goldBg(6), border: `1px solid ${goldBg(20)}`, borderRadius: 8 }}>
+              <div style={{ fontSize: 10, color: GOLD, fontWeight: 600, marginBottom: 4, letterSpacing: '0.06em' }}>FINAL ANSWER</div>
+              <div style={{ fontSize: 13, color: 'var(--color-sc-text)', lineHeight: 1.5 }}>{dag.final_answer}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AddSovereignGoalModal({ onClose, onAdd }) {
+  const [objective, setObjective] = useState('');
+  const [context, setContext] = useState('');
+  const [maxNodes, setMaxNodes] = useState(6);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async () => {
+    if (!objective.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const r = await fetch(`${API}/sovereign/goals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ objective: objective.trim(), context: context.trim(), max_nodes: maxNodes }),
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Failed'); }
+      const dag = await r.json();
+      onAdd(dag);
+      onClose();
+    } catch (e) { setError(e.message); } finally { setSubmitting(false); }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div style={{ background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 14, padding: '28px', width: 480, maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-sc-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Network size={16} style={{ color: GOLD }} /> New Sovereign Plan
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 11, color: 'var(--color-sc-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Objective</label>
+          <textarea value={objective} onChange={e => setObjective(e.target.value)}
+            placeholder="What should ORI accomplish?"
+            rows={3}
+            style={{ background: 'var(--color-sc-bg)', border: '1px solid var(--color-sc-border)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--color-sc-text)', resize: 'none', outline: 'none', fontFamily: 'var(--font-inter)' }}
+          />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 11, color: 'var(--color-sc-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Context (optional)</label>
+          <input value={context} onChange={e => setContext(e.target.value)}
+            placeholder="Additional context or constraints…"
+            style={{ background: 'var(--color-sc-bg)', border: '1px solid var(--color-sc-border)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--color-sc-text)', outline: 'none', fontFamily: 'var(--font-inter)' }}
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <label style={{ fontSize: 11, color: 'var(--color-sc-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Max Steps</label>
+          <input type="number" min={2} max={12} value={maxNodes} onChange={e => setMaxNodes(+e.target.value)}
+            style={{ width: 60, background: 'var(--color-sc-bg)', border: '1px solid var(--color-sc-border)', borderRadius: 6, padding: '6px 10px', fontSize: 13, color: 'var(--color-sc-text)', outline: 'none', textAlign: 'center' }}
+          />
+        </div>
+        {error && <div style={{ fontSize: 12, color: 'var(--color-sc-danger)' }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid var(--color-sc-border)', background: 'transparent', color: 'var(--color-sc-text-muted)', cursor: 'pointer', fontSize: 13 }}>
+            Cancel
+          </button>
+          <button onClick={submit} disabled={submitting || !objective.trim()} style={{
+            padding: '8px 18px', borderRadius: 7, border: 'none', background: GOLD, color: '#fff',
+            cursor: submitting ? 'default' : 'pointer', fontSize: 13, fontWeight: 600, opacity: submitting ? 0.7 : 1,
+          }}>
+            {submitting ? 'Planning…' : 'Create Plan'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
-const TABS = ['all', 'active', 'pending', 'completed', 'failed'];
+const TABS = ['all', 'active', 'pending', 'completed', 'failed', 'plans'];
 
 export function GoalsPage() {
-  const [goals, setGoals]       = useState([]);
-  const [daemons, setDaemons]   = useState([]);
-  const [tab, setTab]           = useState('all');
-  const [loading, setLoading]   = useState(true);
-  const [showAdd, setShowAdd]   = useState(false);
+  const [goals, setGoals]             = useState([]);
+  const [sovereignGoals, setSovGoals] = useState([]);
+  const [daemons, setDaemons]         = useState([]);
+  const [tab, setTab]                 = useState('all');
+  const [loading, setLoading]         = useState(true);
+  const [showAdd, setShowAdd]         = useState(false);
+  const [showAddSov, setShowAddSov]   = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
 
   const fetchGoals = useCallback(async () => {
     try {
       const r = await fetch(`${API}/goals`);
       if (r.ok) { const d = await r.json(); setGoals(d.goals ?? []); }
+    } catch { /* silent */ }
+  }, []);
+
+  const fetchSovGoals = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/sovereign/goals`);
+      if (r.ok) { const d = await r.json(); setSovGoals(d.goals ?? []); }
     } catch { /* silent */ }
   }, []);
 
@@ -319,10 +510,10 @@ export function GoalsPage() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchGoals(), fetchDaemons()]);
+    await Promise.all([fetchGoals(), fetchDaemons(), fetchSovGoals()]);
     setLoading(false);
     setLastRefresh(new Date());
-  }, [fetchGoals, fetchDaemons]);
+  }, [fetchGoals, fetchDaemons, fetchSovGoals]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -337,6 +528,11 @@ export function GoalsPage() {
     await fetchGoals();
   };
 
+  const handleCancelSov = async (id) => {
+    await fetch(`${API}/sovereign/goals/${id}`, { method: 'DELETE' });
+    await fetchSovGoals();
+  };
+
   const handleStatusChange = async (id, status) => {
     // Optimistic update
     setGoals(prev => prev.map(g => g.id === id ? { ...g, status } : g));
@@ -349,8 +545,9 @@ export function GoalsPage() {
     } catch { /* revert on error */ await fetchGoals(); }
   };
 
-  const filtered = tab === 'all' ? goals : goals.filter(g => g.status === tab);
+  const filtered = tab === 'all' ? goals : tab === 'plans' ? [] : goals.filter(g => g.status === tab);
   const counts = TABS.reduce((acc, t) => {
+    if (t === 'plans') { acc[t] = sovereignGoals.length; return acc; }
     acc[t] = t === 'all' ? goals.length : goals.filter(g => g.status === t).length;
     return acc;
   }, {});
@@ -396,6 +593,16 @@ export function GoalsPage() {
           }}>
             <Plus size={13} />
             New Objective
+          </button>
+          <button onClick={() => setShowAddSov(true)} style={{
+            background: 'color-mix(in srgb, var(--color-sc-blue) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--color-sc-blue) 30%, transparent)',
+            borderRadius: 8, padding: '7px 14px', cursor: 'pointer',
+            color: 'var(--color-sc-blue)',
+            display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600,
+          }}>
+            <Network size={13} />
+            New Plan
           </button>
         </div>
       </div>
@@ -446,26 +653,47 @@ export function GoalsPage() {
       </div>
 
       {/* Goal cards */}
-      {loading && goals.length === 0 ? (
-        <div style={{ textAlign: 'center', color: 'var(--color-sc-text-muted)', padding: '40px 0', fontSize: 13 }}>
-          Loading objectives…
-        </div>
-      ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 0' }}>
-          <Target size={32} color="rgba(255,255,255,0.1)" style={{ marginBottom: 12 }} />
-          <p style={{ color: 'var(--color-sc-text-muted)', fontSize: 13, margin: 0 }}>
-            {tab === 'all' ? 'No objectives yet. Add one to start autonomous execution.' : `No ${tab} objectives.`}
-          </p>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {filtered.map(obj => (
-            <ObjectiveCard key={obj.id} obj={obj} all={goals} onDelete={handleDelete} onStatusChange={handleStatusChange} />
-          ))}
-        </div>
+      {tab !== 'plans' && (
+        loading && goals.length === 0 ? (
+          <div style={{ textAlign: 'center', color: 'var(--color-sc-text-muted)', padding: '40px 0', fontSize: 13 }}>
+            Loading objectives…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Target size={32} color="rgba(255,255,255,0.1)" style={{ marginBottom: 12 }} />
+            <p style={{ color: 'var(--color-sc-text-muted)', fontSize: 13, margin: 0 }}>
+              {tab === 'all' ? 'No objectives yet. Add one to start autonomous execution.' : `No ${tab} objectives.`}
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {filtered.map(obj => (
+              <ObjectiveCard key={obj.id} obj={obj} all={goals} onDelete={handleDelete} onStatusChange={handleStatusChange} />
+            ))}
+          </div>
+        )
+      )}
+
+      {/* Sovereign Plans (DAG timeline) */}
+      {tab === 'plans' && (
+        sovereignGoals.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Network size={32} color="rgba(255,255,255,0.1)" style={{ marginBottom: 12 }} />
+            <p style={{ color: 'var(--color-sc-text-muted)', fontSize: 13, margin: 0 }}>
+              No sovereign plans yet. Click <strong style={{ color: GOLD }}>New Plan</strong> to create a multi-step execution DAG.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {sovereignGoals.map(dag => (
+              <SovereignGoalCard key={dag.id} dag={dag} onCancel={handleCancelSov} />
+            ))}
+          </div>
+        )
       )}
 
       {showAdd && <AddGoalModal onClose={() => setShowAdd(false)} onAdd={fetchGoals} />}
+      {showAddSov && <AddSovereignGoalModal onClose={() => setShowAddSov(false)} onAdd={dag => { setSovGoals(prev => [dag, ...prev]); setTab('plans'); }} />}
     </div>
   );
 }
