@@ -36,7 +36,6 @@ if [[ -z "$BASE_MODEL" ]]; then
 fi
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
-
 # ── AWS CLI config — use env vars, no profile/credentials file needed ─────────
 setup_aws() {
   export AWS_ACCESS_KEY_ID="$S3_KEY"
@@ -102,15 +101,21 @@ s3_sync_down() {
 
 # ── Ollama ────────────────────────────────────────────────────────────────────
 wait_for_ollama() {
+  # Start Ollama if not already running
+  if ! curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
+    log "Starting Ollama..."
+    ollama serve &>/tmp/ollama.log &
+  fi
   log "Waiting for Ollama to be ready..."
-  for i in $(seq 1 30); do
+  for i in $(seq 1 60); do
     if curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
       log "Ollama ready."
       return 0
     fi
-    sleep 2
+    sleep 3
   done
-  log "ERROR: Ollama did not start in time"
+  log "ERROR: Ollama did not start in time. Last log:"
+  tail -20 /tmp/ollama.log 2>/dev/null || true
   exit 1
 }
 
