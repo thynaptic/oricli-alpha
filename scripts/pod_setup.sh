@@ -155,9 +155,9 @@ BASE_TAG="${BASE_MODEL//:/-}"  # e.g. qwen3-4b
 S3_BLOB_PATH="s3://${S3_BUCKET}/ollama/models/${BASE_TAG}/"
 
 log "Checking S3 cache for $BASE_MODEL ..."
-if s3_ls "ollama/models/${BASE_TAG}/"; then
+if s3_ls "ollama/models/${BASE_TAG}/" 2>/dev/null; then
   log "Cache hit — syncing $BASE_MODEL blobs from S3 ..."
-  s3_sync_down "ollama/models/${BASE_TAG}" "$OLLAMA_MODELS_DIR"
+  s3_sync_down "ollama/models/${BASE_TAG}" "$OLLAMA_MODELS_DIR" || log "⚠  S3 sync failed, continuing anyway"
   log "Sync complete. Verifying model ..."
   if ! model_exists "$BASE_MODEL"; then
     log "Blobs restored but manifest missing — pulling to register ..."
@@ -166,26 +166,32 @@ if s3_ls "ollama/models/${BASE_TAG}/"; then
 else
   log "No S3 cache — pulling $BASE_MODEL from registry (this takes a while)..."
   ollama pull "$BASE_MODEL"
-  log "Pull complete. Caching blobs to S3 for future pods..."
-  s3_sync_up "$OLLAMA_MODELS_DIR" "ollama/models/${BASE_TAG}"
-  log "Blobs cached to S3."
+  log "Pull complete. Attempting to cache blobs to S3 for future pods..."
+  s3_sync_up "$OLLAMA_MODELS_DIR" "ollama/models/${BASE_TAG}" 2>/dev/null && \
+    log "Blobs cached to S3." || \
+    log "⚠  S3 cache failed (creds issue?) — continuing without cache"
 fi
 
-# Step 2: Download Modelfile from S3
+# Step 2: Download Modelfile — try S3 first, fall back to GitHub
 MODELFILE_LOCAL="/tmp/Modelfile.ori-${ORI_TIER}"
-log "Downloading Modelfile.ori-${ORI_TIER} from S3 ..."
-s3_get "modelfiles/Modelfile.ori-${ORI_TIER}" "$MODELFILE_LOCAL"
+log "Downloading Modelfile.ori-${ORI_TIER} ..."
+if ! s3_get "modelfiles/Modelfile.ori-${ORI_TIER}" "$MODELFILE_LOCAL" 2>/dev/null; then
+  log "⚠  S3 unavailable — fetching Modelfile from GitHub ..."
+  curl -sL "https://raw.githubusercontent.com/thynaptic/oricli-alpha/main/models/Modelfile.ori-${ORI_TIER}" \
+    -o "$MODELFILE_LOCAL"
+fi
 
 # Step 3: Create ori model
 log "Creating ori:${ORI_TIER} ..."
 ollama create "ori:${ORI_TIER}" -f "$MODELFILE_LOCAL"
 log "✓ ori:${ORI_TIER} ready"
 
-# Step 4: Cache ori model back to S3
+# Step 4: Cache ori model back to S3 (best-effort)
 ORI_TAG="ori-${ORI_TIER}"
 log "Caching ori:${ORI_TIER} blobs to S3 ..."
-s3_sync_up "$OLLAMA_MODELS_DIR" "ollama/models/${ORI_TAG}"
-log "✓ ori:${ORI_TIER} cached."
+s3_sync_up "$OLLAMA_MODELS_DIR" "ollama/models/${ORI_TAG}" 2>/dev/null && \
+  log "✓ ori:${ORI_TIER} cached." || \
+  log "⚠  S3 cache failed — skipping"
 
 log ""
 log "═══ Setup complete ═══"
