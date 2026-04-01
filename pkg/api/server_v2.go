@@ -907,7 +907,6 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Non-streaming clients (LiveBench, curl, SDK callers) must send stream:false.
 	// The UI always sends stream:true (or omits it, defaulting to SSE via request header).
 	useSSE := req.Stream
-	log.Printf("[DEBUG] handleChatCompletions: stream=%v useSSE=%v model=%s", req.Stream, useSSE, req.Model)
 	// ── Semantic response cache check ────────────────────────────────────────
 	// L1 (exact hash) is always checked. L2 (vector) only when model is idle.
 	// On hit: stream the cached response as SSE (or return JSON for non-streaming).
@@ -1279,7 +1278,17 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	} else if isCodeAction {
 		msgs[0]["content"] += "\n\n" + reform.NewCodeConstitution().GetSystemPrompt()
 	}
-	tokenCh, err := s.Agent.GenService.ChatStream(c.Request.Context(), msgs, streamOpts)
+	// Non-SSE (stream=false): use an independent context so the token collection
+	// is not cancelled by client disconnect or Caddy/proxy connection teardown.
+	// The Ollama goroutine already uses context.Background() internally.
+	// SSE: use request context so we stop streaming if the client disconnects.
+	streamCtx := c.Request.Context()
+	if !useSSE {
+		var streamCancel context.CancelFunc
+		streamCtx, streamCancel = context.WithTimeout(context.Background(), 5*time.Minute)
+		defer streamCancel()
+	}
+	tokenCh, err := s.Agent.GenService.ChatStream(streamCtx, msgs, streamOpts)
 	if err != nil {
 		if useSSE { close(heartbeatDone) }
 		sseError(err.Error())
@@ -1354,7 +1363,10 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 				c.Writer.Flush()
 			}
 		case <-c.Request.Context().Done():
-			streamDone = true
+			if useSSE {
+				streamDone = true
+			}
+			// non-SSE: ignore request context cancellation — keep collecting tokens
 		}
 	}
 

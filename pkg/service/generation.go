@@ -1537,24 +1537,33 @@ func (s *GenerationService) ollamaChatStream(ctx context.Context, messages []map
 	}
 
 	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", s.GenerateURL+"/api/chat", bytes.NewReader(body))
+	// Use an independent context — do NOT inherit the client request context.
+	// The client context is cancelled on disconnect or Cloudflare proxy timeout
+	// (typically 100s), which would kill Ollama mid-load on a cold-start VPS.
+	// We give Ollama a generous 5-minute budget regardless of what the client does.
+	ollamaCtx, ollamaCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	req, err := http.NewRequestWithContext(ollamaCtx, "POST", s.GenerateURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {
+		ollamaCancel()
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.StreamClient.Do(req)
 	if err != nil {
+		ollamaCancel()
 		return nil, err
 	}
 	if resp.StatusCode >= 400 {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		resp.Body.Close()
+		ollamaCancel()
 		return nil, fmt.Errorf("Ollama returned status %d for streaming chat: %s", resp.StatusCode, strings.TrimSpace(string(errBody)))
 	}
 
 	ch := make(chan string, 64)
 	go func() {
+		defer ollamaCancel()
 		defer resp.Body.Close()
 		defer close(ch)
 		scanner := bufio.NewScanner(resp.Body)

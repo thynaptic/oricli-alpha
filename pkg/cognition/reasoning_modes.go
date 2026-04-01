@@ -29,7 +29,7 @@ func (m ReasoningMode) String() string {
 
 var (
 	// PAL: arithmetic expressions, unit conversions, formulas
-	reMath = regexp.MustCompile(`(?i)(calculat|comput|solv|convert|how many|what is \d|=\?|\d+[\+\-\*\/\^]\d+|integral|derivative|percent|formula|equation|proof)`)
+	reMath = regexp.MustCompile(`(?i)(calculat|comput|solv|convert|how many|=\?|\d+[\+\-\*\/\^]\d+|integral|derivative|percent|formula|equation|proof)`)
 
 	// ReAct: multi-tool research queries
 	reReAct = regexp.MustCompile(`(?i)(research|find.*and.*then|look up.*and|search.*then|compare.*sources|latest.*on|who is.*and what|news about)`)
