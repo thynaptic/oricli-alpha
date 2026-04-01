@@ -1,13 +1,13 @@
 # Oricli-Alpha Quick Start
 
-**Version:** 2.1.0 — Go-native backbone  
+**Version:** v11.0.0 — Go-native backbone  
 **Production URL:** `https://oricli.thynaptic.com`
 
 ---
 
 ## Prerequisites
 
-- **Go 1.21+** — [install](https://go.dev/dl/)
+- **Go 1.25+** — [install](https://go.dev/dl/)
 - **Ollama** — [install](https://ollama.com) with `qwen2.5-coder:3b` pulled
 - **Python 3.11+** + pip — only needed for the UI proxy and training pipelines
 

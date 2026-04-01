@@ -2,17 +2,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Target, Zap, CheckCircle2, XCircle, Clock, RefreshCw, Plus, Trash2, ChevronRight, Activity, MoreHorizontal } from 'lucide-react';
 
 const API = '/api/v1';
-const GOLD = 'rgba(196,164,74,';
+const GOLD = 'var(--color-sc-gold)';
+const goldBg = (pct) => `color-mix(in srgb, var(--color-sc-gold) ${pct}%, transparent)`;
 
 // ── Status config ──────────────────────────────────────────────────────────────
 const STATUS = {
   pending:   { label: 'Pending',   color: 'rgba(120,120,160,0.9)', bg: 'rgba(120,120,160,0.1)', Icon: Clock },
-  active:    { label: 'Active',    color: 'rgba(196,164,74,0.95)', bg: 'rgba(196,164,74,0.12)', Icon: Zap },
+  active:    { label: 'Active',    color: 'color-mix(in srgb, var(--color-sc-gold) 95%, transparent)', bg: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', Icon: Zap },
   completed: { label: 'Completed', color: 'rgba(80,200,120,0.9)',  bg: 'rgba(80,200,120,0.1)',  Icon: CheckCircle2 },
   failed:    { label: 'Failed',    color: 'rgba(220,80,80,0.9)',   bg: 'rgba(220,80,80,0.1)',   Icon: XCircle },
 };
 
-const DAEMON_COLOR = { active: GOLD + '0.9)', idle: 'rgba(120,120,160,0.8)', running: 'rgba(80,200,120,0.85)' };
+const DAEMON_COLOR = { active: GOLD, idle: 'rgba(120,120,160,0.8)', running: 'rgba(80,200,120,0.85)' };
 
 // ── Daemon health row ──────────────────────────────────────────────────────────
 function DaemonRow({ daemon }) {
@@ -68,7 +69,7 @@ function ObjectiveCard({ obj, all, onDelete, onStatusChange }) {
     <div style={{
       borderRadius: 12, padding: '14px 16px',
       background: 'rgba(255,255,255,0.025)',
-      border: `1px solid ${obj.status === 'active' ? GOLD + '0.3)' : 'rgba(255,255,255,0.07)'}`,
+      border: `1px solid ${obj.status === 'active' ? goldBg(30) : 'rgba(255,255,255,0.07)'}`,
       transition: 'border-color 0.2s',
     }}>
       {/* Header */}
@@ -84,8 +85,8 @@ function ObjectiveCard({ obj, all, onDelete, onStatusChange }) {
 
         {obj.priority > 0 && (
           <span style={{
-            fontSize: 10, color: GOLD + '0.7)', fontFamily: 'var(--font-mono)',
-            background: GOLD + '0.08)', padding: '3px 7px', borderRadius: 5,
+            fontSize: 10, color: goldBg(70), fontFamily: 'var(--font-mono)',
+            background: goldBg(8), padding: '3px 7px', borderRadius: 5,
           }}>
             P{obj.priority}
           </span>
@@ -171,7 +172,7 @@ function ObjectiveCard({ obj, all, onDelete, onStatusChange }) {
         <div style={{ height: 2, background: 'rgba(255,255,255,0.08)', borderRadius: 2, margin: '8px 0' }}>
           <div style={{
             height: '100%', borderRadius: 2,
-            background: GOLD + '0.7)',
+            background: goldBg(70),
             width: `${Math.round((obj.progress ?? 0) * 100)}%`,
             transition: 'width 0.5s ease',
           }} />
@@ -238,7 +239,7 @@ function AddGoalModal({ onClose, onAdd }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }} onClick={onClose}>
       <div style={{
-        background: 'var(--color-sc-surface)', border: '1px solid rgba(196,164,74,0.25)',
+        background: 'var(--color-sc-surface)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 25%, transparent)',
         borderRadius: 16, padding: 28, width: 480, maxWidth: '90vw',
       }} onClick={e => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 20px', color: 'var(--color-sc-text)', fontSize: 16, fontWeight: 700 }}>
@@ -266,7 +267,7 @@ function AddGoalModal({ onClose, onAdd }) {
             onChange={e => setPriority(Number(e.target.value))}
             style={{ flex: 1 }}
           />
-          <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: GOLD + '0.9)', minWidth: 20 }}>
+          <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: GOLD, minWidth: 20 }}>
             {priority}
           </span>
         </div>
@@ -280,7 +281,7 @@ function AddGoalModal({ onClose, onAdd }) {
           </button>
           <button onClick={submit} disabled={submitting || !goal.trim()} style={{
             padding: '8px 18px', borderRadius: 8, border: 'none',
-            background: GOLD + '0.15)', color: GOLD + '0.95)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            background: goldBg(15), color: GOLD, cursor: 'pointer', fontSize: 13, fontWeight: 600,
             opacity: submitting || !goal.trim() ? 0.5 : 1,
           }}>
             {submitting ? 'Adding…' : 'Add Objective'}
@@ -361,10 +362,10 @@ export function GoalsPage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{
           width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-          background: GOLD + '0.1)', border: `1px solid ${GOLD}0.2)`,
+          background: goldBg(10), border: `1px solid ${goldBg(20)}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Target size={18} color={GOLD + '0.9)'} />
+          <Target size={18} color={GOLD} />
         </div>
         <div>
           <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--color-sc-text)' }}>
@@ -389,8 +390,8 @@ export function GoalsPage() {
             Refresh
           </button>
           <button onClick={() => setShowAdd(true)} style={{
-            background: GOLD + '0.12)', border: `1px solid ${GOLD}0.25)`,
-            borderRadius: 8, padding: '7px 14px', cursor: 'pointer', color: GOLD + '0.9)',
+            background: goldBg(12), border: `1px solid ${goldBg(25)}`,
+            borderRadius: 8, padding: '7px 14px', cursor: 'pointer', color: GOLD,
             display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600,
           }}>
             <Plus size={13} />
@@ -406,13 +407,13 @@ export function GoalsPage() {
           background: 'rgba(255,255,255,0.015)', padding: '14px 16px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <Activity size={13} color={GOLD + '0.7)'} />
+            <Activity size={13} color={goldBg(70)} />
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-sc-text-muted)', letterSpacing: '0.06em' }}>
               DAEMON HEALTH
             </span>
             {activeCount > 0 && (
               <span style={{
-                fontSize: 10, background: GOLD + '0.15)', color: GOLD + '0.9)',
+                fontSize: 10, background: goldBg(15), color: GOLD,
                 padding: '2px 8px', borderRadius: 5, fontWeight: 700,
               }}>
                 {activeCount} ACTIVE
@@ -434,8 +435,8 @@ export function GoalsPage() {
             style={{
               background: 'none', border: 'none', cursor: 'pointer', padding: '8px 14px',
               fontSize: 12, fontWeight: tab === t ? 700 : 400, letterSpacing: '0.02em',
-              color: tab === t ? GOLD + '0.95)' : 'var(--color-sc-text-muted)',
-              borderBottom: tab === t ? `2px solid ${GOLD}0.8)` : '2px solid transparent',
+              color: tab === t ? GOLD : 'var(--color-sc-text-muted)',
+              borderBottom: tab === t ? `2px solid ${goldBg(80)}` : '2px solid transparent',
               marginBottom: -1, textTransform: 'capitalize', transition: 'color 0.15s',
             }}
           >

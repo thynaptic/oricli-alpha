@@ -137,7 +137,7 @@ export function NavRail({ onOpenSettings }) {
             style={{
               width: 44, height: 44, borderRadius: 10, border: 'none', cursor: 'pointer',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
-              background: active ? 'rgba(196,164,74,0.15)' : 'transparent',
+              background: active ? 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)' : 'transparent',
               color: active ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)',
               transition: 'background 0.15s, color 0.15s',
               position: 'relative',
@@ -161,7 +161,7 @@ export function NavRail({ onOpenSettings }) {
                 position: 'absolute', top: 4, right: 4,
                 width: 8, height: 8, borderRadius: '50%',
                 background: 'var(--color-sc-gold)',
-                boxShadow: '0 0 6px rgba(196,164,74,0.7)',
+                boxShadow: '0 0 6px color-mix(in srgb, var(--color-sc-gold) 70%, transparent)',
                 animation: 'pulse 1.5s ease-in-out infinite',
               }} />
             )}

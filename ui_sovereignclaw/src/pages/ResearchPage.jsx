@@ -18,17 +18,17 @@ function StepTracker({ steps }) {
         <div key={i} style={{
           display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 10px',
           borderRadius: 8, transition: 'background 0.2s',
-          background: step.status === 'active' ? 'rgba(196,164,74,0.07)' : 'transparent',
+          background: step.status === 'active' ? 'color-mix(in srgb, var(--color-sc-gold) 7%, transparent)' : 'transparent',
         }}>
           {/* Status dot */}
           <div style={{
             width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: step.status === 'done'   ? 'rgba(34,197,94,0.12)'
-                       : step.status === 'active' ? 'rgba(196,164,74,0.15)'
+                       : step.status === 'active' ? 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)'
                        : 'rgba(255,255,255,0.04)',
             border: `1px solid ${step.status === 'done'   ? 'rgba(34,197,94,0.35)'
-                                : step.status === 'active' ? 'rgba(196,164,74,0.4)'
+                                : step.status === 'active' ? 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)'
                                 : 'rgba(255,255,255,0.08)'}`,
           }}>
             {step.status === 'done'   && <Check size={9} color="#22c55e" />}
@@ -106,7 +106,7 @@ const MD_COMPONENTS = {
   p:  ({ children }) => <p style={{ margin: '0 0 12px', color: 'var(--color-sc-text-muted)', lineHeight: 1.75, fontSize: 14 }}>{children}</p>,
   li: ({ children }) => <li style={{ color: 'var(--color-sc-text-muted)', marginBottom: 4, fontSize: 14, lineHeight: 1.7 }}>{children}</li>,
   a:  ({ href, children }) => <a href={href} target="_blank" rel="noreferrer" style={{ color: 'var(--color-sc-gold)', textDecoration: 'none' }}>{children}</a>,
-  blockquote: ({ children }) => <blockquote style={{ borderLeft: '3px solid rgba(196,164,74,0.4)', paddingLeft: 14, margin: '12px 0', color: 'var(--color-sc-text-dim)', fontStyle: 'italic' }}>{children}</blockquote>,
+  blockquote: ({ children }) => <blockquote style={{ borderLeft: '3px solid color-mix(in srgb, var(--color-sc-gold) 40%, transparent)', paddingLeft: 14, margin: '12px 0', color: 'var(--color-sc-text-dim)', fontStyle: 'italic' }}>{children}</blockquote>,
 };
 
 function ResultCanvas({ content, title, mode }) {
@@ -134,13 +134,13 @@ function ResultCanvas({ content, title, mode }) {
       <div style={{ height: 46, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 16px', gap: 8, borderBottom: '1px solid var(--color-sc-border)', background: 'var(--color-sc-surface)' }}>
         <FileText size={13} style={{ color: 'var(--color-sc-gold)' }} />
         <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: 'var(--color-sc-text)', fontFamily: 'var(--font-grotesk)' }}>{title || 'Research Report'}</span>
-        <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           {mode === 'deep' ? 'Deep Research' : 'Research'}
         </span>
-        <button onClick={() => setViewMode('preview')} style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: viewMode === 'preview' ? 'rgba(196,164,74,0.15)' : 'transparent', color: viewMode === 'preview' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
+        <button onClick={() => setViewMode('preview')} style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: viewMode === 'preview' ? 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)' : 'transparent', color: viewMode === 'preview' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
           <Eye size={12} /> Preview
         </button>
-        <button onClick={() => setViewMode('edit')} style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: viewMode === 'edit' ? 'rgba(196,164,74,0.15)' : 'transparent', color: viewMode === 'edit' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
+        <button onClick={() => setViewMode('edit')} style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: viewMode === 'edit' ? 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)' : 'transparent', color: viewMode === 'edit' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
           <Edit3 size={12} /> Edit
         </button>
         <div style={{ width: 1, background: 'var(--color-sc-border)', height: 20 }} />
@@ -289,7 +289,7 @@ export function ResearchPage() {
               fontFamily: 'var(--font-inter)', fontSize: 13, lineHeight: 1.55, padding: '10px 12px',
               boxSizing: 'border-box', transition: 'border-color 0.15s',
             }}
-            onFocus={e => e.target.style.borderColor = 'rgba(196,164,74,0.4)'}
+            onFocus={e => e.target.style.borderColor = 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)'}
             onBlur={e => e.target.style.borderColor = 'var(--color-sc-border2)'}
           />
 
@@ -301,8 +301,8 @@ export function ResearchPage() {
             ].map(({ id, label, Icon, desc }) => (
               <button key={id} onClick={() => setMode(id)} style={{
                 flex: 1, padding: '9px 8px', borderRadius: 8, cursor: 'pointer',
-                border: `1px solid ${mode === id ? 'rgba(196,164,74,0.5)' : 'var(--color-sc-border)'}`,
-                background: mode === id ? 'rgba(196,164,74,0.1)' : 'var(--color-sc-surface2)',
+                border: `1px solid ${mode === id ? 'color-mix(in srgb, var(--color-sc-gold) 50%, transparent)' : 'var(--color-sc-border)'}`,
+                background: mode === id ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'var(--color-sc-surface2)',
                 color: mode === id ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)',
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 0.15s',
               }}>
@@ -376,7 +376,7 @@ export function ResearchPage() {
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, color: 'var(--color-sc-text-dim)' }}>
           {running ? (
             <>
-              <div style={{ width: 48, height: 48, borderRadius: '50%', border: '2px solid rgba(196,164,74,0.15)', borderTopColor: 'var(--color-sc-gold)', animation: 'spin 1s linear infinite' }} />
+              <div style={{ width: 48, height: 48, borderRadius: '50%', border: '2px solid color-mix(in srgb, var(--color-sc-gold) 15%, transparent)', borderTopColor: 'var(--color-sc-gold)', animation: 'spin 1s linear infinite' }} />
               <div style={{ fontSize: 14, color: 'var(--color-sc-text-muted)' }}>Researching…</div>
               <div style={{ fontSize: 12 }}>Results will appear here when ready</div>
             </>

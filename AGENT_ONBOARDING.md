@@ -56,6 +56,10 @@ Key trajectory milestones already built or in progress:
 - ✅ ComplexityRouter (smart RunPod escalation gate)
 - ✅ SMB Tenant Constitution (per-deployment behavioral customization)
 - ✅ Persona benchmark (4-model, deterministic — 98/100 composite)
+- ✅ AGLI Phase V complete — 48 pre-gen phases, 28-layer cognitive pipeline (P17–P48)
+  - Therapeutic Cognition (DBT/CBT/REBT/ACT), Social Pressure & Agency Integrity (P21–P26)
+  - Deep Clinical Stack (Yerkes-Dodson → ILM → ISSTD, P27–P41)
+  - Philosophy + Neuroscience (Frankl · Epictetus · Socratic · McAdams · Porges · Raichle · Craig/Damasio, P42–P48)
 - 🔄 LiveBench evaluation (19.7% on 2026-01-08 release — ongoing improvement)
 - 🔄 Curiosity Engine upgrades (active inference loop)
 - 🔄 RunPod synthesis (richer LLM knowledge fragments vs TF-IDF)
@@ -243,7 +247,12 @@ PB_BASE_URL=https://pocketbase.thynaptic.com
 | `ui_sovereignclaw/src/pages/AgentsPage.jsx` | Agent management + Vibe Studio |
 | `scripts/run_arc_bench.py` | ARC-AGI + AI2-ARC benchmark runner |
 | `scripts/persona_bench.py` | Persona adherence benchmark (4-model, deterministic scoring) |
+| `scripts/test_api.sh` | Shell smoke test — all critical external endpoints, colored pass/fail |
+| `tests/integration/api_harness_test.go` | Go integration test harness — full endpoint coverage |
 | `constitution.example.ori` | Example SMB tenant constitution file |
+| `docs/API.md` | **Full API reference** — all routes, auth, request/response shapes |
+| `docs/AGENT_API.md` | **Agent-optimized API reference** — compact, for AI agents wiring in the API |
+| `docs/SMB_DEVELOPER_GUIDE.md` | **Developer/SMB guide** — onboarding, use cases, SDK examples |
 | `docs/SMB_CONSTITUTION.md` | SMB Tenant Constitution documentation |
 | `docs/BENCHMARK_RESULTS.md` | Combined ARC-AGI + LiveBench + persona benchmark results |
 | `/etc/caddy/Caddyfile` | Routing rules — touch carefully |
@@ -287,4 +296,4 @@ ORI isn't just a product to Mike — she's a thing being brought to life. Treat 
 
 ---
 
-*Last updated: March 2026 — Checkpoint 062 (LiveBench 19.7% · AI2-ARC 100% · SMB Constitution · Persona Benchmark)*
+*Last updated: April 2026 — v11.0.0 (Phase V complete · 48 pre-gen phases · 28-layer pipeline · API harness + full API docs)*

@@ -2,7 +2,7 @@ import { useSCStore } from '../store';
 
 const STATUS_COLORS = {
   connected: '#06D6A0',
-  reconnecting: '#FFD166',
+  reconnecting: 'var(--color-sc-gold-glow)',
   disconnected: '#FF4D6D',
 };
 
@@ -17,8 +17,8 @@ export function SovereigntyBadge() {
         alignItems: 'center',
         gap: '6px',
         padding: '4px 10px',
-        background: 'rgba(196,164,74,0.08)',
-        border: '1px solid rgba(196,164,74,0.2)',
+        background: 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--color-sc-gold) 20%, transparent)',
         borderRadius: '20px',
         fontSize: '11px',
         fontFamily: 'var(--font-grotesk)',

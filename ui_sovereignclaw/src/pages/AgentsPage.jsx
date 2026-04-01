@@ -36,7 +36,7 @@ const RULE_POOL = [
   { id: 'sanctuary_protocols', name: 'Sanctuary Protocols',desc: 'Privacy and data protection rules for sensitive operations.' },
 ];
 
-const AVATAR_COLORS = ['#C4A44A','#4D9EFF','#06D6A0','#FF4D6D','#A78BFA','#F97316','#EC4899','#14B8A6'];
+const AVATAR_COLORS = ['var(--color-sc-gold)','#4D9EFF','#06D6A0','#FF4D6D','#A78BFA','#F97316','#EC4899','#14B8A6'];
 const SCOPES = ['global','module','agent'];
 
 // ─── .ori generators ─────────────────────────────────────────────────────────
@@ -104,7 +104,7 @@ function Section({ title, icon: Icon, children }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
         {Icon && <Icon size={13} style={{ color: 'var(--color-sc-gold)', flexShrink: 0 }} />}
         <span style={{ ...lbl, margin: 0, color: 'var(--color-sc-gold)' }}>{title}</span>
-        <div style={{ flex: 1, height: 1, background: 'rgba(196,164,74,0.15)', marginLeft: 4 }} />
+        <div style={{ flex: 1, height: 1, background: 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)', marginLeft: 4 }} />
       </div>
       {children}
     </div>
@@ -134,7 +134,7 @@ function TagInput({ value, onChange, placeholder = 'Type and press Enter…' }) 
           placeholder={placeholder} style={{ ...inp, flex: 1 }} />
         <button onClick={add} disabled={!draft.trim()} style={{
           padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-          background: 'rgba(196,164,74,0.15)', color: 'var(--color-sc-gold)', fontSize: 13, fontWeight: 600,
+          background: 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)', color: 'var(--color-sc-gold)', fontSize: 13, fontWeight: 600,
         }}>Add</button>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
@@ -177,7 +177,7 @@ function OriPreviewPanel({ filename, content }) {
   function copy() { navigator.clipboard.writeText(content).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }); }
   return (
     <div style={{ position: 'sticky', top: 0, background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 120px)' }}>
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--color-sc-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(196,164,74,0.05)' }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--color-sc-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'color-mix(in srgb, var(--color-sc-gold) 5%, transparent)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <FileCode2 size={13} style={{ color: 'var(--color-sc-gold)' }} />
           <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-sc-text-muted)' }}>{filename}</span>
@@ -403,7 +403,7 @@ function PoolCard({ item, type, active, custom, onToggle, onView, onEdit, onDele
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       style={{
         background: hovered ? 'rgba(255,255,255,0.03)' : 'var(--color-sc-surface)',
-        border: `1px solid ${active ? (type === 'skill' ? 'rgba(196,164,74,0.35)' : 'rgba(77,158,255,0.35)') : 'var(--color-sc-border)'}`,
+        border: `1px solid ${active ? (type === 'skill' ? 'color-mix(in srgb, var(--color-sc-gold) 35%, transparent)' : 'rgba(77,158,255,0.35)') : 'var(--color-sc-border)'}`,
         borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8,
         transition: 'border-color 0.15s, background 0.15s',
       }}
@@ -416,7 +416,7 @@ function PoolCard({ item, type, active, custom, onToggle, onView, onEdit, onDele
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-sc-text)', fontFamily: 'var(--font-grotesk)' }}>{item.name}</span>
-              {custom && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 8, background: 'rgba(196,164,74,0.12)', color: 'var(--color-sc-gold)', fontFamily: 'var(--font-grotesk)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>custom</span>}
+              {custom && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 8, background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', color: 'var(--color-sc-gold)', fontFamily: 'var(--font-grotesk)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>custom</span>}
             </div>
             <div style={{ fontSize: 10, color: 'var(--color-sc-text-muted)', marginTop: 1, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{type}</div>
           </div>
@@ -462,7 +462,7 @@ function ProfileDrawer({ item, type, onClose }) {
             <div style={{ fontSize: 11, color: 'var(--color-sc-text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Profile ID</div>
             <code style={{ fontSize: 12, color: 'var(--color-sc-gold)', fontFamily: 'var(--font-mono)' }}>{item.id}.ori</code>
           </div>
-          <div style={{ marginTop: 16, padding: '14px 16px', background: 'rgba(196,164,74,0.05)', border: '1px solid rgba(196,164,74,0.15)', borderRadius: 8, fontSize: 12, color: 'var(--color-sc-text-muted)', lineHeight: 1.65 }}>
+          <div style={{ marginTop: 16, padding: '14px 16px', background: 'color-mix(in srgb, var(--color-sc-gold) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 15%, transparent)', borderRadius: 8, fontSize: 12, color: 'var(--color-sc-text-muted)', lineHeight: 1.65 }}>
             This {type === 'skill' ? 'skill' : 'rule'} is a sovereign profile (<code style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-sc-gold)' }}>.ori</code>) loaded natively by MCI at:
             <br /><code style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-sc-gold)', fontSize: 11 }}>oricli_core/{type === 'skill' ? 'skills' : 'rules'}/{item.id}.ori</code>
           </div>
@@ -485,7 +485,7 @@ function AgentAvatar({ agent, size = 40 }) {
 function AgentCard({ agent, active, onActivate, onEdit, onDelete }) {
   const [hovered, setHovered] = useState(false);
   return (
-    <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} style={{ background: hovered ? 'rgba(255,255,255,0.03)' : 'var(--color-sc-surface)', border: `1px solid ${active ? 'rgba(196,164,74,0.4)' : 'var(--color-sc-border)'}`, borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'border-color 0.15s, background 0.15s' }}>
+    <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} style={{ background: hovered ? 'rgba(255,255,255,0.03)' : 'var(--color-sc-surface)', border: `1px solid ${active ? 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)' : 'var(--color-sc-border)'}`, borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'border-color 0.15s, background 0.15s' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <AgentAvatar agent={agent} size={44} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -498,7 +498,7 @@ function AgentCard({ agent, active, onActivate, onEdit, onDelete }) {
         </div>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-        {agent.tone && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', textTransform: 'capitalize' }}>{agent.tone}</span>}
+        {agent.tone && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)', textTransform: 'capitalize' }}>{agent.tone}</span>}
         {agent.skills?.length > 0 && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(77,158,255,0.1)', color: '#4D9EFF' }}>{agent.skills.length} skill{agent.skills.length !== 1 ? 's' : ''}</span>}
         {agent.rules?.length > 0 && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(6,214,160,0.1)', color: 'var(--color-sc-success)' }}>{agent.rules.length} rule{agent.rules.length !== 1 ? 's' : ''}</span>}
         {agent.savedToFile && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', color: 'var(--color-sc-text-dim)', fontFamily: 'var(--font-mono)' }}>.ori</span>}
@@ -521,7 +521,7 @@ function EmptyState({ icon: Icon, title, subtitle, cta, onCta }) {
       <Icon size={40} style={{ opacity: 0.15, marginBottom: 14 }} />
       <div style={{ fontSize: 15, marginBottom: 8, color: 'var(--color-sc-text-muted)', fontFamily: 'var(--font-grotesk)', fontWeight: 600 }}>{title}</div>
       <div style={{ fontSize: 13, marginBottom: 20 }}>{subtitle}</div>
-      <button onClick={onCta} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 20px', borderRadius: 9, background: 'rgba(196,164,74,0.12)', border: '1px solid rgba(196,164,74,0.3)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-grotesk)' }}>
+      <button onClick={onCta} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 20px', borderRadius: 9, background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 30%, transparent)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-grotesk)' }}>
         <Plus size={14} /> {cta}
       </button>
     </div>
@@ -625,20 +625,20 @@ export function AgentsPage() {
   const Tab = ({ id, label, count }) => (
     <button onClick={() => setTab(id)} style={{
       padding: '8px 18px', borderRadius: 8, border: 'none', cursor: 'pointer',
-      background: tab === id ? 'rgba(196,164,74,0.15)' : 'transparent',
+      background: tab === id ? 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)' : 'transparent',
       color: tab === id ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)',
       fontFamily: 'var(--font-grotesk)', fontWeight: tab === id ? 600 : 400, fontSize: 13,
       display: 'flex', alignItems: 'center', gap: 7, transition: 'background 0.15s, color 0.15s',
     }}>
       {label}
-      <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 10, background: tab === id ? 'rgba(196,164,74,0.2)' : 'rgba(255,255,255,0.06)', color: tab === id ? 'var(--color-sc-gold)' : 'var(--color-sc-text-dim)' }}>{count}</span>
+      <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 10, background: tab === id ? 'color-mix(in srgb, var(--color-sc-gold) 20%, transparent)' : 'rgba(255,255,255,0.06)', color: tab === id ? 'var(--color-sc-gold)' : 'var(--color-sc-text-dim)' }}>{count}</span>
     </button>
   );
 
   const NewBtn = ({ onClick, label }) => (
-    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 9, background: 'rgba(196,164,74,0.12)', border: '1px solid rgba(196,164,74,0.3)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-grotesk)', transition: 'background 0.15s' }}
-      onMouseEnter={e => e.currentTarget.style.background = 'rgba(196,164,74,0.22)'}
-      onMouseLeave={e => e.currentTarget.style.background = 'rgba(196,164,74,0.12)'}
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 9, background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 30%, transparent)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-grotesk)', transition: 'background 0.15s' }}
+      onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 22%, transparent)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)'}
     ><Plus size={14} /> {label}</button>
   );
 
@@ -676,8 +676,8 @@ export function AgentsPage() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px',
                 borderRadius: 9,
-                background: vibeOpen ? 'rgba(196,164,74,0.22)' : 'rgba(196,164,74,0.08)',
-                border: `1px solid ${vibeOpen ? 'rgba(196,164,74,0.5)' : 'rgba(196,164,74,0.2)'}`,
+                background: vibeOpen ? 'color-mix(in srgb, var(--color-sc-gold) 22%, transparent)' : 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)',
+                border: `1px solid ${vibeOpen ? 'color-mix(in srgb, var(--color-sc-gold) 50%, transparent)' : 'color-mix(in srgb, var(--color-sc-gold) 20%, transparent)'}`,
                 color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
                 fontFamily: 'var(--font-grotesk)', transition: 'background 0.15s',
               }}

@@ -3,7 +3,7 @@ import { Sparkles, X, Send, Loader2, Check, RefreshCw, ChevronDown, ChevronUp, B
 
 // ─── Colours for the proposal card ──────────────────────────────────────────
 const COLOR_LABELS = {
-  '#C4A44A': 'Gold',
+  'var(--color-sc-gold)': 'Gold',
   '#4D9EFF': 'Blue',
   '#06D6A0': 'Teal',
   '#FF6B6B': 'Red',
@@ -37,7 +37,7 @@ function ProposalCard({ parsed, skillPool, rulePool, onAccept, onTweak, streamin
 
   const attachedSkills = (proposal.skills || []).map(id => skillPool.find(s => s.id === id)).filter(Boolean);
   const attachedRules  = (proposal.rules  || []).map(id => rulePool.find(r => r.id === id)).filter(Boolean);
-  const color = proposal.color || '#C4A44A';
+  const color = proposal.color || 'var(--color-sc-gold)';
 
   return (
     <div style={{ margin: '12px 0', borderRadius: 12, border: `1px solid ${color}40`, background: `${color}08`, overflow: 'hidden' }}>
@@ -71,7 +71,7 @@ function ProposalCard({ parsed, skillPool, rulePool, onAccept, onTweak, streamin
           </span>
         ))}
         {skills_to_create.map(s => (
-          <span key={s.id} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span key={s.id} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)', display: 'flex', alignItems: 'center', gap: 4 }}>
             <Plus size={9} /> {s.name}
           </span>
         ))}
@@ -107,7 +107,7 @@ function ProposalCard({ parsed, skillPool, rulePool, onAccept, onTweak, streamin
             <div style={{ marginTop: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-sc-gold)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>New skills to create</div>
               {skills_to_create.map(s => (
-                <div key={s.id} style={{ marginBottom: 8, padding: '10px 12px', borderRadius: 8, background: 'rgba(196,164,74,0.06)', border: '1px solid rgba(196,164,74,0.15)' }}>
+                <div key={s.id} style={{ marginBottom: 8, padding: '10px 12px', borderRadius: 8, background: 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 15%, transparent)' }}>
                   <div style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--color-sc-gold)', marginBottom: 4 }}>{s.name}</div>
                   <div style={{ fontSize: 12, color: 'var(--color-sc-text-muted)' }}>{s.description}</div>
                 </div>
@@ -162,8 +162,8 @@ function Message({ msg, skillPool, rulePool, onAccept, onTweak }) {
       {prose && (
         <div style={{
           maxWidth: '90%', padding: '10px 14px', borderRadius: isUser ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
-          background: isUser ? 'rgba(196,164,74,0.15)' : 'rgba(255,255,255,0.05)',
-          border: `1px solid ${isUser ? 'rgba(196,164,74,0.25)' : 'var(--color-sc-border)'}`,
+          background: isUser ? 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)' : 'rgba(255,255,255,0.05)',
+          border: `1px solid ${isUser ? 'color-mix(in srgb, var(--color-sc-gold) 25%, transparent)' : 'var(--color-sc-border)'}`,
           color: 'var(--color-sc-text)', fontSize: 13, lineHeight: 1.65,
           fontFamily: 'var(--font-grotesk)', whiteSpace: 'pre-wrap',
         }}>{prose}</div>
@@ -350,7 +350,7 @@ export default function AgentVibePanel({ onClose, skillPool, rulePool, onAgentCr
     }}>
       {/* Panel header */}
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-sc-border)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-        <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(196,164,74,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 30, height: 30, borderRadius: 8, background: 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Wand2 size={15} style={{ color: 'var(--color-sc-gold)' }} />
         </div>
         <div style={{ flex: 1 }}>
@@ -404,8 +404,8 @@ export default function AgentVibePanel({ onClose, skillPool, rulePool, onAgentCr
             disabled={loading || !input.trim()}
             style={{
               width: 38, height: 38, borderRadius: 10, border: 'none', cursor: loading || !input.trim() ? 'default' : 'pointer',
-              background: loading || !input.trim() ? 'rgba(196,164,74,0.1)' : 'rgba(196,164,74,0.2)',
-              color: loading || !input.trim() ? 'rgba(196,164,74,0.4)' : 'var(--color-sc-gold)',
+              background: loading || !input.trim() ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'color-mix(in srgb, var(--color-sc-gold) 20%, transparent)',
+              color: loading || !input.trim() ? 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)' : 'var(--color-sc-gold)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.15s',
             }}
           >

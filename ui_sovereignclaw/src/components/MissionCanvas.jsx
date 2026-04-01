@@ -119,7 +119,7 @@ function MessageBubble({ msg }) {
       const lang = (className ?? '').replace('language-', '') || 'text';
       if (inline) {
         return (
-          <code style={{ background: 'rgba(196,164,74,0.12)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 3, fontFamily: 'var(--font-mono)', fontSize: '0.9em' }}>
+          <code style={{ background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 3, fontFamily: 'var(--font-mono)', fontSize: '0.9em' }}>
             {children}
           </code>
         );
@@ -161,8 +161,8 @@ function MessageBubble({ msg }) {
         {/* Avatar */}
         <div style={{
           width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-          background: isUser ? 'rgba(77,158,255,0.15)' : 'rgba(196,164,74,0.15)',
-          border: `1px solid ${isUser ? 'rgba(77,158,255,0.3)' : 'rgba(196,164,74,0.3)'}`,
+          background: isUser ? 'rgba(77,158,255,0.15)' : 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)',
+          border: `1px solid ${isUser ? 'rgba(77,158,255,0.3)' : 'color-mix(in srgb, var(--color-sc-gold) 30%, transparent)'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 9, fontFamily: 'var(--font-grotesk)', letterSpacing: '0.04em',
           color: isUser ? 'var(--color-sc-blue)' : 'var(--color-sc-gold)',
@@ -173,8 +173,8 @@ function MessageBubble({ msg }) {
 
         {/* Bubble */}
         <div style={{
-          background: isUser ? 'rgba(77,158,255,0.07)' : 'rgba(196,164,74,0.05)',
-          border: `1px solid ${isUser ? 'rgba(77,158,255,0.15)' : 'rgba(196,164,74,0.12)'}`,
+          background: isUser ? 'rgba(77,158,255,0.07)' : 'color-mix(in srgb, var(--color-sc-gold) 5%, transparent)',
+          border: `1px solid ${isUser ? 'rgba(77,158,255,0.15)' : 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)'}`,
           borderRadius: 10, padding: '10px 14px',
           color: 'var(--color-sc-text)', fontSize: 13.5, lineHeight: 1.65,
         }}>
@@ -315,7 +315,7 @@ function EmptyState() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 40 }}>
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 20, opacity: 0.4 }}>
-        <path d="M12 2 L14 8 L20 6 L16 11 L20 14 L14 13 L12 20 L10 13 L4 14 L8 11 L4 6 L10 8 Z" fill="#C4A44A" />
+        <path d="M12 2 L14 8 L20 6 L16 11 L20 14 L14 13 L12 20 L10 13 L4 14 L8 11 L4 6 L10 8 Z" fill="var(--color-sc-gold)" />
         <circle cx="12" cy="11" r="2" fill="#080810" />
       </svg>
       <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 20, fontWeight: 700, color: 'var(--color-sc-text)', marginBottom: 8 }}>
@@ -333,7 +333,7 @@ function EmptyState() {
           <button key={s.cmd}
             onClick={() => useSCStore.getState().sessions && null}
             style={{
-              background: 'rgba(196,164,74,0.05)', border: '1px solid var(--color-sc-border)',
+              background: 'color-mix(in srgb, var(--color-sc-gold) 5%, transparent)', border: '1px solid var(--color-sc-border)',
               borderRadius: 8, padding: '8px 14px', color: 'var(--color-sc-text-muted)',
               fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'default',
               textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2,
@@ -380,7 +380,7 @@ function CommandBar({ value, onChange, onKeyDown, onSend, onAbort, isStreaming, 
         border: `1px solid ${focused ? 'var(--color-sc-gold)' : 'var(--color-sc-border2)'}`,
         borderRadius: 12,
         className: focused ? 'animate-command-glow' : '',
-        boxShadow: focused ? '0 0 12px rgba(196,164,74,0.2)' : 'none',
+        boxShadow: focused ? '0 0 12px color-mix(in srgb, var(--color-sc-gold) 20%, transparent)' : 'none',
         transition: 'border-color 0.2s, box-shadow 0.2s',
       }}>
         <label htmlFor="sc-file-upload" title="Attach file" style={{ cursor: 'pointer', color: 'var(--color-sc-text-muted)', lineHeight: 1, flexShrink: 0, alignSelf: 'flex-end', paddingBottom: 2 }}>
@@ -411,7 +411,7 @@ function CommandBar({ value, onChange, onKeyDown, onSend, onAbort, isStreaming, 
             background: isStreaming
               ? 'rgba(255,77,109,0.2)'
               : value.trim()
-                ? 'rgba(196,164,74,0.2)'
+                ? 'color-mix(in srgb, var(--color-sc-gold) 20%, transparent)'
                 : 'rgba(255,255,255,0.04)',
             color: isStreaming ? 'var(--color-sc-danger)' : value.trim() ? 'var(--color-sc-gold)' : 'var(--color-sc-text-dim)',
             cursor: (!isStreaming && !value.trim()) ? 'not-allowed' : 'pointer',

@@ -39,7 +39,7 @@ function MemoryCard({ item, type }) {
   return (
     <div style={{
       background: 'var(--color-sc-bg-2)',
-      border: `1px solid ${isOricli ? 'rgba(196,164,74,0.2)' : 'var(--color-sc-border)'}`,
+      border: `1px solid ${isOricli ? 'color-mix(in srgb, var(--color-sc-gold) 20%, transparent)' : 'var(--color-sc-border)'}`,
       borderRadius: 10,
       padding: '14px 16px',
       display: 'flex',
@@ -52,7 +52,7 @@ function MemoryCard({ item, type }) {
         <span style={{
           fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase',
           padding: '2px 7px', borderRadius: 4,
-          background: item.source === 'curiosity' ? 'rgba(196,164,74,0.12)'
+          background: item.source === 'curiosity' ? 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)'
                      : item.source === 'conversation' ? 'rgba(99,102,241,0.12)'
                      : 'rgba(255,255,255,0.05)',
           color: item.source === 'curiosity' ? 'var(--color-sc-gold)'
@@ -66,7 +66,7 @@ function MemoryCard({ item, type }) {
         {isOricli && (
           <span style={{
             fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4,
-            background: 'rgba(196,164,74,0.08)',
+            background: 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)',
             color: 'var(--color-sc-gold)',
             display: 'flex', alignItems: 'center', gap: 4,
           }}>
@@ -203,7 +203,7 @@ function TabPanel({ label, type, searchTopic }) {
       {items.length < total && !loading && (
         <button onClick={loadMore} style={{
           alignSelf: 'center', padding: '8px 24px',
-          background: 'rgba(196,164,74,0.08)', border: '1px solid rgba(196,164,74,0.2)',
+          background: 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 20%, transparent)',
           borderRadius: 8, color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 12,
         }}>
           Load more ({total - items.length} remaining)
@@ -216,7 +216,7 @@ function TabPanel({ label, type, searchTopic }) {
 // ─── Documents Panel ──────────────────────────────────────────────────────────
 
 const EXT_ICON = { pdf: FileText, md: FileCode2, csv: Table2, txt: FileText };
-const EXT_COLOR = { pdf: 'rgba(255,100,100,0.7)', md: 'rgba(130,180,255,0.7)', csv: 'rgba(80,200,120,0.7)', txt: 'rgba(196,164,74,0.7)' };
+const EXT_COLOR = { pdf: 'rgba(255,100,100,0.7)', md: 'rgba(130,180,255,0.7)', csv: 'rgba(80,200,120,0.7)', txt: 'color-mix(in srgb, var(--color-sc-gold) 70%, transparent)' };
 
 function DocumentsPanel() {
   const [docs, setDocs]       = useState([]);
@@ -257,7 +257,7 @@ function DocumentsPanel() {
       {docs.map(doc => {
         const ext = doc.filename?.split('.').pop()?.toLowerCase() ?? 'txt';
         const Icon = EXT_ICON[ext] ?? FileText;
-        const color = EXT_COLOR[ext] ?? 'rgba(196,164,74,0.7)';
+        const color = EXT_COLOR[ext] ?? 'color-mix(in srgb, var(--color-sc-gold) 70%, transparent)';
         return (
           <div key={doc.id} style={{
             display: 'flex', alignItems: 'center', gap: 14,
@@ -359,7 +359,7 @@ export function MemoryBrowser() {
             )}
           </div>
           <button type="submit" style={{
-            padding: '7px 14px', background: 'rgba(196,164,74,0.1)', border: '1px solid rgba(196,164,74,0.25)',
+            padding: '7px 14px', background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 25%, transparent)',
             borderRadius: 8, color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 12,
           }}>
             Search

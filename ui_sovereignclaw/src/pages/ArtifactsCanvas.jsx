@@ -209,7 +209,7 @@ function HtmlRenderer({ content }) {
 function DiagramRenderer({ content, language }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ padding: '10px 16px', background: 'rgba(196,164,74,0.06)', borderBottom: '1px solid var(--color-sc-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ padding: '10px 16px', background: 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)', borderBottom: '1px solid var(--color-sc-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 11, color: 'var(--color-sc-text-muted)' }}>
           <GitCommit size={11} style={{ marginRight: 5, display: 'inline' }} />
           {language} diagram
@@ -306,7 +306,7 @@ function InlineToolbar({ visible, onAction, streaming }) {
             fontSize: 12, color: streaming ? 'var(--color-sc-text-dim)' : 'var(--color-sc-text-muted)',
             transition: 'background 0.12s, color 0.12s', whiteSpace: 'nowrap',
           }}
-            onMouseEnter={e => { if (!streaming) { e.currentTarget.style.background = 'rgba(196,164,74,0.12)'; e.currentTarget.style.color = 'var(--color-sc-gold)'; } }}
+            onMouseEnter={e => { if (!streaming) { e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)'; e.currentTarget.style.color = 'var(--color-sc-gold)'; } }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = streaming ? 'var(--color-sc-text-dim)' : 'var(--color-sc-text-muted)'; }}
           >
             <Icon size={12} /> {label}
@@ -316,7 +316,7 @@ function InlineToolbar({ visible, onAction, streaming }) {
         <button onClick={() => setCustomOpen(o => !o)} disabled={streaming} style={{
           display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 6,
           border: 'none', cursor: streaming ? 'not-allowed' : 'pointer', fontSize: 12,
-          background: customOpen ? 'rgba(196,164,74,0.12)' : 'transparent',
+          background: customOpen ? 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)' : 'transparent',
           color: customOpen ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)',
           transition: 'background 0.12s, color 0.12s',
         }}>
@@ -400,7 +400,7 @@ function SelectionPopup({ text, rect, onAction, streaming, onClose }) {
             fontSize: 12, color: streaming ? 'var(--color-sc-text-dim)' : 'var(--color-sc-text-muted)',
             transition: 'background 0.12s, color 0.12s', whiteSpace: 'nowrap',
           }}
-            onMouseEnter={e => { if (!streaming) { e.currentTarget.style.background = 'rgba(196,164,74,0.12)'; e.currentTarget.style.color = 'var(--color-sc-gold)'; } }}
+            onMouseEnter={e => { if (!streaming) { e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)'; e.currentTarget.style.color = 'var(--color-sc-gold)'; } }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-sc-text-muted)'; }}
           >
             <Icon size={12} /> {label}
@@ -410,7 +410,7 @@ function SelectionPopup({ text, rect, onAction, streaming, onClose }) {
         <button onClick={() => setCustomOpen(o => !o)} style={{
           display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 6,
           border: 'none', cursor: 'pointer', fontSize: 12,
-          background: customOpen ? 'rgba(196,164,74,0.12)' : 'transparent',
+          background: customOpen ? 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)' : 'transparent',
           color: customOpen ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)',
         }}>
           <Pencil size={12} /> Custom…
@@ -467,17 +467,17 @@ function VersionPanel({ doc, onRestore, onClose }) {
         {[...( doc.versions || [])].reverse().map((v, i) => (
           <button key={v.id} onClick={() => { onRestore(v.content); onClose(); }} style={{
             width: '100%', padding: '10px 14px', border: 'none', borderBottom: '1px solid var(--color-sc-border)',
-            background: i === 0 ? 'rgba(196,164,74,0.06)' : 'transparent',
+            background: i === 0 ? 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)' : 'transparent',
             cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-            onMouseLeave={e => e.currentTarget.style.background = i === 0 ? 'rgba(196,164,74,0.06)' : 'transparent'}
+            onMouseLeave={e => e.currentTarget.style.background = i === 0 ? 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)' : 'transparent'}
           >
             <div>
               <div style={{ fontSize: 12.5, color: 'var(--color-sc-text)', fontWeight: i === 0 ? 600 : 400 }}>{v.label}</div>
               <div style={{ fontSize: 10.5, color: 'var(--color-sc-text-muted)', marginTop: 2 }}>{formatTs(v.timestamp)} · {v.content.length} chars</div>
             </div>
-            {i === 0 && <span style={{ fontSize: 10, color: 'var(--color-sc-gold)', padding: '2px 6px', borderRadius: 6, background: 'rgba(196,164,74,0.12)' }}>Latest</span>}
+            {i === 0 && <span style={{ fontSize: 10, color: 'var(--color-sc-gold)', padding: '2px 6px', borderRadius: 6, background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)' }}>Latest</span>}
           </button>
         ))}
       </div>
@@ -636,7 +636,7 @@ function ImageGenPanel({ onInsertToCanvas }) {
               {onInsertToCanvas && (
                 <button
                   onClick={() => onInsertToCanvas(`<img src="data:image/png;base64,${result}" style="max-width:100%;border-radius:8px;" alt="${prompt.slice(0, 60)}" />`)}
-                  style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: 'rgba(196,164,74,0.15)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, fontWeight: 600 }}
+                  style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, fontWeight: 600 }}
                 >
                   <FileCode2 size={12} /> Insert to Canvas
                 </button>
@@ -725,7 +725,7 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
               onChange={e => doc && onUpdate({ name: e.target.value })}
               style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: 'var(--color-sc-text)', fontFamily: 'var(--font-grotesk)', fontWeight: 500, flex: 1, minWidth: 0 }}
             />
-            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', fontFamily: 'var(--font-grotesk)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)', fontFamily: 'var(--font-grotesk)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
               {TYPE_LABELS[displayDoc?.type] || 'Text'}
               {displayDoc?.language && displayDoc.language !== displayDoc.type && ` · ${displayDoc.language}`}
             </span>
@@ -738,13 +738,13 @@ function CanvasPanel({ doc, liveArtifact, streaming, onUpdate, onAddVersion }) {
         {doc && (
           <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
             {/* Mode toggle */}
-            <button onClick={() => setMode('preview')} title="Preview" style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: mode === 'preview' ? 'rgba(196,164,74,0.15)' : 'transparent', color: mode === 'preview' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
+            <button onClick={() => setMode('preview')} title="Preview" style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: mode === 'preview' ? 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)' : 'transparent', color: mode === 'preview' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
               <Eye size={12} /> Preview
             </button>
-            <button onClick={() => setMode('edit')} title="Edit" style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: mode === 'edit' ? 'rgba(196,164,74,0.15)' : 'transparent', color: mode === 'edit' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
+            <button onClick={() => setMode('edit')} title="Edit" style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: mode === 'edit' ? 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)' : 'transparent', color: mode === 'edit' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
               <Edit3 size={12} /> Edit
             </button>
-            <button onClick={() => setMode('image')} title="Generate Image" style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: mode === 'image' ? 'rgba(196,164,74,0.15)' : 'transparent', color: mode === 'image' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
+            <button onClick={() => setMode('image')} title="Generate Image" style={{ padding: '5px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', background: mode === 'image' ? 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)' : 'transparent', color: mode === 'image' ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
               <ImageIcon size={12} /> Image
             </button>
             {/* Actions */}
@@ -920,8 +920,8 @@ function GeneratingCard({ tokens, language, lines, done, stopped }) {
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 8,
       padding: '10px 13px', borderRadius: 10,
-      background: 'rgba(196,164,74,0.06)',
-      border: '1px solid rgba(196,164,74,0.18)',
+      background: 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)',
+      border: '1px solid color-mix(in srgb, var(--color-sc-gold) 18%, transparent)',
       marginBottom: 12,
     }}>
       {/* Stage label */}
@@ -974,8 +974,8 @@ function ChatBubble({ msg, onExtract, isStreaming }) {
       {(isUser || displayText || (!hasArtifact && !isStreaming)) && (
         <div style={{
           maxWidth: '88%', padding: '9px 13px', borderRadius: isUser ? '12px 12px 4px 12px' : '4px 12px 12px 12px',
-          background: isUser ? 'rgba(196,164,74,0.14)' : 'var(--color-sc-surface)',
-          border: `1px solid ${isUser ? 'rgba(196,164,74,0.25)' : 'var(--color-sc-border)'}`,
+          background: isUser ? 'color-mix(in srgb, var(--color-sc-gold) 14%, transparent)' : 'var(--color-sc-surface)',
+          border: `1px solid ${isUser ? 'color-mix(in srgb, var(--color-sc-gold) 25%, transparent)' : 'var(--color-sc-border)'}`,
           fontSize: 13, color: 'var(--color-sc-text)', lineHeight: 1.6,
         }}>
           {displayText || (!isUser && isStreaming
@@ -987,7 +987,7 @@ function ChatBubble({ msg, onExtract, isStreaming }) {
       {pureArtifact && !isStreaming && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 8,
-          background: 'rgba(196,164,74,0.08)', border: '1px solid rgba(196,164,74,0.2)',
+          background: 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 20%, transparent)',
         }}>
           <FileCode2 size={12} style={{ color: 'var(--color-sc-gold)' }} />
           <span style={{ fontSize: 12, color: 'var(--color-sc-text-muted)' }}>
@@ -997,7 +997,7 @@ function ChatBubble({ msg, onExtract, isStreaming }) {
       )}
       {/* Streaming indicator while artifact is building */}
       {!isUser && isStreaming && hasArtifact && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, background: 'rgba(196,164,74,0.06)', border: '1px solid rgba(196,164,74,0.15)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, background: 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 15%, transparent)' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-sc-gold)', animation: 'pulse 1s infinite', display: 'inline-block' }} />
           <span style={{ fontSize: 12, color: 'var(--color-sc-text-dim)' }}>Writing to canvas…</span>
         </div>
@@ -1237,7 +1237,7 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
           {isEditMode && (
             <span style={{
               fontSize: 10.5, padding: '2px 7px', borderRadius: 5, flexShrink: 0,
-              background: 'rgba(196,164,74,0.12)', color: 'var(--color-sc-gold)',
+              background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', color: 'var(--color-sc-gold)',
               fontFamily: 'var(--font-inter)', fontWeight: 500, letterSpacing: '0.03em',
             }}>
               editing canvas
@@ -1250,7 +1250,7 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
           style={{
             display: 'flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 7, border: 'none',
             cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-inter)',
-            background: webSearch ? 'rgba(196,164,74,0.14)' : 'rgba(255,255,255,0.05)',
+            background: webSearch ? 'color-mix(in srgb, var(--color-sc-gold) 14%, transparent)' : 'rgba(255,255,255,0.05)',
             color: webSearch ? 'var(--color-sc-gold)' : 'var(--color-sc-text-dim)',
             transition: 'all 0.15s',
           }}
@@ -1283,7 +1283,7 @@ function CanvasChatPanel({ activeDoc, onLiveArtifact, onCommitArtifact, streamin
             Follow-up edits apply to the current canvas document.
           </div>
         )}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', background: 'var(--color-sc-surface2)', border: `1px solid ${isEditMode ? 'rgba(196,164,74,0.3)' : 'var(--color-sc-border2)'}`, borderRadius: 10, padding: '8px 10px', transition: 'border-color 0.15s' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', background: 'var(--color-sc-surface2)', border: `1px solid ${isEditMode ? 'color-mix(in srgb, var(--color-sc-gold) 30%, transparent)' : 'var(--color-sc-border2)'}`, borderRadius: 10, padding: '8px 10px', transition: 'border-color 0.15s' }}>
           <textarea
             value={input}
             onChange={e => setInput(e.target.value)}

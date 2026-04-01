@@ -345,7 +345,7 @@ function IndexPanel({ integration, saved, indexStatus, onSave, onIndex }) {
   }
 
   return (
-    <div style={{ padding: '14px', background: 'rgba(196,164,74,0.04)', border: '1px solid rgba(196,164,74,0.15)', borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ padding: '14px', background: 'color-mix(in srgb, var(--color-sc-gold) 4%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 15%, transparent)', borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Auto-index toggle row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--color-sc-gold)', fontFamily: 'var(--font-grotesk)' }}>
@@ -395,7 +395,7 @@ function IndexPanel({ integration, saved, indexStatus, onSave, onIndex }) {
         <button onClick={() => onIndex(integration.id, {})} disabled={isIndexing}
           style={{
             display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
-            border: '1px solid rgba(196,164,74,0.3)', background: 'transparent',
+            border: '1px solid color-mix(in srgb, var(--color-sc-gold) 30%, transparent)', background: 'transparent',
             color: isIndexing ? 'var(--color-sc-text-dim)' : 'var(--color-sc-gold)',
             cursor: isIndexing ? 'not-allowed' : 'pointer', fontSize: 11,
             fontFamily: 'var(--font-grotesk)', fontWeight: 600,
@@ -636,7 +636,7 @@ function IntegrationCard({ integration, saved, indexStatus, onConfigure }) {
         display: 'flex', flexDirection: 'column', gap: 10, transition: 'all 0.15s',
         position: 'relative', overflow: 'hidden',
       }}
-      onMouseEnter={e => { if (!integration.comingSoon) { e.currentTarget.style.borderColor = 'rgba(196,164,74,0.3)'; e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; } }}
+      onMouseEnter={e => { if (!integration.comingSoon) { e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-sc-gold) 30%, transparent)'; e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; } }}
       onMouseLeave={e => {
         e.currentTarget.style.borderColor = isConnected && !hasMissing ? 'rgba(6,214,160,0.2)' : 'var(--color-sc-border)';
         e.currentTarget.style.background = 'var(--color-sc-surface)';
@@ -798,8 +798,8 @@ export function ConnectionsPage() {
               key={cat}
               onClick={() => setCategory(cat)}
               style={{
-                padding: '6px 14px', borderRadius: 8, border: `1px solid ${category === cat ? 'rgba(196,164,74,0.4)' : 'transparent'}`,
-                background: category === cat ? 'rgba(196,164,74,0.1)' : 'transparent',
+                padding: '6px 14px', borderRadius: 8, border: `1px solid ${category === cat ? 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)' : 'transparent'}`,
+                background: category === cat ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'transparent',
                 color: category === cat ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)',
                 cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-grotesk)',
                 whiteSpace: 'nowrap', transition: 'all 0.15s',

@@ -117,7 +117,7 @@ function RawLogsTab() {
         </select>
 
         <button onClick={() => { setAutoScroll(a => !a); }} title={autoScroll ? 'Pause auto-scroll' : 'Resume auto-scroll'}
-          style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--color-sc-border)', background: autoScroll ? 'rgba(196,164,74,0.1)' : 'var(--color-sc-bg)', color: autoScroll ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontFamily: 'var(--font-grotesk)' }}>
+          style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--color-sc-border)', background: autoScroll ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'var(--color-sc-bg)', color: autoScroll ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontFamily: 'var(--font-grotesk)' }}>
           {autoScroll ? <Pause size={11} /> : <Play size={11} />} {autoScroll ? 'Auto' : 'Manual'}
         </button>
 
@@ -148,7 +148,7 @@ function RawLogsTab() {
           const st = LEVEL_STYLE[l.level] ?? LEVEL_STYLE.log;
           return (
             <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '2px 24px', borderLeft: `2px solid ${i === visible.length - 1 ? st.color : 'transparent'}`, background: i % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent', transition: 'background 0.1s' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(196,164,74,0.04)'}
+              onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 4%, transparent)'}
               onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent'}>
               <span style={{ color: SOURCE_COLOR[l.source] ?? 'var(--color-sc-text-dim)', fontSize: 10, fontWeight: 700, flexShrink: 0, width: 58 }}>{l.source?.toUpperCase()}</span>
               <span style={{ color: st.color, fontSize: 10, fontWeight: 700, flexShrink: 0, width: 34 }}>{st.label}</span>
@@ -214,7 +214,7 @@ function TraceCard({ trace }) {
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-sc-gold)', marginBottom: 5, fontFamily: 'var(--font-grotesk)', display: 'flex', alignItems: 'center', gap: 5 }}>
                 <Brain size={11} /> THOUGHT / REASONING
               </div>
-              <div style={{ fontSize: 12, color: 'var(--color-sc-text)', lineHeight: 1.7, fontFamily: 'var(--font-inter)', background: 'rgba(196,164,74,0.05)', padding: '8px 12px', borderRadius: 8, borderLeft: '2px solid rgba(196,164,74,0.3)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              <div style={{ fontSize: 12, color: 'var(--color-sc-text)', lineHeight: 1.7, fontFamily: 'var(--font-inter)', background: 'color-mix(in srgb, var(--color-sc-gold) 5%, transparent)', padding: '8px 12px', borderRadius: 8, borderLeft: '2px solid color-mix(in srgb, var(--color-sc-gold) 30%, transparent)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                 {thought}
               </div>
             </div>
@@ -300,7 +300,7 @@ function TracesTab() {
             style={{ width: '100%', background: 'var(--color-sc-bg)', border: '1px solid var(--color-sc-border)', borderRadius: 8, padding: '7px 10px 7px 28px', color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
         </div>
         <button onClick={() => setPaused(p => !p)}
-          style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${paused ? 'rgba(196,164,74,0.4)' : 'var(--color-sc-border)'}`, background: paused ? 'rgba(196,164,74,0.1)' : 'var(--color-sc-bg)', color: paused ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontFamily: 'var(--font-grotesk)' }}>
+          style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${paused ? 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)' : 'var(--color-sc-border)'}`, background: paused ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'var(--color-sc-bg)', color: paused ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontFamily: 'var(--font-grotesk)' }}>
           {paused ? <><Play size={11} /> Paused</> : <><Pause size={11} /> Live</>}
         </button>
         <button onClick={fetchTraces} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--color-sc-border)', background: 'var(--color-sc-bg)', color: 'var(--color-sc-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
@@ -337,7 +337,7 @@ export function LogsPage() {
 
   const TAB = (id, label, Icon) => (
     <button key={id} onClick={() => setTab(id)}
-      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: `1px solid ${tab === id ? 'rgba(196,164,74,0.4)' : 'transparent'}`, background: tab === id ? 'rgba(196,164,74,0.1)' : 'transparent', color: tab === id ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-grotesk)', transition: 'all 0.15s' }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: `1px solid ${tab === id ? 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)' : 'transparent'}`, background: tab === id ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'transparent', color: tab === id ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-grotesk)', transition: 'all 0.15s' }}>
       <Icon size={13} /> {label}
     </button>
   );

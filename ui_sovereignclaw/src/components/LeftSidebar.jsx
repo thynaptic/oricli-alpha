@@ -51,7 +51,7 @@ export function LeftSidebar({ onOpenSettings }) {
             color: 'var(--color-sc-text)', cursor: 'pointer', fontSize: 13,
             fontFamily: 'var(--font-inter)', transition: 'border-color 0.15s, background 0.15s',
           }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-sc-gold)'; e.currentTarget.style.background = 'rgba(196,164,74,0.06)'; }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-sc-gold)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)'; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-sc-border2)'; e.currentTarget.style.background = 'transparent'; }}
         >
           <Plus size={14} style={{ color: 'var(--color-sc-gold)', flexShrink: 0 }} />
@@ -149,11 +149,11 @@ export function LeftSidebar({ onOpenSettings }) {
             key={session.id}
             onClick={() => setActiveSession(session.id)}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; setHoveredId(session.id); }}
-            onMouseLeave={e => { e.currentTarget.style.background = session.id === activeSession?.id ? 'rgba(196,164,74,0.1)' : 'transparent'; setHoveredId(null); }}
+            onMouseLeave={e => { e.currentTarget.style.background = session.id === activeSession?.id ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'transparent'; setHoveredId(null); }}
             style={{
               display: 'flex', alignItems: 'center', padding: '6px 10px', borderRadius: 7,
               cursor: 'pointer', marginBottom: 1,
-              background: session.id === activeSession?.id ? 'rgba(196,164,74,0.1)' : 'transparent',
+              background: session.id === activeSession?.id ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'transparent',
               color: session.id === activeSession?.id ? 'var(--color-sc-text)' : 'var(--color-sc-text-muted)',
               transition: 'background 0.12s',
             }}
@@ -209,7 +209,7 @@ export function LeftSidebar({ onOpenSettings }) {
 function Logo({ size = 20 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M12 2 L14 8 L20 6 L16 11 L20 14 L14 13 L12 20 L10 13 L4 14 L8 11 L4 6 L10 8 Z" fill="#C4A44A" opacity="0.9" />
+      <path d="M12 2 L14 8 L20 6 L16 11 L20 14 L14 13 L12 20 L10 13 L4 14 L8 11 L4 6 L10 8 Z" fill="var(--color-sc-gold)" opacity="0.9" />
       <circle cx="12" cy="11" r="2" fill="#080810" />
     </svg>
   );

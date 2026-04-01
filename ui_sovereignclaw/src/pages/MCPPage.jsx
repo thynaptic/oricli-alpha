@@ -137,7 +137,7 @@ function ServerForm({ initial, onSave, onCancel, existingIds = [] }) {
 
   return (
     <div style={{
-      background: 'var(--color-sc-surface)', border: '1px solid rgba(196,164,74,0.25)',
+      background: 'var(--color-sc-surface)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 25%, transparent)',
       borderRadius: 14, padding: '22px 24px', marginBottom: 20,
     }}>
       <h3 style={{ margin: '0 0 18px', fontFamily: 'var(--font-grotesk)', fontSize: 15, fontWeight: 700, color: 'var(--color-sc-text)' }}>
@@ -152,8 +152,8 @@ function ServerForm({ initial, onSave, onCancel, existingIds = [] }) {
             {TEMPLATES.map(t => (
               <button key={t.id} type="button" onClick={() => applyTemplate(t.id)} style={{
                 padding: '4px 10px', borderRadius: 20, fontSize: 11, cursor: 'pointer',
-                border: `1px solid ${template === t.id ? 'rgba(196,164,74,0.5)' : 'var(--color-sc-border)'}`,
-                background: template === t.id ? 'rgba(196,164,74,0.1)' : 'var(--color-sc-bg)',
+                border: `1px solid ${template === t.id ? 'color-mix(in srgb, var(--color-sc-gold) 50%, transparent)' : 'var(--color-sc-border)'}`,
+                background: template === t.id ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'var(--color-sc-bg)',
                 color: template === t.id ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)',
                 fontFamily: 'var(--font-inter)', transition: 'all 0.12s',
               }}>{t.name}</button>
@@ -226,7 +226,7 @@ function ServerCard({ server, onToggle, onDelete, onEdit }) {
 
   return (
     <div style={{
-      background: 'var(--color-sc-surface)', border: `1px solid ${server.enabled ? 'rgba(196,164,74,0.2)' : 'var(--color-sc-border)'}`,
+      background: 'var(--color-sc-surface)', border: `1px solid ${server.enabled ? 'color-mix(in srgb, var(--color-sc-gold) 20%, transparent)' : 'var(--color-sc-border)'}`,
       borderRadius: 12, overflow: 'hidden', transition: 'border-color 0.15s',
     }}>
       {/* Main row */}
@@ -234,8 +234,8 @@ function ServerCard({ server, onToggle, onDelete, onEdit }) {
         {/* Icon */}
         <div style={{
           width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-          background: server.enabled ? 'rgba(196,164,74,0.1)' : 'rgba(255,255,255,0.04)',
-          border: `1px solid ${server.enabled ? 'rgba(196,164,74,0.2)' : 'var(--color-sc-border)'}`,
+          background: server.enabled ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${server.enabled ? 'color-mix(in srgb, var(--color-sc-gold) 20%, transparent)' : 'var(--color-sc-border)'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: server.enabled ? 'var(--color-sc-gold)' : 'var(--color-sc-text-dim)',
         }}>
@@ -435,12 +435,12 @@ export function MCPPage() {
               onClick={() => { setAdding(true); setEditing(null); }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 9,
-                background: 'rgba(196,164,74,0.12)', border: '1px solid rgba(196,164,74,0.3)',
+                background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 30%, transparent)',
                 color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
                 fontFamily: 'var(--font-grotesk)', transition: 'background 0.15s',
               }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(196,164,74,0.22)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(196,164,74,0.12)'}
+              onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 22%, transparent)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)'}
             >
               <Plus size={14} /> Add server
             </button>
@@ -481,7 +481,7 @@ export function MCPPage() {
         {!adding && !editing && servers.length > 0 && (
           <div style={{
             display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px',
-            background: 'rgba(196,164,74,0.06)', border: '1px solid rgba(196,164,74,0.15)',
+            background: 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 15%, transparent)',
             borderRadius: 10, marginBottom: 16, fontSize: 12, color: 'var(--color-sc-text-muted)',
           }}>
             <AlertCircle size={13} style={{ color: 'var(--color-sc-gold)', flexShrink: 0, marginTop: 1 }} />

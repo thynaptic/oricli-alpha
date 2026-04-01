@@ -89,7 +89,7 @@ export function SettingsPanel({ onClose }) {
           </div>
 
           {/* About */}
-          <div style={{ marginTop: 8, padding: '14px', background: 'rgba(196,164,74,0.05)', border: '1px solid rgba(196,164,74,0.15)', borderRadius: 8 }}>
+          <div style={{ marginTop: 8, padding: '14px', background: 'color-mix(in srgb, var(--color-sc-gold) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 15%, transparent)', borderRadius: 8 }}>
             <div style={{ fontFamily: 'var(--font-grotesk)', fontWeight: 600, fontSize: 13, color: 'var(--color-sc-gold)', marginBottom: 6 }}>ORI Studio</div>
             <div style={{ fontSize: 12, color: 'var(--color-sc-text-muted)', lineHeight: 1.6 }}>
               Runs entirely on your own infrastructure. No data leaves your server. No third-party model providers. Powered by MCI — Main Central Intelligence.

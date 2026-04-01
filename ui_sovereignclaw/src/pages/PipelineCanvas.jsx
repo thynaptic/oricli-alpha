@@ -600,7 +600,7 @@ function PipelineCanvasInner() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px',
                   cursor: 'pointer', borderRadius: 7, margin: '0 4px',
-                  background: activePipe?.id === p.id ? 'rgba(196,164,74,0.1)' : 'transparent',
+                  background: activePipe?.id === p.id ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'transparent',
                   borderLeft: activePipe?.id === p.id ? '2px solid var(--color-sc-gold)' : '2px solid transparent',
                 }}
                 onMouseEnter={e => { if (activePipe?.id !== p.id) e.currentTarget.style.background = 'rgba(128,128,128,0.08)'; }}
@@ -689,7 +689,7 @@ function PipelineCanvasInner() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px',
                   borderRadius: 8, border: 'none', cursor: dirty ? 'pointer' : 'default',
-                  background: dirty ? 'rgba(196,164,74,0.12)' : 'transparent',
+                  background: dirty ? 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)' : 'transparent',
                   color: dirty ? 'var(--color-sc-gold)' : 'var(--color-sc-text-dim)',
                   fontFamily: 'var(--font-grotesk)', fontWeight: 700, fontSize: 12,
                   transition: 'all 0.15s',
@@ -705,7 +705,7 @@ function PipelineCanvasInner() {
                     borderRadius: 8, border: 'none', cursor: 'pointer',
                     background: 'var(--color-sc-gold)', color: '#fff',
                     fontFamily: 'var(--font-grotesk)', fontWeight: 800, fontSize: 12,
-                    boxShadow: '0 2px 8px rgba(196,164,74,0.35)',
+                    boxShadow: '0 2px 8px color-mix(in srgb, var(--color-sc-gold) 35%, transparent)',
                   }}>
                   <Play size={12} fill="currentColor" /> Run
                 </button>
@@ -762,7 +762,7 @@ function PipelineCanvasInner() {
                     background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-gold)',
                     borderRadius: 8, fontSize: 12, color: 'var(--color-sc-gold)',
                     fontFamily: 'var(--font-grotesk)', fontWeight: 700,
-                    boxShadow: '0 0 12px rgba(196,164,74,0.2)',
+                    boxShadow: '0 0 12px color-mix(in srgb, var(--color-sc-gold) 20%, transparent)',
                   }}>
                     <Loader2 size={12} style={{ animation: 'ori-spin 1s linear infinite' }} />
                     Running…

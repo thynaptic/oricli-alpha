@@ -56,9 +56,9 @@ function SovereignIdentityEditor() {
 
   return (
     <div style={{
-      background: 'var(--color-sc-surface)', border: '1px solid rgba(196,164,74,0.25)',
+      background: 'var(--color-sc-surface)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 25%, transparent)',
       borderRadius: 12, marginBottom: 28, overflow: 'hidden',
-      boxShadow: '0 0 24px rgba(196,164,74,0.05)',
+      boxShadow: '0 0 24px color-mix(in srgb, var(--color-sc-gold) 5%, transparent)',
     }}>
       {/* Header */}
       <button
@@ -147,8 +147,8 @@ function SovereignIdentityEditor() {
             </button>
             <button onClick={save} disabled={saving} style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '7px 18px', borderRadius: 8,
-              background: saved ? 'rgba(6,214,160,0.15)' : 'rgba(196,164,74,0.14)',
-              border: `1px solid ${saved ? 'rgba(6,214,160,0.4)' : 'rgba(196,164,74,0.35)'}`,
+              background: saved ? 'rgba(6,214,160,0.15)' : 'color-mix(in srgb, var(--color-sc-gold) 14%, transparent)',
+              border: `1px solid ${saved ? 'rgba(6,214,160,0.4)' : 'color-mix(in srgb, var(--color-sc-gold) 35%, transparent)'}`,
               color: saved ? '#06D6A0' : 'var(--color-sc-gold)',
               cursor: saving ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600,
               fontFamily: 'var(--font-grotesk)', transition: 'all 0.2s',
@@ -162,7 +162,7 @@ function SovereignIdentityEditor() {
   );
 }
 
-const AVATAR_COLORS = ['#C4A44A','#4D9EFF','#06D6A0','#FF4D6D','#A78BFA','#F97316','#EC4899','#14B8A6'];
+const AVATAR_COLORS = ['var(--color-sc-gold)','#4D9EFF','#06D6A0','#FF4D6D','#A78BFA','#F97316','#EC4899','#14B8A6'];
 
 const SKILLS = [
   'api_designer','benchmark_analyst','data_scientist','devops_sre','digital_guardian',
@@ -226,7 +226,7 @@ function ProfileCard({ profile, onDelete, onEdit }) {
         {[{ label: profile.tone, color: 'var(--color-sc-gold)' }].map(badge => (
           <span key={badge.label} style={{
             fontSize: 10, padding: '2px 8px', borderRadius: 10,
-            background: 'rgba(196,164,74,0.1)', color: badge.color,
+            background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: badge.color,
             fontFamily: 'var(--font-grotesk)', letterSpacing: '0.04em', textTransform: 'capitalize',
           }}>{badge.label}</span>
         ))}
@@ -296,7 +296,7 @@ function ProfileForm({ initial, onSave, onCancel }) {
             return (
               <button key={sk} onClick={() => toggleSkill(sk)} style={{
                 padding: '4px 10px', borderRadius: 8, border: `1px solid ${on ? 'var(--color-sc-gold)' : 'var(--color-sc-border)'}`,
-                background: on ? 'rgba(196,164,74,0.12)' : 'transparent',
+                background: on ? 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)' : 'transparent',
                 color: on ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)',
                 fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font-inter)',
                 transition: 'all 0.12s',
@@ -343,12 +343,12 @@ export function ProfilesPage() {
           onClick={() => { setCreating(true); setEditing(null); }}
           style={{
             display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 9,
-            background: 'rgba(196,164,74,0.12)', border: '1px solid rgba(196,164,74,0.3)',
+            background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 30%, transparent)',
             color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
             fontFamily: 'var(--font-grotesk)', transition: 'background 0.15s',
           }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(196,164,74,0.22)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(196,164,74,0.12)'}
+          onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 22%, transparent)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)'}
         >
           <Plus size={14} /> New profile
         </button>
@@ -368,7 +368,7 @@ export function ProfilesPage() {
           <div style={{
             background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-gold)',
             borderRadius: 12, padding: '20px 22px', marginBottom: 24,
-            boxShadow: '0 0 20px rgba(196,164,74,0.08)',
+            boxShadow: '0 0 20px color-mix(in srgb, var(--color-sc-gold) 8%, transparent)',
           }}>
             <div style={{ fontFamily: 'var(--font-grotesk)', fontWeight: 600, fontSize: 14, color: 'var(--color-sc-text)', marginBottom: 18 }}>
               {editing ? 'Edit profile' : 'Create profile'}

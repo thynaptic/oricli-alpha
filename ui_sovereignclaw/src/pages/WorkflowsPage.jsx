@@ -61,7 +61,7 @@ const labelStyle = {
 };
 const goldBtn = {
   display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 9,
-  background: 'rgba(196,164,74,0.12)', border: '1px solid rgba(196,164,74,0.3)',
+  background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 30%, transparent)',
   color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
   fontFamily: 'var(--font-grotesk)', transition: 'background 0.15s',
 };
@@ -82,11 +82,11 @@ function AgentPicker({ value, onChange }) {
       </button>
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50, background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', padding: 4, maxHeight: 240, overflowY: 'auto' }}>
-          <button type="button" onClick={() => { onChange(null); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: !value ? 'rgba(196,164,74,0.08)' : 'transparent', color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', fontSize: 13 }}>
+          <button type="button" onClick={() => { onChange(null); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: !value ? 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)' : 'transparent', color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', fontSize: 13 }}>
             <span>✨</span> Default (Oricli)
           </button>
           {agents.map(ag => (
-            <button key={ag.id} type="button" onClick={() => { onChange(ag); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: value?.id === ag.id ? 'rgba(196,164,74,0.08)' : 'transparent', color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', fontSize: 13 }}>
+            <button key={ag.id} type="button" onClick={() => { onChange(ag); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: value?.id === ag.id ? 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)' : 'transparent', color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', fontSize: 13 }}>
               <span>{ag.emoji}</span>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 12 }}>{ag.name}</div>
@@ -124,7 +124,7 @@ function WorkflowPicker({ value, onChange, excludeId }) {
             <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--color-sc-text-dim)' }}>No other workflows yet</div>
           )}
           {available.map(wf => (
-            <button key={wf.id} type="button" onClick={() => { onChange(wf.id); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: value === wf.id ? 'rgba(196,164,74,0.08)' : 'transparent', color: 'var(--color-sc-text)', textAlign: 'left' }}>
+            <button key={wf.id} type="button" onClick={() => { onChange(wf.id); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: value === wf.id ? 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)' : 'transparent', color: 'var(--color-sc-text)', textAlign: 'left' }}>
               <GitBranch size={12} style={{ color: 'var(--color-sc-gold)', marginTop: 2, flexShrink: 0 }} />
               <div>
                 <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600 }}>{wf.name}</div>
@@ -168,7 +168,7 @@ function RagSourcePicker({ value, onChange }) {
       </button>
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50, background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', padding: 4, maxHeight: 220, overflowY: 'auto' }}>
-          <button type="button" onClick={() => { onChange('__all__'); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: (!value || value === '__all__') ? 'rgba(196,164,74,0.08)' : 'transparent', color: 'var(--color-sc-text)', textAlign: 'left' }}>
+          <button type="button" onClick={() => { onChange('__all__'); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: (!value || value === '__all__') ? 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)' : 'transparent', color: 'var(--color-sc-text)', textAlign: 'left' }}>
             <span style={{ fontSize: 14 }}>🗄️</span>
             <div>
               <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600 }}>All indexed sources</div>
@@ -181,7 +181,7 @@ function RagSourcePicker({ value, onChange }) {
           {indexable.map(c => {
             const docs = indexStatus[c.id]?.local_docs || indexStatus[c.id]?.docs || 0;
             return (
-              <button key={c.id} type="button" onClick={() => { onChange(c.id); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: value === c.id ? 'rgba(196,164,74,0.08)' : 'transparent', color: 'var(--color-sc-text)', textAlign: 'left' }}>
+              <button key={c.id} type="button" onClick={() => { onChange(c.id); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: value === c.id ? 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)' : 'transparent', color: 'var(--color-sc-text)', textAlign: 'left' }}>
                 <span style={{ fontSize: 14 }}>{RAG_SOURCE_ICONS[c.id] || RAG_SOURCE_ICONS.default}</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600 }}>{c.name || c.id}</div>
@@ -405,7 +405,7 @@ function VarsHint() {
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <button type="button" onClick={() => setOpen(o => !o)}
-        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(196,164,74,0.2)', background: 'rgba(196,164,74,0.06)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, border: '1px solid color-mix(in srgb, var(--color-sc-gold) 20%, transparent)', background: 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
         {'{{…}}'} variables
       </button>
       {open && (
@@ -432,7 +432,7 @@ function RunVarsModal({ vars, onConfirm, onCancel }) {
   const [values, setValues] = useState(() => Object.fromEntries(vars.map(v => [v, ''])));
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: 'var(--color-sc-surface)', border: '1px solid rgba(196,164,74,0.25)', borderRadius: 16, padding: '28px 28px 24px', width: 420, maxWidth: '90vw' }}>
+      <div style={{ background: 'var(--color-sc-surface)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 25%, transparent)', borderRadius: 16, padding: '28px 28px 24px', width: 420, maxWidth: '90vw' }}>
         <h3 style={{ margin: '0 0 6px', fontFamily: 'var(--font-grotesk)', fontSize: 15, fontWeight: 700, color: 'var(--color-sc-text)' }}>Fill in variables</h3>
         <p style={{ margin: '0 0 20px', fontSize: 12, color: 'var(--color-sc-text-dim)' }}>This workflow uses custom variables. Enter a value for each before running.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
@@ -503,7 +503,7 @@ function DocUploadModal({ onConfirm, onCancel }) {
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           onClick={() => inputRef.current?.click()}
-          style={{ border: `2px dashed ${dragging ? 'var(--color-sc-gold)' : 'var(--color-sc-border)'}`, borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.15s', background: dragging ? 'rgba(196,164,74,0.05)' : 'transparent', marginBottom: 16 }}
+          style={{ border: `2px dashed ${dragging ? 'var(--color-sc-gold)' : 'var(--color-sc-border)'}`, borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.15s', background: dragging ? 'color-mix(in srgb, var(--color-sc-gold) 5%, transparent)' : 'transparent', marginBottom: 16 }}
         >
           <input ref={inputRef} type="file" accept=".pdf,.txt,.csv,.md,.json" style={{ display: 'none' }} onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
           {uploading ? (
@@ -532,7 +532,7 @@ function DocUploadModal({ onConfirm, onCancel }) {
         )}
 
         {/* Memory toggle */}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--color-sc-border)', marginBottom: 20, background: saveToMemory ? 'rgba(196,164,74,0.06)' : 'transparent' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--color-sc-border)', marginBottom: 20, background: saveToMemory ? 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)' : 'transparent' }}>
           <input type="checkbox" checked={saveToMemory} onChange={e => setSave(e.target.checked)} style={{ accentColor: 'var(--color-sc-gold)', width: 14, height: 14 }} />
           <div>
             <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 13, fontWeight: 600, color: saveToMemory ? 'var(--color-sc-gold)' : 'var(--color-sc-text)' }}>Commit to long-term memory</div>
@@ -545,7 +545,7 @@ function DocUploadModal({ onConfirm, onCancel }) {
           <button
             disabled={!extracted}
             onClick={() => extracted && onConfirm({ text: extracted.text, filename: extracted.filename, saveToMemory })}
-            style={{ flex: 2, padding: '10px 0', borderRadius: 8, border: 'none', background: extracted ? 'var(--color-sc-gold)' : 'rgba(196,164,74,0.2)', color: extracted ? '#0a0a0a' : 'var(--color-sc-text-dim)', cursor: extracted ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-grotesk)', fontSize: 13, fontWeight: 700 }}
+            style={{ flex: 2, padding: '10px 0', borderRadius: 8, border: 'none', background: extracted ? 'var(--color-sc-gold)' : 'color-mix(in srgb, var(--color-sc-gold) 20%, transparent)', color: extracted ? '#0a0a0a' : 'var(--color-sc-text-dim)', cursor: extracted ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-grotesk)', fontSize: 13, fontWeight: 700 }}
           >
             Run Workflow
           </button>
@@ -581,7 +581,7 @@ function BranchStepList({ steps, onChange }) {
       <button
         type="button"
         onClick={add}
-        style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7, border: '1px dashed rgba(196,164,74,0.3)', background: 'transparent', color: 'var(--color-sc-text-dim)', fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font-grotesk)' }}
+        style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7, border: '1px dashed color-mix(in srgb, var(--color-sc-gold) 30%, transparent)', background: 'transparent', color: 'var(--color-sc-text-dim)', fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font-grotesk)' }}
       >
         <Plus size={10} /> Add step
       </button>
@@ -611,17 +611,17 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId, compac
       <div style={{ background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 12, padding: '14px 16px', position: 'relative' }}>
         {/* Step header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(196,164,74,0.15)', color: 'var(--color-sc-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-grotesk)', flexShrink: 0 }}>
+          <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)', color: 'var(--color-sc-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-grotesk)', flexShrink: 0 }}>
             {index + 1}
           </div>
           <div style={{ position: 'relative', flexShrink: 0 }}>
-            <button type="button" onClick={() => setShowTypePicker(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, border: '1px solid rgba(196,164,74,0.3)', background: 'rgba(196,164,74,0.08)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600 }}>
+            <button type="button" onClick={() => setShowTypePicker(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, border: '1px solid color-mix(in srgb, var(--color-sc-gold) 30%, transparent)', background: 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)', color: 'var(--color-sc-gold)', cursor: 'pointer', fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600 }}>
               <Icon size={12} /> {def.label} <ChevronDown size={10} style={{ transform: showTypePicker ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
             </button>
             {showTypePicker && (
               <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50, background: 'var(--color-sc-surface)', border: '1px solid var(--color-sc-border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', padding: 4, minWidth: 200, maxHeight: 280, overflowY: 'auto' }}>
                 {STEP_TYPES.map(st => (
-                  <button key={st.id} type="button" onClick={() => { onChange({ ...step, type: st.id }); setShowTypePicker(false); }} style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: step.type === st.id ? 'rgba(196,164,74,0.08)' : 'transparent', color: 'var(--color-sc-text)', textAlign: 'left' }}>
+                  <button key={st.id} type="button" onClick={() => { onChange({ ...step, type: st.id }); setShowTypePicker(false); }} style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: step.type === st.id ? 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)' : 'transparent', color: 'var(--color-sc-text)', textAlign: 'left' }}>
                     <st.Icon size={13} style={{ color: 'var(--color-sc-gold)', marginTop: 1, flexShrink: 0 }} />
                     <div>
                       <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600 }}>{st.label}</div>
@@ -648,9 +648,9 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId, compac
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--color-sc-border)', background: 'rgba(0,0,0,0.2)', marginBottom: 10 }}>
               <FileText size={14} style={{ color: 'var(--color-sc-gold)', flexShrink: 0 }} />
-              <span style={{ fontSize: 12, color: 'var(--color-sc-text-muted)' }}>You'll be prompted to upload a <strong>PDF, TXT, or CSV</strong> when this workflow runs. Its contents become <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> for the next step.</span>
+              <span style={{ fontSize: 12, color: 'var(--color-sc-text-muted)' }}>You'll be prompted to upload a <strong>PDF, TXT, or CSV</strong> when this workflow runs. Its contents become <code style={{ background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> for the next step.</span>
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '9px 12px', borderRadius: 8, border: `1px solid ${step.saveToMemory ? 'rgba(196,164,74,0.4)' : 'var(--color-sc-border)'}`, background: step.saveToMemory ? 'rgba(196,164,74,0.06)' : 'transparent', transition: 'all 0.15s' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '9px 12px', borderRadius: 8, border: `1px solid ${step.saveToMemory ? 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)' : 'var(--color-sc-border)'}`, background: step.saveToMemory ? 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)' : 'transparent', transition: 'all 0.15s' }}>
               <input type="checkbox" checked={!!step.saveToMemory} onChange={e => onChange({ ...step, saveToMemory: e.target.checked })} style={{ accentColor: 'var(--color-sc-gold)', width: 13, height: 13 }} />
               <div>
                 <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600, color: step.saveToMemory ? 'var(--color-sc-gold)' : 'var(--color-sc-text)' }}>Commit to long-term memory</div>
@@ -666,8 +666,8 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId, compac
               excludeId={parentWfId}
             />
             <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-sc-text-dim)' }}>
-              The selected workflow will run with the current <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> as its starting context.
-              Its final output becomes <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> for your next step.
+              The selected workflow will run with the current <code style={{ background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> as its starting context.
+              Its final output becomes <code style={{ background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> for your next step.
             </div>
           </div>
         ) : step.type === 'if_else' ? (
@@ -725,7 +725,7 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId, compac
             />
             <div style={{ fontSize: 11, color: 'var(--color-sc-text-dim)', marginTop: 2 }}>
               Fetches live data from the selected connection. Its content becomes{' '}
-              <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code>{' '}
+              <code style={{ background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code>{' '}
               for the next step.
             </div>
           </div>
@@ -745,8 +745,8 @@ function StepEditor({ step, index, total, onChange, onRemove, parentWfId, compac
         )}
         {index > 0 && step.type !== 'sub_workflow' && (
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-sc-text-dim)' }}>
-            Use <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> for previous step output,{' '}
-            <code style={{ background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{step_0_output}}'}</code> etc. for specific steps.
+            Use <code style={{ background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{output}}'}</code> for previous step output,{' '}
+            <code style={{ background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)', padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>{'{{step_0_output}}'}</code> etc. for specific steps.
           </div>
         )}
       </div>
@@ -791,7 +791,7 @@ function WorkflowCreator({ onSave, onCancel, initial, defaultProjectId, pendingD
   }
 
   return (
-    <div style={{ background: 'var(--color-sc-surface)', border: '1px solid rgba(196,164,74,0.25)', borderRadius: 14, padding: '22px 24px', marginBottom: 20 }}>
+    <div style={{ background: 'var(--color-sc-surface)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 25%, transparent)', borderRadius: 14, padding: '22px 24px', marginBottom: 20 }}>
       <h3 style={{ margin: '0 0 18px', fontFamily: 'var(--font-grotesk)', fontSize: 15, fontWeight: 700, color: 'var(--color-sc-text)' }}>
         {initial?.id ? 'Edit Workflow' : 'New Workflow'}
       </h3>
@@ -830,12 +830,12 @@ function WorkflowCreator({ onSave, onCancel, initial, defaultProjectId, pendingD
         ))}
       </div>
 
-      <button type="button" onClick={addStep} style={{ ...goldBtn, padding: '7px 14px', fontSize: 12, marginBottom: 20, background: 'transparent', border: '1px dashed rgba(196,164,74,0.3)' }}>
+      <button type="button" onClick={addStep} style={{ ...goldBtn, padding: '7px 14px', fontSize: 12, marginBottom: 20, background: 'transparent', border: '1px dashed color-mix(in srgb, var(--color-sc-gold) 30%, transparent)' }}>
         <Plus size={12} /> Add step
       </button>
 
       {/* Canvas output toggle */}
-      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 9, border: `1px solid ${sendToCanvas ? 'rgba(196,164,74,0.4)' : 'var(--color-sc-border)'}`, background: sendToCanvas ? 'rgba(196,164,74,0.06)' : 'transparent', marginBottom: 16, transition: 'all 0.15s' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 9, border: `1px solid ${sendToCanvas ? 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)' : 'var(--color-sc-border)'}`, background: sendToCanvas ? 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)' : 'transparent', marginBottom: 16, transition: 'all 0.15s' }}>
         <input type="checkbox" checked={sendToCanvas} onChange={e => setSendToCanvas(e.target.checked)} style={{ accentColor: 'var(--color-sc-gold)', width: 13, height: 13, flexShrink: 0 }} />
         <div>
           <div style={{ fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 600, color: sendToCanvas ? 'var(--color-sc-gold)' : 'var(--color-sc-text)' }}>Send output to Canvas</div>
@@ -938,7 +938,7 @@ function ActiveRunsTray({ bgRuns, workflows, onDismiss, onDismissAll, onRerun, o
           Background Runs
         </span>
         {activeCount > 0 && (
-          <span style={{ padding: '2px 8px', borderRadius: 20, background: 'rgba(196,164,74,0.15)', border: '1px solid rgba(196,164,74,0.3)', color: 'var(--color-sc-gold)', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-grotesk)', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ padding: '2px 8px', borderRadius: 20, background: 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 30%, transparent)', color: 'var(--color-sc-gold)', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-grotesk)', display: 'flex', alignItems: 'center', gap: 5 }}>
             <Loader size={9} style={{ animation: 'spin 1s linear infinite' }} />
             {activeCount} running
           </span>
@@ -1111,9 +1111,9 @@ function WorkflowCard({ wf, onDelete, onRun, onEdit, onHistory, activeRun }) {
 
   return (
     <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-      style={{ background: 'var(--color-sc-surface)', border: `1px solid ${isRunning ? 'rgba(196,164,74,0.35)' : hovered ? 'rgba(196,164,74,0.2)' : 'var(--color-sc-border)'}`, borderRadius: 12, padding: '16px 18px', transition: 'border-color 0.15s', overflow: 'hidden' }}>
+      style={{ background: 'var(--color-sc-surface)', border: `1px solid ${isRunning ? 'color-mix(in srgb, var(--color-sc-gold) 35%, transparent)' : hovered ? 'color-mix(in srgb, var(--color-sc-gold) 20%, transparent)' : 'var(--color-sc-border)'}`, borderRadius: 12, padding: '16px 18px', transition: 'border-color 0.15s', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 10, background: isRunning ? 'rgba(196,164,74,0.18)' : 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 10, background: isRunning ? 'color-mix(in srgb, var(--color-sc-gold) 18%, transparent)' : 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           {isRunning ? <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Zap size={16} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -1629,7 +1629,7 @@ function TaskCreator({ onSave, onCancel }) {
   }
 
   return (
-    <div style={{ background: 'var(--color-sc-surface)', border: '1px solid rgba(196,164,74,0.25)', borderRadius: 14, padding: '22px 24px', marginBottom: 20 }}>
+    <div style={{ background: 'var(--color-sc-surface)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 25%, transparent)', borderRadius: 14, padding: '22px 24px', marginBottom: 20 }}>
       <h3 style={{ margin: '0 0 20px', fontFamily: 'var(--font-grotesk)', fontSize: 15, fontWeight: 700, color: 'var(--color-sc-text)' }}>New Task</h3>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
         <div><label style={labelStyle}>Task name (optional)</label><input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Daily market summary" style={inputStyle} /></div>
@@ -1643,7 +1643,7 @@ function TaskCreator({ onSave, onCancel }) {
         <label style={labelStyle}>Schedule</label>
         <div style={{ display: 'flex', gap: 8 }}>
           {SCHEDULE_TYPES.map(st => (
-            <button key={st.id} type="button" onClick={() => { setSchedType(st.id); setSchedValue(''); }} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${schedType === st.id ? 'rgba(196,164,74,0.5)' : 'var(--color-sc-border)'}`, background: schedType === st.id ? 'rgba(196,164,74,0.1)' : 'var(--color-sc-bg)', color: schedType === st.id ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', cursor: 'pointer', fontFamily: 'var(--font-inter)', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <button key={st.id} type="button" onClick={() => { setSchedType(st.id); setSchedValue(''); }} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${schedType === st.id ? 'color-mix(in srgb, var(--color-sc-gold) 50%, transparent)' : 'var(--color-sc-border)'}`, background: schedType === st.id ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'var(--color-sc-bg)', color: schedType === st.id ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', cursor: 'pointer', fontFamily: 'var(--font-inter)', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <st.Icon size={12} /> {st.label}
             </button>
           ))}
@@ -1656,7 +1656,7 @@ function TaskCreator({ onSave, onCancel }) {
         <div style={{ marginBottom: 20 }}>
           <label style={labelStyle}>Cron expression (UTC)</label>
           <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-            {CRON_PRESETS.map(p => (<button key={p.value} type="button" onClick={() => setSchedValue(p.value)} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, cursor: 'pointer', border: `1px solid ${schedValue === p.value ? 'rgba(196,164,74,0.5)' : 'var(--color-sc-border)'}`, background: schedValue === p.value ? 'rgba(196,164,74,0.1)' : 'var(--color-sc-bg)', color: schedValue === p.value ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', fontFamily: 'var(--font-inter)' }}>{p.label}</button>))}
+            {CRON_PRESETS.map(p => (<button key={p.value} type="button" onClick={() => setSchedValue(p.value)} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, cursor: 'pointer', border: `1px solid ${schedValue === p.value ? 'color-mix(in srgb, var(--color-sc-gold) 50%, transparent)' : 'var(--color-sc-border)'}`, background: schedValue === p.value ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'var(--color-sc-bg)', color: schedValue === p.value ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', fontFamily: 'var(--font-inter)' }}>{p.label}</button>))}
           </div>
           <input value={schedValue} onChange={e => setSchedValue(e.target.value)} placeholder="0 9 * * *" style={inputStyle} />
           <div style={{ fontSize: 11, color: 'var(--color-sc-text-dim)', marginTop: 5 }}>Format: minute hour day month weekday — <a href="https://crontab.guru" target="_blank" rel="noopener" style={{ color: 'var(--color-sc-gold)' }}>crontab.guru</a></div>
@@ -1707,7 +1707,7 @@ function TaskCard({ task, onDelete, onRun, onRefresh }) {
               await new Promise(r => setTimeout(r, 2000));
               onRefresh();
             } finally { setRunning(false); }
-          }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: 'none', background: 'rgba(196,164,74,0.12)', border: '1px solid rgba(196,164,74,0.3)', color: 'var(--color-sc-gold)', cursor: running ? 'default' : 'pointer', fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 700 }} disabled={running}>
+          }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: 'none', background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 30%, transparent)', color: 'var(--color-sc-gold)', cursor: running ? 'default' : 'pointer', fontFamily: 'var(--font-grotesk)', fontSize: 12, fontWeight: 700 }} disabled={running}>
             {running ? <Loader size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={11} />} {running ? 'Running…' : 'Run now'}
           </button>
         </div>
@@ -1755,7 +1755,7 @@ export function WorkflowsPage() {
   const [tab, setTab] = useState('workflows');
 
   const TAB_BTN = (id, label, Icon) => (
-    <button key={id} onClick={() => { setTab(id); setCreating(false); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: `1px solid ${tab === id ? 'rgba(196,164,74,0.4)' : 'transparent'}`, background: tab === id ? 'rgba(196,164,74,0.1)' : 'transparent', color: tab === id ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-grotesk)', transition: 'all 0.15s' }}>
+    <button key={id} onClick={() => { setTab(id); setCreating(false); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: `1px solid ${tab === id ? 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)' : 'transparent'}`, background: tab === id ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : 'transparent', color: tab === id ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-grotesk)', transition: 'all 0.15s' }}>
       <Icon size={13} /> {label}
     </button>
   );
@@ -1773,8 +1773,8 @@ export function WorkflowsPage() {
             </p>
           </div>
           <button onClick={() => setCreating(true)} style={goldBtn}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(196,164,74,0.22)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(196,164,74,0.12)'}>
+            onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 22%, transparent)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)'}>
             <Plus size={14} /> {tab === 'tasks' ? 'New task' : 'New workflow'}
           </button>
         </div>

@@ -34,7 +34,7 @@ export function ChatSidebar() {
             background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-sc-text-muted)',
             display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6, transition: 'background 0.12s, color 0.12s',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(196,164,74,0.1)'; e.currentTarget.style.color = 'var(--color-sc-gold)'; }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)'; e.currentTarget.style.color = 'var(--color-sc-gold)'; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--color-sc-text-muted)'; }}
         >
           <Plus size={15} />
@@ -52,7 +52,7 @@ export function ChatSidebar() {
             style={{
               display: 'flex', alignItems: 'center', padding: '7px 8px',
               borderRadius: 7, cursor: 'pointer', marginBottom: 1, gap: 8,
-              background: session.id === activeSession?.id ? 'rgba(196,164,74,0.1)' : hoveredId === session.id ? 'rgba(255,255,255,0.04)' : 'transparent',
+              background: session.id === activeSession?.id ? 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)' : hoveredId === session.id ? 'rgba(255,255,255,0.04)' : 'transparent',
               color: session.id === activeSession?.id ? 'var(--color-sc-text)' : 'var(--color-sc-text-muted)',
               transition: 'background 0.12s',
             }}

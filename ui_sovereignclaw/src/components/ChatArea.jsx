@@ -164,7 +164,7 @@ const markdownComponents = {
     if (inline) {
       return (
         <code style={{
-          background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)',
+          background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)',
           padding: '1px 5px', borderRadius: 3, fontFamily: 'var(--font-mono)', fontSize: '0.88em',
         }}>{children}</code>
       );
@@ -187,7 +187,7 @@ const markdownComponents = {
   h2({ children }) { return <h2 style={{ fontSize: 16, fontFamily: 'var(--font-grotesk)', fontWeight: 600, margin: '16px 0 6px', color: 'var(--color-sc-text)' }}>{children}</h2>; },
   h3({ children }) { return <h3 style={{ fontSize: 14, fontFamily: 'var(--font-grotesk)', fontWeight: 600, margin: '14px 0 5px', color: 'var(--color-sc-text)' }}>{children}</h3>; },
   blockquote({ children }) { return <blockquote style={{ borderLeft: '3px solid var(--color-sc-gold)', paddingLeft: 14, margin: '10px 0', color: 'var(--color-sc-text-muted)', fontStyle: 'italic' }}>{children}</blockquote>; },
-  a({ href, children }) { return <a href={href} target="_blank" rel="noopener" style={{ color: 'var(--color-sc-gold)', textDecoration: 'underline', textDecorationColor: 'rgba(196,164,74,0.4)' }}>{children}</a>; },
+  a({ href, children }) { return <a href={href} target="_blank" rel="noopener" style={{ color: 'var(--color-sc-gold)', textDecoration: 'underline', textDecorationColor: 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)' }}>{children}</a>; },
   hr() { return <hr style={{ border: 'none', borderTop: '1px solid var(--color-sc-border)', margin: '16px 0' }} />; },
   table({ children }) { return <div style={{ overflowX: 'auto', margin: '12px 0' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>{children}</table></div>; },
   th({ children }) { return <th style={{ border: '1px solid var(--color-sc-border)', padding: '6px 10px', background: 'var(--color-sc-surface)', color: 'var(--color-sc-text-muted)', textAlign: 'left', fontWeight: 600, fontSize: 12 }}>{children}</th>; },
@@ -249,10 +249,10 @@ function ReactionBar({ msg }) {
             onMouseLeave={() => setHover(null)}
             style={{
               background: isSelected
-                ? 'rgba(196,164,74,0.18)'
+                ? 'color-mix(in srgb, var(--color-sc-gold) 18%, transparent)'
                 : isHovered ? 'rgba(255,255,255,0.07)' : 'transparent',
               border: isSelected
-                ? '1px solid rgba(196,164,74,0.45)'
+                ? '1px solid color-mix(in srgb, var(--color-sc-gold) 45%, transparent)'
                 : '1px solid transparent',
               borderRadius: 8,
               cursor: 'pointer',
@@ -338,11 +338,11 @@ function Message({ msg, onEdit }) {
               }}
               rows={Math.min(8, editText.split('\n').length + 1)}
               style={{
-                width: '100%', resize: 'none', background: 'rgba(196,164,74,0.07)',
-                border: '1px solid rgba(196,164,74,0.4)', borderRadius: 12,
+                width: '100%', resize: 'none', background: 'color-mix(in srgb, var(--color-sc-gold) 7%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--color-sc-gold) 40%, transparent)', borderRadius: 12,
                 padding: '10px 14px', fontSize: 14, lineHeight: 1.65,
                 color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)',
-                outline: 'none', boxShadow: '0 0 0 2px rgba(196,164,74,0.15)',
+                outline: 'none', boxShadow: '0 0 0 2px color-mix(in srgb, var(--color-sc-gold) 15%, transparent)',
               }}
             />
             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
@@ -358,7 +358,7 @@ function Message({ msg, onEdit }) {
                 onClick={() => { setEditing(false); onEdit(msg.id, editText); }}
                 style={{
                   padding: '5px 14px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
-                  background: 'rgba(196,164,74,0.15)', border: '1px solid rgba(196,164,74,0.4)',
+                  background: 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 40%, transparent)',
                   color: 'var(--color-sc-gold)', fontWeight: 600,
                 }}
               >Save & Resend</button>
@@ -366,8 +366,8 @@ function Message({ msg, onEdit }) {
           </div>
         ) : (
           <div style={{
-            maxWidth: '72%', background: 'rgba(196,164,74,0.1)',
-            border: '1px solid rgba(196,164,74,0.18)', borderRadius: '16px 16px 4px 16px',
+            maxWidth: '72%', background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--color-sc-gold) 18%, transparent)', borderRadius: '16px 16px 4px 16px',
             padding: '10px 16px', fontSize: 14, lineHeight: 1.65, color: 'var(--color-sc-text)',
           }}>
             {msg.content}
@@ -405,8 +405,8 @@ function Message({ msg, onEdit }) {
           <div title="SCAI Critique-Revision loop detected a constitutional violation and applied a correction." style={{
             display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8,
             padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-            background: 'rgba(196,164,74,0.10)', border: '1px solid rgba(196,164,74,0.28)',
-            color: 'rgba(196,164,74,0.85)', letterSpacing: '0.03em',
+            background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--color-sc-gold) 28%, transparent)',
+            color: 'color-mix(in srgb, var(--color-sc-gold) 85%, transparent)', letterSpacing: '0.03em',
           }}>
             <img src="/ori-mark.png" alt="SCAI" width="10" height="10" className="logo-light-src" style={{ flexShrink: 0, objectFit: 'contain' }} />
             SCAI corrected
@@ -451,7 +451,7 @@ function WelcomeScreen({ onSuggest }) {
             color: 'var(--color-sc-text-muted)', fontSize: 13, lineHeight: 1.5,
             fontFamily: 'var(--font-inter)', transition: 'border-color 0.15s, background 0.15s',
           }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(196,164,74,0.4)'; e.currentTarget.style.background = 'rgba(196,164,74,0.05)'; e.currentTarget.style.color = 'var(--color-sc-text)'; }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-sc-gold) 40%, transparent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 5%, transparent)'; e.currentTarget.style.color = 'var(--color-sc-text)'; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-sc-border)'; e.currentTarget.style.background = 'var(--color-sc-surface)'; e.currentTarget.style.color = 'var(--color-sc-text-muted)'; }}
           >{s}</button>
         ))}
@@ -528,9 +528,9 @@ function ChatInput({ value, onChange, onSend, onAbort, isStreaming, disabled }) 
       )}
 
       <div style={{
-        border: `1px solid ${focused ? 'rgba(196,164,74,0.5)' : 'var(--color-sc-border2)'}`,
+        border: `1px solid ${focused ? 'color-mix(in srgb, var(--color-sc-gold) 50%, transparent)' : 'var(--color-sc-border2)'}`,
         borderRadius: 14, background: 'var(--color-sc-surface)',
-        boxShadow: focused ? '0 0 0 3px rgba(196,164,74,0.08)' : 'none',
+        boxShadow: focused ? '0 0 0 3px color-mix(in srgb, var(--color-sc-gold) 8%, transparent)' : 'none',
         transition: 'border-color 0.2s, box-shadow 0.2s',
       }}>
         {/* Hidden file input */}
@@ -570,7 +570,7 @@ function ChatInput({ value, onChange, onSend, onAbort, isStreaming, disabled }) 
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'background 0.15s, color 0.15s',
             }}
-            onMouseEnter={e => { if (!uploading) e.currentTarget.style.background = 'rgba(196,164,74,0.1)'; }}
+            onMouseEnter={e => { if (!uploading) e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(128,128,128,0.1)'; }}
           >
             {uploading
@@ -637,8 +637,8 @@ function AgentSwitcher() {
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '4px 10px 4px 8px', borderRadius: 20,
-          background: activeChatAgent ? 'rgba(196,164,74,0.12)' : 'rgba(128,128,128,0.1)',
-          border: `1px solid ${activeChatAgent ? 'rgba(196,164,74,0.35)' : 'var(--color-sc-border)'}`,
+          background: activeChatAgent ? 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)' : 'rgba(128,128,128,0.1)',
+          border: `1px solid ${activeChatAgent ? 'color-mix(in srgb, var(--color-sc-gold) 35%, transparent)' : 'var(--color-sc-border)'}`,
           cursor: 'pointer', transition: 'all 0.15s', fontSize: 12,
           color: activeChatAgent ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)',
           fontFamily: 'var(--font-inter)',
@@ -684,12 +684,12 @@ function AgentSwitcher() {
             style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: 10,
               padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-              background: !activeChatAgent ? 'rgba(196,164,74,0.08)' : 'transparent',
+              background: !activeChatAgent ? 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)' : 'transparent',
               color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', fontSize: 13,
               textAlign: 'left', transition: 'background 0.12s',
             }}
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(128,128,128,0.1)'}
-            onMouseLeave={e => e.currentTarget.style.background = !activeChatAgent ? 'rgba(196,164,74,0.08)' : 'transparent'}
+            onMouseLeave={e => e.currentTarget.style.background = !activeChatAgent ? 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)' : 'transparent'}
           >
             <span style={{ fontSize: 16 }}>✨</span>
             <div>
@@ -713,12 +713,12 @@ function AgentSwitcher() {
                       style={{
                         width: '100%', display: 'flex', alignItems: 'flex-start', gap: 10,
                         padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                        background: isActive ? 'rgba(196,164,74,0.08)' : 'transparent',
+                        background: isActive ? 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)' : 'transparent',
                         color: 'var(--color-sc-text)', fontFamily: 'var(--font-inter)', fontSize: 13,
                         textAlign: 'left', transition: 'background 0.12s',
                       }}
                       onMouseEnter={e => e.currentTarget.style.background = 'rgba(128,128,128,0.1)'}
-                      onMouseLeave={e => e.currentTarget.style.background = isActive ? 'rgba(196,164,74,0.08)' : 'transparent'}
+                      onMouseLeave={e => e.currentTarget.style.background = isActive ? 'color-mix(in srgb, var(--color-sc-gold) 8%, transparent)' : 'transparent'}
                     >
                       <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{ag.emoji}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -847,10 +847,10 @@ function RoutingCard({ msg }) {
   return (
     <div style={{ margin: '4px 0 4px 44px', maxWidth: 480 }}>
       <div style={{
-        border: '1px solid rgba(196,164,74,0.28)',
+        border: '1px solid color-mix(in srgb, var(--color-sc-gold) 28%, transparent)',
         borderRadius: 10,
         padding: '12px 14px',
-        background: 'rgba(196,164,74,0.07)',
+        background: 'color-mix(in srgb, var(--color-sc-gold) 7%, transparent)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
           {isAgent ? <Bot size={15} color="var(--color-sc-gold)" /> : <Workflow size={15} color="var(--color-sc-gold)" />}
@@ -883,8 +883,8 @@ function RoutingCard({ msg }) {
                   onClick={() => isAgent ? useExistingAgent(item) : useExistingWorkflow()}
                   style={{
                     padding: '3px 9px', borderRadius: 5, fontSize: 11,
-                    background: 'rgba(196,164,74,0.12)', color: 'var(--color-sc-gold)',
-                    border: '1px solid rgba(196,164,74,0.3)', cursor: 'pointer', fontWeight: 600,
+                    background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', color: 'var(--color-sc-gold)',
+                    border: '1px solid color-mix(in srgb, var(--color-sc-gold) 30%, transparent)', cursor: 'pointer', fontWeight: 600,
                   }}
                 >
                   {item.emoji ? `${item.emoji} ` : ''}{isAgent ? item.name : item.subject}

@@ -113,7 +113,7 @@ export function HivePanel() {
           </span>
           <span style={{
             fontSize: 10, padding: '1px 6px', borderRadius: 10,
-            background: 'rgba(196,164,74,0.1)', color: 'var(--color-sc-gold)',
+            background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)',
             fontFamily: 'var(--font-mono)',
           }}>
             {NODE_COUNT} modules
@@ -161,7 +161,7 @@ export function HivePanel() {
           {/* Active edges */}
           {edgeLines.map((e, i) => (
             <line key={i} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
-              stroke="#C4A44A" strokeWidth="0.8" strokeDasharray="4 4" opacity="0.4"
+              stroke="var(--color-sc-gold)" strokeWidth="0.8" strokeDasharray="4 4" opacity="0.4"
               style={{ animation: 'edge-flow 1.5s linear infinite' }}
             />
           ))}
@@ -176,12 +176,12 @@ export function HivePanel() {
                 style={{ cursor: 'default' }}
               >
                 {isActive && (
-                  <circle cx={pos.x} cy={pos.y} r={8} fill="#C4A44A" opacity={0.12} />
+                  <circle cx={pos.x} cy={pos.y} r={8} fill="var(--color-sc-gold)" opacity={0.12} />
                 )}
                 <circle
                   cx={pos.x} cy={pos.y}
                   r={isActive ? 3.5 : 2}
-                  fill={isActive ? '#FFD166' : '#2A2A44'}
+                  fill={isActive ? 'var(--color-sc-gold-glow)' : '#2A2A44'}
                   style={isActive ? { animation: 'node-pulse 1s ease-in-out infinite', transformOrigin: `${pos.x}px ${pos.y}px` } : undefined}
                 />
                 {hovered === i && nodeLabels[i] && (
@@ -209,7 +209,7 @@ export function HivePanel() {
               fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--color-sc-gold)',
               padding: '2px 0', display: 'flex', alignItems: 'center', gap: 6,
             }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#FFD166', display: 'inline-block' }} />
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--color-sc-gold-glow)', display: 'inline-block' }} />
               {name}
             </div>
           ))}
