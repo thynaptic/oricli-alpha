@@ -16,7 +16,32 @@ Versions track `VERSION` file. Commits listed for traceability.
 
 ---
 
-## [11.1.0] — 2026-04-01 — Intelligence Benchmark + Reasoning Routing Fixes — `5a3ead8`
+## [11.2.0] — 2026-04-01 — Adaptive Reasoning Engine (ARE) — `b34b95a`
+
+### Added
+- **Adaptive Reasoning Engine** (`pkg/cognition/adaptive_engine.go`): New dual-track architecture replaces the static `ModeDiscover` catch-all for high-complexity / ambiguous queries. ARE runs a 3-step loop (Consistency → Debate → Discover) with a **Policy** function selecting the next cognitive tool and a **Value** function scoring answer quality (pure heuristic, < 1ms). Exits early at confidence ≥ 0.75; always returns a non-empty answer. Context: `context.WithoutCancel` detaches ARE from HTTP request context so client disconnection can't kill mid-step reasoning. Each step gets its own 90s timeout.
+- **`ModeAdaptive` constant** (`pkg/cognition/reasoning_modes.go`): Added `ModeAdaptive = 12` to the `ReasoningMode` enum. Updated `String()` and `ParseReasoningMode()`. `ClassifyReasoningMode()` now routes `complexity ≥ 0.55` to `ModeAdaptive` (ARE) instead of `ModeDiscover`.
+- **ARE dispatch in sovereign.go** (`pkg/cognition/sovereign.go`): `case ModeAdaptive` calls `runAdaptive()` which returns a complete answer — `modeHandled = true` skips the downstream standard LLM call. Added to `skipWebSearch` bitmask and balanced-prompting gate.
+- **AnalyzeComplexity: Factor 8 + Factor 9** (`pkg/cognition/adaptive.go`): Factor 8 detects conceptual/explanatory queries (`explain why`, `compare`, `difference between`, `implications of`, `how does`, `when should`, etc.) — previously these scored 0 complexity and bypassed the ARE entirely. Factor 9 adds a bonus for medium-length conceptual queries (15–60 words). Also added `tradeoffs` / `tradeoff` / `trade-offs` variants to Factor 3 exploration keywords. Combined: most "explain X and why Y" questions now score ≥ 0.55 and enter the ARE.
+
+### Fixed
+- **`Generate()` missing `"response"` key** (`pkg/service/generation.go`): All reasoning engines (`runConsistency`, `runDebate`, `runSelfDiscover`, `runPAL`, `runCausal`, `runCBR`, etc.) read `r["response"]` from `GenService.Generate()`. But the `go_ollama_native` and `go_ollama_chat` return paths only included the key `"text"` — `r["response"]` was always `""`. This caused every reasoning engine to silently return empty output and fall through to the final standard LLM call, masking all mode contributions. Fixed by adding `"response": resp` (and `"response": content`) to both return sites. The existing `RunPod` and `CrystalCache` paths already had both keys.
+- **ARE context cancellation** (`pkg/cognition/adaptive_engine.go`): Previous impl passed the raw HTTP request context to `runAdaptive`. When the client timed out or disconnected, `ctx.Err() != nil` caused all ARE steps to be marked as skipped regardless of whether they produced output. Fixed by using `context.WithoutCancel(ctx)` as the ARE base context.
+- **areExecute enrichment runners** (`pkg/cognition/adaptive_engine.go`): `runDebate` and `runSelfDiscover` return composite enrichments (system-prompt context), not final answers. ARE scored these at 0.0. Fixed by adding `areFinalizeWithLLM()` — after enrichment-style runners build their composite, one direct LLM call is made to produce a scorable answer.
+- **arePolicy order** (`pkg/cognition/adaptive_engine.go`): Previous policy started with `ModeDiscover` (composite enrichment, no standalone answer). Changed to Consistency → Debate → Discover, matching answer-quality capability order.
+
+### Verified
+```
+[ARE] start — stimulus len=138 budget=3
+[ARE] step mode=Consistency score=0.82 elapsed=49.632s chars=2654
+[ARE] confidence threshold met (0.82) after 1 step(s)
+[ARE] done — steps=1 final_confidence=0.82
+[SovereignEngine] Pipeline v3.3.0 Complete. Router: Adaptive, Complexity: 0.71
+```
+
+---
+
+
 
 ### Fixed
 - **CuriosityDaemon topic stop words** (`pkg/service/curiosity_daemon.go`): Added logical connectives (`therefore`, `thus`, `thereby`, `hence`, `consequently`, `however`, `furthermore`, `moreover`, `nevertheless`) to `topicStopWords`. These were being extracted as research topics from bench/logic questions, causing CollySearcher to spam StackExchange with nonsense queries and saturate the Ollama inference queue.
