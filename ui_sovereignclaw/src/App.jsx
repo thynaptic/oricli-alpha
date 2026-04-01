@@ -16,7 +16,6 @@ import { MemoryBrowser } from './pages/MemoryBrowser';
 import { GoalsPage } from './pages/GoalsPage';
 import OriStudioPage from './pages/OriStudioPage';
 import { SettingsPanel } from './components/SettingsPanel';
-import { HivePanel } from './components/HivePanel';
 import { useERI } from './hooks/useERI';
 import { LandingPage } from './pages/LandingPage';
 
@@ -369,7 +368,6 @@ export default function App() {
       {activePage === 'ori-studio'   && <OriStudioPage />}
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
-      <HivePanel />
     </div>
   );
 }
