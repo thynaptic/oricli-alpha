@@ -38,6 +38,17 @@ fi
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 # ── AWS CLI config — use env vars, no profile/credentials file needed ─────────
 setup_aws() {
+  # If creds already in environment (set via RunPod secrets template), use them
+  if [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+    log "Using AWS creds from environment"
+    export AWS_DEFAULT_REGION="$REGION"
+    return 0
+  fi
+  # Fall back to ORI_S3_KEY / ORI_S3_SECRET
+  if [[ -z "$S3_KEY" || -z "$S3_SECRET" ]]; then
+    log "ERROR: No AWS credentials found. Set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or ORI_S3_KEY/ORI_S3_SECRET"
+    exit 1
+  fi
   export AWS_ACCESS_KEY_ID="$S3_KEY"
   export AWS_SECRET_ACCESS_KEY="$S3_SECRET"
   export AWS_DEFAULT_REGION="$REGION"
