@@ -56,9 +56,11 @@ import (
 type GenerationService struct {
 	BaseURL        string
 	GenerateURL    string
-	DefaultModel   string // fast model  — chat          (e.g. qwen2.5-coder:3b)
-	CodeModel      string // mid model   — canvas / code  (e.g. qwen2.5-coder:7b)
-	ResearchModel  string // heavy model — research / deep tasks (e.g. deepseek-coder-v2:16b)
+	DefaultModel   string // fast model  — chat          (e.g. ori:1.7b)
+	CodeModel      string // mid model   — canvas / code  (e.g. ori:1.7b local fallback)
+	ResearchModel  string // heavy model — research / deep tasks (e.g. ori:16b)
+	RemoteURL      string // RunPod Ollama tunnel (e.g. http://localhost:11435)
+	MediumModel    string // mid-tier remote model (e.g. ori:4b on RunPod)
 	NumThreads     int
 	HTTPClient     *http.Client
 	StreamClient   *http.Client
@@ -384,6 +386,11 @@ func NewGenerationService() *GenerationService {
 	if researchModel == "" {
 		researchModel = codeModel // fall back to code model if not set
 	}
+	remoteURL := os.Getenv("OLLAMA_REMOTE_URL") // e.g. http://localhost:11435
+	mediumModel := os.Getenv("OLLAMA_MEDIUM_MODEL")
+	if mediumModel == "" {
+		mediumModel = "ori:4b"
+	}
 
 	// Leave 2 cores for OS + backbone goroutines; never exceed physical count.
 	// Over-subscribing threads is catastrophic for CPU inference (400x slowdown observed).
@@ -391,8 +398,11 @@ func NewGenerationService() *GenerationService {
 	if numThreads < 2 {
 		numThreads = 2
 	}
-	log.Printf("[GenerationService] CPU threads: %d / Chat: %s / Code: %s / Research: %s",
-		numThreads, model, codeModel, researchModel)
+	log.Printf("[GenerationService] CPU threads: %d / Chat: %s / Code: %s / Research: %s / Medium(remote): %s @ %s",
+		numThreads, model, codeModel, researchModel, mediumModel, func() string {
+			if remoteURL != "" { return remoteURL }
+			return "not configured"
+		}())
 	// Shared transport with generous limits for the EPYC host
 	transport := &http.Transport{
 		MaxIdleConns:        10,
@@ -405,6 +415,8 @@ func NewGenerationService() *GenerationService {
 		DefaultModel:  model,
 		CodeModel:     codeModel,
 		ResearchModel: researchModel,
+		RemoteURL:     remoteURL,
+		MediumModel:   mediumModel,
 		NumThreads:    numThreads,
 		HTTPClient:    &http.Client{Timeout: 300 * time.Second, Transport: transport},
 		StreamClient:  &http.Client{Timeout: 0, Transport: transport},
@@ -1361,7 +1373,14 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		log.Printf("[BidGovernor] %s", result.Rationale)
 		switch result.Winner.TierID {
 		case compute.TierMedium:
-			options["use_code_model"] = true
+			if s.RemoteURL != "" {
+				options["_remote_url"] = s.RemoteURL
+				options["_remote_model"] = s.MediumModel
+				log.Printf("[BidGovernor] TierMedium → remote %s @ %s", s.MediumModel, s.RemoteURL)
+			} else {
+				options["use_code_model"] = true
+				log.Printf("[BidGovernor] TierMedium → local fallback (OLLAMA_REMOTE_URL not set)")
+			}
 			options["_bid_tier"] = compute.TierMedium
 		case compute.TierRemote:
 			options["_escalate_to_runpod"] = true
@@ -1489,6 +1508,16 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		}
 	}
 
+	// ── Remote Ollama path (TierMedium → RunPod tunnel) ──────────────────────
+	if remoteURL, ok := options["_remote_url"].(string); ok && remoteURL != "" {
+		remoteModel, _ := options["_remote_model"].(string)
+		if remoteModel == "" {
+			remoteModel = s.MediumModel
+		}
+		log.Printf("[GenerationService] routing to remote Ollama: %s @ %s", remoteModel, remoteURL)
+		return s.remoteOllamaChatStream(ctx, messages, remoteModel, remoteURL, options)
+	}
+
 	// ── Ollama path ──────────────────────────────────────────────────────────
 
 	return s.ollamaChatStream(ctx, messages, model, options)
@@ -1503,6 +1532,22 @@ func (s *GenerationService) DirectOllama(ctx context.Context, messages []map[str
 		model = m
 	}
 	return s.ollamaChatStream(ctx, messages, model, options)
+}
+
+// remoteOllamaChatStream routes to a remote Ollama instance (e.g. RunPod pod
+// via SSH tunnel). Identical to ollamaChatStream but overrides the base URL.
+func (s *GenerationService) remoteOllamaChatStream(ctx context.Context, messages []map[string]string, model, remoteURL string, options map[string]interface{}) (<-chan string, error) {
+	// Temporarily swap BaseURL, call ollamaChatStream, restore.
+	// Safe: GenerationService is not mutated concurrently at the URL level.
+	orig := s.BaseURL
+	s.BaseURL = remoteURL
+	ch, err := s.ollamaChatStream(ctx, messages, model, options)
+	s.BaseURL = orig
+	if err != nil {
+		log.Printf("[GenerationService] remote Ollama failed (%v) — falling back to local %s", err, s.DefaultModel)
+		return s.ollamaChatStream(ctx, messages, s.DefaultModel, options)
+	}
+	return ch, nil
 }
 
 // ollamaChatStream is the raw Ollama streaming path, extracted so it can be
