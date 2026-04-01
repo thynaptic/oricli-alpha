@@ -105,17 +105,24 @@ wait_for_ollama() {
   if ! curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
     log "Starting Ollama..."
     ollama serve &>/tmp/ollama.log &
+    OLLAMA_PID=$!
+    log "Ollama PID: $OLLAMA_PID"
   fi
-  log "Waiting for Ollama to be ready..."
+  log "Waiting for Ollama to be ready (up to 3 min)..."
   for i in $(seq 1 60); do
     if curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
       log "Ollama ready."
       return 0
     fi
+    # Print ollama log every 10s so we can see what's happening
+    if (( i % 5 == 0 )); then
+      log "--- ollama log (attempt $i/60) ---"
+      tail -5 /tmp/ollama.log 2>/dev/null || true
+    fi
     sleep 3
   done
-  log "ERROR: Ollama did not start in time. Last log:"
-  tail -20 /tmp/ollama.log 2>/dev/null || true
+  log "ERROR: Ollama did not start. Full log:"
+  cat /tmp/ollama.log 2>/dev/null || echo "(no log)"
   exit 1
 }
 
