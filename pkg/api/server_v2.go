@@ -459,8 +459,9 @@ func (s *ServerV2) setupRoutes() {
 
 		protected.POST("/feedback", s.handleReactionFeedback)
 
-		// Canvas shares — create a permanent public share link
+		// Canvas shares — create a permanent public share link, list recent shares
 		protected.POST("/share", s.handleCreateShare)
+		protected.GET("/shares", s.handleListShares)
 
 		// Agent Vibe Studio — natural language agent creation
 		protected.POST("/agents/vibe", s.handleAgentVibe)
@@ -950,7 +951,6 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		c.Header("X-Accel-Buffering", "no")
 		c.Writer.WriteString(": keep-alive\n\n")
 		c.Writer.Flush()
-
 		// Pipeline heartbeat — keeps the CF/browser connection alive during the
 		// blocking pipeline stages (ProcessInference + RAG embed, up to 90s).
 		// The main token-stream ticker takes over once ChatStream starts.
@@ -1263,15 +1263,23 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	} else if isCodeAction {
 		msgs[0]["content"] += "\n\n" + reform.NewCodeConstitution().GetSystemPrompt()
 	}
-	// Non-SSE (stream=false): use an independent context so the token collection
-	// is not cancelled by client disconnect or Caddy/proxy connection teardown.
-	// The Ollama goroutine already uses context.Background() internally.
-	// SSE: use request context so we stop streaming if the client disconnects.
-	streamCtx := c.Request.Context()
-	if !useSSE {
-		var streamCancel context.CancelFunc
-		streamCtx, streamCancel = context.WithTimeout(context.Background(), 5*time.Minute)
-		defer streamCancel()
+	// Both SSE and non-SSE use a detached context for generation so that the
+	// 3-second TenantEnricher deadline (used only for DB lookups in middleware)
+	// does not kill long-running model inference. For SSE we layer a separate
+	// client-disconnect monitor so we still stop streaming when the browser
+	// closes the connection.
+	var streamCancel context.CancelFunc
+	streamCtx, streamCancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 5*time.Minute)
+	defer streamCancel()
+	if useSSE {
+		// Mirror client disconnect → cancel the generation context.
+		go func() {
+			select {
+			case <-c.Request.Context().Done():
+				streamCancel()
+			case <-streamCtx.Done():
+			}
+		}()
 	}
 	tokenCh, err := s.Agent.GenService.ChatStream(streamCtx, msgs, streamOpts)
 	if err != nil {
@@ -1308,6 +1316,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	streamDone := false
+	tokenCount := 0
 	for !streamDone {
 		select {
 		case token, ok := <-tokenCh:
@@ -1326,6 +1335,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 					c.Writer.Flush()
 				}
 			} else {
+				tokenCount++
 				ticker.Reset(15 * time.Second)
 				responseBuilder.WriteString(token)
 				if useSSE {

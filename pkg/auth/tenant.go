@@ -30,32 +30,39 @@ const (
 // with nil values — callers must treat nil as "unrestricted".
 func TenantEnricher(st store.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tenantID := coreauth.TenantID(c.Request.Context())
+		baseCtx := c.Request.Context()
+		tenantID := coreauth.TenantID(baseCtx)
 		if tenantID == "" {
 			c.Next()
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		// Use a short-lived context for DB lookups only — do NOT replace the
+		// request context with this timed context, or the 3s deadline leaks
+		// into long-running streaming responses and kills SSE mid-stream.
+		lookupCtx, cancel := context.WithTimeout(baseCtx, 3*time.Second)
 		defer cancel()
 
+		// Inject fetched values back into the original (deadline-free) context.
+		outCtx := baseCtx
+
 		// Fetch CognitivePolicy — gates reasoning mode access + tool allowlist.
-		policy, err := st.GetCognitivePolicy(ctx, tenantID)
+		policy, err := st.GetCognitivePolicy(lookupCtx, tenantID)
 		if err != nil {
 			log.Printf("[TenantEnricher] CognitivePolicy lookup for %q: %v", tenantID, err)
 		} else {
-			ctx = context.WithValue(ctx, ctxCognitivePolicy, &policy)
+			outCtx = context.WithValue(outCtx, ctxCognitivePolicy, &policy)
 		}
 
 		// Fetch Quota — gates RPM/TPM limits per tenant.
-		quota, err := st.GetQuota(ctx, tenantID)
+		quota, err := st.GetQuota(lookupCtx, tenantID)
 		if err != nil {
 			log.Printf("[TenantEnricher] Quota lookup for %q: %v", tenantID, err)
 		} else {
-			ctx = context.WithValue(ctx, ctxQuota, &quota)
+			outCtx = context.WithValue(outCtx, ctxQuota, &quota)
 		}
 
-		c.Request = c.Request.WithContext(ctx)
+		c.Request = c.Request.WithContext(outCtx)
 		c.Next()
 	}
 }
