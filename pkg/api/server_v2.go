@@ -1159,8 +1159,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		}
 	}
 	// SCL-6: inject Sovereign Cognitive Ledger context — corrections always first.
+	// Use Background context — request context may already be near deadline at this stage.
 	if s.SCLEngine != nil && lastMsg != "" {
-		sclCtx, sclCancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		sclCtx, sclCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		sclWindow := s.SCLEngine.BuildContextWindow(sclCtx, lastMsg, scl.RetrievalOptions{MaxTokens: 800})
 		sclCancel()
 		if sclWindow != "" {
@@ -1252,6 +1253,29 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Go-scoped CodeConstitution. Must run before ChatStream to influence generation.
 	if isCanvasMode {
 		msgs[0]["content"] += "\n\n" + reform.NewCanvasConstitution().GetSystemPrompt()
+
+		// Inject canvas-specific skill on top of the general trigger-based skill match.
+		// This runs after isCanvasMode is confirmed so the right artifact skill wins.
+		if s.Skills != nil && lastMsg != "" {
+			canvasSkillName := detectCanvasSkill(lastMsg)
+			if canvasSkillName != "" {
+				if cs, ok := s.Skills.GetSkill(canvasSkillName); ok {
+					var csb strings.Builder
+					csb.WriteString("### CANVAS SKILL: " + cs.Name + "\n")
+					if cs.Mindset != "" {
+						csb.WriteString("\n#### Mindset:\n" + cs.Mindset + "\n")
+					}
+					if cs.Instructions != "" {
+						csb.WriteString("\n#### Instructions:\n" + cs.Instructions + "\n")
+					}
+					if cs.Constraints != "" {
+						csb.WriteString("\n#### Constraints:\n" + cs.Constraints + "\n")
+					}
+					msgs[0]["content"] += "\n\n---\n\n" + csb.String()
+					log.Printf("[Canvas] Injected canvas skill: %s", cs.Name)
+				}
+			}
+		}
 	} else if isCodeAction {
 		msgs[0]["content"] += "\n\n" + reform.NewCodeConstitution().GetSystemPrompt()
 	}
@@ -4634,4 +4658,40 @@ func (s *ServerV2) handleInteroceptionStats(c *gin.Context) {
 		return
 	}
 	c.JSON(200, s.InteroceptionStats)
+}
+
+// detectCanvasSkill maps a canvas request message to the appropriate canvas skill name.
+// Returns "" if no specific canvas skill applies (generic canvas constitution handles it).
+func detectCanvasSkill(msg string) string {
+	lower := strings.ToLower(msg)
+
+	// Diagram signals take priority — Mermaid is unambiguous
+	diagramSignals := []string{"mermaid", "flowchart", "sequence diagram", "erd", "entity relationship",
+		"gantt", "class diagram", "state diagram", "mindmap", "diagram", "visualize", "data flow",
+		"architecture diagram", "system diagram"}
+	for _, sig := range diagramSignals {
+		if strings.Contains(lower, sig) {
+			return "canvas_diagram"
+		}
+	}
+
+	// React/JSX signals
+	reactSignals := []string{"react", "jsx", "tsx", "functional component", "component", "hook",
+		"usestate", "useeffect", "next.js", "nextjs", "props"}
+	for _, sig := range reactSignals {
+		if strings.Contains(lower, sig) {
+			return "canvas_react"
+		}
+	}
+
+	// HTML/web signals
+	htmlSignals := []string{"html", "landing page", "web page", "webpage", "tailwind", "html page",
+		"html form", "html card", "html layout", "html site", "build a page", "create a page"}
+	for _, sig := range htmlSignals {
+		if strings.Contains(lower, sig) {
+			return "canvas_web"
+		}
+	}
+
+	return ""
 }

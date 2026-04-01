@@ -17,6 +17,7 @@ type AgentSkill struct {
 	RequiresTools []string `json:"requires_tools"`
 	Mindset       string   `json:"mindset"`
 	Instructions  string   `json:"instructions"`
+	Constraints   string   `json:"constraints"`
 }
 
 type SkillManager struct {
@@ -86,6 +87,8 @@ func (sm *SkillManager) parseSkillFile(path string) (AgentSkill, error) {
 	if m := mr.FindStringSubmatch(contentStr); len(m) > 1 { skill.Mindset = strings.TrimSpace(m[1]) }
 	ir := regexp.MustCompile(`(?s)<instructions>(.*?)</instructions>`)
 	if m := ir.FindStringSubmatch(contentStr); len(m) > 1 { skill.Instructions = strings.TrimSpace(m[1]) }
+	cr := regexp.MustCompile(`(?s)<constraints>(.*?)</constraints>`)
+	if m := cr.FindStringSubmatch(contentStr); len(m) > 1 { skill.Constraints = strings.TrimSpace(m[1]) }
 	return skill, nil
 }
 
