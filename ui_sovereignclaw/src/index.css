@@ -56,8 +56,10 @@
   animation: none !important;
 }
 
-/* Smooth ERI accent transitions on key elements */
-:root {
+/* ERI accent transitions — only active once the ERI hook has fired its first update.
+   Class is added by useERI on first applyERI call, preventing @property initial-value
+   from triggering a 1.2s sweep on page load in light mode. */
+.sc-eri-live {
   transition:
     --color-sc-gold 1.2s ease,
     --color-sc-gold-glow 1.2s ease;

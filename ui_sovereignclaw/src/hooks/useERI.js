@@ -43,6 +43,8 @@ export function useERI(liveERI = null) {
     const { surface, surface2 } = arousalToSurface(arousal);
 
     const root = document.documentElement;
+    // Enable ERI transitions now that we have a real value — safe to animate from here
+    root.classList.add('sc-eri-live');
     root.style.setProperty('--color-sc-gold',      accent);
     root.style.setProperty('--color-sc-gold-glow', glow);
     root.style.setProperty('--color-sc-surface',   surface);
