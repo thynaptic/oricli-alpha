@@ -7,36 +7,57 @@
     <meta name="description" content="ORI Studio — Sovereign Intelligence OS. No rented minds." />
     <meta name="theme-color" content="#E5004C" />
     <title>ORI Studio</title>
-    <!-- Blocking theme init: runs before React, eliminates light-mode FOUC on refresh -->
+    <!-- Blocking theme init: runs before React, eliminates FOUC on refresh for all themes -->
     <script>
       (function () {
+        var DARK = {
+          '--color-sc-bg':         '#080810',
+          '--color-sc-surface':    '#0E0810',
+          '--color-sc-surface2':   '#150A14',
+          '--color-sc-border':     '#1E0A18',
+          '--color-sc-border2':    '#2A0F22',
+          '--color-sc-gold':       '#E5004C',
+          '--color-sc-gold-glow':  '#FF0055',
+          '--color-sc-text':       '#F0ECE8',
+          '--color-sc-text-muted': '#9A8890',
+          '--color-sc-text-dim':   '#4D2F42',
+          '--color-sc-success':    '#06D6A0',
+          '--color-sc-danger':     '#FF4D6D',
+          '--color-sc-blue':       '#4D9EFF',
+        };
+        var LIGHT = {
+          '--color-sc-bg':         '#F5F0EC',
+          '--color-sc-surface':    '#EDE8E3',
+          '--color-sc-surface2':   '#E5DFD9',
+          '--color-sc-border':     '#D4CDC5',
+          '--color-sc-border2':    '#C5BDB4',
+          '--color-sc-gold':       '#C4001E',
+          '--color-sc-gold-glow':  '#E5003A',
+          '--color-sc-text':       '#1A1214',
+          '--color-sc-text-muted': '#6B5F68',
+          '--color-sc-text-dim':   '#9E9099',
+          '--color-sc-success':    '#059669',
+          '--color-sc-danger':     '#DC2626',
+          '--color-sc-blue':       '#1D4ED8',
+        };
         try {
+          var theme = 'dark';
           var stored = localStorage.getItem('sc-store-v1');
           if (stored) {
-            var theme = JSON.parse(stored).state?.theme;
-            if (theme === 'light') {
-              var r = document.documentElement.style;
-              r.setProperty('--color-sc-bg',         '#F5F0EC');
-              r.setProperty('--color-sc-surface',    '#EDE8E3');
-              r.setProperty('--color-sc-surface2',   '#E5DFD9');
-              r.setProperty('--color-sc-border',     '#D4CDC5');
-              r.setProperty('--color-sc-border2',    '#C5BDB4');
-              r.setProperty('--color-sc-gold',       '#C4001E');
-              r.setProperty('--color-sc-gold-glow',  '#E5003A');
-              r.setProperty('--color-sc-text',       '#1A1214');
-              r.setProperty('--color-sc-text-muted', '#6B5F68');
-              r.setProperty('--color-sc-text-dim',   '#9E9099');
-              r.setProperty('--color-sc-success',    '#059669');
-              r.setProperty('--color-sc-danger',     '#DC2626');
-              r.setProperty('--color-sc-blue',       '#1D4ED8');
-              document.documentElement.setAttribute('data-theme', 'light');
-            }
+            var t = JSON.parse(stored).state?.theme;
+            if (t === 'light' || t === 'dark') theme = t;
           }
+          var vars = theme === 'light' ? LIGHT : DARK;
+          var r = document.documentElement.style;
+          for (var k in vars) r.setProperty(k, vars[k]);
+          document.documentElement.setAttribute('data-theme', theme);
+          // Kill all transitions until React has rendered once
+          document.documentElement.classList.add('sc-no-transition');
         } catch (e) {}
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-XZ0160Lw.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-_gu_eXpJ.css">
+    <script type="module" crossorigin src="/assets/index-DSj2fg2i.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-6iDq8C5t.css">
   </head>
   <body>
     <div id="root"></div>

@@ -302,14 +302,25 @@ export default function App() {
       };
       Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
     } else {
-      // Remove inline overrides — CSS @theme defaults take back over
-      [
-        '--color-sc-bg', '--color-sc-surface', '--color-sc-surface2',
-        '--color-sc-border', '--color-sc-border2', '--color-sc-gold',
-        '--color-sc-gold-glow', '--color-sc-text', '--color-sc-text-muted',
-        '--color-sc-text-dim', '--color-sc-success', '--color-sc-danger', '--color-sc-blue',
-      ].forEach(k => root.style.removeProperty(k));
+      const DARK_VARS = {
+        '--color-sc-bg':         '#080810',
+        '--color-sc-surface':    '#0E0810',
+        '--color-sc-surface2':   '#150A14',
+        '--color-sc-border':     '#1E0A18',
+        '--color-sc-border2':    '#2A0F22',
+        '--color-sc-gold':       '#E5004C',
+        '--color-sc-gold-glow':  '#FF0055',
+        '--color-sc-text':       '#F0ECE8',
+        '--color-sc-text-muted': '#9A8890',
+        '--color-sc-text-dim':   '#4D2F42',
+        '--color-sc-success':    '#06D6A0',
+        '--color-sc-danger':     '#FF4D6D',
+        '--color-sc-blue':       '#4D9EFF',
+      };
+      Object.entries(DARK_VARS).forEach(([k, v]) => root.style.setProperty(k, v));
     }
+    // Remove no-transition guard now that theme is applied — re-enable smooth transitions
+    requestAnimationFrame(() => root.classList.remove('sc-no-transition'));
   }, [theme]);
 
   // ERI → live CSS color shifts (poll + SSE live value)

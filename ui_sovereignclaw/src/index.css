@@ -50,6 +50,12 @@
   --color-sc-blue: #1D4ED8;
 }
 
+/* Suppress ALL transitions on initial load — removed by React after first render */
+.sc-no-transition, .sc-no-transition * {
+  transition: none !important;
+  animation: none !important;
+}
+
 /* Smooth ERI accent transitions on key elements */
 :root {
   transition:
