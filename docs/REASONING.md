@@ -1,17 +1,18 @@
 # Reasoning Systems — Oricli-Alpha / ORI Studio
 
 **Document Type:** Technical Reference  
-**Version:** v3.0.0  
+**Version:** v3.1.0  
 **Status:** Active  
 
 ---
 
 ## Overview
 
-Oricli-Alpha's reasoning stack is a **Go-native orchestration layer** that treats LLMs as compute subsystems, not as the sole source of intelligence. Reasoning is composed from deterministic state machines, structured search, memory retrieval, and policy gates, then fused with generation for the final response. The system dynamically routes between **11 discrete reasoning modes** based on task complexity and explicit routing preferences.
+Oricli-Alpha's reasoning stack is a **Go-native orchestration layer** that treats LLMs as compute subsystems, not as the sole source of intelligence. Reasoning is composed from deterministic state machines, structured search, memory retrieval, and policy gates, then fused with generation for the final response. The system routes queries across a **dual-track architecture**: a fast-path for keyword-matched queries and an **Adaptive Reasoning Engine (ARE)** for high-complexity / ambiguous queries.
 
 **Primary entrypoints and references:**
 - Mode classification & dispatch: `pkg/cognition/reasoning_modes.go` (`ClassifyReasoningMode()`), `pkg/cognition/reasoning_engines.go`
+- Adaptive Reasoning Engine: `pkg/cognition/adaptive_engine.go` (`runAdaptive()`, `arePolicy()`, `areValue()`)
 - Sovereign engine orchestration: `pkg/cognition/sovereign.go`, `pkg/cognition/instructions.go`
 - MCTS engine: `docs/MCTS_REASONING.md`, `pkg/cognition/mcts_*`, `pkg/core/reasoning/mcts.go`
 - ToT engine: `pkg/cognition/tot.go`, `pkg/service/reasoning_tot.go`
@@ -22,9 +23,46 @@ Oricli-Alpha's reasoning stack is a **Go-native orchestration layer** that treat
 
 ---
 
-## Reasoning Mode Dispatcher (v3.0.0)
+## Dual-Track Architecture (v3.1.0)
 
-All inference passes route through `ClassifyReasoningMode()` in `pkg/cognition/reasoning_modes.go`. It accepts a stimulus string + `AdaptiveBudget` and returns one of 11 `ReasoningMode` constants. The selected mode's runner executes in `pkg/cognition/reasoning_engines.go`.
+### Track 1 — Fast Path
+All queries with a strong keyword signal route directly to a specific mode. Same latency as before; no change for these paths.
+
+### Track 2 — Adaptive Reasoning Engine (ARE)
+Fires when complexity ≥ 0.55 AND no strong keyword signal is present. Replaces the old static `ModeDiscover` catch-all.
+
+The ARE runs a **multi-step loop** (max 3 steps, hard cap):
+
+```
+Query → [complexity ≥ 0.55, no keyword] → ARE loop:
+  Step 1: Consistency (3-vote plurality — fastest standalone answerer)
+  Step 2: Debate     (adversarial synthesis → finalized with 1 LLM call)  [if step 1 < 0.60]
+  Step 3: Discover   (structured plan → finalized with 1 LLM call)         [if step 2 < 0.60]
+```
+
+**Exit criteria:** Confidence (Value score) ≥ 0.75 → stop early. Budget exhausted → return best answer seen. Always returns a non-empty answer.
+
+**Context design:** ARE uses `context.WithoutCancel` so HTTP client disconnection doesn't kill mid-step reasoning. Each step has its own 90s timeout.
+
+### Value Function (`areValue`)
+Pure heuristic, < 1ms. Scores answer quality on [0.0, 1.0]:
+
+| Condition | Score |
+|-----------|-------|
+| Empty | 0.0 |
+| < 50 chars | 0.20 |
+| 50–200 chars | 0.50 |
+| 200–500 chars | 0.62 |
+| > 500 chars | 0.70 |
+| + structured output (lists, code, headings) | +0.08 |
+| + reasoning markers (therefore, because, etc.) | +0.04 |
+| - hedging opener (I don't know, I cannot, etc.) | -0.30 |
+
+---
+
+## Reasoning Mode Dispatcher (v3.1.0)
+
+All inference passes route through `ClassifyReasoningMode()` in `pkg/cognition/reasoning_modes.go`. It accepts a stimulus string + `AdaptiveBudget` and returns one of 13 `ReasoningMode` constants. The selected mode's runner executes in `pkg/cognition/reasoning_engines.go` or `pkg/cognition/adaptive_engine.go`.
 
 | Mode | Constant | Trigger Signal |
 |------|----------|----------------|
@@ -37,13 +75,15 @@ All inference passes route through `ClassifyReasoningMode()` in `pkg/cognition/r
 | ReAct | `ModeReAct` | Tool-use / observation loop |
 | Multi-Agent Debate | `ModeDebate` | High-stakes or contested claim |
 | Causal Chain | `ModeCausal` | WHY / WHAT-IF / HOW queries |
-| SELF-DISCOVER | `ModeDiscover` | Novel task structure (complexity ≥ 0.55) |
-| Self-Consistency | `ModeConsistency` | Logical argument evaluation (syllogisms, deduction validity); medium-complexity factual |
+| SELF-DISCOVER | `ModeDiscover` | Called from ARE Step 3 (internal) |
+| Self-Consistency | `ModeConsistency` | Logical argument eval; ARE Step 1 |
+| CrossDomain Bridge | `ModeCrossdomainBridge` | Cross-domain synthesis |
+| **Adaptive (ARE)** | `ModeAdaptive` | **complexity ≥ 0.55, no keyword hit** |
 
 **Routing priority order** (first match wins in `ClassifyReasoningMode()`):
 1. **PAL** — `reMath` match (arithmetic, `how long.*\d`, formula, etc.)
 2. **LogicEval → Consistency** — `reLogicEval` match (`therefore`, `valid argument`, `it follows that`, `modus ponens`, etc.)
-3. **SELF-DISCOVER** — complexity ≥ 0.55
+3. **Adaptive (ARE)** — complexity ≥ 0.55 (replaces old ModeDiscover catch-all)
 4. **Causal / Debate / ReAct / LeastToMost / SelfRefine** — keyword + complexity gate
 5. **CBR** — complexity > 0.45
 6. **Consistency** — complexity ≥ 0.30
