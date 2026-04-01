@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Target, Zap, CheckCircle2, XCircle, Clock, RefreshCw, Plus, Trash2, ChevronRight, Activity } from 'lucide-react';
+import { Target, Zap, CheckCircle2, XCircle, Clock, RefreshCw, Plus, Trash2, ChevronRight, Activity, MoreHorizontal } from 'lucide-react';
 
 const API = '/api/v1';
 const GOLD = 'rgba(196,164,74,';
@@ -47,9 +47,17 @@ function DaemonRow({ daemon }) {
 }
 
 // ── Objective card ─────────────────────────────────────────────────────────────
-function ObjectiveCard({ obj, all, onDelete }) {
+const STATUS_TRANSITIONS = {
+  pending:   ['active', 'completed', 'failed'],
+  active:    ['completed', 'failed', 'pending'],
+  completed: ['pending'],
+  failed:    ['pending'],
+};
+
+function ObjectiveCard({ obj, all, onDelete, onStatusChange }) {
   const cfg = STATUS[obj.status] ?? STATUS.pending;
   const { Icon } = cfg;
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const deps = (obj.depends_on ?? []).map(depId => {
     const dep = all.find(o => o.id === depId);
@@ -102,6 +110,55 @@ function ObjectiveCard({ obj, all, onDelete }) {
         >
           <Trash2 size={13} />
         </button>
+
+        {/* Status transition menu */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setMenuOpen(v => !v)}
+            title="Change status"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--color-sc-text-muted)', padding: 2, borderRadius: 4,
+              opacity: 0.5, transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = 1}
+            onMouseLeave={e => e.currentTarget.style.opacity = 0.5}
+          >
+            <MoreHorizontal size={13} />
+          </button>
+          {menuOpen && (
+            <div
+              style={{
+                position: 'absolute', right: 0, top: '100%', zIndex: 100,
+                background: 'var(--color-sc-surface)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 8, padding: '4px 0', minWidth: 130, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              }}
+              onMouseLeave={() => setMenuOpen(false)}
+            >
+              {(STATUS_TRANSITIONS[obj.status] ?? []).map(s => {
+                const c = STATUS[s];
+                const SI = c?.Icon;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => { setMenuOpen(false); onStatusChange(obj.id, s); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      width: '100%', padding: '7px 14px', background: 'none', border: 'none',
+                      cursor: 'pointer', fontSize: 12, color: c?.color ?? 'var(--color-sc-text)',
+                      textAlign: 'left', transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                  >
+                    {SI && <SI size={11} />}
+                    Mark {s}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Goal text */}
@@ -279,6 +336,18 @@ export function GoalsPage() {
     await fetchGoals();
   };
 
+  const handleStatusChange = async (id, status) => {
+    // Optimistic update
+    setGoals(prev => prev.map(g => g.id === id ? { ...g, status } : g));
+    try {
+      await fetch(`${API}/goals/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+    } catch { /* revert on error */ await fetchGoals(); }
+  };
+
   const filtered = tab === 'all' ? goals : goals.filter(g => g.status === tab);
   const counts = TABS.reduce((acc, t) => {
     acc[t] = t === 'all' ? goals.length : goals.filter(g => g.status === t).length;
@@ -390,7 +459,7 @@ export function GoalsPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {filtered.map(obj => (
-            <ObjectiveCard key={obj.id} obj={obj} all={goals} onDelete={handleDelete} />
+            <ObjectiveCard key={obj.id} obj={obj} all={goals} onDelete={handleDelete} onStatusChange={handleStatusChange} />
           ))}
         </div>
       )}

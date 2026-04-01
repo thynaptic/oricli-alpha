@@ -254,26 +254,11 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		c.Next()
 	})
 
-	// Serve Flutter UI Static Files
-	webDir := "/home/mike/Mavaia/oricli_ui/build/web"
-	r.Static("/portal", webDir)
-	r.Static("/assets", webDir+"/assets")
-	r.Static("/canvaskit", webDir+"/canvaskit")
-	r.Static("/icons", webDir+"/icons")
-
 	r.GET("/", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/portal/")
+		c.JSON(200, gin.H{"service": "Oricli API", "status": "ok", "ui": "https://oristudio.thynaptic.com"})
 	})
 
 	r.NoRoute(func(c *gin.Context) {
-		if strings.HasPrefix(c.Request.URL.Path, "/portal") {
-			c.File(webDir + "/index.html")
-			return
-		}
-		if !strings.HasPrefix(c.Request.URL.Path, "/v1") {
-			c.Redirect(http.StatusTemporaryRedirect, "/portal/")
-			return
-		}
 		c.JSON(404, gin.H{"error": "not found"})
 	})
 
