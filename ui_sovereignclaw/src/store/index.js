@@ -188,6 +188,10 @@ export const useSCStore = create(
   activePage: 'chat', // 'chat' | 'agents' | 'profiles' | 'workflows' | 'canvas'
   setActivePage(page) { set({ activePage: page }); },
 
+  // ── Launch state (skip landing page on return visits) ────────────────────
+  hasLaunched: false,
+  setHasLaunched(v) { set({ hasLaunched: v }); },
+
   // ── Theme ─────────────────────────────────────────────────────────────────
   theme: 'dark', // 'dark' | 'light'
   setTheme(t) { set({ theme: t }); },
@@ -434,6 +438,8 @@ export const useSCStore = create(
         activeCanvasDocId: state.activeCanvasDocId,
         canvasChatHistories: state.canvasChatHistories,
         theme: state.theme,
+        hasLaunched: state.hasLaunched,
+        activePage: state.activePage,
       }),
     }
   )

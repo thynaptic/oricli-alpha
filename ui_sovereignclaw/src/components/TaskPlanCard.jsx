@@ -29,14 +29,24 @@ export default function TaskPlanCard({ tasks }) {
   const progressPct = Math.round((done / total) * 100);
 
   return (
-    <div className="my-2 rounded-xl border border-zinc-700/60 bg-zinc-900/70 backdrop-blur-sm overflow-hidden text-sm">
+    <div style={{
+      margin: '8px 0', borderRadius: 12, overflow: 'hidden', fontSize: 13,
+      border: '1px solid var(--color-sc-border2)',
+      background: 'var(--color-sc-surface2)',
+    }}>
       {/* Header */}
       <button
         onClick={() => setCollapsed(c => !c)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-zinc-800/50 transition-colors"
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 16px', background: 'transparent', border: 'none',
+          cursor: 'pointer', color: 'var(--color-sc-text)', transition: 'background 0.12s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--color-sc-gold) 6%, transparent)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
       >
-        <span className="text-base">📋</span>
-        <span className="font-semibold text-zinc-200 flex-1 text-left">
+        <span style={{ fontSize: 15 }}>📋</span>
+        <span style={{ fontWeight: 600, flex: 1, textAlign: 'left', color: 'var(--color-sc-text)' }}>
           {allDone
             ? 'Plan complete'
             : hasFailed
@@ -44,42 +54,41 @@ export default function TaskPlanCard({ tasks }) {
             : `Planning… ${done}/${total}`}
         </span>
         {!allDone && (
-          <span className="text-xs text-zinc-500">{progressPct}%</span>
+          <span style={{ fontSize: 11, color: 'var(--color-sc-text-dim)' }}>{progressPct}%</span>
         )}
-        <span className="text-zinc-500 text-xs ml-1">{collapsed ? '▸' : '▾'}</span>
+        <span style={{ fontSize: 11, color: 'var(--color-sc-text-dim)', marginLeft: 4 }}>{collapsed ? '▸' : '▾'}</span>
       </button>
 
       {/* Progress bar */}
       {!allDone && (
-        <div className="h-0.5 bg-zinc-800">
+        <div style={{ height: 2, background: 'var(--color-sc-border)' }}>
           <div
-            className="h-full bg-blue-500 transition-all duration-300"
-            style={{ width: `${progressPct}%` }}
+            style={{ height: '100%', background: 'var(--color-sc-blue)', width: `${progressPct}%`, transition: 'width 0.3s' }}
           />
         </div>
       )}
 
       {/* Task list */}
       {!collapsed && (
-        <ul className="px-4 py-2 space-y-1.5">
+        <ul style={{ listStyle: 'none', margin: 0, padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           {tasks.map((task) => {
             const si = STATUS_ICONS[task.status] ?? STATUS_ICONS.pending;
             const actionIcon = ACTION_ICONS[task.action] ?? '▸';
+            const statusColor = task.status === 'done' ? 'var(--color-sc-success)'
+              : task.status === 'failed' ? 'var(--color-sc-danger)'
+              : task.status === 'running' ? 'var(--color-sc-blue)'
+              : 'var(--color-sc-text-dim)';
             return (
-              <li key={task.id} className="flex items-start gap-2.5">
-                {/* Status icon */}
-                <span className={`mt-0.5 font-mono text-xs w-3 shrink-0 ${si.cls} ${task.status === 'running' ? 'inline-block' : ''}`}>
+              <li key={task.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <span style={{ fontFamily: 'monospace', fontSize: 11, width: 12, flexShrink: 0, marginTop: 1, color: statusColor }}>
                   {si.icon}
                 </span>
-                {/* Action badge */}
-                <span className="shrink-0 text-xs">{actionIcon}</span>
-                {/* Title */}
-                <span className={`flex-1 leading-snug ${task.status === 'done' ? 'text-zinc-400' : 'text-zinc-200'}`}>
+                <span style={{ flexShrink: 0, fontSize: 11 }}>{actionIcon}</span>
+                <span style={{ flex: 1, lineHeight: 1.5, color: task.status === 'done' ? 'var(--color-sc-text-muted)' : 'var(--color-sc-text)' }}>
                   {task.title}
                 </span>
-                {/* Snippet on done */}
                 {task.snippet && task.status === 'done' && (
-                  <span className="text-zinc-600 text-xs max-w-[180px] truncate hidden sm:block">
+                  <span style={{ fontSize: 11, color: 'var(--color-sc-text-dim)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {task.snippet}
                   </span>
                 )}

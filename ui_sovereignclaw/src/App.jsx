@@ -269,15 +269,18 @@ function BootSplash() {
 }
 
 export default function App() {
-  const setHealth  = useSCStore(s => s.setHealth);
-  const setModels  = useSCStore(s => s.setModels);
-  const setModules = useSCStore(s => s.setModules);
-  const activePage = useSCStore(s => s.activePage);
-  const eriState   = useSCStore(s => s.eriState);
-  const theme      = useSCStore(s => s.theme);
+  const setHealth      = useSCStore(s => s.setHealth);
+  const setModels      = useSCStore(s => s.setModels);
+  const setModules     = useSCStore(s => s.setModules);
+  const activePage     = useSCStore(s => s.activePage);
+  const eriState       = useSCStore(s => s.eriState);
+  const theme          = useSCStore(s => s.theme);
+  const hasLaunched    = useSCStore(s => s.hasLaunched);
+  const setHasLaunched = useSCStore(s => s.setHasLaunched);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Phase machine: 'landing' → 'booting' → 'app'
-  const [phase, setPhase] = useState('landing');
+  // Skip landing/boot entirely on return visits (hasLaunched persisted in localStorage)
+  const [phase, setPhase] = useState(() => hasLaunched ? 'app' : 'landing');
 
   // Apply theme: set CSS vars directly on documentElement.style (inline = highest priority)
   // Beats @layer theme in Tailwind v4 compiled CSS and all component inline styles
@@ -333,8 +336,19 @@ export default function App() {
     fetchModels().then(ms => setModels(ms));
     fetchModules().then(ms => setModules(ms));
     connectHiveWS();
-    setTimeout(() => setPhase('app'), 3400);
-  }, [setHealth, setModels, setModules]);
+    setTimeout(() => { setPhase('app'); setHasLaunched(true); }, 3400);
+  }, [setHealth, setModels, setModules, setHasLaunched]);
+
+  // Bootstrap API fetches when arriving directly in app (returning user, skipped landing)
+  useEffect(() => {
+    if (phase === 'app') {
+      fetchHealth().then(h => setHealth(h));
+      fetchModels().then(ms => setModels(ms));
+      fetchModules().then(ms => setModules(ms));
+      connectHiveWS();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // only on mount
 
   // Health poll — only active once inside the app
   useEffect(() => {
