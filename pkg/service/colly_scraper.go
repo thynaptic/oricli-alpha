@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -114,10 +115,57 @@ func fetchViaArchive(rawURL string) (string, error) {
 type CollySearcher struct {
 	MaxResults int
 	MaxChars   int
+
+	// domainFailures tracks consecutive 403/429 failures per hostname.
+	// Domains that fail 3+ times in a row are blacklisted for 1 hour.
+	domainFailures map[string]int
+	domainBlacklist map[string]time.Time
+	mu             sync.Mutex
 }
 
 func NewCollySearcher() *CollySearcher {
-	return &CollySearcher{MaxResults: 3, MaxChars: 8000}
+	return &CollySearcher{
+		MaxResults:      3,
+		MaxChars:        8000,
+		domainFailures:  make(map[string]int),
+		domainBlacklist: make(map[string]time.Time),
+	}
+}
+
+// isBlacklisted returns true if the hostname is currently blacklisted.
+func (cs *CollySearcher) isBlacklisted(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	if t, ok := cs.domainBlacklist[u.Hostname()]; ok {
+		if time.Now().Before(t) {
+			return true
+		}
+		// Blacklist expired — reset
+		delete(cs.domainBlacklist, u.Hostname())
+		delete(cs.domainFailures, u.Hostname())
+	}
+	return false
+}
+
+// recordFailure increments the failure count for a domain and blacklists it
+// for 1 hour after 3 consecutive failures.
+func (cs *CollySearcher) recordFailure(rawURL string) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return
+	}
+	host := u.Hostname()
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cs.domainFailures[host]++
+	if cs.domainFailures[host] >= 3 {
+		cs.domainBlacklist[host] = time.Now().Add(1 * time.Hour)
+		log.Printf("[CollySearcher] blacklisted %s for 1h (3 consecutive failures)", host)
+	}
 }
 
 type searchResult struct {
@@ -256,11 +304,12 @@ func (cs *CollySearcher) FetchResultPages(results []*searchResult) {
 		res.Body = extractStructuredDOM(e)
 	})
 
-	// On 403/429/blocked: escalate through Jina → Archive fallback chain.
+	// On 403/429/blocked: record domain failure, escalate through Jina → Archive fallback chain.
 	c.OnError(func(r *colly.Response, err error) {
 		rawURL := r.Request.URL.String()
 		status := r.StatusCode
 		if status == http.StatusForbidden || status == http.StatusTooManyRequests || status == 0 {
+			cs.recordFailure(rawURL)
 			log.Printf("[CollySearcher] %d on %s — trying Jina Reader", status, rawURL)
 			if text, jinaErr := fetchViaJina(rawURL); jinaErr == nil && text != "" {
 				if res, ok := byURL[rawURL]; ok {
@@ -280,10 +329,17 @@ func (cs *CollySearcher) FetchResultPages(results []*searchResult) {
 	})
 
 	for _, r := range results {
-		if r.URL != "" {
-			if err := c.Visit(r.URL); err != nil {
-				log.Printf("[CollySearcher] Visit error for %s: %v", r.URL, err)
-			}
+		if r.URL == "" {
+			continue
+		}
+		// Skip blacklisted domains — don't even attempt the request.
+		if cs.isBlacklisted(r.URL) {
+			log.Printf("[CollySearcher] skipping blacklisted domain: %s", r.URL)
+			continue
+		}
+		if err := c.Visit(r.URL); err != nil {
+			log.Printf("[CollySearcher] Visit error for %s: %v", r.URL, err)
+			cs.recordFailure(r.URL)
 		}
 	}
 }

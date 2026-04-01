@@ -630,6 +630,10 @@ var topicStopWords = map[string]bool{
 	"up": true, "down": true, "over": true, "after": true, "before": true, "between": true,
 	"and": true, "but": true, "or": true, "not": true, "no": true, "nor": true, "so": true,
 	"if": true, "when": true, "where": true, "while": true, "because": true, "though": true,
+	// logical connectives / reasoning words — not epistemic topics worth researching
+	"therefore": true, "thus": true, "thereby": true, "hence": true, "consequently": true,
+	"however": true, "furthermore": true, "moreover": true, "nevertheless": true,
+	"therefore do": true, "thus the": true, "hence the": true,
 	// generic UI / meta words that bleed in from chat context
 	"page": true, "text": true, "here": true, "there": true, "what": true, "how": true,
 	"which": true, "who": true, "help": true, "please": true, "thanks": true, "okay": true,
