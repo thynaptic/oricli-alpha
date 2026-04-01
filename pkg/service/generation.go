@@ -557,7 +557,7 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 					}
 				}
 			}
-			return map[string]interface{}{"success": true, "text": resp, "model": model, "method": "go_ollama_native", "confidence": 0.95}, nil
+			return map[string]interface{}{"success": true, "text": resp, "response": resp, "model": model, "method": "go_ollama_native", "confidence": 0.95}, nil
 		}
 	}
 	return s.Chat([]map[string]string{{"role": "user", "content": prompt}}, options)
@@ -1286,7 +1286,7 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 				}
 			}
 
-			return map[string]interface{}{"success": true, "text": content, "model": model, "method": "go_ollama_chat", "confidence": 0.95}, nil
+			return map[string]interface{}{"success": true, "text": content, "response": content, "model": model, "method": "go_ollama_chat", "confidence": 0.95}, nil
 		}
 	}
 	return nil, fmt.Errorf("invalid response format")

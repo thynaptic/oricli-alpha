@@ -114,7 +114,7 @@ func AnalyzeComplexity(query string) (float64, float64, []string) {
 	}
 
 	// Factor 3: Exploration/Exploitation (35% max)
-	expKeywords := []string{"explore options", "try different", "experiment", "weigh options", "trade-off"}
+	expKeywords := []string{"explore options", "try different", "experiment", "weigh options", "trade-off", "tradeoff", "tradeoffs", "trade-offs"}
 	eScore := 0.0
 	for _, kw := range expKeywords {
 		if strings.Contains(lower, kw) {
@@ -156,6 +156,41 @@ func AnalyzeComplexity(query string) (float64, float64, []string) {
 	qCount := strings.Count(query, "?")
 	if qCount > 1 {
 		totalScore += 0.08 * float64(qCount-1)
+	}
+
+	// Factor 8: Conceptual / Explanatory Complexity (25% max)
+	// Catches "explain why X", "why is X harder than Y", "compare A and B",
+	// "difference between", "implications of", "how does X work" — all high-reasoning queries
+	// that score zero on MCTS factors but genuinely need multi-step reasoning.
+	conceptualKeywords := []string{
+		"explain why", "why is ", "why does", "why do ", "why are ",
+		"how does", "how do ", "how can ", "how would ",
+		"compare ", "difference between", "vs ", " versus ",
+		"implications of", "fundamentally", "choosing between",
+		"when should", "when to use", "pros and cons",
+		"advantages and disadvantages", "impact of", "effect of",
+		"causes of", "reason for", "reason why",
+	}
+	cScore := 0.0
+	for _, kw := range conceptualKeywords {
+		if strings.Contains(lower, kw) {
+			cScore += 0.12
+		}
+	}
+	cScore = math.Min(cScore, 0.25)
+	if cScore > 0 {
+		totalScore += cScore
+		explorationBenefit += cScore * 0.7
+		factors = append(factors, "conceptual_complexity")
+	}
+
+	// Factor 9: Long-form explanatory queries (moderate length + open-ended)
+	// A 100-300 char question asking "explain/why/how/compare" is structurally more
+	// complex than a 500-char list of bullet points.
+	wordCount := len(strings.Fields(query))
+	if wordCount >= 15 && wordCount < 60 && cScore > 0 {
+		totalScore += 0.12
+		factors = append(factors, "medium_length_conceptual")
 	}
 
 	return math.Min(1.0, totalScore), math.Min(1.0, explorationBenefit), factors

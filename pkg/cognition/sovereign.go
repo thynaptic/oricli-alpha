@@ -676,6 +676,14 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 			modeEnrichedComposite = enriched
 			modeHandled = true
 		}
+	case ModeAdaptive:
+		// Dual-track ARE: multi-step loop (Discover→Consistency→Debate) with
+		// policy+value gating. Returns final answer directly — modeHandled=true
+		// skips the downstream standard LLM call in sovereign.go.
+		if answer, err := e.runAdaptive(ctx, stimulus, ""); err == nil && answer != "" {
+			modeEnrichedComposite = answer
+			modeHandled = true
+		}
 	case ModeConsistency:
 		if answer, err := e.runConsistency(ctx, stimulus, ""); err == nil && answer != "" {
 			modeEnrichedComposite = answer
@@ -722,7 +730,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		topic   string
 	}
 	// Skip parallel web search for modes that already did targeted search (Active, ReAct)
-	skipWebSearch := mode == ModeActive || mode == ModeReAct || mode == ModeDebate || mode == ModeCausal || mode == ModeDiscover || mode == ModeConsistency || mode == ModeCrossdomainBridge
+	skipWebSearch := mode == ModeActive || mode == ModeReAct || mode == ModeDebate || mode == ModeCausal || mode == ModeDiscover || mode == ModeConsistency || mode == ModeCrossdomainBridge || mode == ModeAdaptive
 	webCh := make(chan webResult, 1)
 	if !skipWebSearch && e.SearXNG != nil && e.SearXNG.IsAvailable() {
 		if needsSearch, sq := DetectUncertainty(stimulus); needsSearch {
@@ -828,7 +836,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	// removed because it triggered on short MCQ prompts (complexity ~0.35-0.45)
 	// causing the model to second-guess correct answers — verified -20% regression
 	// on AI2-ARC (100% → 80%). Standard mode with low complexity must stay clean.
-	if mode == ModeDebate || mode == ModeCausal || mode == ModeDiscover || mode == ModeCrossdomainBridge {
+	if mode == ModeDebate || mode == ModeCausal || mode == ModeDiscover || mode == ModeCrossdomainBridge || mode == ModeAdaptive {
 		composite += "\n\n### EPISTEMIC BALANCE\n" +
 			"**Before committing to any conclusion**: (1) Identify the strongest evidence AGAINST your current position. " +
 			"(2) Steelman the best opposing argument — not a strawman. " +

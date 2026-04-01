@@ -21,10 +21,11 @@ const (
 	ModeDiscover                         // SELF-DISCOVER — LLM self-composes optimal reasoning plan (arXiv:2402.03620)
 	ModeConsistency                      // Self-Consistency — N parallel samples + consensus vote (arXiv:2310.01798)
 	ModeCrossdomainBridge                // Cross-Domain Bridge — structural analogies from foreign fields
+	ModeAdaptive                         // Adaptive Reasoning Engine — multi-step loop with policy+value (dual-track)
 )
 
 func (m ReasoningMode) String() string {
-	return [...]string{"Standard", "CBR", "PAL", "Active", "LeastToMost", "SelfRefine", "ReAct", "Debate", "Causal", "Discover", "Consistency", "CrossdomainBridge"}[m]
+	return [...]string{"Standard", "CBR", "PAL", "Active", "LeastToMost", "SelfRefine", "ReAct", "Debate", "Causal", "Discover", "Consistency", "CrossdomainBridge", "Adaptive"}[m]
 }
 
 var (
@@ -72,12 +73,12 @@ func ClassifyReasoningMode(stimulus string, budget AdaptiveBudget) ReasoningMode
 		return ModeConsistency
 	}
 
-	// SELF-DISCOVER: high-complexity queries get dynamic module composition.
-	// Lowered 0.70→0.60→0.55: catches medium-hard multi-step queries that keyword
-	// routing misclassifies as single-mode problems. Validated on BigBench-Hard:
-	// SELF-DISCOVER at 0.55 outperforms CBR at 0.60 for cross-domain reasoning tasks.
+	// Adaptive Reasoning Engine: high-complexity queries with no strong keyword signal.
+	// ARE replaces the old ModeDiscover catch-all — it runs a multi-step loop
+	// (Discover → Consistency → Debate) with a Value function gating early exit.
+	// Fast-path keyword modes above this check are unaffected.
 	if budget.Complexity >= 0.55 {
-		return ModeDiscover
+		return ModeAdaptive
 	}
 
 	// Causal: why/how-does/what-if — dedicated causal chain extraction
@@ -156,6 +157,8 @@ case "consistency":
 return ModeConsistency, true
 case "crossdomainbridge", "cross_domain_bridge", "crossdomain":
 return ModeCrossdomainBridge, true
+case "adaptive":
+return ModeAdaptive, true
 default:
 return ModeStandard, false
 }
