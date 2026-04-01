@@ -10,7 +10,9 @@ function eriToAccent(eri) {
 }
 
 // Arousal → surface warmth tweak (subtle warm tint on high arousal)
-function arousalToSurface(arousal = 0.5) {
+// Only applies in dark mode — in light mode the surface palette stays at theme values
+function arousalToSurface(arousal = 0.5, isDark = true) {
+  if (!isDark) return null; // Light theme: don't override surface vars
   // arousal 0.0–1.0 shifts surface from cool-dark toward slightly warm-dark
   const warmth = Math.round((arousal - 0.5) * 12); // -6 to +6 shift on red channel
   const base = 14 + warmth; // 8–20 range for the red component of surface
@@ -39,16 +41,24 @@ export function useERI(liveERI = null) {
     if (lastERI.current !== null && Math.abs(lastERI.current - eri) < 0.05) return;
     lastERI.current = eri;
 
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     const { accent, glow } = eriToAccent(eri);
-    const { surface, surface2 } = arousalToSurface(arousal);
+    const surfaces = arousalToSurface(arousal, isDark);
 
     const root = document.documentElement;
     // Enable ERI transitions now that we have a real value — safe to animate from here
     root.classList.add('sc-eri-live');
     root.style.setProperty('--color-sc-gold',      accent);
     root.style.setProperty('--color-sc-gold-glow', glow);
-    root.style.setProperty('--color-sc-surface',   surface);
-    root.style.setProperty('--color-sc-surface2',  surface2);
+    if (surfaces) {
+      // Dark mode: apply arousal-driven warm surface tint
+      root.style.setProperty('--color-sc-surface',  surfaces.surface);
+      root.style.setProperty('--color-sc-surface2', surfaces.surface2);
+    } else {
+      // Light mode: remove any stale dark surface overrides so theme vars win
+      root.style.removeProperty('--color-sc-surface');
+      root.style.removeProperty('--color-sc-surface2');
+    }
   }
 
   // Live update from SSE event (immediate, no poll delay)
