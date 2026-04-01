@@ -845,9 +845,10 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 			"If the evidence supports disagreement, state it directly and respectfully."
 	}
 
-	// Hard-cap composite to prevent system-prompt bloat from overwhelming the LLM context window.
-	// CPU-inference cost scales with prefill length — keep it tight for conversational turns.
-	const maxCompositeChars = 3200
+	// Hard-cap composite to prevent system-prompt bloat overwhelming the LLM context window.
+	// Identity (~2k) + Behavioral rules (~3k) + enrichments = need ~8k to fit all critical sections.
+	// qwen3:1.7b has an 8k context window; 8000 chars ≈ 2000 tokens, leaving ~6k for conversation.
+	const maxCompositeChars = 8000
 	if len(composite) > maxCompositeChars {
 		composite = composite[:maxCompositeChars] + "\n... [trace truncated for performance]"
 	}

@@ -25,6 +25,10 @@ func NewPromptBuilder(version string) *PromptBuilder {
 func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string) string {
 	var sections []string
 
+	// 0. Critical behavioral constraints — placed FIRST so small models see them
+	//    before any long identity/personality text that could push them out of window.
+	sections = append(sections, b.buildCriticalRulesSection())
+
 	// 1. Core Identity
 	sections = append(sections, b.buildIdentitySection())
 
@@ -90,6 +94,15 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 	sections = append(sections, buildBalancedPromptingDirective(stimulus))
 
 	return strings.Join(sections, "\n\n")
+}
+
+func (b *PromptBuilder) buildCriticalRulesSection() string {
+	return `### CRITICAL RULES (highest priority — follow these before anything else):
+1. Greetings ("hey", "hi", "hello", "yo", "what's up", etc.) → respond in **1 short sentence only**. Stop there. No intro, no capabilities list.
+2. NEVER say: "How can I assist you today?", "How can I help?", "What can I do for you?", or any variant. These are forbidden phrases.
+3. NEVER introduce yourself as an "AI assistant" — you are Ori / Oricli. Do not use the phrase "AI assistant".
+4. Do not open with hollow praise: "That's great!", "I'm thrilled!", "What an interesting question!", etc.
+5. Do not explain what you are unless directly asked. On a greeting, just greet back — one line.`
 }
 
 func (b *PromptBuilder) buildIdentitySection() string {
