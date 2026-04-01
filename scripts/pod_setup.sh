@@ -8,18 +8,18 @@
 #   4. Syncs blobs back to S3 for future pods
 #
 # Expected pod env vars (set in RunPod template):
-#   RUNPOD_S3_ENDPOINT  = https://s3api-eu-ro-1.runpod.io
-#   RUNPOD_S3_BUCKET    = s2uvk5nvun
-#   RUNPOD_S3_KEY       = user_3AAtmhUshdqnwQvcSYkFNrOQbF8
-#   RUNPOD_S3_SECRET    = rps_DK3KBF0UX3046F166E1QJ7KXC418SITKKKHHBBJVb6hyw1
+#   ORI_S3_ENDPOINT  = https://s3api-eu-ro-1.runpod.io
+#   ORI_S3_BUCKET    = s2uvk5nvun
+#   ORI_S3_KEY       = user_3AAtmhUshdqnwQvcSYkFNrOQbF8
+#   ORI_S3_SECRET    = rps_DK3KBF0UX3046F166E1QJ7KXC418SITKKKHHBBJVb6hyw1
 #   ORI_TIER            = 4b  (or 16b — which tier this pod runs)
 
 set -euo pipefail
 
-S3_ENDPOINT="${RUNPOD_S3_ENDPOINT:-https://s3api-eu-ro-1.runpod.io}"
-S3_BUCKET="${RUNPOD_S3_BUCKET:-s2uvk5nvun}"
-S3_KEY="${RUNPOD_S3_KEY:-}"
-S3_SECRET="${RUNPOD_S3_SECRET:-}"
+S3_ENDPOINT="${ORI_S3_ENDPOINT:-https://s3api-eu-ro-1.runpod.io}"
+S3_BUCKET="${ORI_S3_BUCKET:-s2uvk5nvun}"
+S3_KEY="${ORI_S3_KEY:-}"
+S3_SECRET="${ORI_S3_SECRET:-}"
 ORI_TIER="${ORI_TIER:-4b}"
 OLLAMA_MODELS_DIR="${OLLAMA_MODELS_DIR:-/root/.ollama/models}"
 REGION="eu-ro-1"

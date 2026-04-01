@@ -159,9 +159,9 @@ if [[ "$RESTART" == "true" && -z "$REMOTE_HOST" ]]; then
 fi
 
 # ── Sync updated Modelfiles to S3 ────────────────────────────────────────────
-S3_ENDPOINT="${RUNPOD_S3_ENDPOINT:-https://s3api-eu-ro-1.runpod.io}"
-S3_BUCKET="${RUNPOD_S3_BUCKET:-s2uvk5nvun}"
-S3_PROFILE="${RUNPOD_S3_PROFILE:-runpod}"
+S3_ENDPOINT="${ORI_S3_ENDPOINT:-https://s3api-eu-ro-1.runpod.io}"
+S3_BUCKET="${ORI_S3_BUCKET:-s2uvk5nvun}"
+S3_PROFILE="${ORI_S3_PROFILE:-runpod}"
 
 if aws s3 ls "s3://${S3_BUCKET}/" --profile "$S3_PROFILE" --region eu-ro-1 \
     --endpoint-url "$S3_ENDPOINT" > /dev/null 2>&1; then
