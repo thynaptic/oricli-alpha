@@ -28,8 +28,15 @@ func (m ReasoningMode) String() string {
 }
 
 var (
-	// PAL: arithmetic expressions, unit conversions, formulas
-	reMath = regexp.MustCompile(`(?i)(calculat|comput|solv|convert|how many|=\?|\d+[\+\-\*\/\^]\d+|integral|derivative|percent|formula|equation|proof)`)
+	// PAL: arithmetic expressions, unit conversions, rate/machine problems, formulas.
+	// "how long" + digit catches rate problems ("how long for 100 machines to make 100 widgets")
+	// that reMath previously missed because they phrase the target as time, not count.
+	reMath = regexp.MustCompile(`(?i)(calculat|comput|solv|convert|how many|how long.*\d|\d.*how long|=\?|\d+[\+\-\*\/\^]\d+|integral|derivative|percent|formula|equation|proof)`)
+
+	// LogicEval: logical argument evaluation — syllogisms, deduction validity, logical fallacies.
+	// Small models (gemma3:1b) fail on these with single-shot SELF-DISCOVER; ModeConsistency
+	// (3 independent samples + plurality vote) provides error-correction via diverse reasoning paths.
+	reLogicEval = regexp.MustCompile(`(?i)\b(therefore\b|it follows (that|from)|necessarily (true|false)|valid (argument|conclusion|syllogism)|logically? (follows|valid|invalid|fallac)|does (it|the conclusion) follow|conclude (that|from)|syllogis[m]|non.?sequitur|modus (ponens|tollens)|all .{1,40} are .{1,40}\. (some|all|no) )`)
 
 	// ReAct: multi-tool research queries
 	reReAct = regexp.MustCompile(`(?i)(research|find.*and.*then|look up.*and|search.*then|compare.*sources|latest.*on|who is.*and what|news about)`)
@@ -55,6 +62,14 @@ func ClassifyReasoningMode(stimulus string, budget AdaptiveBudget) ReasoningMode
 	// PAL wins for anything math/logic — Python beats LLM prediction every time
 	if reMath.MatchString(s) {
 		return ModePAL
+	}
+
+	// LogicEval: syllogisms and deductive argument validity questions.
+	// ModeConsistency (3 independent samples, plurality vote) outperforms a single
+	// SELF-DISCOVER path on small models for logical fallacy detection — the diversity
+	// of sampling paths catches invalid syllogisms that any single reasoning plan misses.
+	if reLogicEval.MatchString(s) {
+		return ModeConsistency
 	}
 
 	// SELF-DISCOVER: high-complexity queries get dynamic module composition.
