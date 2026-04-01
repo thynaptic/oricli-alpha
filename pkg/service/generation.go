@@ -355,7 +355,15 @@ func DefaultLLMModel() string {
 	if m := os.Getenv("OLLAMA_MODEL"); m != "" {
 		return m
 	}
-	return "qwen3:1.7b"
+	return "ori:1.7b"
+}
+
+// isQwen3Based returns true for any model whose inference requires think=false
+// to suppress extended chain-of-thought output. Covers native qwen3 tags and
+// the ori: family (all ori tiers are built FROM qwen3 bases).
+func isQwen3Based(model string) bool {
+	lower := strings.ToLower(model)
+	return strings.HasPrefix(lower, "qwen3") || strings.HasPrefix(lower, "ori:")
 }
 
 func NewGenerationService() *GenerationService {
@@ -420,7 +428,7 @@ func (s *GenerationService) prewarmModel(model string) {
 		"keep_alive": "60m",
 		"options":    map[string]interface{}{"num_predict": 1},
 	}
-	if strings.HasPrefix(strings.ToLower(model), "qwen3") {
+	if isQwen3Based(model) {
 		payload["think"] = false
 	}
 	body, _ := json.Marshal(payload)
@@ -1524,9 +1532,9 @@ func (s *GenerationService) ollamaChatStream(ctx context.Context, messages []map
 	if temp, ok := options["temperature"].(float64); ok {
 		payload["options"].(map[string]interface{})["temperature"] = temp
 	}
-	// Disable Qwen3 extended thinking for chat to keep tok/s high.
-	// Only set on qwen3 models — other models silently drop the stream when this field is present.
-	if strings.HasPrefix(strings.ToLower(model), "qwen3") {
+	// Disable extended thinking for Qwen3-based models (including ori: tier) to keep tok/s high.
+	// Only set when applicable — other models silently drop the stream when this field is present.
+	if isQwen3Based(model) {
 		payload["think"] = false
 	}
 	// Allow callers to override num_predict / num_ctx / other Ollama options
@@ -1615,7 +1623,7 @@ func (s *GenerationService) DirectOllamaSingle(ctx context.Context, messages []m
 			"temperature": 0.2,
 		},
 	}
-	if strings.HasPrefix(strings.ToLower(model), "qwen3") {
+	if isQwen3Based(model) {
 		payload["think"] = false
 	}
 	result, err := s.postJSON("/api/chat", payload)
