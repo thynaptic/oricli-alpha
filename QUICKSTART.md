@@ -8,7 +8,7 @@
 ## Prerequisites
 
 - **Go 1.25+** — [install](https://go.dev/dl/)
-- **Ollama** — [install](https://ollama.com) with `qwen2.5-coder:3b` pulled
+- **Ollama** — [install](https://ollama.com) with `ori:1.7b` pulled (`ollama pull ori:1.7b`). For RunPod tiers (ori:4b / ori:16b), start `ori-pod-tunnel.service` — see `INSTALL.md`.
 - **Python 3.11+** + pip — only needed for the UI proxy and training pipelines
 
 ---

@@ -35,7 +35,7 @@ Oricli-Alpha is a proactive, local-first intelligence OS built for autonomous, m
 | Swarm Bus | Go channels | Sub-ms task routing between agents |
 | Memory | LMDB + chromem-go | Fast KV store + in-process vector search |
 | Knowledge | Neo4j | Persistent entity/relationship graph |
-| Inference | Ollama | Local LLM generation (`ministral-3:3b`, `qwen2.5-coder:3b`) |
+| Inference | Ollama + RunPod | VPS: `ori:1.7b` (TierLocal, `localhost:11434`); RunPod SSH tunnel: `ori:4b` (TierMedium), `ori:16b` (TierRemote) at `localhost:11435` |
 | Therapy Stack | `pkg/therapy/` | DBT/CBT/REBT/ACT inline cognitive regulation (Phase 15–16) |
 | Cognitive Stack | `pkg/cogload/` `pkg/dualprocess/` `pkg/rumination/` `pkg/mindset/` | System 1/2 audit, cognitive load, rumination & growth mindset (P17–P20) |
 | Agency Stack | `pkg/hopecircuit/` `pkg/socialdefeat/` `pkg/conformity/` `pkg/ideocapture/` `pkg/coalition/` `pkg/statusbias/` | Hope circuit, social defeat, conformity shield, ideological capture, coalition/status bias (P21–P26) |
@@ -163,7 +163,7 @@ Mavaia/
 ## Prerequisites
 
 - **Go 1.21+** — primary runtime
-- **Ollama** — local inference (`ministral-3:3b` or `qwen2.5-coder:3b`)
+- **Ollama** — VPS local inference with `ori:1.7b` (TierLocal); RunPod pod via SSH tunnel for `ori:4b` (TierMedium) and `ori:16b` (TierRemote)
 - **Python 3.11+** — UI proxy and training pipelines only
 - **Neo4j** (optional) — persistent knowledge graph
 - **Caddy** — TLS reverse proxy for production

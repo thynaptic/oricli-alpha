@@ -1383,8 +1383,13 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 			}
 			options["_bid_tier"] = compute.TierMedium
 		case compute.TierRemote:
-			options["_escalate_to_runpod"] = true
-			options["_complexity_tier"] = "heavy"
+			if s.RemoteURL != "" {
+				options["_remote_url"] = s.RemoteURL
+				options["_remote_model"] = s.ResearchModel
+				log.Printf("[BidGovernor] TierRemote → remote %s @ %s", s.ResearchModel, s.RemoteURL)
+			} else {
+				log.Printf("[BidGovernor] TierRemote → local fallback (OLLAMA_REMOTE_URL not set)")
+			}
 			options["_bid_tier"] = compute.TierRemote
 		default:
 			options["_bid_tier"] = compute.TierLocal

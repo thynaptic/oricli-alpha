@@ -16,7 +16,31 @@ Versions track `VERSION` file. Commits listed for traceability.
 
 ---
 
-## [11.2.0] — 2026-04-01 — Adaptive Reasoning Engine (ARE) — `b34b95a`
+## [11.3.0] — 2026-04-02 — Ori 3-Tier Model Pipeline — `HEAD`
+
+### Added
+- **ori: model tiers** — custom Ollama models baked with Ori identity, strict persona rules, and few-shot examples:
+  - `ori:1.7b` — TierLocal, qwen3:1.7b base, VPS Ollama (`localhost:11434`)
+  - `ori:4b` — TierMedium, qwen3:4b base, RunPod pod via SSH tunnel (`localhost:11435`)
+  - `ori:16b` — TierRemote, qwen3:14b base, same RunPod pod via SSH tunnel
+- **`scripts/build_ori_models.sh`** — Modelfile → `ollama create` pipeline; `--remote <url>` for RunPod pods; auto-syncs Modelfiles to S3
+- **`scripts/pod_setup.sh`** — RunPod pod cold-start bootstrap: starts Ollama, S3 blob cache check, model pull, `ollama create ori:$ORI_TIER`; S3 ops non-fatal
+- **`ori-pod-tunnel.service`** — systemd SSH tunnel (`User=mike`, key: `id_ed25519_runpod_mavaia`, `localhost:11435` → pod `localhost:11434`); auto-restarts on drop
+- **`models/Modelfile.ori-{1.7b,4b,16b}`** — baked system prompts, 6+ few-shot Q&A examples, strict greeting rules
+- **RunPod S3 storage** — `s3://s2uvk5nvun/` (endpoint: `https://s3api-eu-ro-1.runpod.io`) for Modelfile and model blob caching
+
+### Changed
+- **`BidGovernor` routing** (`pkg/service/generation.go`):
+  - `TierLocal` → `ori:1.7b` on VPS Ollama
+  - `TierMedium` → `ori:4b` via `remoteOllamaChatStream(OLLAMA_REMOTE_URL, OLLAMA_MEDIUM_MODEL)`
+  - `TierRemote` → `ori:16b` via `remoteOllamaChatStream(OLLAMA_REMOTE_URL, OLLAMA_RESEARCH_MODEL)` *(was: stale KoboldCpp flags)*
+- **`isQwen3Based()`** — extended to match `ori:` prefix; fixes think-mode leak where qwen3 base models exposed extended thinking when renamed
+- **`DefaultLLMModel()`** — fallback updated `qwen3:1.7b` → `ori:1.7b`
+- **New env vars**: `OLLAMA_REMOTE_URL`, `OLLAMA_MEDIUM_MODEL`, `OLLAMA_RESEARCH_MODEL` added to `oricli-api.service`
+
+---
+
+
 
 ### Added
 - **Adaptive Reasoning Engine** (`pkg/cognition/adaptive_engine.go`): New dual-track architecture replaces the static `ModeDiscover` catch-all for high-complexity / ambiguous queries. ARE runs a 3-step loop (Consistency → Debate → Discover) with a **Policy** function selecting the next cognitive tool and a **Value** function scoring answer quality (pure heuristic, < 1ms). Exits early at confidence ≥ 0.75; always returns a non-empty answer. Context: `context.WithoutCancel` detaches ARE from HTTP request context so client disconnection can't kill mid-step reasoning. Each step gets its own 90s timeout.

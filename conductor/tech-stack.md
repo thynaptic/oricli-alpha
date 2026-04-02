@@ -28,8 +28,8 @@
 
 ## Inference & Generation
 
-- **Ollama**: Local LLM inference. Primary model: `qwen2.5-coder:3b` (via `oricli-backbone.service`). The Go backbone offloads all prose generation and light reasoning to Ollama, reserving native compute for orchestration and tool-use.
-- **RunPod GPU Inference**: On-demand KoboldCpp pods for code and research tiers (`pkg/service/runpod_manager.go`). Model auto-selected from baked catalog (`pkg/connectors/runpod/inference.go` → `TierModels`) based on available GPU VRAM. Only `RUNPOD_ENABLED=true` required — no URL config.
+- **Ollama**: VPS local inference. Primary model: `ori:1.7b` (TierLocal, via `oricli-api.service`, `localhost:11434`). The Go backbone offloads prose generation and light reasoning to Ollama, reserving native compute for orchestration and tool-use.
+- **RunPod GPU Inference**: Persistent pod running `ori:4b` (TierMedium — code / multi-step reasoning) and `ori:16b` (TierRemote — heavy synthesis, ARC, proofs). Both models served by a single Ollama instance on the pod. Access via SSH tunnel managed by `ori-pod-tunnel.service` (`localhost:11435` → pod `localhost:11434`). Key: `/home/mike/.ssh/id_ed25519_runpod_mavaia`. Pod: `213.173.102.174:16520` (internal: `209obwnsvrz0wj.runpod.internal`). Update `POD_HOST`/`POD_PORT` in the service unit when pod restarts.
 - **RunPod Image Generation**: A1111 Stable Diffusion WebUI pods for image generation (`pkg/service/image_gen_manager.go`). Activated via `RUNPOD_IMAGEGEN_ENABLED=true`. Idle auto-terminates after 10 minutes. API-compatible with `POST /v1/images/generations`.
 - **gRPC Sidecars**: Specialized Python cognitive modules (e.g., vision, symbolic solvers) are invoked via gRPC from the Go orchestrator when a capability requires a Python ML library.
 

@@ -35,7 +35,7 @@ go version
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen2.5-coder:3b
+ollama pull ori:1.7b
 ```
 
 ---
@@ -126,8 +126,11 @@ The backbone reads from `.env` in the project root. Key variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `OLLAMA_URL` | `http://localhost:11434` | Ollama inference endpoint |
-| `OLLAMA_MODEL` | `qwen2.5-coder:3b` | Default generation model |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama inference endpoint (VPS local) |
+| `OLLAMA_MODEL` | `ori:1.7b` | TierLocal model — default VPS inference |
+| `OLLAMA_REMOTE_URL` | `http://localhost:11435` | SSH tunnel to RunPod pod (TierMedium + TierRemote) |
+| `OLLAMA_MEDIUM_MODEL` | `ori:4b` | TierMedium model — code / multi-step reasoning |
+| `OLLAMA_RESEARCH_MODEL` | `ori:16b` | TierRemote model — heavy reasoning / long synthesis |
 | `ORICLI_ENCRYPTION_KEY` | (auto) | Base64 AES key for LMDB encryption |
 | `OricliAlpha_Key` | (auto) | Override API key (optional) |
 

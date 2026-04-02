@@ -85,8 +85,9 @@ Key trajectory milestones already built or in progress:
 ### Infrastructure
 - **VPS:** AMD EPYC 7543P, 32 cores, 32GB RAM
 - **Caddy:** Reverse proxy — `oristudio.thynaptic.com` → Flask (5001) + Go API (8089)
-- **Ollama:** Local inference — `ministral-3:3b` (general), `qwen2.5-coder:3b` (code)
-- **RunPod:** Remote GPU burst (NVIDIA RTX 5090 / Blackwell) — pennies per run, used for heavy synthesis
+- **Ollama (local):** VPS inference — `ori:1.7b` (TierLocal, `localhost:11434`)
+- **Ollama (remote):** RunPod pod via SSH tunnel — `ori:4b` (TierMedium) and `ori:16b` (TierRemote) at `localhost:11435`
+- **RunPod:** NVIDIA RTX 5090 / Blackwell — pod `209obwnsvrz0wj.runpod.internal` (IP: 213.173.102.174:16520); tunnel managed by `ori-pod-tunnel.service`
 - **PocketBase:** Long-term memory bank at `pocketbase.thynaptic.com`
 - **Caddy routing (critical):** `/v1/*` → Go API (8089), everything else → Flask (5001)
 
@@ -124,12 +125,12 @@ Heavy ML modules are opt-in (`MAVAIA_ENABLE_HEAVY_MODULES=true`).
 - Reads `arc_results/<latest>/results.json` on every boot
 - Extracts topic entities from failed ARC questions
 - Injects via `AddSeedForce()` — guaranteed re-study
-- ARC-AGI current score: 6% (ministral-3:3b — spatial/color pattern reasoning is the primary gap)
+- ARC-AGI current score: 6% (ori:1.7b — spatial/color pattern reasoning is the primary gap; ori:16b on RunPod is the escalation path)
 
 ### ComplexityRouter
-- Routes hard queries to RunPod, easy/conversational queries to local Ollama
+- Routes queries to appropriate tier: local → `ori:1.7b`, medium → `ori:4b` (RunPod), remote → `ori:16b` (RunPod)
 - Gate: `RUNPOD_COMPLEXITY_ROUTING=true` env var
-- Threshold: `COMPLEXITY_HEAVY_THRESHOLD=0.65` — scores each query, only escalates genuinely hard tasks (ARC grids, proofs) to RunPod
+- Threshold: `COMPLEXITY_HEAVY_THRESHOLD=0.65` — scores each query; escalates genuinely hard tasks (ARC grids, proofs) to `TierRemote` (ori:16b)
 - Prevents "Hey Ori" from triggering a remote GPU call
 
 ### CostGovernor
@@ -185,7 +186,10 @@ RUNPOD_PRIMARY=false             # was true — caused ALL requests to hit RunPo
 RUNPOD_ENABLED=false
 RUNPOD_COMPLEXITY_ROUTING=true   # ComplexityRouter scores each query; only hard tasks escalate
 COMPLEXITY_HEAVY_THRESHOLD=0.65  # score threshold above which query routes to RunPod
-OLLAMA_MODEL=ministral-3:3b
+OLLAMA_MODEL=ori:1.7b
+OLLAMA_REMOTE_URL=http://localhost:11435  # SSH tunnel → RunPod pod
+OLLAMA_MEDIUM_MODEL=ori:4b               # TierMedium
+OLLAMA_RESEARCH_MODEL=ori:16b            # TierRemote
 
 # World Traveler
 WORLD_TRAVELER_ENABLED=true      # always on
@@ -274,15 +278,14 @@ PB_BASE_URL=https://pocketbase.thynaptic.com
 - DreamDaemon, MetacogDaemon, ReformDaemon, GoalExecutor — all running
 - Persona benchmark runner (`scripts/persona_bench.py`) — 4-model, deterministic scoring
 
-**Current benchmark scores (ministral-3:3b):**
-- ARC-AGI: 6% — spatial/color pattern reasoning is the gap (RunPod 32B is the path forward)
+**Current benchmark scores (ori:1.7b local / ori:16b remote):**
+- ARC-AGI: 6% (ori:1.7b) — spatial/color pattern reasoning is the gap; ori:16b on RunPod is the escalation path
 - AI2-ARC: 100% (50/50)
 - LiveBench (2026-01-08): 19.7% overall / instruction_following 42.0% (standout) / data_analysis 23.5% / math 13.7% / reasoning 12.5% / language 6.8%
-- Persona adherence: 98/100 composite (4-model comparison, ministral confirmed)
+- Persona adherence: 98/100 composite (4-model comparison, ori:1.7b confirmed)
 
 **Known gaps / next focus areas:**
-- ARC-AGI spatial reasoning (small model limitation — RunPod 32B escalation is the path)
-- `RUNPOD_PRIMARY=false` currently — re-enable with `RUNPOD_COMPLEXITY_ROUTING=true` as smart gate
+- ARC-AGI spatial reasoning (ori:1.7b limitation — ori:16b on RunPod is the escalation path via `RUNPOD_COMPLEXITY_ROUTING=true`)
 - Extended agent CRUD API (`pkg/api/server.go`) not yet wired into `ServerV2`
 - `balanced-prompting` / `aletheia-loop` — reasoning quality improvements pending
 
