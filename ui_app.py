@@ -1394,6 +1394,36 @@ def _ori_action_footer(workflows: list | None = None) -> str:
     return "\n".join(lines)
 
 
+def _body_to_html(text: str) -> str:
+    """Convert plain-text email body to HTML, making mailto: and https: links clickable."""
+    import html as _html_mod, re as _re
+    safe = _html_mod.escape(text)
+    # mailto: links → <a href="mailto:...">label</a>
+    # Pattern: word(s) → mailto:addr?subject=SUBJECT
+    safe = _re.sub(
+        r'([\w ./:%-]+?)\s*→\s*(mailto:[^\s<]+)',
+        lambda m: f'<a href="{m.group(2).strip()}" style="color:#6366f1;text-decoration:none;">{m.group(1).strip()}</a>',
+        safe,
+    )
+    # bare https: links
+    safe = _re.sub(
+        r'(https://[^\s<]+)',
+        lambda m: f'<a href="{m.group(1)}" style="color:#6366f1;">{m.group(1)}</a>',
+        safe,
+    )
+    # separator line → <hr>
+    safe = _re.sub(r'─{10,}', '<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">', safe)
+    lines_html = "".join(
+        f"<br>" if ln.strip() == "" else f"<p style='margin:4px 0'>{ln}</p>"
+        for ln in safe.splitlines()
+    )
+    return (
+        '<div style="font-family:system-ui,sans-serif;font-size:14px;color:#111;max-width:560px;margin:0 auto;padding:24px;">'
+        + lines_html
+        + '</div>'
+    )
+
+
 def _send_email(
     to: str,
     subject: str,
@@ -1415,8 +1445,7 @@ def _send_email(
             "subject":  subject,
             "text":     body,
         }
-        if html:
-            payload["html"] = html
+        payload["html"] = html if html else _body_to_html(body)
         r = _resend.Emails.send(payload)
         mid = str(getattr(r, "id", "") or "")
         if mid and wf_id and run_id:
