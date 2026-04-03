@@ -1555,19 +1555,23 @@ def api_email_inbound() -> Response:
     subject = _re.sub(r'^(re|fwd?|fw)\s*:\s*', '', subject, flags=_re.IGNORECASE).strip()
     subject = _re.sub(r'^ORI\s*:\s*', '', subject, flags=_re.IGNORECASE).strip()
 
-    # If subject doesn't look like a command, try first non-quoted line of body
-    cmd_parts = subject.split(None, 1)
-    cmd_check  = cmd_parts[0].upper() if cmd_parts else ""
+    # Debug — visible in nohup log
+    print(f"[email-inbound] from={data.get('from','')} subject={subject!r} body_preview={body[:80]!r}", flush=True)
+
+    # If subject isn't a known command, scan entire body for a command line
     KNOWN_CMDS = {"RUN", "LIST", "STATUS", "STOP", "APPROVE", "YES", "REJECT", "NO"}
+    cmd_parts = subject.split(None, 1)
+    cmd_check = cmd_parts[0].upper() if cmd_parts else ""
     if cmd_check not in KNOWN_CMDS and body:
         for line in body.splitlines():
             line = line.strip()
-            if line.startswith(">") or not line:
+            if not line or line.startswith(">"):
                 continue
-            first = line.split(None, 1)
-            if first and first[0].upper() in KNOWN_CMDS:
+            first_word = line.split()[0].upper()
+            if first_word in KNOWN_CMDS:
                 subject = line
-            break
+                print(f"[email-inbound] body fallback matched: {subject!r}", flush=True)
+                break
 
     raw_headers = data.get("headers") or []
     if isinstance(raw_headers, list):
@@ -1696,10 +1700,18 @@ def api_email_inbound() -> Response:
     elif cmd == "LIST":
         with _WF_LOCK:
             wfs = _load_workflows()
-        lines = [f"• {w['name']}" for w in wfs] or ["No workflows configured yet."]
+        if wfs:
+            lines = []
+            for w in wfs:
+                name_enc = w['name'].replace(' ', '%20')
+                lines.append(f"• {w['name']}\n  → mailto:ori@inbound.thynaptic.com?subject=RUN%20{name_enc}")
+            body_lines = "\n\n".join(lines)
+        else:
+            body_lines = "No workflows configured yet."
         _send_email(sender_email, "ORI: Your Workflows",
-            f"Hi {name},\n\nAvailable workflows:\n\n" + "\n".join(lines) +
-            "\n\nReply RUN <name> to trigger one.\n\n— ORI")
+            f"Hi {name},\n\nAvailable workflows:\n\n{body_lines}\n\n"
+            f"Tap a link above to trigger, or send a new email with subject:\n"
+            f"  RUN <workflow name>\n\n— ORI")
         return jsonify({"ok": True, "mode": "command", "cmd": "LIST"})
 
     elif cmd == "STATUS":
@@ -1731,13 +1743,21 @@ def api_email_inbound() -> Response:
         return jsonify({"ok": True, "mode": "command", "cmd": "STOP"})
 
     else:
+        with _WF_LOCK:
+            wfs = _load_workflows()
+        wf_links = ""
+        if wfs:
+            wf_links = "\n\nYour workflows:\n" + "\n".join(
+                f"  • {w['name']} → mailto:ori@inbound.thynaptic.com?subject=RUN%20{w['name'].replace(' ','%20')}"
+                for w in wfs
+            )
         _send_email(sender_email, "ORI: Available Commands",
-            f"Hi {name},\n\nHere's what you can do via email:\n\n"
+            f"Hi {name},\n\nSend a NEW email (not a reply) with one of these subjects:\n\n"
             f"  RUN <workflow-name>   — trigger a workflow\n"
             f"  LIST                  — see your workflows\n"
             f"  STATUS                — recent run statuses\n"
-            f"  STOP <run-id>         — cancel a run\n\n"
-            f"Send to any address @inbound.thynaptic.com\n\n— ORI")
+            f"  STOP <run-id>         — cancel a run\n"
+            f"{wf_links}\n\n— ORI")
         return jsonify({"ok": True, "mode": "command", "cmd": "UNKNOWN"})
 
     """
