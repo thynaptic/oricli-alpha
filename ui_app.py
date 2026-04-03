@@ -1603,14 +1603,20 @@ def api_email_inbound() -> Response:
         app.logger.info(f"[email-cmd] unauthorized: {sender}")
         _send_email(
             sender_email,
-            "You reached ORI",
-            "Hi there,\n\n"
-            "This workspace hasn't enabled email commands yet.\n\n"
-            "If you're the owner, you can activate this feature from\n"
-            "ORI Studio → Settings → Email Access.\n\n"
+            "Hey — you found ORI",
+            "Hey,\n\n"
+            "You just emailed an AI that runs business workflows.\n"
+            "No app. No dashboard. Just this.\n\n"
+            "Here's how it works:\n\n"
+            "  • Email LIST → ORI sends you your available workflows\n"
+            "  • Email RUN <name> → ORI runs it and emails you the results\n"
+            "  • Every morning → ORI emails you a briefing of what happened overnight\n\n"
+            "Your email isn't on an active workspace yet — but it takes about 5 minutes to set one up.\n\n"
+            "→ https://oristudio.thynaptic.com\n\n"
+            "If someone sent you this address, ask them to add you to their workspace.\n\n"
             "— ORI\n\n"
             "---\n"
-            "ORI Studio · Sovereign AI for your business\n"
+            "ORI Studio · No app. No dashboard. Just email.\n"
             "https://oristudio.thynaptic.com"
         )
         return jsonify({"ok": True, "mode": "ignored"})
