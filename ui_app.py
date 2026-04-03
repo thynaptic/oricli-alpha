@@ -3913,8 +3913,23 @@ def _run_workflow_job(wf_id: str, run_id: str) -> None:
                         "final_output": step_result["output"]})
             return
 
+    final_output = context["output"]
     update_run({"status": "done", "finished": datetime.now(timezone.utc).isoformat(),
-                "final_output": context["output"]})
+                "final_output": final_output})
+
+    # Email results back if triggered via email
+    triggered_by = run_meta.get("triggered_by", "")
+    if triggered_by.startswith("email:"):
+        recipient = triggered_by[len("email:"):]
+        wf_name = wf.get("name", "Workflow")
+        all_wfs = _load_workflows()
+        _send_email(
+            recipient,
+            f"ORI: \"{wf_name}\" complete ✓",
+            f"Hi,\n\nYour workflow \"{wf_name}\" finished.\n\n"
+            f"{'─' * 40}\n{final_output}\n{'─' * 40}\n"
+            + _ori_action_footer(all_wfs),
+        )
 
 
 # ── Workflow CRUD routes ──────────────────────────────────────────────────────
