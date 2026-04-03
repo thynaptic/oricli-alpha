@@ -1376,6 +1376,24 @@ def _register_email_thread(message_id: str, wf_id: str, run_id: str, sender: str
         _save_email_threads(threads)
 
 
+def _ori_action_footer(workflows: list | None = None) -> str:
+    """Standard action footer appended to every ORI email. Includes mailto quick-action links."""
+    base = "ori@inbound.thynaptic.com"
+    lines = [
+        "",
+        "─" * 40,
+        "Quick actions — tap to send:",
+        f"  • List workflows  → mailto:{base}?subject=LIST",
+        f"  • Check status    → mailto:{base}?subject=STATUS",
+    ]
+    if workflows:
+        for w in workflows[:5]:
+            slug = w["name"].replace(" ", "%20")
+            lines.append(f"  • Run: {w['name']}  → mailto:{base}?subject=RUN%20{slug}")
+    lines += ["", "Tip: Use these links on mobile/watch — no typing needed.", "— ORI Studio"]
+    return "\n".join(lines)
+
+
 def _send_email(
     to: str,
     subject: str,
@@ -1656,6 +1674,10 @@ def api_email_inbound() -> Response:
     name      = client.get("name", "there")
     app.logger.info(f"[email-cmd] parsed subject='{subject}' cmd='{cmd}' arg='{cmd_arg}'")
 
+    # Load workflows once — used for commands + footers
+    with _WF_LOCK:
+        all_wfs = _load_workflows()
+
     # Parse body vars: "key: value" lines
     user_vars: dict = {}
     for line in body.splitlines():
@@ -1667,15 +1689,13 @@ def api_email_inbound() -> Response:
     app.logger.info(f"[email-cmd] {cmd} '{cmd_arg}' from {sender}")
 
     if cmd == "RUN":
-        with _WF_LOCK:
-            wfs = _load_workflows()
-        wf = next((w for w in wfs
+        wf = next((w for w in all_wfs
                    if w["name"].lower() == cmd_arg.lower()
                    or w["id"].startswith(cmd_arg)), None)
         if not wf:
             _send_email(sender_email, f"ORI: Workflow not found — {cmd_arg}",
-                f"Hi {name},\n\nNo workflow named \"{cmd_arg}\" found.\n"
-                f"Reply LIST to see available workflows.\n\n— ORI")
+                f"Hi {name},\n\nNo workflow named \"{cmd_arg}\" found.\n\n"
+                + _ori_action_footer(all_wfs))
             return jsonify({"ok": True, "mode": "command", "cmd": "RUN", "result": "not_found"})
 
         run_id = str(uuid.uuid4())
@@ -1692,39 +1712,35 @@ def api_email_inbound() -> Response:
         import threading as _t
         _t.Thread(target=_run_workflow_job, args=(wf["id"], run_id), daemon=True).start()
         _send_email(sender_email, f"ORI: Running \"{wf['name']}\"",
-            f"Hi {name},\n\nWorkflow \"{wf['name']}\" has started.\n"
-            f"Run ID: {run_id}\n\nReply STATUS to check progress.\n\n— ORI",
+            f"Hi {name},\n\n✓ Workflow \"{wf['name']}\" is running.\n"
+            f"Run ID: {run_id[:8]}\n\nI'll email you when it's done.\n\n"
+            + _ori_action_footer(all_wfs),
             wf_id=wf["id"], run_id=run_id)
         return jsonify({"ok": True, "mode": "command", "cmd": "RUN", "run_id": run_id})
 
     elif cmd == "LIST":
-        with _WF_LOCK:
-            wfs = _load_workflows()
-        if wfs:
-            lines = []
-            for w in wfs:
-                name_enc = w['name'].replace(' ', '%20')
-                lines.append(f"• {w['name']}\n  → mailto:ori@inbound.thynaptic.com?subject=RUN%20{name_enc}")
-            body_lines = "\n\n".join(lines)
+        if all_wfs:
+            wf_lines = "\n".join(
+                f"  • {w['name']}  → mailto:ori@inbound.thynaptic.com?subject=RUN%20{w['name'].replace(' ','%20')}"
+                for w in all_wfs
+            )
         else:
-            body_lines = "No workflows configured yet."
+            wf_lines = "  No workflows configured yet."
         _send_email(sender_email, "ORI: Your Workflows",
-            f"Hi {name},\n\nAvailable workflows:\n\n{body_lines}\n\n"
-            f"Tap a link above to trigger, or send a new email with subject:\n"
-            f"  RUN <workflow name>\n\n— ORI")
+            f"Hi {name},\n\nTap any workflow to run it:\n\n{wf_lines}\n\n"
+            + _ori_action_footer(all_wfs))
         return jsonify({"ok": True, "mode": "command", "cmd": "LIST"})
 
     elif cmd == "STATUS":
         with _WFR_LOCK:
             runs = _load_runs()
-        with _WF_LOCK:
-            wfs = {w["id"]: w["name"] for w in _load_workflows()}
+        wf_map = {w["id"]: w["name"] for w in all_wfs}
         recent = sorted(runs.values(), key=lambda r: r.get("created", ""), reverse=True)[:5]
-        lines  = [f"• {wfs.get(r.get('wf_id',''),'?')}: {r['status']} (run {r['id'][:8]}…)"
+        lines  = [f"  • {wf_map.get(r.get('wf_id',''),'?')}: {r['status']} (run {r['id'][:8]}…)"
                   for r in recent]
         _send_email(sender_email, "ORI: Recent Run Status",
-            f"Hi {name},\n\nRecent runs:\n\n" + ("\n".join(lines) or "No runs yet.") +
-            "\n\n— ORI")
+            f"Hi {name},\n\nRecent runs:\n\n" + ("\n".join(lines) or "  No runs yet.") +
+            "\n\n" + _ori_action_footer(all_wfs))
         return jsonify({"ok": True, "mode": "command", "cmd": "STATUS"})
 
     elif cmd == "STOP":
@@ -1736,28 +1752,17 @@ def api_email_inbound() -> Response:
                 run["finished"] = datetime.now(timezone.utc).isoformat()
                 _save_runs(runs)
                 _send_email(sender_email, "ORI: Run stopped",
-                    f"Run {run['id'][:8]}… cancelled.\n\n— ORI")
+                    f"Run {run['id'][:8]}… cancelled.\n\n" + _ori_action_footer(all_wfs))
             else:
                 _send_email(sender_email, "ORI: Run not found",
-                    f"No run matching \"{cmd_arg}\".\n\n— ORI")
+                    f"No run matching \"{cmd_arg}\".\n\n" + _ori_action_footer(all_wfs))
         return jsonify({"ok": True, "mode": "command", "cmd": "STOP"})
 
     else:
-        with _WF_LOCK:
-            wfs = _load_workflows()
-        wf_links = ""
-        if wfs:
-            wf_links = "\n\nYour workflows:\n" + "\n".join(
-                f"  • {w['name']} → mailto:ori@inbound.thynaptic.com?subject=RUN%20{w['name'].replace(' ','%20')}"
-                for w in wfs
-            )
-        _send_email(sender_email, "ORI: Available Commands",
-            f"Hi {name},\n\nSend a NEW email (not a reply) with one of these subjects:\n\n"
-            f"  RUN <workflow-name>   — trigger a workflow\n"
-            f"  LIST                  — see your workflows\n"
-            f"  STATUS                — recent run statuses\n"
-            f"  STOP <run-id>         — cancel a run\n"
-            f"{wf_links}\n\n— ORI")
+        # Unknown/empty reply — respond with tap-to-run workflow links
+        _send_email(sender_email, "ORI: What would you like to run?",
+            f"Hi {name},\n\nNot sure what you meant — but here's what I can do:\n\n"
+            + _ori_action_footer(all_wfs))
         return jsonify({"ok": True, "mode": "command", "cmd": "UNKNOWN"})
 
     """
