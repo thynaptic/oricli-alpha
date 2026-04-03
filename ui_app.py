@@ -1583,34 +1583,40 @@ def api_email_inbound() -> Response:
     thread = threads.get(in_reply_to) if in_reply_to else None
 
     if thread:
-        first_line   = next((l.strip() for l in body.splitlines() if l.strip()), "").upper()
+        first_line   = next((l.strip() for l in body.splitlines() if l.strip() and not l.strip().startswith(">")), "").upper()
         APPROVE_CMDS = {"APPROVE", "YES", "OK", "CONFIRMED", "CONFIRM"}
         REJECT_CMDS  = {"REJECT", "NO", "CANCEL", "DENIED", "DENY"}
-        action = "approve" if first_line in APPROVE_CMDS else \
-                 "reject"  if first_line in REJECT_CMDS  else "reply"
 
-        with _WFR_LOCK:
-            runs = _load_runs()
-            run  = runs.get(thread["run_id"])
-            if run:
-                run.setdefault("email_replies", []).append({
-                    "from": sender, "action": action,
-                    "body_preview": body[:200],
-                    "received": datetime.now(timezone.utc).isoformat(),
-                })
-                if action == "approve":
-                    run["email_approved"] = True
-                    run.setdefault("notes", []).append(
-                        f"[Email APPROVED by {sender}]")
-                elif action == "reject":
-                    run["status"]   = "cancelled"
-                    run["finished"] = datetime.now(timezone.utc).isoformat()
-                    run.setdefault("notes", []).append(
-                        f"[Email REJECTED by {sender}]")
-                _save_runs(runs)
+        # If first line is a command (RUN/LIST/etc), fall through to command mode
+        first_word = first_line.split()[0] if first_line.split() else ""
+        if first_word in {"RUN", "LIST", "STATUS", "STOP"}:
+            thread = None  # treat as fresh command
+        else:
+            action = "approve" if first_line in APPROVE_CMDS else \
+                     "reject"  if first_line in REJECT_CMDS  else "reply"
 
-        app.logger.info(f"[email-reply] {action} from {sender} → run {thread['run_id']}")
-        return jsonify({"ok": True, "mode": "reply", "action": action})
+            with _WFR_LOCK:
+                runs = _load_runs()
+                run  = runs.get(thread["run_id"])
+                if run:
+                    run.setdefault("email_replies", []).append({
+                        "from": sender, "action": action,
+                        "body_preview": body[:200],
+                        "received": datetime.now(timezone.utc).isoformat(),
+                    })
+                    if action == "approve":
+                        run["email_approved"] = True
+                        run.setdefault("notes", []).append(
+                            f"[Email APPROVED by {sender}]")
+                    elif action == "reject":
+                        run["status"]   = "cancelled"
+                        run["finished"] = datetime.now(timezone.utc).isoformat()
+                        run.setdefault("notes", []).append(
+                            f"[Email REJECTED by {sender}]")
+                    _save_runs(runs)
+
+            app.logger.info(f"[email-reply] {action} from {sender} → run {thread['run_id']}")
+            return jsonify({"ok": True, "mode": "reply", "action": action})
 
     # ── Mode 2: Command email ────────────────────────────────────────────────
     # Normalize sender — Resend may include display name: "Mike <email@x.com>"
