@@ -1550,9 +1550,24 @@ def api_email_inbound() -> Response:
     subject = (data.get("subject") or "").strip()
     body    = (data.get("text") or "").strip()
 
-    # Strip common email client prefixes so "Re: RUN foo" still works
+    # Strip common email client prefixes and ORI's own subject prefixes
     import re as _re
     subject = _re.sub(r'^(re|fwd?|fw)\s*:\s*', '', subject, flags=_re.IGNORECASE).strip()
+    subject = _re.sub(r'^ORI\s*:\s*', '', subject, flags=_re.IGNORECASE).strip()
+
+    # If subject doesn't look like a command, try first non-quoted line of body
+    cmd_parts = subject.split(None, 1)
+    cmd_check  = cmd_parts[0].upper() if cmd_parts else ""
+    KNOWN_CMDS = {"RUN", "LIST", "STATUS", "STOP", "APPROVE", "YES", "REJECT", "NO"}
+    if cmd_check not in KNOWN_CMDS and body:
+        for line in body.splitlines():
+            line = line.strip()
+            if line.startswith(">") or not line:
+                continue
+            first = line.split(None, 1)
+            if first and first[0].upper() in KNOWN_CMDS:
+                subject = line
+            break
 
     raw_headers = data.get("headers") or []
     if isinstance(raw_headers, list):
