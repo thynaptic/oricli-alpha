@@ -1550,6 +1550,10 @@ def api_email_inbound() -> Response:
     subject = (data.get("subject") or "").strip()
     body    = (data.get("text") or "").strip()
 
+    # Strip common email client prefixes so "Re: RUN foo" still works
+    import re as _re
+    subject = _re.sub(r'^(re|fwd?|fw)\s*:\s*', '', subject, flags=_re.IGNORECASE).strip()
+
     raw_headers = data.get("headers") or []
     if isinstance(raw_headers, list):
         hdrs = {h["name"].lower(): h["value"] for h in raw_headers if "name" in h}
@@ -1625,6 +1629,7 @@ def api_email_inbound() -> Response:
     cmd       = cmd_parts[0].upper() if cmd_parts else ""
     cmd_arg   = cmd_parts[1].strip() if len(cmd_parts) > 1 else ""
     name      = client.get("name", "there")
+    app.logger.info(f"[email-cmd] parsed subject='{subject}' cmd='{cmd}' arg='{cmd_arg}'")
 
     # Parse body vars: "key: value" lines
     user_vars: dict = {}
