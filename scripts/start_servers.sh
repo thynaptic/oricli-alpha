@@ -218,6 +218,8 @@ fi
 # Use unbuffered Python output and ensure environment variables are set
 export MAVAIA_API_BASE="http://localhost:${ACTUAL_API_PORT}"
 export MAVAIA_UI_PORT=$ACTUAL_UI_PORT
+# Load .env so Resend keys and all secrets are always available
+set -a && source "$(dirname "$0")/../.env" 2>/dev/null || true && set +a
 PYTHONUNBUFFERED=1 python3 -u ui_app.py 2>&1 | tee /tmp/oricli_ui.log &
 UI_PID=$!
 

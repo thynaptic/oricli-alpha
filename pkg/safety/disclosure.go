@@ -125,11 +125,13 @@ func (g *DisclosureGuard) compileOutputPatterns() {
 		`eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+`,
 	)
 
-	// PII — email addresses, international phone numbers
+	// PII — email addresses, international phone numbers.
+	// Phone pattern requires at least one separator (space/dot/dash/parens) so that
+	// plain numeric computation results (e.g., "675963673084") are not false-positived.
 	g.rePII = regexp.MustCompile(
 		`(?i)(` +
 			`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}` + // email
-			`|\+?[0-9]{1,3}[\s\-.]?(\([0-9]{1,4}\)[\s\-.]?)?[0-9]{6,14}` + // phone
+			`|\+?[0-9]{1,3}[\s\-.][(\s]?(\([0-9]{1,4}\)[\s\-.]?)?[0-9]{4,14}` + // phone (separator required)
 			`)`,
 	)
 

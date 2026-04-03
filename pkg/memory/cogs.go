@@ -78,6 +78,9 @@ func NewWorkingMemoryGraph() *WorkingMemoryGraph {
 	}
 }
 
+func (g *WorkingMemoryGraph) RLock()   { g.mu.RLock() }
+func (g *WorkingMemoryGraph) RUnlock() { g.mu.RUnlock() }
+
 // FindGaps identifies entities that require autonomous epistemic foraging.
 // Only returns entities whose labels are substantive research topics — not
 // common words, not short strings, not bare numbers.

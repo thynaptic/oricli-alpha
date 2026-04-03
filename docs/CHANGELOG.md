@@ -751,6 +751,12 @@ Phase I of the AGLI trajectory is complete. All ten phases shipped and live on t
 - **OAuth2** — Workflow chaining + auto-index scheduler. (`028`)
 - **MCP connections** — Agent switcher, Tasks pane, MCP backend. (`004`)
 - **Research page** — Canvas fixes. (`003`)
+- **Two-way email interface** — SMB clients control ORI from inbox. `LIST`, `RUN <name>`, `STATUS`, `STOP` commands via email to `@inbound.thynaptic.com`. Reply-mode approval loop for workflow notifications. See `docs/EMAIL_API.md`.
+- **`/v1/email/send`** — Standalone REST endpoint for sending transactional email via Resend from any app on the VPS. Bearer token auth.
+- **`/v1/email/inbound`** — Resend inbound webhook with Svix HMAC verification. Dual-mode: reply-matching and command dispatch.
+- **`/v1/email/clients`** — CRUD API for managing authorized email command senders.
+- **Workflow cron scheduling** — APScheduler bootstraps scheduled workflows on Flask startup. `_schedule_workflow()` called on create/update.
+- **Webhook trigger endpoint** — `POST /workflows/webhook/<key>` fires a workflow by `trigger.webhookKey`.
 
 ### Changed
 - **Rebrand: ORI Studio → ORI Studio** — UI, docs, service names, system prompts. (`0db0469`, `07fd93c`)

@@ -20,7 +20,14 @@ import (
 // relationships in the graph, and returns a formatted injection string.
 // Returns "" if the graph has no relevant relationships (no injection overhead).
 func BuildRelationalContext(stimulus string, graph *memory.WorkingMemoryGraph) string {
-	if graph == nil || len(graph.Entities) == 0 {
+	if graph == nil {
+		return ""
+	}
+
+	graph.RLock()
+	defer graph.RUnlock()
+
+	if len(graph.Entities) == 0 {
 		return ""
 	}
 

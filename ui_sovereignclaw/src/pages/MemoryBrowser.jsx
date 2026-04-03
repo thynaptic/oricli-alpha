@@ -53,7 +53,7 @@ function MemoryCard({ item, type }) {
           fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase',
           padding: '2px 7px', borderRadius: 4,
           background: item.source === 'curiosity' ? 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)'
-                     : item.source === 'conversation' ? 'rgba(99,102,241,0.12)'
+                     : item.source === 'conversation' ? 'rgba(136,117,255,0.12)'
                      : 'rgba(255,255,255,0.05)',
           color: item.source === 'curiosity' ? 'var(--color-sc-gold)'
                : item.source === 'conversation' ? '#818cf8'

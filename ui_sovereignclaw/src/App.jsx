@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useSCStore, fetchHealth, fetchModels, fetchModules, connectHiveWS } from './store';
 import { NavRail } from './components/NavRail';
 import { ChatSidebar } from './components/ChatSidebar';
@@ -17,15 +18,133 @@ import { GoalsPage } from './pages/GoalsPage';
 import OriStudioPage from './pages/OriStudioPage';
 import { SettingsPanel } from './components/SettingsPanel';
 import { useERI } from './hooks/useERI';
+import { DemoPreviewPage } from './pages/DemoPreviewPage';
 import { LandingPage } from './pages/LandingPage';
+import FAQPage, { AskOricliWidget, FAQ_SECTIONS } from './pages/FAQPage';
+import { NotionBuilderPage } from './pages/NotionBuilderPage';
+import { LoginPage } from './pages/LoginPage';
+import { HomePage } from './pages/HomePage';
+import { NotebookPage } from './pages/NotebookPage';
+import { BoardPage } from './pages/BoardPage';
+import { AutomationsPage } from './pages/AutomationsPage';
+import { SettingsPage } from './pages/SettingsPage';
+
+// ── AuthGuard — redirects to /login if no token ───────────────────────────────
+function AuthGuard({ children }) {
+  const token = useSCStore(s => s.token);
+  const refreshUser = useSCStore(s => s.refreshUser);
+
+  useEffect(() => { if (token) refreshUser(); }, []); // eslint-disable-line
+
+  if (!token) return <Navigate to="/login" replace />;
+  return children;
+}
+
+// ── Demo mode banner (shown on demo.thynaptic.com) ───────────────────────────
+export const IS_DEMO = window.location.hostname === 'demo.thynaptic.com';
+
+function DemoFAQButton() {
+  const [open, setOpen] = useState(false);
+  if (!IS_DEMO) return null;
+  return (
+    <>
+      {/* Floating ? button */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 8000,
+          width: 44, height: 44, borderRadius: '50%',
+          background: open ? '#8875FF' : 'rgba(136,117,255,0.15)',
+          border: '1px solid rgba(136,117,255,0.35)',
+          color: open ? '#FFF' : '#8875FF',
+          fontSize: 18, fontWeight: 700, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'background 0.2s, color 0.2s',
+          boxShadow: open ? '0 0 20px rgba(136,117,255,0.35)' : 'none',
+        }}
+        title="Help & FAQ"
+      >?</button>
+
+      {/* Slide-out panel */}
+      {open && (
+        <div style={{
+          position: 'fixed', bottom: 80, right: 24, zIndex: 7999,
+          width: 360, height: 520,
+          background: '#13131A',
+          border: '1px solid rgba(136,117,255,0.22)',
+          borderRadius: 16, overflow: 'hidden',
+          display: 'flex', flexDirection: 'column',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+          animation: 'faqPanelIn 0.2s ease forwards',
+        }}>
+          <style>{`
+            @keyframes faqPanelIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+            @keyframes faqDot { 0%,80%,100% { transform:scale(0.6); opacity:0.4; } 40% { transform:scale(1); opacity:1; } }
+          `}</style>
+
+          {/* Header */}
+          <div style={{
+            padding: '14px 16px', borderBottom: '1px solid rgba(136,117,255,0.12)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div>
+              <div style={{ fontFamily: 'system-ui,-apple-system,sans-serif', fontSize: 14, fontWeight: 700, color: '#F0ECF0' }}>Ask Oricli</div>
+              <div style={{ fontFamily: "'SF Mono','Fira Code',monospace", fontSize: 8.5, color: 'rgba(136,117,255,0.6)', letterSpacing: '0.12em' }}>POWERED BY ORI STUDIO</div>
+            </div>
+            <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(240,236,240,0.35)', fontSize: 16 }}>✕</button>
+          </div>
+
+          {/* Quick FAQ links */}
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(136,117,255,0.08)', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {FAQ_SECTIONS.flatMap(s => s.items).slice(0, 4).map((item, i) => (
+              <div key={i} style={{
+                fontFamily: 'system-ui,-apple-system,sans-serif',
+                fontSize: 11, color: 'rgba(136,117,255,0.8)',
+                background: 'rgba(136,117,255,0.08)',
+                border: '1px solid rgba(136,117,255,0.15)',
+                borderRadius: 20, padding: '4px 10px', cursor: 'default',
+                lineHeight: 1.3,
+              }}>{item.q.split('?')[0].slice(0, 30)}…</div>
+            ))}
+          </div>
+
+          {/* Chat widget */}
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <AskOricliWidget compact />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function DemoBanner() {
+  if (!IS_DEMO) return null;
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+      height: 28,
+      background: 'rgba(136,117,255,0.12)',
+      borderBottom: '1px solid rgba(136,117,255,0.25)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+      backdropFilter: 'blur(8px)',
+    }}>
+      <span style={{
+        fontFamily: "'SF Mono','Fira Code',monospace",
+        fontSize: 9.5, letterSpacing: '0.18em', fontWeight: 600,
+        color: 'rgba(169,155,255,0.85)',
+      }}>✦ DEMO ENVIRONMENT — DATA RESETS HOURLY · NOT FOR PRODUCTION USE ✦</span>
+    </div>
+  );
+}
 
 // ── ERI state → accent color mapping ──
 // ERI -1.0…1.0: swarm coherence composite from Go ResonanceService
 export const ERI_STATES = [
-  { min: 0.7,       name: 'Symphonic',  accent: '#FF1A5E', glow: '#FF4D80', label: 'E Major ✦' },
-  { min: 0.3,       name: 'Stable',     accent: '#E5004C', glow: '#FF0055', label: 'C Major ◈' },
-  { min: -0.3,      name: 'Dissonant',  accent: '#B8003D', glow: '#D4004A', label: 'G Minor ◇' },
-  { min: -Infinity, name: 'Cacophonic', accent: '#7A0028', glow: '#9E0035', label: 'B Locrian ⚠' },
+  { min: 0.7,       name: 'Symphonic',  accent: '#A99BFF', glow: '#C4B9FF', label: 'E Major ✦' },
+  { min: 0.3,       name: 'Stable',     accent: '#8875FF', glow: '#A99BFF', label: 'C Major ◈' },
+  { min: -0.3,      name: 'Dissonant',  accent: '#6B5FE0', glow: '#8875FF', label: 'G Minor ◇' },
+  { min: -Infinity, name: 'Cacophonic', accent: '#4F45B8', glow: '#6B5FE0', label: 'B Locrian ⚠' },
 ];
 
 export function resolveEriTheme(eri) {
@@ -81,8 +200,8 @@ function BootSplash() {
           100% { opacity: 1; transform: scale(1); filter: blur(0px); }
         }
         @keyframes oriLogoGlow {
-          0%, 100% { filter: drop-shadow(0 0 16px rgba(229,0,76,0.50)); }
-          50%       { filter: drop-shadow(0 0 36px rgba(229,0,76,0.85)); }
+          0%, 100% { filter: drop-shadow(0 0 16px rgba(136,117,255,0.50)); }
+          50%       { filter: drop-shadow(0 0 36px rgba(136,117,255,0.85)); }
         }
         @keyframes oriWordIn {
           0%   { opacity: 0; letter-spacing: 0.7em; filter: blur(8px); }
@@ -122,7 +241,7 @@ function BootSplash() {
       {/* Radial red warmth — center glow */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: 'radial-gradient(ellipse 55% 45% at 50% 48%, rgba(200,0,48,0.11) 0%, rgba(120,0,28,0.04) 55%, transparent 75%)',
+        background: 'radial-gradient(ellipse 55% 45% at 50% 48%, rgba(67,56,202,0.11) 0%, rgba(49,46,129,0.04) 55%, transparent 75%)',
         animation: 'oriBgPulse 1.2s ease forwards',
       }} />
 
@@ -136,7 +255,7 @@ function BootSplash() {
       {/* Horizontal scan line — top edge, appears at phase 6 */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, height: 1,
-        background: 'linear-gradient(to right, transparent 0%, rgba(229,0,76,0.6) 30%, rgba(229,0,76,0.8) 50%, rgba(229,0,76,0.6) 70%, transparent 100%)',
+        background: 'linear-gradient(to right, transparent 0%, rgba(136,117,255,0.6) 30%, rgba(136,117,255,0.8) 50%, rgba(136,117,255,0.6) 70%, transparent 100%)',
         transformOrigin: 'center',
         transform: phase >= 6 ? 'scaleX(1)' : 'scaleX(0)',
         transition: 'transform 0.7s ease',
@@ -154,7 +273,7 @@ function BootSplash() {
           marginBottom: 22,
         }}>
           <img
-            src="/ori-mark-red.png"
+            src="/ori-mark.png"
             alt="ORI"
             style={{
               width: 92, height: 92, objectFit: 'contain', display: 'block',
@@ -176,7 +295,7 @@ function BootSplash() {
         {/* Subtitle */}
         <div style={{
           fontFamily: "'SF Mono', 'Fira Code', monospace",
-          fontSize: 9.5, color: 'rgba(229,0,76,0.65)', letterSpacing: '0.26em',
+          fontSize: 9.5, color: 'rgba(136,117,255,0.65)', letterSpacing: '0.26em',
           fontWeight: 500,
           opacity: 0,
           animation: phase >= 1 ? 'oriFadeSlideIn 0.5s ease 0.12s forwards' : 'none',
@@ -186,7 +305,7 @@ function BootSplash() {
         {/* Hairline divider */}
         <div style={{
           width: 60, height: 1, marginBottom: 22,
-          background: 'linear-gradient(to right, transparent, rgba(229,0,76,0.45), transparent)',
+          background: 'linear-gradient(to right, transparent, rgba(136,117,255,0.45), transparent)',
           opacity: 0,
           animation: phase >= 1 ? 'oriFadeSlideIn 0.5s ease 0.18s forwards' : 'none',
         }} />
@@ -203,8 +322,8 @@ function BootSplash() {
                 fontSize: line.hero ? 12.5 : 11,
                 fontWeight: line.hero ? 700 : 400,
                 letterSpacing: line.hero ? '0.14em' : '0.06em',
-                color: line.hero ? '#E5004C' : 'rgba(255,255,255,0.48)',
-                borderTop: line.hero ? '1px solid rgba(229,0,76,0.18)' : 'none',
+                color: line.hero ? '#8875FF' : 'rgba(255,255,255,0.48)',
+                borderTop: line.hero ? '1px solid rgba(136,117,255,0.18)' : 'none',
                 paddingTop: line.hero ? 11 : 0,
                 marginTop: line.hero ? 5 : 0,
                 animation: line.hero
@@ -213,9 +332,9 @@ function BootSplash() {
               }}>
                 <span>{line.text}</span>
                 <span style={{
-                  color: line.hero ? '#E5004C' : 'rgba(229,0,76,0.75)',
+                  color: line.hero ? '#8875FF' : 'rgba(136,117,255,0.75)',
                   marginLeft: 20, flexShrink: 0,
-                  textShadow: line.hero ? '0 0 12px rgba(229,0,76,0.6)' : 'none',
+                  textShadow: line.hero ? '0 0 12px rgba(136,117,255,0.6)' : 'none',
                 }}>{line.status}</span>
               </div>
             );
@@ -227,7 +346,7 @@ function BootSplash() {
           <div style={{
             alignSelf: 'flex-start', marginTop: 10,
             width: 7, height: 13,
-            background: 'rgba(229,0,76,0.8)',
+            background: 'rgba(136,117,255,0.8)',
             animation: 'oriCursor 0.75s step-end infinite',
             borderRadius: 1,
           }} />
@@ -237,11 +356,11 @@ function BootSplash() {
       {/* Bottom scan bar */}
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0, height: 1,
-        background: 'rgba(229,0,76,0.12)',
+        background: 'rgba(136,117,255,0.08)',
       }}>
         <div style={{
           height: '100%',
-          background: 'linear-gradient(to right, transparent, #E5004C 20%, #E5004C 80%, transparent)',
+          background: 'linear-gradient(to right, transparent, #8875FF 20%, #8875FF 80%, transparent)',
           transformOrigin: 'left center',
           transform: phase >= 6 ? 'scaleX(1)' : 'scaleX(0)',
           transition: 'transform 0.9s ease',
@@ -268,102 +387,122 @@ function BootSplash() {
   );
 }
 
-export default function App() {
+// ── App shell — rendered for all /:page routes ────────────────────────────────
+function AppShell() {
+  const { page } = useParams();
+  const navigate = useNavigate();
+
   const setHealth      = useSCStore(s => s.setHealth);
   const setModels      = useSCStore(s => s.setModels);
   const setModules     = useSCStore(s => s.setModules);
   const activePage     = useSCStore(s => s.activePage);
+  const setActivePage  = useSCStore(s => s.setActivePage);
   const eriState       = useSCStore(s => s.eriState);
   const theme          = useSCStore(s => s.theme);
   const hasLaunched    = useSCStore(s => s.hasLaunched);
   const setHasLaunched = useSCStore(s => s.setHasLaunched);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Phase machine: 'landing' → 'booting' → 'app'
-  // Skip landing/boot entirely on return visits (hasLaunched persisted in localStorage)
-  const [phase, setPhase] = useState(() => hasLaunched ? 'app' : 'landing');
+  // Skip boot splash on demo OR if hasLaunched is in localStorage (sync read avoids Zustand hydration gap)
+  const [booting, setBooting] = useState(() => {
+    if (IS_DEMO) return false;
+    try {
+      const stored = localStorage.getItem('sc-store-v1');
+      if (stored && JSON.parse(stored).state?.hasLaunched) return false;
+    } catch (_) {}
+    return !hasLaunched;
+  });
+  const syncingUrl = useRef(false);
 
-  // Apply theme: set CSS vars directly on documentElement.style (inline = highest priority)
-  // Beats @layer theme in Tailwind v4 compiled CSS and all component inline styles
+  // URL → Zustand: keep activePage in sync when URL changes
+  useEffect(() => {
+    if (page && page !== activePage) {
+      syncingUrl.current = true;
+      setActivePage(page);
+      // allow one render cycle before re-enabling Zustand→URL sync
+      requestAnimationFrame(() => { syncingUrl.current = false; });
+    }
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Zustand → URL: programmatic setActivePage (e.g. canvas redirect from service) syncs URL
+  useEffect(() => {
+    if (!syncingUrl.current && activePage && activePage !== page) {
+      navigate(`/${activePage}`, { replace: true });
+    }
+  }, [activePage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Apply theme CSS vars
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute('data-theme', theme ?? 'dark');
     if (theme === 'light') {
       const vars = {
-        '--color-sc-bg':         '#F5F0EC',
-        '--color-sc-surface':    '#EDE8E3',
-        '--color-sc-surface2':   '#E5DFD9',
-        '--color-sc-border':     '#D4CDC5',
-        '--color-sc-border2':    '#C5BDB4',
-        '--color-sc-gold':       '#C4001E',
-        '--color-sc-gold-glow':  '#E5003A',
-        '--color-sc-text':       '#1A1214',
-        '--color-sc-text-muted': '#6B5F68',
-        '--color-sc-text-dim':   '#9E9099',
+        '--color-sc-bg':         '#F7F7FA',
+        '--color-sc-surface':    '#FFFFFF',
+        '--color-sc-surface2':   '#F0F0F5',
+        '--color-sc-border':     '#E2E2EC',
+        '--color-sc-border2':    '#D0D0DE',
+        '--color-sc-gold':       '#6254D6',
+        '--color-sc-gold-glow':  '#7B6EE8',
+        '--color-sc-text':       '#111118',
+        '--color-sc-text-muted': '#4A4A60',
+        '--color-sc-text-dim':   '#8888A0',
         '--color-sc-success':    '#059669',
         '--color-sc-danger':     '#DC2626',
-        '--color-sc-blue':       '#1D4ED8',
+        '--color-sc-blue':       '#2563EB',
       };
       Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
     } else {
       const DARK_VARS = {
-        '--color-sc-bg':         '#080810',
-        '--color-sc-surface':    '#0E0810',
-        '--color-sc-surface2':   '#150A14',
-        '--color-sc-border':     '#1E0A18',
-        '--color-sc-border2':    '#2A0F22',
-        '--color-sc-gold':       '#E5004C',
-        '--color-sc-gold-glow':  '#FF0055',
-        '--color-sc-text':       '#F0ECE8',
-        '--color-sc-text-muted': '#9A8890',
-        '--color-sc-text-dim':   '#4D2F42',
-        '--color-sc-success':    '#06D6A0',
-        '--color-sc-danger':     '#FF4D6D',
-        '--color-sc-blue':       '#4D9EFF',
+        '--color-sc-bg':         '#0C0C11',
+        '--color-sc-surface':    '#13131A',
+        '--color-sc-surface2':   '#1A1A23',
+        '--color-sc-border':     '#22222E',
+        '--color-sc-border2':    '#2C2C3A',
+        '--color-sc-gold':       '#8875FF',
+        '--color-sc-gold-glow':  '#A99BFF',
+        '--color-sc-text':       '#EEEDF2',
+        '--color-sc-text-muted': '#8A8898',
+        '--color-sc-text-dim':   '#47465A',
+        '--color-sc-success':    '#22D3A0',
+        '--color-sc-danger':     '#F06060',
+        '--color-sc-blue':       '#60AAFF',
       };
       Object.entries(DARK_VARS).forEach(([k, v]) => root.style.setProperty(k, v));
     }
-    // Remove no-transition guard now that theme is applied — re-enable smooth transitions
     requestAnimationFrame(() => root.classList.remove('sc-no-transition'));
   }, [theme]);
 
-  // ERI → live CSS color shifts (poll + SSE live value)
+  // ERI → live CSS accent shifts
   useERI(eriState?.eri ?? null);
 
-  // handleLaunch: fires on CTA click — starts boot sequence + kicks off API fetches
-  const handleLaunch = useCallback(() => {
-    setPhase('booting');
+  // Bootstrap API on mount
+  useEffect(() => {
     fetchHealth().then(h => setHealth(h));
     fetchModels().then(ms => setModels(ms));
     fetchModules().then(ms => setModules(ms));
     connectHiveWS();
-    setTimeout(() => { setPhase('app'); setHasLaunched(true); }, 3400);
-  }, [setHealth, setModels, setModules, setHasLaunched]);
-
-  // Bootstrap API fetches when arriving directly in app (returning user, skipped landing)
-  useEffect(() => {
-    if (phase === 'app') {
-      fetchHealth().then(h => setHealth(h));
-      fetchModels().then(ms => setModels(ms));
-      fetchModules().then(ms => setModules(ms));
-      connectHiveWS();
+    if (!hasLaunched) {
+      setTimeout(() => { setBooting(false); setHasLaunched(true); }, 3400);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // only on mount
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Health poll — only active once inside the app
+  // Health poll
   useEffect(() => {
-    if (phase !== 'app') return;
     const poll = setInterval(() => fetchHealth().then(h => setHealth(h)), 30_000);
     return () => clearInterval(poll);
-  }, [phase, setHealth]);
+  }, [setHealth]);
 
-  if (phase === 'landing') return <LandingPage onLaunch={handleLaunch} />;
-  if (phase === 'booting') return <BootSplash />;
+  if (booting) return <BootSplash />;
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--color-sc-bg)' }}>
-      <NavRail onOpenSettings={() => setSettingsOpen(true)} />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--color-sc-bg)' }}>
+      <DemoBanner />
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', marginTop: IS_DEMO ? 28 : 0 }}>
+      <NavRail />
 
+      {IS_DEMO && ['agents', 'workflows', 'memory', 'canvas'].includes(activePage)
+        ? <DemoPreviewPage page={activePage} />
+        : (<>
       {activePage === 'chat' && (
         <>
           <ChatSidebar />
@@ -381,18 +520,55 @@ export default function App() {
         <PipelineCanvas />
       </div>
 
-      {activePage === 'research'  && <ResearchPage />}
-      {activePage === 'agents'    && <AgentsPage />}
-      {activePage === 'profiles'  && <ProfilesPage />}
-      {activePage === 'workflows' && <WorkflowsPage />}
+      {activePage === 'home'        && <HomePage />}
+      {activePage === 'notebook'    && <NotebookPage />}
+      {activePage === 'board'       && <BoardPage />}
+      {activePage === 'automations' && <AutomationsPage />}
+      {activePage === 'research'    && <ResearchPage />}
+      {activePage === 'agents'      && <AgentsPage />}
+      {activePage === 'settings'    && <SettingsPage />}
+      {activePage === 'profiles'    && <SettingsPage />}
+      {activePage === 'workflows'   && <WorkflowsPage />}
       {activePage === 'mcp'         && <MCPPage />}
-      {activePage === 'connections'  && <ConnectionsPage />}
-      {activePage === 'logs'         && <LogsPage />}
-      {activePage === 'memory'       && <MemoryBrowser />}
-      {activePage === 'goals'        && <GoalsPage />}
-      {activePage === 'ori-studio'   && <OriStudioPage />}
+      {activePage === 'connections' && <ConnectionsPage />}
+      {activePage === 'logs'        && <LogsPage />}
+      {activePage === 'memory'      && <MemoryBrowser />}
+      {activePage === 'goals'       && <GoalsPage />}
+      {activePage === 'ori-studio'  && <OriStudioPage />}
+      {activePage === 'notion-builder' && <NotionBuilderPage />}
+      </>)
+      }
 
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {/* settings panel removed — Settings is now a full page */}
+      </div>
+      <DemoFAQButton />
     </div>
+  );
+}
+
+// ── Root router ───────────────────────────────────────────────────────────────
+export default function App() {
+  const navigate = useNavigate();
+  const hasLaunched = useSCStore(s => s.hasLaunched);
+
+  const handleLaunch = () => {
+    fetchHealth();
+    fetchModels();
+    fetchModules();
+    navigate('/chat');
+  };
+
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/faq"   element={<FAQPage />} />
+      <Route path="/" element={
+        <AuthGuard><LandingPage onLaunch={handleLaunch} /></AuthGuard>
+      } />
+      <Route path="/:page" element={
+        <AuthGuard><AppShell /></AuthGuard>
+      } />
+      <Route path="*" element={<Navigate to="/home" replace />} />
+    </Routes>
   );
 }

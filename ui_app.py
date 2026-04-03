@@ -68,7 +68,7 @@ RETRY_COUNT = 3
 # Google OAuth2
 GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "357323906391-2b5pfagemqmfglk1j5u7uln8jqtpmfvh.apps.googleusercontent.com")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "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")
-GOOGLE_REDIRECT_URI  = "https://oristudio.thynaptic.com/connections/oauth/callback/google"
+GOOGLE_REDIRECT_URI  = "https://oristudio.thynaptic.com/api/connections/oauth/callback/google"
 GOOGLE_SCOPES = " ".join([
     "openid", "email", "profile",
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -331,9 +331,13 @@ def _strip_artifact_xml(text: str) -> str:
     """
     The Go backbone wraps every response in sovereign <artifact> XML tags.
     Strip the wrapper so the content is clean prose/code for the client.
-    e.g. <artifact type="code" language="go">...</artifact>  →  ```go\n...\n```
+    Also strips <think>...</think> reasoning blocks emitted by CoT models.
     """
     import re as _re
+    # Strip <think>...</think> reasoning blocks (DeepSeek, Qwen, etc.)
+    text = _re.sub(r'<think>[\s\S]*?</think>', '', text)
+    # Strip orphaned </think> tags (model stopped mid-thought)
+    text = _re.sub(r'</think>', '', text).strip()
     # Match <artifact ...>content</artifact> — including multi-line
     m = _re.search(r'<artifact[^>]*language=["\']?(\w+)["\']?[^>]*>([\s\S]*?)</artifact>', text)
     if m:
@@ -346,6 +350,48 @@ def _strip_artifact_xml(text: str) -> str:
     if m2:
         return m2.group(1).strip()
     return text
+
+
+def _think_filter(sse_lines: Iterable[str]) -> Iterable[str]:
+    """Stateful SSE filter that drops delta chunks inside <think>...</think> blocks."""
+    import json as _json
+    import re as _re
+    in_think = False
+    for line in sse_lines:
+        if not line.startswith("data:"):
+            yield line
+            continue
+        raw = line[5:].strip()
+        if raw == "[DONE]":
+            yield line
+            continue
+        try:
+            chunk = _json.loads(raw)
+        except _json.JSONDecodeError:
+            yield line
+            continue
+        delta = chunk.get("choices", [{}])[0].get("delta", {})
+        token = delta.get("content", "")
+        if not token:
+            yield line
+            continue
+        # Track think block boundaries (including orphaned </think> with no opener)
+        if "<think>" in token:
+            in_think = True
+        if "</think>" in token:
+            if in_think:
+                in_think = False
+                after = token.split("</think>", 1)[1]
+                if after:
+                    delta["content"] = after
+                    chunk["choices"][0]["delta"] = delta
+                    yield f"data: {_json.dumps(chunk)}\n\n"
+            # Orphaned </think> — drop the whole token regardless
+            continue
+        if in_think:
+            # Inside think block, no closing tag yet — drop
+            continue
+        yield line
 
 
 def _sse_stream(target_url: str, payload: Dict[str, Any]) -> Iterable[str]:
@@ -1099,25 +1145,38 @@ def chat() -> Response:
         return jsonify({"error": {"message": str(exc), "type": "invalid_request_error", "code": 400}}), 400
 
     # Inject local RAG context if we have relevant indexed docs
+    # Skip if caller already provides a system message (e.g. FAQ widget with its own context)
     messages = payload.get("messages", [])
+    has_system = any(m.get("role") == "system" for m in messages)
     last_user = next((m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), "")
-    if last_user and isinstance(last_user, str) and len(last_user) > 5:
+    if not has_system and last_user and isinstance(last_user, str) and len(last_user) > 5:
+        ctx_lines = []
+
+        # Local RAG store
         rag_hits = _rag_search(last_user, limit=4)
-        if rag_hits:
-            ctx_lines = []
-            for h in rag_hits:
-                meta = h.get("metadata", {})
-                pub = meta.get("published", "")
-                src = h["source"]
-                ctx_lines.append(f"**{h['title']}** ({pub}) [{src}]\n{h['snippet']}")
-            rag_block = "Relevant knowledge from your indexed sources:\n\n" + "\n\n---\n\n".join(ctx_lines)
+        for h in rag_hits:
+            meta = h.get("metadata", {})
+            pub = meta.get("published", "")
+            src = h["source"]
+            ctx_lines.append(f"**{h['title']}** ({pub}) [{src}]\n{h['snippet']}")
+
+        # Live connections (Notion, HubSpot, GitHub, Jira)
+        conn_hits = _query_connections(last_user)
+        for h in conn_hits:
+            line = f"**{h['title']}** [{h['source']}]"
+            if h.get("snippet"):
+                line += f"\n{h['snippet']}"
+            ctx_lines.append(line)
+
+        if ctx_lines:
+            rag_block = "Relevant context from your connected sources:\n\n" + "\n\n---\n\n".join(ctx_lines)
             payload = {**payload, "messages": [{"role": "system", "content": rag_block}] + messages}
 
     target_url = f"{API_BASE}/v1/chat/completions"
 
     if stream:
         return Response(
-            _sse_stream(target_url, payload),
+            _think_filter(_sse_stream(target_url, payload)),
             mimetype="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
@@ -1279,6 +1338,463 @@ try:
 except Exception:
     _SCHEDULER = None  # type: ignore[assignment]
     _SCHEDULER_AVAILABLE = False
+
+# ── Resend email helper ───────────────────────────────────────────────────────
+_RESEND_KEY            = os.environ.get("RESEND_API_KEY", "")
+_EMAIL_FROM            = os.environ.get("EMAIL_FROM", "ORI Studio <ori@thynaptic.com>")
+_RESEND_WEBHOOK_SECRET = os.environ.get("RESEND_WEBHOOK_SECRET", "")
+
+# ── Email thread store (message_id → run context for reply matching) ──────────
+_EMAIL_THREADS_FILE = Path(__file__).parent / ".oricli" / "email_threads.json"
+_EMAIL_THREADS_LOCK = threading.Lock()
+
+def _load_email_threads() -> dict:
+    try:
+        if _EMAIL_THREADS_FILE.exists():
+            return json.loads(_EMAIL_THREADS_FILE.read_text())
+    except Exception:
+        pass
+    return {}
+
+def _save_email_threads(threads: dict) -> None:
+    _EMAIL_THREADS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _EMAIL_THREADS_FILE.write_text(json.dumps(threads, indent=2))
+
+def _register_email_thread(message_id: str, wf_id: str, run_id: str, sender: str) -> None:
+    """Store a sent email's message-id so inbound replies can be matched."""
+    mid = message_id.strip("<>")
+    if not mid:
+        return
+    with _EMAIL_THREADS_LOCK:
+        threads = _load_email_threads()
+        threads[mid] = {
+            "wf_id":   wf_id,
+            "run_id":  run_id,
+            "sender":  sender,
+            "created": datetime.now(timezone.utc).isoformat(),
+        }
+        _save_email_threads(threads)
+
+
+def _send_email(
+    to: str,
+    subject: str,
+    body: str,
+    html: str | None = None,
+    wf_id: str | None = None,
+    run_id: str | None = None,
+) -> dict:
+    """Send a transactional email via Resend. Returns {"ok": bool, "message": str, "message_id": str}."""
+    if not _RESEND_KEY:
+        return {"ok": False, "message": "RESEND_API_KEY not configured", "message_id": ""}
+    try:
+        import resend as _resend
+        _resend.api_key = _RESEND_KEY
+        payload: dict = {
+            "from":     _EMAIL_FROM,
+            "reply_to": os.environ.get("EMAIL_REPLY_TO", "ori@inbound.thynaptic.com"),
+            "to":       [to] if isinstance(to, str) else to,
+            "subject":  subject,
+            "text":     body,
+        }
+        if html:
+            payload["html"] = html
+        r = _resend.Emails.send(payload)
+        mid = str(getattr(r, "id", "") or "")
+        if mid and wf_id and run_id:
+            _register_email_thread(mid, wf_id, run_id, to if isinstance(to, str) else to[0])
+        return {"ok": True, "message": f"Email sent (id={mid})", "message_id": mid}
+    except Exception as exc:
+        return {"ok": False, "message": str(exc), "message_id": ""}
+
+
+@app.route("/v1/email/send", methods=["POST"])
+def api_send_email() -> Response:
+    """
+    Standalone email-send endpoint — callable from any app on the VPS.
+    Auth: Bearer <MAVAIA_API_KEY>
+    Body: { "to", "subject", "body", "html"(opt) }
+    """
+    auth = request.headers.get("Authorization", "")
+    if API_KEY and auth != f"Bearer {API_KEY}":
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data    = request.get_json(silent=True) or {}
+    to      = data.get("to")
+    subject = data.get("subject", "(no subject)")
+    body    = data.get("body", "")
+    html    = data.get("html") or None
+
+    if not to:
+        return jsonify({"error": "'to' is required"}), 400
+
+    result = _send_email(to, subject, body, html=html)
+    return jsonify(result), (200 if result["ok"] else 502)
+
+
+# ── Authorized email clients (email command interface) ────────────────────────
+_EMAIL_CLIENTS_FILE = Path(__file__).parent / ".oricli" / "email_clients.json"
+_EMAIL_CLIENTS_LOCK = threading.Lock()
+
+def _load_email_clients() -> dict:
+    try:
+        if _EMAIL_CLIENTS_FILE.exists():
+            return json.loads(_EMAIL_CLIENTS_FILE.read_text())
+    except Exception:
+        pass
+    return {}
+
+def _save_email_clients(clients: dict) -> None:
+    _EMAIL_CLIENTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _EMAIL_CLIENTS_FILE.write_text(json.dumps(clients, indent=2))
+
+
+@app.route("/v1/email/clients", methods=["GET"])
+def list_email_clients() -> Response:
+    auth = request.headers.get("Authorization", "")
+    if API_KEY and auth != f"Bearer {API_KEY}":
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify({"clients": _load_email_clients()})
+
+@app.route("/v1/email/clients", methods=["POST"])
+def add_email_client() -> Response:
+    auth = request.headers.get("Authorization", "")
+    if API_KEY and auth != f"Bearer {API_KEY}":
+        return jsonify({"error": "Unauthorized"}), 401
+    body  = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").lower().strip()
+    if not email:
+        return jsonify({"error": "'email' required"}), 400
+    client = {
+        "name":          body.get("name", email),
+        "briefing":      bool(body.get("briefing", False)),
+        "briefing_time": body.get("briefing_time", "08:00"),
+        "timezone":      body.get("timezone", "UTC"),
+        "added_at":      datetime.now(timezone.utc).isoformat(),
+    }
+    with _EMAIL_CLIENTS_LOCK:
+        clients = _load_email_clients()
+        clients[email] = client
+        _save_email_clients(clients)
+    _schedule_client_briefing(email, client)
+    return jsonify({"ok": True, "email": email})
+
+
+@app.route("/v1/email/clients/<path:email>", methods=["PATCH"])
+def update_email_client(email: str) -> Response:
+    """Update briefing settings for an existing client."""
+    auth = request.headers.get("Authorization", "")
+    if API_KEY and auth != f"Bearer {API_KEY}":
+        return jsonify({"error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    with _EMAIL_CLIENTS_LOCK:
+        clients = _load_email_clients()
+        client  = clients.get(email.lower())
+        if not client:
+            return jsonify({"error": "Client not found"}), 404
+        for field in ("name", "briefing", "briefing_time", "timezone"):
+            if field in body:
+                client[field] = body[field]
+        _save_email_clients(clients)
+    _schedule_client_briefing(email.lower(), client)
+    return jsonify({"ok": True})
+
+@app.route("/v1/email/clients/<path:email>", methods=["DELETE"])
+def remove_email_client(email: str) -> Response:
+    auth = request.headers.get("Authorization", "")
+    if API_KEY and auth != f"Bearer {API_KEY}":
+        return jsonify({"error": "Unauthorized"}), 401
+    with _EMAIL_CLIENTS_LOCK:
+        clients = _load_email_clients()
+        clients.pop(email.lower(), None)
+        _save_email_clients(clients)
+    return jsonify({"ok": True})
+
+
+@app.route("/v1/email/briefing/<path:email>", methods=["POST"])
+def send_briefing_now(email: str) -> Response:
+    """Manually trigger ORI's daily briefing for a client (for testing or on-demand sends)."""
+    auth = request.headers.get("Authorization", "")
+    if API_KEY and auth != f"Bearer {API_KEY}":
+        return jsonify({"error": "Unauthorized"}), 401
+    import threading as _t
+    _t.Thread(target=_send_briefing, args=[email.lower()], daemon=True).start()
+    return jsonify({"ok": True, "message": f"Briefing queued for {email}"})
+
+
+@app.route("/v1/email/inbound", methods=["POST"])
+def api_email_inbound() -> Response:
+    """
+    Resend inbound webhook. Two modes:
+      1. Reply  — In-Reply-To matches a sent workflow email → APPROVE/REJECT/log
+      2. Command — New email from authorized client → RUN / LIST / STATUS / STOP
+    """
+    # ── Svix signature verification ──────────────────────────────────────────
+    if _RESEND_WEBHOOK_SECRET:
+        try:
+            from svix.webhooks import Webhook
+            wh = Webhook(_RESEND_WEBHOOK_SECRET)
+            wh.verify(request.get_data(), {
+                "svix-id":        request.headers.get("svix-id", ""),
+                "svix-timestamp": request.headers.get("svix-timestamp", ""),
+                "svix-signature": request.headers.get("svix-signature", ""),
+            })
+        except Exception as exc:
+            app.logger.warning(f"[email-inbound] sig verify failed: {exc}")
+            return jsonify({"error": "Invalid signature"}), 403
+
+    raw  = request.get_json(silent=True) or {}
+    data = raw.get("data", raw)
+
+    sender  = data.get("from", "")
+    subject = (data.get("subject") or "").strip()
+    body    = (data.get("text") or "").strip()
+
+    raw_headers = data.get("headers") or []
+    if isinstance(raw_headers, list):
+        hdrs = {h["name"].lower(): h["value"] for h in raw_headers if "name" in h}
+    else:
+        hdrs = {k.lower(): v for k, v in raw_headers.items()}
+
+    in_reply_to = hdrs.get("in-reply-to", "").strip("<>").strip()
+
+    # ── Mode 1: Reply to a workflow thread ───────────────────────────────────
+    with _EMAIL_THREADS_LOCK:
+        threads = _load_email_threads()
+    thread = threads.get(in_reply_to) if in_reply_to else None
+
+    if thread:
+        first_line   = next((l.strip() for l in body.splitlines() if l.strip()), "").upper()
+        APPROVE_CMDS = {"APPROVE", "YES", "OK", "CONFIRMED", "CONFIRM"}
+        REJECT_CMDS  = {"REJECT", "NO", "CANCEL", "DENIED", "DENY"}
+        action = "approve" if first_line in APPROVE_CMDS else \
+                 "reject"  if first_line in REJECT_CMDS  else "reply"
+
+        with _WFR_LOCK:
+            runs = _load_runs()
+            run  = runs.get(thread["run_id"])
+            if run:
+                run.setdefault("email_replies", []).append({
+                    "from": sender, "action": action,
+                    "body_preview": body[:200],
+                    "received": datetime.now(timezone.utc).isoformat(),
+                })
+                if action == "approve":
+                    run["email_approved"] = True
+                    run.setdefault("notes", []).append(
+                        f"[Email APPROVED by {sender}]")
+                elif action == "reject":
+                    run["status"]   = "cancelled"
+                    run["finished"] = datetime.now(timezone.utc).isoformat()
+                    run.setdefault("notes", []).append(
+                        f"[Email REJECTED by {sender}]")
+                _save_runs(runs)
+
+        app.logger.info(f"[email-reply] {action} from {sender} → run {thread['run_id']}")
+        return jsonify({"ok": True, "mode": "reply", "action": action})
+
+    # ── Mode 2: Command email ────────────────────────────────────────────────
+    # Normalize sender — Resend may include display name: "Mike <email@x.com>"
+    import re as _re
+    _m = _re.search(r'<([^>]+)>', sender)
+    sender_email = _m.group(1).lower() if _m else sender.lower()
+    client = _load_email_clients().get(sender_email)
+    if not client:
+        app.logger.info(f"[email-cmd] unauthorized: {sender}")
+        _send_email(
+            sender_email,
+            "You reached ORI",
+            "Hi there,\n\n"
+            "This workspace hasn't enabled email commands yet.\n\n"
+            "If you're the owner, you can activate this feature from\n"
+            "ORI Studio → Settings → Email Access.\n\n"
+            "— ORI\n\n"
+            "---\n"
+            "ORI Studio · Sovereign AI for your business\n"
+            "https://oristudio.thynaptic.com"
+        )
+        return jsonify({"ok": True, "mode": "ignored"})
+
+    cmd_parts = subject.split(None, 1)
+    cmd       = cmd_parts[0].upper() if cmd_parts else ""
+    cmd_arg   = cmd_parts[1].strip() if len(cmd_parts) > 1 else ""
+    name      = client.get("name", "there")
+
+    # Parse body vars: "key: value" lines
+    user_vars: dict = {}
+    for line in body.splitlines():
+        if ":" in line and not line.startswith(">"):
+            k, _, v = line.partition(":")
+            if k.strip():
+                user_vars[k.strip()] = v.strip()
+
+    app.logger.info(f"[email-cmd] {cmd} '{cmd_arg}' from {sender}")
+
+    if cmd == "RUN":
+        with _WF_LOCK:
+            wfs = _load_workflows()
+        wf = next((w for w in wfs
+                   if w["name"].lower() == cmd_arg.lower()
+                   or w["id"].startswith(cmd_arg)), None)
+        if not wf:
+            _send_email(sender_email, f"ORI: Workflow not found — {cmd_arg}",
+                f"Hi {name},\n\nNo workflow named \"{cmd_arg}\" found.\n"
+                f"Reply LIST to see available workflows.\n\n— ORI")
+            return jsonify({"ok": True, "mode": "command", "cmd": "RUN", "result": "not_found"})
+
+        run_id = str(uuid.uuid4())
+        with _WFR_LOCK:
+            runs = _load_runs()
+            runs[run_id] = {
+                "id": run_id, "wf_id": wf["id"], "status": "queued",
+                "steps": [], "created": datetime.now(timezone.utc).isoformat(),
+                "final_output": None, "doc_text": "", "save_to_memory": False,
+                "doc_filename": "", "user_vars": user_vars,
+                "triggered_by": f"email:{sender_email}",
+            }
+            _save_runs(runs)
+        import threading as _t
+        _t.Thread(target=_run_workflow_job, args=(wf["id"], run_id), daemon=True).start()
+        _send_email(sender_email, f"ORI: Running \"{wf['name']}\"",
+            f"Hi {name},\n\nWorkflow \"{wf['name']}\" has started.\n"
+            f"Run ID: {run_id}\n\nReply STATUS to check progress.\n\n— ORI",
+            wf_id=wf["id"], run_id=run_id)
+        return jsonify({"ok": True, "mode": "command", "cmd": "RUN", "run_id": run_id})
+
+    elif cmd == "LIST":
+        with _WF_LOCK:
+            wfs = _load_workflows()
+        lines = [f"• {w['name']}" for w in wfs] or ["No workflows configured yet."]
+        _send_email(sender_email, "ORI: Your Workflows",
+            f"Hi {name},\n\nAvailable workflows:\n\n" + "\n".join(lines) +
+            "\n\nReply RUN <name> to trigger one.\n\n— ORI")
+        return jsonify({"ok": True, "mode": "command", "cmd": "LIST"})
+
+    elif cmd == "STATUS":
+        with _WFR_LOCK:
+            runs = _load_runs()
+        with _WF_LOCK:
+            wfs = {w["id"]: w["name"] for w in _load_workflows()}
+        recent = sorted(runs.values(), key=lambda r: r.get("created", ""), reverse=True)[:5]
+        lines  = [f"• {wfs.get(r.get('wf_id',''),'?')}: {r['status']} (run {r['id'][:8]}…)"
+                  for r in recent]
+        _send_email(sender_email, "ORI: Recent Run Status",
+            f"Hi {name},\n\nRecent runs:\n\n" + ("\n".join(lines) or "No runs yet.") +
+            "\n\n— ORI")
+        return jsonify({"ok": True, "mode": "command", "cmd": "STATUS"})
+
+    elif cmd == "STOP":
+        with _WFR_LOCK:
+            runs = _load_runs()
+            run  = next((r for r in runs.values() if r["id"].startswith(cmd_arg)), None)
+            if run:
+                run["status"]   = "cancelled"
+                run["finished"] = datetime.now(timezone.utc).isoformat()
+                _save_runs(runs)
+                _send_email(sender_email, "ORI: Run stopped",
+                    f"Run {run['id'][:8]}… cancelled.\n\n— ORI")
+            else:
+                _send_email(sender_email, "ORI: Run not found",
+                    f"No run matching \"{cmd_arg}\".\n\n— ORI")
+        return jsonify({"ok": True, "mode": "command", "cmd": "STOP"})
+
+    else:
+        _send_email(sender_email, "ORI: Available Commands",
+            f"Hi {name},\n\nHere's what you can do via email:\n\n"
+            f"  RUN <workflow-name>   — trigger a workflow\n"
+            f"  LIST                  — see your workflows\n"
+            f"  STATUS                — recent run statuses\n"
+            f"  STOP <run-id>         — cancel a run\n\n"
+            f"Send to any address @inbound.thynaptic.com\n\n— ORI")
+        return jsonify({"ok": True, "mode": "command", "cmd": "UNKNOWN"})
+
+    """
+    Resend inbound webhook — receives emails sent to inbound.thynaptic.com.
+    Verified via Svix signature (RESEND_WEBHOOK_SECRET).
+    """
+    # ── Svix signature verification ──────────────────────────────────────────
+    if _RESEND_WEBHOOK_SECRET:
+        try:
+            from svix.webhooks import Webhook, WebhookVerificationError
+            wh = Webhook(_RESEND_WEBHOOK_SECRET)
+            wh.verify(request.get_data(), {
+                "svix-id":        request.headers.get("svix-id", ""),
+                "svix-timestamp": request.headers.get("svix-timestamp", ""),
+                "svix-signature": request.headers.get("svix-signature", ""),
+            })
+        except Exception as exc:
+            app.logger.warning(f"[email-inbound] signature verification failed: {exc}")
+            return jsonify({"error": "Invalid signature"}), 403
+    raw = request.get_json(silent=True) or {}
+
+    # Resend may wrap in { "type": "email.received", "data": {...} }
+    data = raw.get("data", raw)
+
+    sender  = data.get("from", "")
+    subject = data.get("subject", "")
+    body    = (data.get("text") or "").strip()
+
+    # Headers come as list-of-dicts [{name, value}] or plain dict
+    raw_headers = data.get("headers") or []
+    if isinstance(raw_headers, list):
+        headers = {h["name"].lower(): h["value"] for h in raw_headers if "name" in h}
+    else:
+        headers = {k.lower(): v for k, v in raw_headers.items()}
+
+    in_reply_to = headers.get("in-reply-to", "").strip("<>").strip()
+    message_id  = data.get("messageId") or data.get("message_id") or headers.get("message-id", "")
+
+    # Match thread
+    with _EMAIL_THREADS_LOCK:
+        threads = _load_email_threads()
+    thread = threads.get(in_reply_to) if in_reply_to else None
+
+    # Parse command from first non-empty line
+    first_line = next((l.strip() for l in body.splitlines() if l.strip()), "").upper()
+    APPROVE_CMDS = {"APPROVE", "YES", "OK", "CONFIRMED", "CONFIRM"}
+    REJECT_CMDS  = {"REJECT", "NO", "CANCEL", "STOP", "DENIED", "DENY"}
+
+    action  = "approve" if first_line in APPROVE_CMDS else \
+              "reject"  if first_line in REJECT_CMDS  else "reply"
+
+    log_entry = {
+        "inbound_id":   message_id,
+        "from":         sender,
+        "subject":      subject,
+        "action":       action,
+        "body_preview": body[:200],
+        "received":     datetime.now(timezone.utc).isoformat(),
+    }
+
+    if thread:
+        wf_id  = thread["wf_id"]
+        run_id = thread["run_id"]
+        log_entry.update({"wf_id": wf_id, "run_id": run_id})
+
+        with _WFR_LOCK:
+            runs = _load_runs()
+            run  = runs.get(run_id)
+            if run:
+                run.setdefault("email_replies", []).append(log_entry)
+                if action == "approve":
+                    run["email_approved"] = True
+                    run.setdefault("notes", []).append(
+                        f"[Email APPROVED by {sender} at {log_entry['received']}]"
+                    )
+                elif action == "reject":
+                    run["status"] = "cancelled"
+                    run["finished"] = datetime.now(timezone.utc).isoformat()
+                    run.setdefault("notes", []).append(
+                        f"[Email REJECTED by {sender} at {log_entry['received']}]"
+                    )
+                _save_runs(runs)
+
+        app.logger.info(f"[email-inbound] {action} from {sender} → run {run_id}")
+    else:
+        app.logger.info(f"[email-inbound] unmatched reply from {sender} subject='{subject}'")
+
+    # Always 200 — Resend retries on non-2xx
+    return jsonify({"ok": True, "action": action, "matched": thread is not None})
 
 _TASKS_FILE = Path(__file__).parent / ".oricli" / "tasks.json"
 _TASKS_LOCK = threading.Lock()
@@ -1528,14 +2044,14 @@ def _boot_auto_index_schedules() -> None:
             _schedule_auto_index(conn_id, interval_hours)
 
 
-@app.route("/connections", methods=["GET"])
+@app.route("/api/connections", methods=["GET"])
 def list_connections() -> Response:
     with _CONN_LOCK:
         data = _load_connections()
     return jsonify({"connections": data})
 
 
-@app.route("/connections/<conn_id>", methods=["PUT"])
+@app.route("/api/connections/<conn_id>", methods=["PUT"])
 def save_connection(conn_id: str) -> Response:
     payload = request.get_json(force=True, silent=True) or {}
     with _CONN_LOCK:
@@ -1565,7 +2081,7 @@ def save_connection(conn_id: str) -> Response:
     return jsonify({"connection": cfg})
 
 
-@app.route("/connections/<conn_id>", methods=["DELETE"])
+@app.route("/api/connections/<conn_id>", methods=["DELETE"])
 def delete_connection(conn_id: str) -> Response:
     with _CONN_LOCK:
         data = _load_connections()
@@ -1574,7 +2090,527 @@ def delete_connection(conn_id: str) -> Response:
     return jsonify({"ok": True})
 
 
-@app.route("/connections/<conn_id>/test", methods=["POST"])
+@app.route("/api/slack-integrations", methods=["GET"])
+def slack_integrations() -> Response:
+    """Internal endpoint polled by oricli-slack TenantManager.
+    Returns all active Slack connection configs with their credentials."""
+    with _CONN_LOCK:
+        data = _load_connections()
+
+    results = []
+    for conn_id, conn in data.items():
+        if conn.get("type") != "slack":
+            continue
+        creds = conn.get("credentials", {})
+        bot_token = creds.get("bot_token", "")
+        app_token = creds.get("app_token", "")
+        if not bot_token or not app_token:
+            continue
+        results.append({
+            "tenant_id": conn_id,
+            "workspace_name": creds.get("workspace_name", conn_id),
+            "bot_token": bot_token,
+            "app_token": app_token,
+            "glm_key": "",  # uses shared key from env; future: per-tenant keys
+            "active": True,
+        })
+
+    return jsonify(results)
+
+
+@app.route("/api/teams-integrations", methods=["GET"])
+def teams_integrations() -> Response:
+    """Internal endpoint polled by oricli-teams TenantManager.
+    Returns all active Teams connection configs with their credentials."""
+    with _CONN_LOCK:
+        data = _load_connections()
+
+    results = []
+    for conn_id, conn in data.items():
+        if conn.get("type") != "ms_teams":
+            continue
+        creds = conn.get("credentials", {})
+        app_id = creds.get("app_id", "")
+        app_password = creds.get("app_password", "")
+        if not app_id or not app_password:
+            continue
+        results.append({
+            "tenant_id": creds.get("tenant_id", conn_id),
+            "app_id": app_id,
+            "app_password": app_password,
+            "glm_key": "",  # uses shared key from env; future: per-tenant keys
+            "active": True,
+        })
+
+    return jsonify(results)
+
+
+# ── Notion Builder endpoints ───────────────────────────────────────────────────
+
+# Pre-built template schemas deployed via Notion API
+_NOTION_TEMPLATES = {
+    "crm_pipeline": {
+        "title": "CRM Pipeline",
+        "pages": [
+            {
+                "title": "Deals", "icon": "💼", "type": "database",
+                "properties": [
+                    {"name": "Deal Name", "type": "title"},
+                    {"name": "Stage", "type": "select", "options": ["Lead", "Qualified", "Proposal", "Negotiation", "Closed Won", "Closed Lost"]},
+                    {"name": "Value", "type": "number"},
+                    {"name": "Close Date", "type": "date"},
+                    {"name": "Owner", "type": "people"},
+                    {"name": "Company", "type": "rich_text"},
+                    {"name": "Notes", "type": "rich_text"},
+                ],
+            },
+            {
+                "title": "Contacts", "icon": "👤", "type": "database",
+                "properties": [
+                    {"name": "Name", "type": "title"},
+                    {"name": "Email", "type": "email"},
+                    {"name": "Phone", "type": "phone_number"},
+                    {"name": "Company", "type": "rich_text"},
+                    {"name": "Lead Source", "type": "select", "options": ["Website", "Referral", "Cold Outreach", "Event", "Social"]},
+                    {"name": "Last Contacted", "type": "date"},
+                ],
+            },
+        ],
+    },
+    "project_tracker": {
+        "title": "Project Tracker",
+        "pages": [
+            {
+                "title": "Tasks", "icon": "📋", "type": "database",
+                "properties": [
+                    {"name": "Task", "type": "title"},
+                    {"name": "Status", "type": "select", "options": ["Backlog", "To Do", "In Progress", "In Review", "Done"]},
+                    {"name": "Priority", "type": "select", "options": ["🔴 High", "🟡 Medium", "🟢 Low"]},
+                    {"name": "Assignee", "type": "people"},
+                    {"name": "Due Date", "type": "date"},
+                    {"name": "Project", "type": "rich_text"},
+                ],
+            },
+        ],
+    },
+    "content_calendar": {
+        "title": "Content Calendar",
+        "pages": [
+            {
+                "title": "Content", "icon": "📅", "type": "database",
+                "properties": [
+                    {"name": "Title", "type": "title"},
+                    {"name": "Status", "type": "select", "options": ["Idea", "In Draft", "In Review", "Scheduled", "Published"]},
+                    {"name": "Type", "type": "select", "options": ["Blog Post", "Social", "Email", "Video", "Podcast"]},
+                    {"name": "Channel", "type": "select", "options": ["Website", "LinkedIn", "Twitter/X", "Instagram", "Newsletter"]},
+                    {"name": "Publish Date", "type": "date"},
+                    {"name": "Author", "type": "people"},
+                    {"name": "Notes", "type": "rich_text"},
+                ],
+            },
+        ],
+    },
+    "onboarding_hub": {
+        "title": "Onboarding Hub",
+        "pages": [
+            {
+                "title": "Welcome to the Team 🚀", "icon": "🚀", "type": "page",
+                "content": "## Welcome!\n\nThis hub has everything you need to get started.\n\n### Your First Week\n- [ ] Meet your manager\n- [ ] Set up your tools\n- [ ] Read the team handbook\n- [ ] Attend team standup\n- [ ] Complete your first task\n\n### Key Links\n- Team Handbook\n- Engineering Docs\n- HR Portal\n",
+            },
+            {
+                "title": "Onboarding Tasks", "icon": "✅", "type": "database",
+                "properties": [
+                    {"name": "Task", "type": "title"},
+                    {"name": "Status", "type": "select", "options": ["Not Started", "In Progress", "Done"]},
+                    {"name": "Week", "type": "select", "options": ["Week 1", "Week 2", "Week 3", "Week 4"]},
+                    {"name": "Assigned To", "type": "people"},
+                    {"name": "Due Date", "type": "date"},
+                ],
+            },
+        ],
+    },
+    "meeting_notes": {
+        "title": "Meeting Notes",
+        "pages": [
+            {
+                "title": "Meetings", "icon": "📝", "type": "database",
+                "properties": [
+                    {"name": "Meeting", "type": "title"},
+                    {"name": "Date", "type": "date"},
+                    {"name": "Type", "type": "select", "options": ["Standup", "1:1", "Team Sync", "Client Call", "Planning", "Retrospective"]},
+                    {"name": "Attendees", "type": "people"},
+                    {"name": "Status", "type": "select", "options": ["Scheduled", "In Progress", "Done"]},
+                ],
+            },
+        ],
+    },
+    "team_wiki": {
+        "title": "Team Wiki",
+        "pages": [
+            {
+                "title": "📖 Handbook", "icon": "📖", "type": "page",
+                "content": "## Team Handbook\n\n### Mission\nAdd your team mission here.\n\n### Values\n- Value 1\n- Value 2\n- Value 3\n\n### Communication\n- **Slack**: Day-to-day communication\n- **Email**: External + formal\n- **Notion**: Documentation\n\n### Meetings\nDescribe your meeting cadence here.\n",
+            },
+            {
+                "title": "SOPs", "icon": "⚙️", "type": "database",
+                "properties": [
+                    {"name": "Process Name", "type": "title"},
+                    {"name": "Department", "type": "select", "options": ["Engineering", "Sales", "Marketing", "Operations", "HR", "Finance"]},
+                    {"name": "Owner", "type": "people"},
+                    {"name": "Last Updated", "type": "date"},
+                    {"name": "Status", "type": "select", "options": ["Draft", "Active", "Outdated"]},
+                ],
+            },
+        ],
+    },
+    "invoice_tracker": {
+        "title": "Invoice Tracker",
+        "pages": [
+            {
+                "title": "Invoices", "icon": "💰", "type": "database",
+                "properties": [
+                    {"name": "Invoice #", "type": "title"},
+                    {"name": "Client", "type": "rich_text"},
+                    {"name": "Amount", "type": "number"},
+                    {"name": "Status", "type": "select", "options": ["Draft", "Sent", "Partial", "Paid", "Overdue", "Cancelled"]},
+                    {"name": "Issue Date", "type": "date"},
+                    {"name": "Due Date", "type": "date"},
+                    {"name": "Notes", "type": "rich_text"},
+                ],
+            },
+        ],
+    },
+    "hiring_pipeline": {
+        "title": "Hiring Pipeline",
+        "pages": [
+            {
+                "title": "Candidates", "icon": "🧑‍💼", "type": "database",
+                "properties": [
+                    {"name": "Name", "type": "title"},
+                    {"name": "Role", "type": "rich_text"},
+                    {"name": "Stage", "type": "select", "options": ["Applied", "Screen", "Interview 1", "Interview 2", "Offer", "Hired", "Rejected"]},
+                    {"name": "Source", "type": "select", "options": ["LinkedIn", "Referral", "Job Board", "Direct", "Agency"]},
+                    {"name": "Interviewer", "type": "people"},
+                    {"name": "Applied Date", "type": "date"},
+                    {"name": "Notes", "type": "rich_text"},
+                ],
+            },
+        ],
+    },
+}
+
+
+def _safe_notion_emoji(raw: str) -> str:
+    """Return a single-codepoint emoji Notion accepts. Strips ZWJ sequences,
+    variation selectors, and skin-tone modifiers. Falls back to 📄 if the
+    result isn't actually an emoji (e.g. Ori outputs 'page' or 'emoji')."""
+    if not raw:
+        return "📄"
+    # Strip variation selector (FE0F), ZWJ (200D), and skin-tone modifiers (1F3FB-1F3FF)
+    clean = "".join(
+        c for c in raw
+        if c != "\ufe0f" and c != "\u200d" and not ("\U0001f3fb" <= c <= "\U0001f3ff")
+    )
+    # Take first non-whitespace char and verify it's actually an emoji codepoint
+    for c in clean:
+        if c.strip():
+            cp = ord(c)
+            is_emoji = (
+                0x1F300 <= cp <= 0x1FAFF  # misc symbols, emoticons, transport, supplemental
+                or 0x2600 <= cp <= 0x27BF   # misc symbols + dingbats
+                or 0x1F000 <= cp <= 0x1F02F  # mahjong/dominos
+                or cp in (0x2764, 0x2665, 0x2666, 0x2663, 0x2660)  # hearts/suits
+            )
+            if is_emoji:
+                return c
+    return "📄"
+
+
+def _notion_build_schema(schema: dict, token: str) -> dict:
+    """Deploy a schema dict to Notion with full property support including
+    relations (two-pass), rollups, formulas, status, and cover images."""
+    import httpx as _hx
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+    }
+
+    workspace_title = schema.get("title", "ORI Studio Workspace")
+
+    # Internal integrations can only create under pages explicitly shared with them.
+    search_r = _hx.post(
+        "https://api.notion.com/v1/search",
+        headers=headers,
+        json={"filter": {"value": "page", "property": "object"}, "page_size": 1},
+        timeout=8,
+    )
+    if search_r.status_code != 200 or not search_r.json().get("results"):
+        return {
+            "ok": False,
+            "error": (
+                "No Notion pages are shared with your integration. "
+                "Open a Notion page → '...' menu → Connections → select your integration, "
+                "then try again."
+            ),
+        }
+
+    shared_page_id = search_r.json()["results"][0]["id"]
+
+    # Container page for all template content
+    container_payload = {
+        "parent": {"type": "page_id", "page_id": shared_page_id},
+        "icon": {"type": "emoji", "emoji": "🤖"},
+        "properties": {"title": {"title": [{"type": "text", "text": {"content": workspace_title}}]}},
+        "children": [],
+    }
+    container_r = _hx.post("https://api.notion.com/v1/pages", headers=headers, json=container_payload, timeout=15)
+    if not container_r.is_success:
+        detail = container_r.json().get("message", container_r.text)
+        raise RuntimeError(f"Failed to create container page: {detail}")
+    parent = {"type": "page_id", "page_id": container_r.json()["id"]}
+
+    # ── Property builder (skip relations/rollups/formulas — handled in pass 2) ──
+    _NUMBER_FORMATS = {"dollar", "euro", "pound", "yen", "ruble", "rupee", "won",
+                       "yuan", "percent", "number", "number_with_commas"}
+
+    def _build_props_pass1(properties: list) -> tuple[dict, list, bool]:
+        """Returns (props_dict, deferred_list, has_title).
+        Deferred list contains raw prop dicts for relation/rollup/formula."""
+        props: dict = {}
+        deferred: list = []
+        has_title = False
+        for prop in properties:
+            pname = prop["name"]
+            ptype = prop["type"]
+            if ptype in ("relation", "rollup", "formula"):
+                deferred.append(prop)
+                continue
+            if ptype == "title":
+                if not has_title:
+                    props[pname] = {"title": {}}
+                    has_title = True
+            elif ptype == "select":
+                opts = [{"name": str(o), "color": "default"} for o in prop.get("options", [])]
+                props[pname] = {"select": {"options": opts}}
+            elif ptype == "multi_select":
+                opts = [{"name": str(o), "color": "default"} for o in prop.get("options", [])]
+                props[pname] = {"multi_select": {"options": opts}}
+            elif ptype == "status":
+                # Notion creates a default status prop if you pass empty config
+                props[pname] = {"status": {}}
+            elif ptype == "number":
+                fmt = prop.get("format", "number")
+                if fmt not in _NUMBER_FORMATS:
+                    fmt = "number"
+                props[pname] = {"number": {"format": fmt}}
+            elif ptype == "date":
+                props[pname] = {"date": {}}
+            elif ptype == "people":
+                props[pname] = {"people": {}}
+            elif ptype == "email":
+                props[pname] = {"email": {}}
+            elif ptype == "phone_number":
+                props[pname] = {"phone_number": {}}
+            elif ptype == "url":
+                props[pname] = {"url": {}}
+            elif ptype == "checkbox":
+                props[pname] = {"checkbox": {}}
+            elif ptype == "created_time":
+                props[pname] = {"created_time": {}}
+            elif ptype == "created_by":
+                props[pname] = {"created_by": {}}
+            elif ptype == "last_edited_time":
+                props[pname] = {"last_edited_time": {}}
+            elif ptype == "last_edited_by":
+                props[pname] = {"last_edited_by": {}}
+            else:
+                props[pname] = {"rich_text": {}}
+        if not has_title:
+            props["Name"] = {"title": {}}
+        return props, deferred, has_title
+
+    def _rt(text: str) -> list:
+        """Single rich_text block, clamped to 2000 chars."""
+        return [{"type": "text", "text": {"content": str(text)[:2000]}}]
+
+    def _parse_children(content: str) -> list:
+        children = []
+        for line in content.split("\n")[:100]:
+            t = line[:2000]
+            if line.startswith("# "):
+                children.append({"object": "block", "type": "heading_1", "heading_1": {"rich_text": _rt(t[2:])}})
+            elif line.startswith("## "):
+                children.append({"object": "block", "type": "heading_2", "heading_2": {"rich_text": _rt(t[3:])}})
+            elif line.startswith("### "):
+                children.append({"object": "block", "type": "heading_3", "heading_3": {"rich_text": _rt(t[4:])}})
+            elif line.startswith("- [ ] "):
+                children.append({"object": "block", "type": "to_do", "to_do": {"rich_text": _rt(t[6:]), "checked": False}})
+            elif line.startswith("- [x] "):
+                children.append({"object": "block", "type": "to_do", "to_do": {"rich_text": _rt(t[6:]), "checked": True}})
+            elif line.startswith("- "):
+                children.append({"object": "block", "type": "bulleted_list_item", "bulleted_list_item": {"rich_text": _rt(t[2:])}})
+            elif line.startswith("> "):
+                children.append({"object": "block", "type": "quote", "quote": {"rich_text": _rt(t[2:])}})
+            elif line.startswith("---"):
+                children.append({"object": "block", "type": "divider", "divider": {}})
+            elif line.strip():
+                children.append({"object": "block", "type": "paragraph", "paragraph": {"rich_text": _rt(t)}})
+        return children[:100]
+
+    # ── PASS 1: Create all pages/databases (no relations yet) ──
+    pages_built: list[str] = []
+    db_name_to_id: dict[str, str] = {}   # title → notion database_id
+    db_name_to_deferred: dict[str, list] = {}  # title → deferred props
+
+    for page_def in schema.get("pages", []):
+        title = page_def.get("title", "Untitled")
+        icon_emoji = _safe_notion_emoji(page_def.get("icon", "📄"))
+        page_type = page_def.get("type", "page")
+
+        if page_type == "database":
+            props, deferred, _ = _build_props_pass1(page_def.get("properties", []))
+            if deferred:
+                db_name_to_deferred[title] = deferred
+
+            db_payload: dict = {
+                "parent": parent,
+                "icon": {"type": "emoji", "emoji": icon_emoji},
+                "title": _rt(title),
+                "properties": props,
+            }
+            if page_def.get("description"):
+                db_payload["description"] = _rt(page_def["description"])
+
+            r = _hx.post("https://api.notion.com/v1/databases", headers=headers, json=db_payload, timeout=15)
+            if not r.is_success:
+                detail = r.json().get("message", r.text)
+                raise RuntimeError(f"Failed to create database '{title}': {detail}")
+            db_id = r.json()["id"]
+            db_name_to_id[title] = db_id
+            pages_built.append(r.json().get("url", ""))
+
+        else:
+            cover = page_def.get("cover")
+            page_payload: dict = {
+                "parent": parent,
+                "icon": {"type": "emoji", "emoji": icon_emoji},
+                "properties": {"title": {"title": _rt(title)}},
+                "children": _parse_children(page_def.get("content", "")),
+            }
+            if cover:
+                page_payload["cover"] = {"type": "external", "external": {"url": cover}}
+
+            r = _hx.post("https://api.notion.com/v1/pages", headers=headers, json=page_payload, timeout=15)
+            if not r.is_success:
+                detail = r.json().get("message", r.text)
+                raise RuntimeError(f"Failed to create page '{title}': {detail}")
+            pages_built.append(r.json().get("url", ""))
+
+    # ── PASS 2: Wire relations, rollups, formulas via PATCH ──
+    _ROLLUP_FUNCTIONS = {
+        "count", "count_values", "empty", "not_empty", "unique", "show_unique",
+        "sum", "average", "median", "min", "max", "range",
+        "earliest_date", "latest_date", "date_range", "checked", "unchecked",
+        "percent_checked", "percent_unchecked", "percent_empty", "percent_not_empty",
+        "percent_per_group", "show_original",
+    }
+
+    for db_title, deferred in db_name_to_deferred.items():
+        db_id = db_name_to_id.get(db_title)
+        if not db_id:
+            continue
+        patch_props: dict = {}
+        for prop in deferred:
+            pname = prop["name"]
+            ptype = prop["type"]
+            if ptype == "relation":
+                related_db = prop.get("relation_to", "")
+                related_id = db_name_to_id.get(related_db)
+                if not related_id:
+                    continue  # can't wire — target DB not in this schema
+                patch_props[pname] = {
+                    "relation": {
+                        "database_id": related_id,
+                        "type": "single_property",
+                        "single_property": {},
+                    }
+                }
+            elif ptype == "rollup":
+                patch_props[pname] = {
+                    "rollup": {
+                        "relation_property_name": prop.get("relation_property", ""),
+                        "rollup_property_name": prop.get("rollup_property", ""),
+                        "function": prop.get("function", "count") if prop.get("function", "count") in _ROLLUP_FUNCTIONS else "count",
+                    }
+                }
+            elif ptype == "formula":
+                patch_props[pname] = {
+                    "formula": {"expression": prop.get("expression", '""')}
+                }
+
+        if patch_props:
+            pr = _hx.patch(
+                f"https://api.notion.com/v1/databases/{db_id}",
+                headers=headers,
+                json={"properties": patch_props},
+                timeout=15,
+            )
+            if not pr.is_success:
+                # Non-fatal: log but don't fail the whole deploy
+                log.warning("[NotionBuild] pass-2 patch failed for '%s': %s", db_title, pr.json().get("message", pr.text))
+
+    url = pages_built[0] if pages_built else container_r.json().get("url", "https://notion.so")
+    return {"ok": True, "url": url, "title": workspace_title, "pages": len(pages_built)}
+
+
+
+@app.route("/api/notion/templates", methods=["GET"])
+def notion_templates() -> Response:
+    """Return list of available Notion templates (metadata only)."""
+    return jsonify([
+        {"id": k, "title": v["title"], "pages": len(v.get("pages", []))}
+        for k, v in _NOTION_TEMPLATES.items()
+    ])
+
+
+@app.route("/api/notion/build", methods=["POST"])
+def notion_build() -> Response:
+    """Deploy a Notion template or custom schema to the user's connected Notion workspace."""
+    body = request.get_json(silent=True) or {}
+    template_id = body.get("template_id")
+    custom_schema = body.get("schema")
+
+    with _CONN_LOCK:
+        conns = _load_connections()
+
+    cfg = conns.get("notion", {})
+    if not cfg.get("enabled") or not cfg.get("credentials", {}).get("api_key"):
+        return jsonify({"ok": False, "error": "Notion not connected. Add your Notion API key in Connections."}), 400
+
+    token = cfg["credentials"]["api_key"]
+
+    if template_id:
+        schema = _NOTION_TEMPLATES.get(template_id)
+        if not schema:
+            return jsonify({"ok": False, "error": f"Unknown template: {template_id}"}), 400
+    elif custom_schema:
+        schema = custom_schema
+    else:
+        return jsonify({"ok": False, "error": "Provide template_id or schema"}), 400
+
+    try:
+        result = _notion_build_schema(schema, token)
+        if not result.get("ok"):
+            return jsonify(result), 400
+        return jsonify(result)
+    except Exception as exc:
+        log.error("[NotionBuild] error: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.route("/api/connections/<conn_id>/test", methods=["POST"])
 def test_connection(conn_id: str) -> Response:
     """Lightweight connectivity test for each integration type."""
     with _CONN_LOCK:
@@ -1589,7 +2625,7 @@ def test_connection(conn_id: str) -> Response:
         return jsonify({"ok": False, "message": str(exc)})
 
 
-@app.route("/connections/oauth/authorize/google")
+@app.route("/api/connections/oauth/authorize/google")
 def google_oauth_authorize():
     """Redirect user to Google OAuth consent screen."""
     state = secrets.token_urlsafe(16)
@@ -1611,7 +2647,7 @@ def google_oauth_authorize():
     return _redirect(f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
 
 
-@app.route("/connections/oauth/callback/google")
+@app.route("/api/connections/oauth/callback/google")
 def google_oauth_callback():
     """Handle Google OAuth callback — exchange code for tokens."""
     from flask import redirect as _redirect
@@ -1743,10 +2779,9 @@ def _test_conn(conn_id: str, creds: dict) -> tuple[bool, str]:
         return True, f"Connected to {d.get('team', 'workspace')} as {d.get('user', 'bot')}"
 
     if conn_id == "ms_teams":
-        # Just validate the tenant / client id fields are set
-        if not creds.get("client_id") or not creds.get("tenant_id"):
-            return False, "Client ID and Tenant ID required"
-        return True, "Credentials saved (OAuth flow required to activate)"
+        if not creds.get("app_id"):
+            return False, "Azure App ID required"
+        return True, "Credentials saved (coming soon)"
 
     # ── Productivity ──────────────────────────────────────────────────────────
     if conn_id == "notion":
@@ -1907,6 +2942,186 @@ def _test_conn(conn_id: str, creds: dict) -> tuple[bool, str]:
     return False, "No credentials provided"
 
 
+# ── Connection context query functions ────────────────────────────────────────
+# Each function queries a live integration and returns a list of
+# {"title": str, "snippet": str, "source": str} dicts for RAG injection.
+
+def _query_notion(query: str, creds: dict) -> list[dict]:
+    token = creds.get("api_key", "")
+    if not token:
+        return []
+    try:
+        import httpx as _hx
+        r = _hx.post(
+            "https://api.notion.com/v1/search",
+            headers={"Authorization": f"Bearer {token}", "Notion-Version": "2022-06-28"},
+            json={"query": query, "page_size": 5},
+            timeout=8,
+        )
+        if r.status_code != 200:
+            return []
+        results = []
+        for obj in r.json().get("results", [])[:5]:
+            obj_type = obj.get("object", "")
+            title = ""
+            snippet = ""
+            if obj_type == "page":
+                props = obj.get("properties", {})
+                for prop in props.values():
+                    if prop.get("type") == "title":
+                        parts = prop.get("title", [])
+                        title = "".join(p.get("plain_text", "") for p in parts)
+                        break
+                if not title:
+                    title = obj.get("url", "Untitled page")
+            elif obj_type == "database":
+                title_arr = obj.get("title", [])
+                title = "".join(p.get("plain_text", "") for p in title_arr) or "Untitled database"
+            if title:
+                results.append({"title": title, "snippet": snippet or f"Notion {obj_type}", "source": "Notion"})
+        return results
+    except Exception as exc:
+        log.debug("[Notion] query failed: %s", exc)
+        return []
+
+
+def _query_hubspot(query: str, creds: dict) -> list[dict]:
+    token = creds.get("access_token", "")
+    if not token:
+        return []
+    try:
+        import httpx as _hx
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        results = []
+
+        # Search contacts
+        r = _hx.post(
+            "https://api.hubapi.com/crm/v3/objects/contacts/search",
+            headers=headers,
+            json={"query": query, "limit": 3, "properties": ["firstname", "lastname", "email", "jobtitle", "company"]},
+            timeout=8,
+        )
+        if r.status_code == 200:
+            for obj in r.json().get("results", []):
+                p = obj.get("properties", {})
+                name = f"{p.get('firstname','') or ''} {p.get('lastname','') or ''}".strip() or p.get("email", "Unknown")
+                detail = " | ".join(filter(None, [p.get("jobtitle"), p.get("company"), p.get("email")]))
+                results.append({"title": f"Contact: {name}", "snippet": detail, "source": "HubSpot"})
+
+        # Search deals
+        r2 = _hx.post(
+            "https://api.hubapi.com/crm/v3/objects/deals/search",
+            headers=headers,
+            json={"query": query, "limit": 3, "properties": ["dealname", "dealstage", "amount", "closedate"]},
+            timeout=8,
+        )
+        if r2.status_code == 200:
+            for obj in r2.json().get("results", []):
+                p = obj.get("properties", {})
+                name = p.get("dealname", "Unnamed deal")
+                detail = " | ".join(filter(None, [
+                    f"Stage: {p.get('dealstage')}" if p.get("dealstage") else "",
+                    f"Amount: ${p.get('amount')}" if p.get("amount") else "",
+                    f"Close: {p.get('closedate', '')[:10]}" if p.get("closedate") else "",
+                ]))
+                results.append({"title": f"Deal: {name}", "snippet": detail, "source": "HubSpot"})
+
+        return results[:6]
+    except Exception as exc:
+        log.debug("[HubSpot] query failed: %s", exc)
+        return []
+
+
+def _query_github(query: str, creds: dict) -> list[dict]:
+    token = creds.get("personal_access_token", "")
+    if not token:
+        return []
+    try:
+        import httpx as _hx
+        owner = creds.get("default_owner", "")
+        q = f"{query}+org:{owner}" if owner else query
+        r = _hx.get(
+            "https://api.github.com/search/issues",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+            params={"q": q, "per_page": 5, "sort": "updated"},
+            timeout=8,
+        )
+        if r.status_code != 200:
+            return []
+        results = []
+        for item in r.json().get("items", [])[:5]:
+            state = item.get("state", "")
+            repo = item.get("repository_url", "").split("/")[-1]
+            body = (item.get("body") or "")[:200].replace("\n", " ")
+            results.append({
+                "title": f"[{repo}] #{item['number']}: {item['title']} ({state})",
+                "snippet": body,
+                "source": "GitHub",
+            })
+        return results
+    except Exception as exc:
+        log.debug("[GitHub] query failed: %s", exc)
+        return []
+
+
+def _query_jira(query: str, creds: dict) -> list[dict]:
+    email = creds.get("email", "")
+    token = creds.get("api_token", "")
+    domain = creds.get("domain", "")
+    if not email or not token or not domain:
+        return []
+    try:
+        import httpx as _hx
+        import base64 as _b64
+        auth = _b64.b64encode(f"{email}:{token}".encode()).decode()
+        r = _hx.get(
+            f"https://{domain}/rest/api/3/issue/picker",
+            headers={"Authorization": f"Basic {auth}"},
+            params={"query": query, "currentJQL": "order by updated DESC"},
+            timeout=8,
+        )
+        results = []
+        if r.status_code == 200:
+            for section in r.json().get("sections", []):
+                for issue in section.get("issues", [])[:3]:
+                    results.append({
+                        "title": f"[{issue.get('key')}] {issue.get('summaryText', issue.get('summary', ''))}",
+                        "snippet": "",
+                        "source": "Jira",
+                    })
+        return results[:5]
+    except Exception as exc:
+        log.debug("[Jira] query failed: %s", exc)
+        return []
+
+
+def _query_connections(query: str) -> list[dict]:
+    """Query all active connections and return combined context snippets."""
+    with _CONN_LOCK:
+        conns = _load_connections()
+
+    results = []
+    query_map = {
+        "notion":     _query_notion,
+        "hubspot":    _query_hubspot,
+        "github_api": _query_github,
+        "jira":       _query_jira,
+    }
+
+    for conn_id, fn in query_map.items():
+        cfg = conns.get(conn_id, {})
+        if not cfg.get("enabled", False):
+            continue
+        creds = cfg.get("credentials", {})
+        try:
+            hits = fn(query, creds)
+            results.extend(hits)
+        except Exception as exc:
+            log.debug("[Connections] %s query error: %s", conn_id, exc)
+
+    return results
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Workflows — persistent multi-step execution engine
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1932,6 +3147,178 @@ def _load_workflows() -> list:
 def _save_workflows(data: list) -> None:
     _WORKFLOWS_FILE.parent.mkdir(parents=True, exist_ok=True)
     _WORKFLOWS_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _schedule_workflow(wf: dict) -> None:
+    """Register or replace a cron job for a workflow with trigger.type == 'schedule'."""
+    if not _SCHEDULER_AVAILABLE:
+        return
+    wf_id   = wf.get("id")
+    trigger = wf.get("trigger") or {}
+    if not wf_id or trigger.get("type") != "schedule":
+        return
+    cron_expr = (trigger.get("cron") or "").strip()
+    if not cron_expr:
+        return
+    try:
+        parts = cron_expr.split()
+        if len(parts) != 5:
+            return
+        m, h, dom, mon, dow = parts
+        from apscheduler.triggers.cron import CronTrigger
+        job_id = f"wf_schedule_{wf_id}"
+        _SCHEDULER.add_job(
+            _run_workflow_schedule,
+            CronTrigger(minute=m, hour=h, day=dom, month=mon, day_of_week=dow, timezone="UTC"),
+            args=[wf_id],
+            id=job_id,
+            replace_existing=True,
+        )
+        log.info("[WorkflowScheduler] Registered job %s  cron=%s", job_id, cron_expr)
+    except Exception as exc:
+        log.warning("[WorkflowScheduler] Failed to schedule wf %s: %s", wf_id, exc)
+
+
+def _run_workflow_schedule(wf_id: str) -> None:
+    """APScheduler callback — fires a workflow run."""
+    import uuid as _uuid, threading as _threading
+    run_id = str(_uuid.uuid4())
+    with _WFR_LOCK:
+        runs = _load_runs()
+        runs[run_id] = {
+            "id": run_id, "wf_id": wf_id, "status": "queued",
+            "steps": [], "created": datetime.now(timezone.utc).isoformat(),
+            "final_output": None, "doc_text": "", "save_to_memory": False,
+            "doc_filename": "", "user_vars": {},
+        }
+        _save_runs(runs)
+    _threading.Thread(target=_run_workflow_job, args=(wf_id, run_id), daemon=True).start()
+    log.info("[WorkflowScheduler] Fired scheduled run %s for wf %s", run_id, wf_id)
+
+
+def _bootstrap_workflow_schedules() -> None:
+    """On startup, re-register cron jobs for all workflows with trigger.type == 'schedule'."""
+    try:
+        for wf in _load_workflows():
+            _schedule_workflow(wf)
+    except Exception as exc:
+        log.warning("[WorkflowScheduler] Bootstrap failed: %s", exc)
+
+
+# ── Daily briefing ────────────────────────────────────────────────────────────
+
+def _send_briefing(client_email: str) -> None:
+    """Generate and send ORI's daily briefing to a client."""
+    clients = _load_email_clients()
+    client  = clients.get(client_email.lower())
+    if not client:
+        return
+
+    name = client.get("name", "there")
+    now  = datetime.now(timezone.utc)
+    day  = now.strftime("%A, %B %-d")
+
+    # ── Overnight runs (last 24h) ─────────────────────────────────────────────
+    with _WFR_LOCK:
+        runs = _load_runs()
+    with _WF_LOCK:
+        wf_map = {w["id"]: w["name"] for w in _load_workflows()}
+
+    cutoff   = now.timestamp() - 86400
+    recent   = [r for r in runs.values()
+                if r.get("created") and
+                datetime.fromisoformat(r["created"].replace("Z","+00:00")).timestamp() > cutoff]
+    done_runs  = [r for r in recent if r.get("status") == "done"]
+    error_runs = [r for r in recent if r.get("status") == "error"]
+
+    # ── Pending approvals ─────────────────────────────────────────────────────
+    pending = [r for r in runs.values()
+               if r.get("status") == "running" and r.get("email_approved") is None
+               and any(s.get("type") == "notify" for s in r.get("steps", []))]
+
+    # ── Upcoming scheduled workflows (next 24h) ───────────────────────────────
+    with _WF_LOCK:
+        wfs = _load_workflows()
+    scheduled = [w for w in wfs
+                 if (w.get("trigger") or {}).get("type") == "schedule"
+                 and w.get("status") != "paused"]
+
+    # ── Build email body ──────────────────────────────────────────────────────
+    lines = [f"Good morning {name} ☀️", f"", f"Your ORI briefing for {day}.", ""]
+
+    if done_runs or error_runs:
+        lines.append("OVERNIGHT")
+        for r in done_runs[:5]:
+            lines.append(f"  • {wf_map.get(r.get('wf_id',''),'Workflow')} — completed ✓")
+        for r in error_runs[:3]:
+            lines.append(f"  • {wf_map.get(r.get('wf_id',''),'Workflow')} — failed ✗  (reply STATUS for details)")
+        lines.append("")
+
+    if pending:
+        lines.append("PENDING YOUR APPROVAL")
+        for r in pending[:3]:
+            lines.append(f"  • \"{wf_map.get(r.get('wf_id',''),'Workflow')}\" is waiting — reply APPROVE or REJECT")
+        lines.append("")
+
+    if scheduled:
+        lines.append("SCHEDULED TODAY")
+        for w in scheduled[:5]:
+            cron = (w.get("trigger") or {}).get("cron", "")
+            lines.append(f"  • {w['name']}" + (f"  ({cron})" if cron else ""))
+        lines.append("")
+
+    if not done_runs and not error_runs and not pending and not scheduled:
+        lines.append("Nothing to report overnight. ORI is standing by.")
+        lines.append("")
+
+    lines += [
+        "QUICK COMMANDS",
+        "  Reply RUN <name>   — trigger a workflow",
+        "  Reply LIST         — see all workflows",
+        "  Reply STATUS       — recent run statuses",
+        "  Reply STOP <id>    — cancel a run",
+        "",
+        "— ORI",
+    ]
+
+    _send_email(
+        client_email,
+        f"ORI Briefing — {day}",
+        "\n".join(lines),
+    )
+    log.info("[Briefing] sent to %s", client_email)
+
+
+def _schedule_client_briefing(client_email: str, client: dict) -> None:
+    """Register or update the APScheduler cron job for a client's daily briefing."""
+    if not _SCHEDULER_AVAILABLE or not client.get("briefing", False):
+        return
+    try:
+        time_str = client.get("briefing_time", "08:00")
+        hour, minute = (int(x) for x in time_str.split(":")[:2])
+        job_id = f"briefing_{client_email}"
+        _SCHEDULER.add_job(
+            _send_briefing,
+            trigger="cron",
+            hour=hour,
+            minute=minute,
+            timezone="UTC",
+            args=[client_email],
+            id=job_id,
+            replace_existing=True,
+        )
+        log.info("[Briefing] scheduled %s at %02d:%02d UTC", client_email, hour, minute)
+    except Exception as exc:
+        log.warning("[Briefing] schedule failed for %s: %s", client_email, exc)
+
+
+def _bootstrap_briefing_schedules() -> None:
+    """On startup, register briefing cron jobs for all opted-in clients."""
+    try:
+        for email, client in _load_email_clients().items():
+            _schedule_client_briefing(email, client)
+    except Exception as exc:
+        log.warning("[Briefing] Bootstrap failed: %s", exc)
 
 
 def _load_projects() -> dict:
@@ -2208,6 +3595,15 @@ def _execute_step(step: dict, context: dict, run_id: str, step_idx: int, system_
                     timeout=15,
                 )
                 result["output"] = f"Slack notification sent (status {r.status_code})"
+            elif conn_id == "email":
+                # Format: "email: recipient@example.com | Optional subject | body"
+                # Falls back to: "email: recipient@example.com" with output as body
+                email_parts = message.split("|", 2)
+                to_addr  = email_parts[0].strip()
+                subject  = email_parts[1].strip() if len(email_parts) > 1 else "ORI Notification"
+                body_txt = email_parts[2].strip() if len(email_parts) > 2 else context.get("output", message)
+                r = _send_email(to_addr, subject, body_txt, wf_id=context.get("wf_id"), run_id=run_id)
+                result["output"] = f"Email: {r['message']}"
             else:
                 result["output"] = f"Notify: connection '{conn_id}' not configured or not supported"
 
@@ -2455,6 +3851,7 @@ def create_workflow() -> Response:
         "agentName":   body.get("agentName", "Default"),
         "agentEmoji":  body.get("agentEmoji", "✨"),
         "steps":       body.get("steps", []),
+        "trigger":     body.get("trigger", {"type": "manual"}),
         "createdAt":   datetime.now(timezone.utc).isoformat(),
         "updatedAt":   datetime.now(timezone.utc).isoformat(),
     }
@@ -2462,20 +3859,25 @@ def create_workflow() -> Response:
         wfs = _load_workflows()
         wfs.append(wf)
         _save_workflows(wfs)
+    _schedule_workflow(wf)
     return jsonify({"workflow": wf})
 
 
 @app.route("/workflows/<wf_id>", methods=["PUT"])
 def update_workflow(wf_id: str) -> Response:
     body = request.get_json(silent=True) or {}
+    saved_wf = None
     with _WF_LOCK:
         wfs = _load_workflows()
         for wf in wfs:
             if wf["id"] == wf_id:
                 wf.update({k: v for k, v in body.items() if k not in ("id", "createdAt")})
                 wf["updatedAt"] = datetime.now(timezone.utc).isoformat()
+                saved_wf = wf
                 break
         _save_workflows(wfs)
+    if saved_wf:
+        _schedule_workflow(saved_wf)
     return jsonify({"ok": True})
 
 
@@ -2624,6 +4026,33 @@ def list_wf_runs(wf_id: str) -> Response:
         key=lambda r: r.get("created", ""), reverse=True
     )[:20]
     return jsonify({"runs": wf_runs})
+
+
+@app.route("/workflows/webhook/<webhook_key>", methods=["POST"])
+def trigger_workflow_webhook(webhook_key: str) -> Response:
+    """Fire a workflow whose trigger.webhookKey matches webhook_key."""
+    with _WF_LOCK:
+        wfs = _load_workflows()
+    matched = next(
+        (w for w in wfs if (w.get("trigger") or {}).get("webhookKey") == webhook_key),
+        None,
+    )
+    if not matched:
+        return jsonify({"error": "No workflow found for this webhook key"}), 404
+    run_id = str(uuid.uuid4())
+    body   = request.get_json(silent=True) or {}
+    with _WFR_LOCK:
+        runs = _load_runs()
+        runs[run_id] = {
+            "id": run_id, "wf_id": matched["id"], "status": "queued",
+            "steps": [], "created": datetime.now(timezone.utc).isoformat(),
+            "final_output": None, "doc_text": "", "save_to_memory": False,
+            "doc_filename": "", "user_vars": body.get("vars") or {},
+        }
+        _save_runs(runs)
+    import threading as _t
+    _t.Thread(target=_run_workflow_job, args=(matched["id"], run_id), daemon=True).start()
+    return jsonify({"run_id": run_id, "status": "queued"})
 
 
 # ── Pipeline (visual orchestration canvas) CRUD + run ────────────────────────
@@ -4479,7 +5908,7 @@ def _run_index_job(conn_id: str, creds: dict, opts: dict) -> None:
             _save_index_status(status_data)
 
 
-@app.route("/connections/index/status", methods=["GET"])
+@app.route("/api/connections/index/status", methods=["GET"])
 def get_all_index_status() -> Response:
     with _INDEX_LOCK:
         status = _load_index_status()
@@ -4516,7 +5945,7 @@ def rag_search_endpoint() -> Response:
     return jsonify({"query": query, "results": hits, "count": len(hits)})
 
 
-@app.route("/connections/<conn_id>/index", methods=["POST"])
+@app.route("/api/connections/<conn_id>/index", methods=["POST"])
 def index_connection(conn_id: str) -> Response:
     """Trigger background RAG indexing for a connection."""
     with _CONN_LOCK:
@@ -4538,7 +5967,7 @@ def index_connection(conn_id: str) -> Response:
 
 
 
-@app.route("/connections/telegram/webhook", methods=["POST"])
+@app.route("/api/connections/telegram/webhook", methods=["POST"])
 def telegram_webhook() -> Response:
     """Receive incoming Telegram updates via webhook and ingest into local RAG store."""
     import hashlib
@@ -4942,10 +6371,13 @@ def main() -> None:
         print(f"[DEBUG] About to start Flask app.run()", flush=True)
         sys.stderr.write(f"[DEBUG] Starting Flask on {host}:{port}\n")
         sys.stderr.flush()
-        
+
+        _bootstrap_workflow_schedules()
+        _bootstrap_briefing_schedules()
+
         # Start Flask server (this blocks until server stops)
         app.run(host=host, port=port, debug=False, threaded=True, use_reloader=False)
-        
+
         # This line won't be reached until server stops
         print(f"[DEBUG] Flask server stopped", flush=True)
     except KeyboardInterrupt:

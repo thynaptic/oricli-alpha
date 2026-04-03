@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSCStore, streamChat, selectActiveSession } from '../store';
+import { IS_DEMO } from '../App';
 import { Send, Square, Copy, Check, ChevronDown, X, Bot, Search, BookOpen, ListTodo, Workflow, FileText, BarChart2, Loader2, CheckCircle2, AlertCircle, FileCode2, ExternalLink, Paperclip, ArrowRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import TaskPlanCard from './TaskPlanCard';
 
 // ── Dispatch card ──────────────────────────────────────────────────────────────
@@ -146,7 +147,7 @@ function CopyButton({ text }) {
       style={{
         position: 'absolute', top: 8, right: 8, background: 'rgba(255,255,255,0.07)',
         border: '1px solid rgba(255,255,255,0.1)', borderRadius: 5, padding: '3px 7px',
-        cursor: 'pointer', color: copied ? 'var(--color-sc-success)' : 'var(--color-sc-text-muted)',
+        cursor: 'pointer', color: copied ? 'var(--color-sc-success)' : 'var(--color-sc-text-dim)',
         fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-inter)',
         transition: 'color 0.15s',
       }}
@@ -157,24 +158,77 @@ function CopyButton({ text }) {
   );
 }
 
-const markdownComponents = {
+// Custom vscDarkPlus override — tighter padding, matches ORI's surface bg
+// Token colour replacements:
+//   #DCDCAA (yellow-green function names)  → #C8A96E (warm muted gold, on-brand)
+//   #b5cea8 (sage-green numbers/symbols)   → #7FBFCF (soft teal-blue, neutral)
+//   #4EC9B0 (teal type names)              → #7ECFCF (softer cyan)
+const CODE_DARK_STYLE = (() => {
+  const fix = (obj) => {
+    if (typeof obj === 'string') {
+      return obj
+        .replace(/#DCDCAA/gi, '#C8A96E')
+        .replace(/#b5cea8/gi, '#7FBFCF')
+        .replace(/#4EC9B0/gi, '#7ECFCF');
+    }
+    if (Array.isArray(obj)) return obj.map(fix);
+    if (obj && typeof obj === 'object') {
+      return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, fix(v)]));
+    }
+    return obj;
+  };
+  const patched = fix({ ...vscDarkPlus });
+  patched['pre[class*="language-"]'] = {
+    ...patched['pre[class*="language-"]'],
+    background: 'transparent', margin: 0, padding: 0,
+  };
+  patched['code[class*="language-"]'] = {
+    ...patched['code[class*="language-"]'],
+    background: 'transparent',
+  };
+  return patched;
+})();
+
+function makeMarkdownComponents(isDark) {
+  return {
   code({ inline, className, children }) {
     const lang = (className ?? '').replace('language-', '') || 'text';
     const code = String(children).replace(/\n$/, '');
     if (inline) {
       return (
         <code style={{
-          background: 'color-mix(in srgb, var(--color-sc-gold) 10%, transparent)', color: 'var(--color-sc-gold)',
+          background: 'color-mix(in srgb, var(--color-sc-gold) 12%, transparent)', color: 'var(--color-sc-gold)', fontWeight: 600,
           padding: '1px 5px', borderRadius: 3, fontFamily: 'var(--font-mono)', fontSize: '0.88em',
         }}>{children}</code>
       );
     }
     return (
-      <div style={{ position: 'relative', margin: '12px 0' }}>
+      <div style={{
+        position: 'relative', margin: '12px 0', borderRadius: 10,
+        background: isDark ? '#1e1e1e' : '#f5f5f5',
+        border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.08)',
+        overflow: 'hidden',
+      }}>
+        {lang && lang !== 'text' && (
+          <div style={{
+            position: 'absolute', top: 9, left: 14,
+            fontSize: 10, fontWeight: 700, color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.3)',
+            fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em',
+            userSelect: 'none',
+          }}>{lang}</div>
+        )}
         <CopyButton text={code} />
-        <SyntaxHighlighter language={lang} style={atomDark}
-          customStyle={{ borderRadius: 8, fontSize: 13, margin: 0, background: 'var(--color-sc-surface)', padding: '14px 16px' }}
-          showLineNumbers={code.split('\n').length > 4}
+        <SyntaxHighlighter
+          language={lang}
+          style={isDark ? CODE_DARK_STYLE : oneLight}
+          customStyle={{
+            borderRadius: 0, fontSize: 13, margin: 0,
+            background: 'transparent',
+            padding: lang && lang !== 'text' ? '30px 16px 14px' : '14px 16px',
+          }}
+          showLineNumbers={code.split('\n').length > 6}
+          lineNumberStyle={{ color: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.25)', fontSize: 11, userSelect: 'none', minWidth: '2.2em' }}
+          wrapLines
         >{code}</SyntaxHighlighter>
       </div>
     );
@@ -193,7 +247,8 @@ const markdownComponents = {
   th({ children }) { return <th style={{ border: '1px solid var(--color-sc-border)', padding: '6px 10px', background: 'var(--color-sc-surface)', color: 'var(--color-sc-text-muted)', textAlign: 'left', fontWeight: 600, fontSize: 12 }}>{children}</th>; },
   td({ children }) { return <td style={{ border: '1px solid var(--color-sc-border)', padding: '6px 10px', color: 'var(--color-sc-text)' }}>{children}</td>; },
   strong({ children }) { return <strong style={{ color: '#fff', fontWeight: 700 }}>{children}</strong>; },
-};
+  };
+}
 
 // ── Reaction Bar ──────────────────────────────────────────────────────────────
 
@@ -281,6 +336,8 @@ function Message({ msg, onEdit }) {
   const [hoverBubble, setHoverBubble]     = useState(false);
   const editRef                           = useRef(null);
   const isUser = msg.role === 'user';
+  const isDark = useSCStore(s => s.theme) !== 'light';
+  const mdComponents = useMemo(() => makeMarkdownComponents(isDark), [isDark]);
 
   useEffect(() => {
     if (editing && editRef.current) {
@@ -387,7 +444,7 @@ function Message({ msg, onEdit }) {
       {/* Avatar */}
       <div style={{
         width: 30, height: 30, flexShrink: 0, borderRadius: '50%', marginTop: 2,
-        background: 'rgba(229,0,76,0.08)', border: '1px solid rgba(229,0,76,0.2)',
+        background: 'rgba(136,117,255,0.08)', border: '1px solid rgba(136,117,255,0.20)',
         overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <img src="/oricli-avatar.png" alt="ORI" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -397,7 +454,7 @@ function Message({ msg, onEdit }) {
         {msg.streaming && !msg.content ? (
           msg.modelTier === 'research' ? <DeepResearchBanner /> : <ThinkingDots />
         ) : (
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
             {msg.content ?? ''}
           </ReactMarkdown>
         )}
@@ -1000,7 +1057,7 @@ export function ChatArea() {
     try {
       let full = '';
       // Pass profile field to Go backbone for sovereign profile routing
-      const extraBody = activeChatAgent ? { profile: activeChatAgent.id } : {};
+      const extraBody = activeChatAgent ? { profile: activeChatAgent.id } : IS_DEMO ? { profile: 'smb_assistant' } : {};
       for await (const delta of streamChat({
         messages,
         model: activeModel,
@@ -1098,7 +1155,7 @@ export function ChatArea() {
 
     try {
       let full = '';
-      const extraBody = activeChatAgent ? { profile: activeChatAgent.id } : {};
+      const extraBody = activeChatAgent ? { profile: activeChatAgent.id } : IS_DEMO ? { profile: 'smb_assistant' } : {};
       for await (const delta of streamChat({ messages, model: activeModel, signal: controller.signal, extraBody })) {
         full += delta;
         updateLastAgentMessage(sessionId, { content: full, streaming: true });

@@ -289,8 +289,11 @@ func (g *WebInjectionGuard) compileOutputPatterns() {
 			`)`,
 	)
 
-	// CRLF injection — \r\n sequences that could split HTTP headers
-	g.reCRLF = regexp.MustCompile(`(%0[dD]%0[aA]|%0[aA]%0[dD]|\r\n\w+:|\n\w+:\s)`)
+	// CRLF injection — URL-encoded \r\n sequences that could split HTTP headers.
+	// We only flag URL-encoded variants (%0d%0a) because plain \r\n in model output
+	// is legitimately used in formatted prose and is safely escaped by JSON transport.
+	// Matching plain "\nWord: " patterns causes false positives on formatted responses.
+	g.reCRLF = regexp.MustCompile(`(%0[dD]%0[aA]|%0[aA]%0[dD])`)
 
 	// SSRF — internal metadata and loopback URLs appearing in generated output
 	g.reSSRF = regexp.MustCompile(

@@ -1,39 +1,26 @@
 import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useSCStore } from '../store';
-import { MessageSquare, Bot, User, GitBranch, GitMerge, Layers, Settings, Microscope, Plug, Cable, ScrollText, Brain, Target, Code2, Sun, Moon } from 'lucide-react';
-import { resolveEriTheme } from '../App';
+import { Home, Zap, BookOpen, Pin, Plug, Settings, Sun, Moon, LogOut } from 'lucide-react';
+import { resolveEriTheme, IS_DEMO } from '../App';
 
 const NAV_ITEMS = [
-  { id: 'chat',        Icon: MessageSquare, label: 'Chat' },
-  { id: 'canvas',      Icon: Layers,        label: 'Canvas' },
-  { id: 'research',    Icon: Microscope,    label: 'Research' },
-  { id: 'agents',      Icon: Bot,           label: 'Agents' },
-  { id: 'profiles',    Icon: User,          label: 'Profiles' },
-  { id: 'workflows',   Icon: GitBranch,     label: 'Workflows' },
-  { id: 'pipelines',   Icon: GitMerge,      label: 'Pipelines' },
-  { id: 'ori-studio',  Icon: Code2,         label: 'ORI Studio' },
-  { id: 'mcp',         Icon: Plug,          label: 'MCP' },
-  { id: 'connections', Icon: Cable,          label: 'Connect' },
-  { id: 'memory',      Icon: Brain,         label: 'Memory' },
-  { id: 'goals',       Icon: Target,        label: 'Goals' },
-  { id: 'logs',        Icon: ScrollText,    label: 'Logs' },
+  { id: 'home',        Icon: Home,     label: 'Home'        },
+  { id: 'automations', Icon: Zap,      label: 'Automations' },
+  { id: 'notebook',    Icon: BookOpen, label: 'Notebook'    },
+  { id: 'board',       Icon: Pin,      label: 'Board'       },
+  { id: 'connections', Icon: Plug,     label: 'Connections' },
 ];
 
 function ERIOrb() {
-  const eriState    = useSCStore(s => s.eriState);
-  const sensory     = useSCStore(s => s.sensoryState);
-  const wsStatus    = useSCStore(s => s.wsStatus);
-  const eri         = eriState?.eri ?? 0.5;
-  const theme       = resolveEriTheme(eri);
-  const pulseRate   = sensory?.pulse_rate ?? 1.0;
-  const bpm         = eriState?.bpm ?? 120;
-  const coherence   = Math.round((eriState?.coherence ?? 1.0) * 100);
+  const eriState  = useSCStore(s => s.eriState);
+  const wsStatus  = useSCStore(s => s.wsStatus);
+  const eri       = eriState?.eri ?? 0.5;
+  const theme     = resolveEriTheme(eri);
+  const bpm       = eriState?.bpm ?? 120;
+  const beatMs    = Math.round(60000 / Math.max(40, Math.min(180, bpm)));
+  const animDur   = `${(beatMs / 1000).toFixed(2)}s`;
   const isConnected = wsStatus === 'connected';
-
-  // BPM → animation duration (60000ms / bpm = ms per beat)
-  const beatMs = Math.round(60000 / Math.max(40, Math.min(180, bpm)));
-  const animDur = `${(beatMs / 1000).toFixed(2)}s`;
-
   const [hover, setHover] = React.useState(false);
 
   return (
@@ -42,53 +29,22 @@ function ERIOrb() {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      {/* Orb */}
       <div style={{
-        width: 10, height: 10, borderRadius: '50%',
+        width: 8, height: 8, borderRadius: '50%',
         background: isConnected ? theme.accent : '#44445A',
         animation: isConnected ? `eri-pulse ${animDur} ease-in-out infinite` : 'none',
         transition: 'background 1.2s ease',
-        cursor: 'default',
       }} />
-      {/* Tiny label */}
-      <span style={{
-        fontSize: 7, fontFamily: 'var(--font-inter)', color: isConnected ? theme.accent : '#44445A',
-        letterSpacing: '0.02em', lineHeight: 1, fontWeight: 600,
-        transition: 'color 1.2s ease',
-      }}>
-        {isConnected ? theme.name.slice(0, 4).toUpperCase() : 'IDLE'}
-      </span>
-
-      {/* Hover tooltip */}
       {hover && isConnected && (
         <div style={{
           position: 'absolute', left: 52, bottom: 0, zIndex: 400,
           background: 'var(--color-sc-surface)', border: `1px solid ${theme.accent}40`,
-          borderRadius: 10, padding: '10px 14px', width: 180,
-          boxShadow: `0 4px 20px ${theme.accent}20`,
-          pointerEvents: 'none',
+          borderRadius: 10, padding: '10px 14px', width: 160,
+          boxShadow: `0 4px 20px ${theme.accent}20`, pointerEvents: 'none',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: theme.accent, flexShrink: 0,
-                          animation: `eri-pulse ${animDur} ease-in-out infinite` }} />
-            <span style={{ fontFamily: 'var(--font-grotesk)', fontWeight: 700, fontSize: 12, color: theme.accent }}>
-              {theme.name}
-            </span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 10px' }}>
-            {[
-              ['ERI',       `${(eri * 100).toFixed(0)}%`],
-              ['Coherence', `${coherence}%`],
-              ['Key',       eriState?.musicalKey ?? '—'],
-              ['BPM',       `${Math.round(bpm)}`],
-              ['Pacing',    `${Math.round((eriState?.pacing ?? 1) * 100)}%`],
-              ['Tone',      (sensory?.active_tone ?? 'Deep Focus').split(' ')[0]],
-            ].map(([k, v]) => (
-              <React.Fragment key={k}>
-                <span style={{ fontSize: 10, color: 'var(--color-sc-text-dim)' }}>{k}</span>
-                <span style={{ fontSize: 10, color: 'var(--color-sc-text-muted)', textAlign: 'right', fontFamily: k === 'Key' || k === 'Tone' ? 'var(--font-inter)' : 'var(--font-mono)' }}>{v}</span>
-              </React.Fragment>
-            ))}
+          <div style={{ fontSize: 11, fontWeight: 700, color: theme.accent, marginBottom: 6 }}>{theme.name}</div>
+          <div style={{ fontSize: 10, color: 'var(--color-sc-text-dim)' }}>
+            ERI {Math.round(eri * 100)}% · {Math.round(bpm)} BPM
           </div>
         </div>
       )}
@@ -102,10 +58,21 @@ export function NavRail({ onOpenSettings }) {
   const bgRuns        = useSCStore(s => s.bgRuns);
   const theme         = useSCStore(s => s.theme);
   const toggleTheme   = useSCStore(s => s.toggleTheme);
+  const logout        = useSCStore(s => s.logout);
+  const user          = useSCStore(s => s.user);
+  const navigate      = useNavigate();
+  const location      = useLocation();
+
+  const currentPage = location.pathname.replace(/^\//, '') || activePage;
 
   const activeRunCount = Object.values(bgRuns).filter(r =>
     r.run?.status === 'running' || r.run?.status === 'queued' || !r.run
   ).length;
+
+  function handleLogout() {
+    logout();
+    navigate('/login', { replace: true });
+  }
 
   return (
     <nav style={{
@@ -116,34 +83,35 @@ export function NavRail({ onOpenSettings }) {
       padding: '12px 0', gap: 2,
     }}>
       {/* Logo */}
-      <div style={{ marginBottom: 16, padding: '4px 0' }}>
-        <img
-          src="/ori-mark.png"
-          alt="Oricli"
-          className="logo-light-src"
-          style={{ width: 32, height: 32, objectFit: 'contain', display: 'block' }}
-        />
+      <div
+        onClick={() => { navigate('/home'); setActivePage('home'); }}
+        title="Home"
+        style={{ marginBottom: 16, padding: '4px 0', cursor: 'pointer', opacity: 0.9, transition: 'opacity 0.15s' }}
+        onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+        onMouseLeave={e => e.currentTarget.style.opacity = '0.9'}
+      >
+        <img src="/ori-mark.png" alt="ORI" className="logo-light-src"
+          style={{ width: 32, height: 32, objectFit: 'contain', display: 'block' }} />
       </div>
 
       {/* Nav items */}
       {NAV_ITEMS.map(({ id, Icon, label }) => {
-        const active = activePage === id;
-        const showBadge = id === 'workflows' && activeRunCount > 0;
+        const active = currentPage === id;
+        const showBadge = id === 'automations' && activeRunCount > 0;
         return (
           <button
             key={id}
-            onClick={() => setActivePage(id)}
+            onClick={() => { navigate(`/${id}`); setActivePage(id); }}
             title={label}
             style={{
               width: 44, height: 44, borderRadius: 10, border: 'none', cursor: 'pointer',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
               background: active ? 'color-mix(in srgb, var(--color-sc-gold) 15%, transparent)' : 'transparent',
               color: active ? 'var(--color-sc-gold)' : 'var(--color-sc-text-muted)',
-              transition: 'background 0.15s, color 0.15s',
-              position: 'relative',
+              transition: 'background 0.15s, color 0.15s', position: 'relative',
             }}
-            onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(128,128,128,0.12)'; e.currentTarget.style.color = 'var(--color-sc-text)'; } }}
-            onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-sc-text-muted)'; } }}
+            onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(128,128,128,0.1)'; e.currentTarget.style.color = 'var(--color-sc-text)'; }}}
+            onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-sc-text-muted)'; }}}
           >
             {active && (
               <span style={{
@@ -155,11 +123,9 @@ export function NavRail({ onOpenSettings }) {
             <span style={{ fontSize: 9, fontFamily: 'var(--font-inter)', fontWeight: active ? 600 : 400, letterSpacing: '0.02em' }}>
               {label}
             </span>
-            {/* Running badge — visible from any page */}
             {showBadge && (
               <span style={{
-                position: 'absolute', top: 4, right: 4,
-                width: 8, height: 8, borderRadius: '50%',
+                position: 'absolute', top: 4, right: 4, width: 8, height: 8, borderRadius: '50%',
                 background: 'var(--color-sc-gold)',
                 boxShadow: '0 0 6px color-mix(in srgb, var(--color-sc-gold) 70%, transparent)',
                 animation: 'pulse 1.5s ease-in-out infinite',
@@ -169,48 +135,42 @@ export function NavRail({ onOpenSettings }) {
         );
       })}
 
-      {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* ERI Status Orb */}
       <ERIOrb />
 
       {/* Theme toggle */}
-      <button
-        onClick={toggleTheme}
-        title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-        style={{
-          width: 44, height: 44, borderRadius: 10, border: 'none', cursor: 'pointer',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
-          background: 'transparent', color: 'var(--color-sc-text-muted)', transition: 'background 0.15s, color 0.15s',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(128,128,128,0.1)'; e.currentTarget.style.color = 'var(--color-sc-text)'; }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-sc-text-muted)'; }}
-      >
-        {theme === 'dark'
-          ? <Sun size={15} strokeWidth={1.7} />
-          : <Moon size={15} strokeWidth={1.7} />
-        }
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-inter)' }}>
-          {theme === 'dark' ? 'Light' : 'Dark'}
-        </span>
-      </button>
+      <NavBtn onClick={toggleTheme} title={theme === 'dark' ? 'Light mode' : 'Dark mode'} label={theme === 'dark' ? 'Light' : 'Dark'}>
+        {theme === 'dark' ? <Sun size={15} strokeWidth={1.7} /> : <Moon size={15} strokeWidth={1.7} />}
+      </NavBtn>
 
       {/* Settings */}
-      <button
-        onClick={onOpenSettings}
-        title="Settings"
-        style={{
-          width: 44, height: 44, borderRadius: 10, border: 'none', cursor: 'pointer',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
-          background: 'transparent', color: 'var(--color-sc-text-muted)', transition: 'background 0.15s, color 0.15s',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(128,128,128,0.12)'; e.currentTarget.style.color = 'var(--color-sc-text)'; }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-sc-text-muted)'; }}
-      >
+      <NavBtn onClick={() => navigate('/settings')} title="Settings" label="Settings">
         <Settings size={17} strokeWidth={1.7} />
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-inter)' }}>Settings</span>
-      </button>
+      </NavBtn>
+
+      {/* Avatar + logout */}
+      {user && (
+        <NavBtn onClick={handleLogout} title={`Sign out (${user.name})`} label="Sign out">
+          <LogOut size={15} strokeWidth={1.7} />
+        </NavBtn>
+      )}
     </nav>
+  );
+}
+
+function NavBtn({ onClick, title, label, children }) {
+  return (
+    <button onClick={onClick} title={title} style={{
+      width: 44, height: 44, borderRadius: 10, border: 'none', cursor: 'pointer',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+      background: 'transparent', color: 'var(--color-sc-text-muted)', transition: 'background 0.15s, color 0.15s',
+    }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(128,128,128,0.1)'; e.currentTarget.style.color = 'var(--color-sc-text)'; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-sc-text-muted)'; }}
+    >
+      {children}
+      <span style={{ fontSize: 9, fontFamily: 'var(--font-inter)' }}>{label}</span>
+    </button>
   );
 }

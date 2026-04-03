@@ -5,53 +5,60 @@
 @property --color-sc-gold {
   syntax: '<color>';
   inherits: true;
-  initial-value: #E5004C;
+  initial-value: #8875FF;
 }
 @property --color-sc-gold-glow {
   syntax: '<color>';
   inherits: true;
-  initial-value: #FF0055;
+  initial-value: #A99BFF;
 }
 
 @theme {
-  --color-sc-bg: #080810;
-  --color-sc-surface: #0E0810;
-  --color-sc-surface2: #150A14;
-  --color-sc-border: #1E0A18;
-  --color-sc-border2: #2A0F22;
-  --color-sc-gold: #E5004C;
-  --color-sc-gold-glow: #FF0055;
-  --color-sc-text: #F0ECE8;
-  --color-sc-text-muted: #9A8890;
-  --color-sc-text-dim: #4D2F42;
-  --color-sc-success: #06D6A0;
-  --color-sc-danger: #FF4D6D;
-  --color-sc-blue: #4D9EFF;
+  --color-sc-bg: #0C0C11;
+  --color-sc-surface: #13131A;
+  --color-sc-surface2: #1A1A23;
+  --color-sc-border: #22222E;
+  --color-sc-border2: #2C2C3A;
+  --color-sc-gold: #8875FF;
+  --color-sc-gold-glow: #A99BFF;
+  --color-sc-text: #EEEDF2;
+  --color-sc-text-muted: #8A8898;
+  --color-sc-text-dim: #47465A;
+  --color-sc-success: #22D3A0;
+  --color-sc-danger: #F06060;
+  --color-sc-blue: #60AAFF;
 
   --font-grotesk: 'Space Grotesk', sans-serif;
   --font-inter: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 }
 
+/* Hard-code dark defaults on :root so there's zero flash before JS/theme runs */
+:root {
+  background: #0C0C11;
+  color: #EEEDF2;
+}
+
 /* ── Light theme overrides ── */
 [data-theme="light"] {
-  --color-sc-bg: #F5F0EC;
-  --color-sc-surface: #EDE8E3;
-  --color-sc-surface2: #E5DFD9;
-  --color-sc-border: #D4CDC5;
-  --color-sc-border2: #C5BDB4;
-  --color-sc-gold: #C4001E;
-  --color-sc-gold-glow: #E5003A;
-  --color-sc-text: #1A1214;
-  --color-sc-text-muted: #6B5F68;
-  --color-sc-text-dim: #9E9099;
+  --color-sc-bg: #F7F7FA;
+  --color-sc-surface: #FFFFFF;
+  --color-sc-surface2: #F0F0F5;
+  --color-sc-border: #E2E2EC;
+  --color-sc-border2: #D0D0DE;
+  --color-sc-gold: #6254D6;
+  --color-sc-gold-glow: #7B6EE8;
+  --color-sc-text: #111118;
+  --color-sc-text-muted: #4A4A60;
+  --color-sc-text-dim: #8888A0;
   --color-sc-success: #059669;
   --color-sc-danger: #DC2626;
-  --color-sc-blue: #1D4ED8;
+  --color-sc-blue: #2563EB;
 }
 
 /* Suppress ALL transitions on initial load — removed by React after first render */
-.sc-no-transition, .sc-no-transition * {
+.sc-no-transition, .sc-no-transition *,
+html.sc-no-transition {
   transition: none !important;
   animation: none !important;
 }

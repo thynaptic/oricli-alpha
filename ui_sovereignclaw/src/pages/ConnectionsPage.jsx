@@ -5,45 +5,30 @@ import { Check, X, Zap, AlertCircle, ExternalLink, Trash2, TestTube, Database, R
 const CATALOG = [
   // Communication
   {
-    id: 'discord', name: 'Discord', category: 'Communication',
-    emoji: '🎮', color: '#5865F2',
-    description: 'Read messages, post updates, trigger workflows from Discord channels.',
-    docs: 'https://discord.com/developers/docs/intro',
-    fields: [
-      { key: 'bot_token', label: 'Bot Token', type: 'password', placeholder: 'Bot token from Discord Developer Portal', required: true },
-      { key: 'guild_id', label: 'Server (Guild) ID', type: 'text', placeholder: 'Optional — restrict to one server' },
-    ],
-  },
-  {
-    id: 'telegram', name: 'Telegram', category: 'Communication',
-    emoji: '✈️', color: '#2AABEE',
-    description: 'Send and receive messages via Telegram bots for agent notifications and inputs.',
-    docs: 'https://core.telegram.org/bots/api',
-    fields: [
-      { key: 'bot_token', label: 'Bot Token', type: 'password', placeholder: 'Token from @BotFather', required: true },
-      { key: 'default_chat_id', label: 'Default Chat ID', type: 'text', placeholder: 'Optional chat/channel ID' },
-    ],
-  },
-  {
     id: 'slack', name: 'Slack', category: 'Communication',
     emoji: '💬', color: '#4A154B',
-    description: 'Post summaries, search message history, trigger Slack workflows.',
+    badge: 'Team+',
+    description: 'Deploy Ori as a Slack bot in your workspace — answer questions, run tasks, and post summaries directly in channels.',
     docs: 'https://api.slack.com/start',
     fields: [
+      { key: 'workspace_name', label: 'Workspace Name', type: 'text', placeholder: 'e.g. Acme Corp', required: true },
       { key: 'bot_token', label: 'Bot Token (xoxb-…)', type: 'password', placeholder: 'xoxb-...', required: true },
+      { key: 'app_token', label: 'App-Level Token (xapp-…)', type: 'password', placeholder: 'xapp-...', required: true },
       { key: 'default_channel', label: 'Default Channel', type: 'text', placeholder: '#general' },
     ],
   },
   {
     id: 'ms_teams', name: 'Microsoft Teams', category: 'Communication',
     emoji: '🔷', color: '#6264A7',
+    badge: 'Business',
     comingSoon: true,
-    description: 'Post messages and read channels via Microsoft Graph API.',
-    docs: 'https://learn.microsoft.com/en-us/graph/teams-concept-overview',
+    description: 'Bring Ori into Teams — answer questions, assist with tasks, and automate workflows.',
+    docs: 'https://learn.microsoft.com/en-us/microsoftteams/platform/agents-in-teams/overview',
     fields: [
-      { key: 'client_id', label: 'Client (Application) ID', type: 'text', required: true },
-      { key: 'client_secret', label: 'Client Secret', type: 'password', required: true },
-      { key: 'tenant_id', label: 'Tenant ID', type: 'text', required: true },
+      { key: 'app_id', label: 'Azure App (Client) ID', type: 'text', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', required: true },
+      { key: 'app_password', label: 'Client Secret', type: 'password', placeholder: 'Azure app client secret', required: true },
+      { key: 'tenant_id', label: 'Tenant ID', type: 'text', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
+      { key: 'bot_name', label: 'Bot Display Name', type: 'text', placeholder: 'Ori' },
     ],
   },
 
@@ -51,7 +36,7 @@ const CATALOG = [
   {
     id: 'notion', name: 'Notion', category: 'Productivity',
     emoji: '📓', color: '#000000',
-    description: 'Read and write Notion pages and databases — ideal for knowledge RAG.',
+    description: 'Read and write Notion pages and databases — give Ori your team\'s knowledge base.',
     docs: 'https://developers.notion.com',
     fields: [
       { key: 'api_key', label: 'Internal Integration Secret', type: 'password', placeholder: 'secret_...', required: true },
@@ -59,113 +44,40 @@ const CATALOG = [
     ],
   },
   {
-    id: 'todoist', name: 'Todoist', category: 'Productivity',
-    emoji: '✅', color: '#DB4035',
-    description: 'Fetch tasks, create action items, and track agent-generated to-dos.',
-    docs: 'https://developer.todoist.com/rest/v2',
-    fields: [
-      { key: 'api_token', label: 'API Token', type: 'password', required: true },
-    ],
-  },
-  {
-    id: 'trello', name: 'Trello', category: 'Productivity',
-    emoji: '📋', color: '#0052CC',
-    description: 'Read boards, create cards, and manage Trello workflows from agents.',
-    docs: 'https://developer.atlassian.com/cloud/trello',
-    fields: [
-      { key: 'api_key', label: 'API Key', type: 'text', required: true },
-      { key: 'token', label: 'Token', type: 'password', required: true },
-      { key: 'board_id', label: 'Default Board ID', type: 'text' },
-    ],
-  },
-  {
-    id: 'airtable', name: 'Airtable', category: 'Productivity',
-    emoji: '🗂️', color: '#FCB400',
-    description: 'Query Airtable bases as structured RAG sources or write agent outputs.',
-    docs: 'https://airtable.com/developers/web/api/introduction',
-    fields: [
-      { key: 'api_key', label: 'Personal Access Token', type: 'password', placeholder: 'pat...', required: true },
-      { key: 'base_id', label: 'Default Base ID', type: 'text', placeholder: 'appXXXXXXXXXXXXXX' },
-    ],
-  },
-  {
-    id: 'linear', name: 'Linear', category: 'Productivity',
-    emoji: '⚡', color: '#5E6AD2',
-    description: 'Sync issues, create tasks, and use Linear as a project knowledge source.',
-    docs: 'https://developers.linear.app/docs/graphql/working-with-the-graphql-api',
-    fields: [
-      { key: 'api_key', label: 'Personal API Key', type: 'password', required: true },
-    ],
-  },
-  {
-    id: 'asana', name: 'Asana', category: 'Productivity',
-    emoji: '🎯', color: '#FC636B',
-    description: 'Read project tasks and write action items from agent outputs.',
-    docs: 'https://developers.asana.com/docs',
-    fields: [
-      { key: 'personal_access_token', label: 'Personal Access Token', type: 'password', required: true },
-      { key: 'workspace_gid', label: 'Workspace GID', type: 'text' },
-    ],
-  },
-
-  // Enterprise
-  {
-    id: 'google_workspace', name: 'Google Workspace', category: 'Enterprise',
+    id: 'google_workspace', name: 'Google Workspace', category: 'Productivity',
     emoji: '🅶', color: '#4285F4',
-    description: 'Access Gmail, Drive, Docs, Calendar, Tasks, Sheets, Forms & Keep for agent RAG.',
+    description: 'Connect Gmail, Drive, Docs, and Calendar — Ori answers questions using your actual documents.',
     docs: 'https://developers.google.com/workspace',
     authType: 'oauth2',
     fields: [],
   },
+
+  // CRM
   {
-    id: 'microsoft_365', name: 'Microsoft 365', category: 'Enterprise',
-    emoji: '🪟', color: '#0078D4',
-    comingSoon: true,
-    description: 'Access OneDrive, SharePoint, Outlook, and Teams via Microsoft Graph.',
-    docs: 'https://learn.microsoft.com/en-us/graph/overview',
-    fields: [
-      { key: 'client_id', label: 'Application (Client) ID', type: 'text', required: true },
-      { key: 'client_secret', label: 'Client Secret', type: 'password', required: true },
-      { key: 'tenant_id', label: 'Tenant ID', type: 'text', required: true },
-    ],
-  },
-  {
-    id: 'workday', name: 'Workday', category: 'Enterprise',
-    emoji: '🏢', color: '#F5820F',
-    comingSoon: true,
-    description: 'Connect to Workday HCM for HR data, org charts, and workforce analytics.',
-    docs: 'https://developer.workday.com/documentation',
-    fields: [
-      { key: 'tenant_url', label: 'Tenant URL', type: 'url', placeholder: 'https://wd2.myworkday.com/tenant_name', required: true },
-      { key: 'client_id', label: 'Client ID', type: 'text', required: true },
-      { key: 'client_secret', label: 'Client Secret', type: 'password', required: true },
-      { key: 'refresh_token', label: 'Refresh Token', type: 'password' },
-    ],
-  },
-  {
-    id: 'salesforce', name: 'Salesforce', category: 'Enterprise',
-    emoji: '☁️', color: '#00A1E0',
-    description: 'Query CRM records, contacts, and opportunities as RAG context.',
-    docs: 'https://developer.salesforce.com/docs/apis',
-    fields: [
-      { key: 'instance_url', label: 'Instance URL', type: 'url', placeholder: 'https://yourorg.my.salesforce.com', required: true },
-      { key: 'access_token', label: 'Access Token', type: 'password', required: true },
-      { key: 'refresh_token', label: 'Refresh Token', type: 'password' },
-    ],
-  },
-  {
-    id: 'hubspot', name: 'HubSpot', category: 'Enterprise',
+    id: 'hubspot', name: 'HubSpot', category: 'CRM',
     emoji: '🔶', color: '#FF7A59',
-    description: 'Pull CRM data, contacts, deals, and pipeline information for agent context.',
+    description: 'Pull contacts, deals, and pipeline data — ask Ori questions about your business in plain English.',
     docs: 'https://developers.hubspot.com/docs/api/overview',
     fields: [
       { key: 'access_token', label: 'Private App Access Token', type: 'password', required: true },
     ],
   },
+
+  // Developer
   {
-    id: 'jira', name: 'Jira', category: 'Enterprise',
+    id: 'github_api', name: 'GitHub', category: 'Developer',
+    emoji: '🐙', color: '#24292F',
+    description: 'Query repos, issues, PRs, and code — Ori becomes aware of your codebase and project state.',
+    docs: 'https://docs.github.com/en/rest',
+    fields: [
+      { key: 'personal_access_token', label: 'Personal Access Token', type: 'password', required: true },
+      { key: 'default_owner', label: 'Default Org / User', type: 'text' },
+    ],
+  },
+  {
+    id: 'jira', name: 'Jira', category: 'Developer',
     emoji: '🔵', color: '#0052CC',
-    description: 'Read issues, epics, and sprints from Jira as project knowledge RAG.',
+    description: 'Read issues, epics, and sprints — ask Ori about project status without leaving chat.',
     docs: 'https://developer.atlassian.com/cloud/jira/platform/rest/v3',
     fields: [
       { key: 'domain', label: 'Atlassian Domain', type: 'text', placeholder: 'yourcompany.atlassian.net', required: true },
@@ -174,130 +86,16 @@ const CATALOG = [
     ],
   },
 
-  // Research
-  {
-    id: 'arxiv', name: 'arXiv', category: 'Research',
-    emoji: '📐', color: '#B31B1B',
-    description: 'Auto-index latest preprints by category. No API key needed.',
-    docs: 'https://info.arxiv.org/help/api/index.html',
-    fields: [
-      { key: 'default_categories', label: 'Categories', type: 'text', placeholder: 'cs.AI, cs.LG, cs.IT, stat.ML', required: true },
-      { key: 'days_back', label: 'Fetch papers from last N days', type: 'text', placeholder: '7' },
-      { key: 'max_results', label: 'Max papers per index run', type: 'text', placeholder: '50' },
-    ],
-  },
-  {
-    id: 'pubmed', name: 'PubMed / NCBI', category: 'Research',
-    emoji: '🧬', color: '#336699',
-    description: 'Search 35M+ biomedical citations. No key required (key raises rate limits).',
-    docs: 'https://www.ncbi.nlm.nih.gov/home/develop/api/',
-    fields: [
-      { key: 'api_key', label: 'NCBI API Key (optional)', type: 'text', placeholder: 'Raises rate limit to 10 req/s' },
-    ],
-  },
-  {
-    id: 'semantic_scholar', name: 'Semantic Scholar', category: 'Research',
-    emoji: '📚', color: '#1A73A7',
-    description: 'AI-powered academic paper search with citation graphs. No key required.',
-    docs: 'https://api.semanticscholar.org/api-docs',
-    fields: [
-      { key: 'api_key', label: 'API Key (optional)', type: 'text', placeholder: 'Optional — higher rate limits' },
-    ],
-  },
-  {
-    id: 'newsapi', name: 'NewsAPI', category: 'Research',
-    emoji: '📰', color: '#333333',
-    description: 'Real-time news search from 80k+ sources worldwide.',
-    docs: 'https://newsapi.org/docs',
-    fields: [
-      { key: 'api_key', label: 'API Key', type: 'password', required: true },
-      { key: 'default_language', label: 'Default Language', type: 'text', placeholder: 'en' },
-    ],
-  },
-  {
-    id: 'reddit', name: 'Reddit', category: 'Research',
-    emoji: '🤖', color: '#FF4500',
-    description: 'Search posts and comments. Useful for community sentiment and discussions.',
-    docs: 'https://www.reddit.com/dev/api/',
-    fields: [
-      { key: 'client_id', label: 'App Client ID', type: 'text', required: true },
-      { key: 'client_secret', label: 'App Client Secret', type: 'password', required: true },
-      { key: 'user_agent', label: 'User Agent', type: 'text', placeholder: 'ORI Studio/1.0 (by u/username)' },
-    ],
-  },
-  {
-    id: 'wikipedia', name: 'Wikipedia', category: 'Research',
-    emoji: '🌐', color: '#3366CC',
-    description: 'Search and retrieve Wikipedia articles. No API key required.',
-    docs: 'https://www.mediawiki.org/wiki/API:Main_page',
-    fields: [
-      { key: 'default_language', label: 'Default Language', type: 'text', placeholder: 'en' },
-    ],
-  },
-  {
-    id: 'youtube', name: 'YouTube Data API', category: 'Research',
-    emoji: '▶️', color: '#FF0000',
-    description: 'Search videos, read transcripts, and extract metadata for agent context.',
-    docs: 'https://developers.google.com/youtube/v3',
-    fields: [
-      { key: 'api_key', label: 'Google API Key', type: 'password', required: true },
-    ],
-  },
-
-  // Developer
-  {
-    id: 'github_api', name: 'GitHub (Direct API)', category: 'Developer',
-    emoji: '🐙', color: '#24292F',
-    description: 'Query repos, issues, code, PRs directly — separate from the MCP server.',
-    docs: 'https://docs.github.com/en/rest',
-    fields: [
-      { key: 'personal_access_token', label: 'Personal Access Token', type: 'password', required: true },
-      { key: 'default_owner', label: 'Default Org / User', type: 'text' },
-    ],
-  },
-  {
-    id: 'gitlab', name: 'GitLab', category: 'Developer',
-    emoji: '🦊', color: '#FC6D26',
-    description: 'Access self-hosted or gitlab.com repos, issues, and pipelines.',
-    docs: 'https://docs.gitlab.com/ee/api/',
-    fields: [
-      { key: 'personal_access_token', label: 'Personal Access Token', type: 'password', required: true },
-      { key: 'host', label: 'GitLab Host', type: 'url', placeholder: 'https://gitlab.com' },
-    ],
-  },
-
   // Data & Storage
   {
     id: 'supabase', name: 'Supabase', category: 'Data & Storage',
     emoji: '⚡', color: '#3ECF8E',
-    description: 'Query Postgres via Supabase REST or use as a vector store for RAG.',
+    description: 'Query your Postgres database or use Supabase as a vector store for RAG pipelines.',
     docs: 'https://supabase.com/docs/reference/javascript/introduction',
     fields: [
       { key: 'url', label: 'Project URL', type: 'url', placeholder: 'https://xxx.supabase.co', required: true },
       { key: 'anon_key', label: 'Anon / Public Key', type: 'password', required: true },
       { key: 'service_role_key', label: 'Service Role Key (optional)', type: 'password' },
-    ],
-  },
-  {
-    id: 'pinecone', name: 'Pinecone', category: 'Data & Storage',
-    emoji: '🌲', color: '#1C3134',
-    description: 'Managed vector database — store and query embeddings for RAG pipelines.',
-    docs: 'https://docs.pinecone.io/reference/api',
-    fields: [
-      { key: 'api_key', label: 'API Key', type: 'password', required: true },
-      { key: 'environment', label: 'Environment', type: 'text', placeholder: 'us-east-1-aws' },
-      { key: 'index_name', label: 'Default Index', type: 'text' },
-    ],
-  },
-  {
-    id: 'mongodb', name: 'MongoDB Atlas', category: 'Data & Storage',
-    emoji: '🍃', color: '#47A248',
-    description: 'Query MongoDB documents and use Atlas Vector Search for RAG.',
-    docs: 'https://www.mongodb.com/docs/atlas/api/data-api/',
-    fields: [
-      { key: 'connection_string', label: 'Connection String', type: 'password', placeholder: 'mongodb+srv://...', required: true },
-      { key: 'database', label: 'Database Name', type: 'text' },
-      { key: 'data_api_key', label: 'Data API Key (optional)', type: 'password' },
     ],
   },
 ];
@@ -425,7 +223,7 @@ function OAuthPanel({ integration, saved, onDelete }) {
               <div style={{ fontSize: 11, color: 'var(--color-sc-text-dim)' }}>{name ? email : ''}</div>
             </div>
           </div>
-          <a href="/connections/oauth/authorize/google" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 16px', borderRadius: 9, border: '1px solid var(--color-sc-border)', background: 'transparent', color: 'var(--color-sc-text-muted)', cursor: 'pointer', fontSize: 13, textDecoration: 'none', fontFamily: 'var(--font-inter)' }}>
+          <a href="/api/connections/oauth/authorize/google" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 16px', borderRadius: 9, border: '1px solid var(--color-sc-border)', background: 'transparent', color: 'var(--color-sc-text-muted)', cursor: 'pointer', fontSize: 13, textDecoration: 'none', fontFamily: 'var(--font-inter)' }}>
             Re-authorize
           </a>
         </div>
@@ -434,7 +232,7 @@ function OAuthPanel({ integration, saved, onDelete }) {
           <div style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--color-sc-border)', fontSize: 12, color: 'var(--color-sc-text-muted)', lineHeight: 1.5 }}>
             Connect your Google account to give Oricli access to Gmail, Drive, Docs, Calendar, Tasks, Sheets, Forms &amp; Keep.
           </div>
-          <a href="/connections/oauth/authorize/google" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '11px 20px', borderRadius: 10, background: '#fff', color: '#1a1a1a', cursor: 'pointer', fontSize: 14, fontWeight: 600, textDecoration: 'none', fontFamily: 'var(--font-grotesk)', border: 'none' }}>
+          <a href="/api/connections/oauth/authorize/google" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '11px 20px', borderRadius: 10, background: '#fff', color: '#1a1a1a', cursor: 'pointer', fontSize: 14, fontWeight: 600, textDecoration: 'none', fontFamily: 'var(--font-grotesk)', border: 'none' }}>
             <span style={{ fontSize: 18 }}>🅶</span> Authorize with Google
           </a>
         </div>
@@ -466,7 +264,7 @@ function ConfigDrawer({ integration, saved, indexStatus, onSave, onDelete, onInd
     setTesting(true);
     setTestResult(null);
     try {
-      const r = await fetch(`/connections/${integration.id}/test`, { method: 'POST' });
+      const r = await fetch(`/api/connections/${integration.id}/test`, { method: 'POST' });
       const d = await r.json();
       setTestResult(d);
     } catch {
@@ -650,7 +448,12 @@ function IntegrationCard({ integration, saved, indexStatus, onConfigure }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 22 }}>{integration.emoji}</span>
           <div>
-            <div style={{ fontFamily: 'var(--font-grotesk)', fontWeight: 700, fontSize: 13, color: 'var(--color-sc-text)' }}>{integration.name}</div>
+            <div style={{ fontFamily: 'var(--font-grotesk)', fontWeight: 700, fontSize: 13, color: 'var(--color-sc-text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {integration.name}
+              {integration.badge && (
+                <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 6, fontWeight: 700, background: 'rgba(136,117,255,0.18)', color: '#A099FF', letterSpacing: '0.05em' }}>{integration.badge}</span>
+              )}
+            </div>
             <div style={{ fontSize: 10, color: 'var(--color-sc-text-dim)', marginTop: 1 }}>{integration.category}</div>
           </div>
         </div>
@@ -705,11 +508,11 @@ export function ConnectionsPage() {
   const [configuring, setConfiguring] = useState(null);
 
   const refresh = useCallback(() => {
-    fetch('/connections').then(r => r.json()).then(d => setSaved(d.connections || {})).catch(() => {});
+    fetch('/api/connections').then(r => r.json()).then(d => setSaved(d.connections || {})).catch(() => {});
   }, []);
 
   const refreshStatus = useCallback(() => {
-    fetch('/connections/index/status').then(r => r.json()).then(d => setIndexStatus(d)).catch(() => {});
+    fetch('/api/connections/index/status').then(r => r.json()).then(d => setIndexStatus(d)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -731,7 +534,7 @@ export function ConnectionsPage() {
   }, [refresh]);
 
   async function handleSave(id, payload) {
-    await fetch(`/connections/${id}`, {
+    await fetch(`/api/connections/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
@@ -739,13 +542,13 @@ export function ConnectionsPage() {
   }
 
   async function handleDelete(id) {
-    await fetch(`/connections/${id}`, { method: 'DELETE' });
+    await fetch(`/api/connections/${id}`, { method: 'DELETE' });
     refresh();
     setConfiguring(null);
   }
 
   async function handleIndex(id, opts) {
-    await fetch(`/connections/${id}/index`, {
+    await fetch(`/api/connections/${id}/index`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(opts),
     });

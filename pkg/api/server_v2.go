@@ -424,6 +424,10 @@ func (s *ServerV2) setupRoutes() {
 	// Public
 	v1.GET("/health", s.handleHealth)
 	v1.GET("/eri", s.handleERI)
+	v1.GET("/aeci", s.handleAECI)
+	v1.GET("/flow/prompt", s.handleFlowPrompt)
+	v1.POST("/flow/trigger", s.handleFlowTrigger)
+	v1.POST("/flow/prompt/dismiss", s.handleFlowDismiss)
 	v1.GET("/ws", s.handleWS)
 	v1.GET("/traces", s.handleGetTraces)
 	v1.GET("/loglines", s.handleLogLines)
@@ -699,15 +703,88 @@ func (s *ServerV2) handleHealth(c *gin.Context) {
 func (s *ServerV2) handleERI(c *gin.Context) {
 	res := s.Agent.SovEngine.Resonance.Current
 	c.JSON(http.StatusOK, gin.H{
-		"eri":        res.ERI,
-		"ers":        res.ERS,
-		"pacing":     res.Pacing,
-		"volatility": res.Volatility,
-		"coherence":  res.Coherence,
-		"musical_key": res.MusicalKey,
-		"bpm":        res.BPM,
-		"state":      s.Agent.SovEngine.Resonance.GetStateDescription(),
+		// Core ERI
+		"eri":            res.ERI,
+		"ers":            res.ERS,
+		"pacing":         res.Pacing,
+		"volatility":     res.Volatility,
+		"coherence":      res.Coherence,
+		"tone_coherence": res.ToneCoherence,
+		"arousal":        res.Arousal,
+		"musical_key":    res.MusicalKey,
+		"bpm":            res.BPM,
+		"state":          s.Agent.SovEngine.Resonance.GetStateDescription(),
+		// ARTE cognitive state
+		"arte_state":     res.ARTEState,
+		"arte_intensity": res.ARTEIntensity,
+		"arte_stability": res.ARTEStability,
+		"arte_palette":   s.Agent.SovEngine.Resonance.GetARTEPalette(),
+		// Temporal emotional memory
+		"temporal_baseline": res.TemporalBaseline,
+		"thirty_day_base":   res.ThirtyDayBase,
+		"momentum":          res.TemporalMomentum,
+		"volatility_7d":     res.Volatility7Day,
+		// Drift detection
+		"drift_active":   res.DriftActive,
+		"drift_severity": res.DriftSeverity,
+		"drift_type":     res.DriftType,
 	})
+}
+
+// handleAECI returns the Aurora Emotional Climate Index (weekly climate snapshot).
+func (s *ServerV2) handleAECI(c *gin.Context) {
+	a := s.Agent.SovEngine.Resonance.AECI.Current()
+	c.JSON(http.StatusOK, gin.H{
+		"index":              a.Index,
+		"category":           a.Category,
+		"stability_score":    a.StabilityScore,
+		"sentiment_momentum": a.SentimentMomentum,
+		"volatility_score":   a.VolatilityScore,
+		"ui_hue_shift":       a.UIHueShift,
+		"ui_saturation":      a.UISaturation,
+		"response_pacing":    a.ResponsePacing,
+		"tone_bias":          a.ToneBias,
+		"calculated_at":      a.CalculatedAt,
+	})
+}
+
+// handleFlowPrompt returns the next pending ambient reflection prompt (or null).
+func (s *ServerV2) handleFlowPrompt(c *gin.Context) {
+	p := s.Agent.SovEngine.FlowCompanion.NextPrompt()
+	if p == nil {
+		c.JSON(http.StatusOK, gin.H{"prompt": nil, "pending": 0})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"prompt": gin.H{
+			"id":         p.ID,
+			"text":       p.Prompt,
+			"trigger":    p.Trigger,
+			"arte_state": p.ARTEState,
+			"issued_at":  p.IssuedAt,
+			"expires_at": p.ExpiresAt,
+		},
+		"pending": s.Agent.SovEngine.FlowCompanion.PendingCount(),
+	})
+}
+
+// handleFlowTrigger fires a manual reflection trigger.
+func (s *ServerV2) handleFlowTrigger(c *gin.Context) {
+	s.Agent.SovEngine.FlowCompanion.TriggerManual()
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// handleFlowDismiss dismisses a reflection prompt by ID.
+func (s *ServerV2) handleFlowDismiss(c *gin.Context) {
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.ID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing id"})
+		return
+	}
+	s.Agent.SovEngine.FlowCompanion.DismissPrompt(body.ID)
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // handleListModules returns the live skills + registered Go modules.

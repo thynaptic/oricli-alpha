@@ -1,74 +1,107 @@
 import { useEffect, useRef } from 'react';
 
-// ERI → ORI accent color mapping
-// ERI is -1.0 to 1.0: swarm coherence/pacing/volatility composite
-function eriToAccent(eri) {
-  if (eri >= 0.7)  return { accent: '#FF1A5E', glow: '#FF4D80' }; // Symphonic — bright electric
-  if (eri >= 0.3)  return { accent: '#E5004C', glow: '#FF0055' }; // Stable — base ORI crimson
-  if (eri >= -0.3) return { accent: '#B8003D', glow: '#D4004A' }; // Dissonant — deeper, subdued
-  return           { accent: '#7A0028', glow: '#9E0035' };         // Cacophonic — dark burgundy
+// Fallback ERI → accent mapping used only when backbone is unreachable
+// (no arte_palette in response). Keeps purple family across all states.
+function eriFallbackAccent(eri) {
+  if (eri >= 0.7)  return { accent: '#C4B9FF', glow: '#D8D1FF' }; // Symphonic
+  if (eri >= 0.3)  return { accent: '#8875FF', glow: '#A99BFF' }; // Stable
+  if (eri >= -0.3) return { accent: '#6B5FCC', glow: '#8070E0' }; // Dissonant
+  return           { accent: '#4E4499', glow: '#6558BB' };         // Cacophonic
 }
 
-// Arousal → surface warmth tweak (subtle warm tint on high arousal)
-// Only applies in dark mode — in light mode the surface palette stays at theme values
+// Arousal → surface warmth tweak (subtle tint on high arousal)
+// Only applies in dark mode — light mode surface palette stays at theme values
 function arousalToSurface(arousal = 0.5, isDark = true) {
-  if (!isDark) return null; // Light theme: don't override surface vars
-  // arousal 0.0–1.0 shifts surface from cool-dark toward slightly warm-dark
-  const warmth = Math.round((arousal - 0.5) * 12); // -6 to +6 shift on red channel
-  const base = 14 + warmth; // 8–20 range for the red component of surface
+  if (!isDark) return null;
+  const warmth = Math.round((arousal - 0.5) * 6); // -3 to +3 shift
+  const r = Math.max(12, Math.min(22, 17 + warmth));
+  const g = Math.max(11, Math.min(20, 15 + warmth));
+  const b = Math.max(20, Math.min(35, 26 + warmth));
   return {
-    surface:  `rgb(${base}, 8, ${Math.max(8, 16 - warmth)})`,
-    surface2: `rgb(${Math.round(base * 1.1)}, 10, ${Math.max(10, 20 - warmth)})`,
+    surface:  `rgb(${r}, ${g}, ${b})`,
+    surface2: `rgb(${Math.round(r * 1.15)}, ${Math.round(g * 1.15)}, ${Math.round(b * 1.1)})`,
   };
 }
 
 /**
  * useERI — polls /api/eri every 8 seconds and maps the result to CSS custom
- * properties on :root. The existing CSS @property + transition handles the
- * smooth glide between states automatically.
+ * properties on :root. The CSS @property + transition handles smooth glide.
  *
- * Also accepts an `eri` value passed directly from chat SSE events so the
- * color updates immediately after each response (not just on the poll cycle).
+ * Priority for accent color:
+ *   1. arte_palette from backend (Ori's actual ARTE cognitive state)
+ *   2. ERI-tier fallback (when backbone unreachable)
+ *
+ * Also accepts a live `eri` value from chat SSE for immediate post-response
+ * color update (before the next poll cycle fires).
  */
 export function useERI(liveERI = null) {
-  const lastERI = useRef(null);
+  const lastERI    = useRef(null);
+  const lastState  = useRef(null);
+  const lastPalette = useRef(null);
 
   function applyERI(data) {
-    const eri     = typeof data.eri === 'number' ? data.eri : 0.5;
-    const arousal = typeof data.arousal === 'number' ? data.arousal : 0.5;
+    const eri      = typeof data.eri     === 'number' ? data.eri     : 0.5;
+    const arousal  = typeof data.arousal === 'number' ? data.arousal : 0.5;
+    const artePalette = data.arte_palette || null;
+    const arteState   = data.arte_state   || null;
 
-    // Skip if essentially unchanged (avoid micro-jitter)
-    if (lastERI.current !== null && Math.abs(lastERI.current - eri) < 0.05) return;
-    lastERI.current = eri;
+    // Skip if ERI + state are both essentially unchanged (avoid micro-jitter)
+    const eriUnchanged   = lastERI.current   !== null && Math.abs(lastERI.current - eri) < 0.05;
+    const stateUnchanged = lastState.current !== null && lastState.current === arteState;
+    if (eriUnchanged && stateUnchanged) return;
 
-    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-    const { accent, glow } = eriToAccent(eri);
+    lastERI.current   = eri;
+    lastState.current = arteState;
+
+    // ── Accent / glow — prefer ARTE palette from Ori's cognitive state ───────
+    let accent, glow;
+    if (artePalette?.accent && artePalette?.glow) {
+      accent = artePalette.accent;
+      glow   = artePalette.glow;
+      lastPalette.current = artePalette;
+    } else {
+      // Fallback: ERI-tier mapping (backbone unreachable or cold-start)
+      ({ accent, glow } = eriFallbackAccent(eri));
+    }
+
+    const isDark   = document.documentElement.getAttribute('data-theme') !== 'light';
     const surfaces = arousalToSurface(arousal, isDark);
 
     const root = document.documentElement;
-    // Enable ERI transitions now that we have a real value — safe to animate from here
     root.classList.add('sc-eri-live');
     root.style.setProperty('--color-sc-gold',      accent);
     root.style.setProperty('--color-sc-gold-glow', glow);
+
+    // Expose ARTE state as a data attribute for CSS selectors / Hive panel
+    if (arteState) root.setAttribute('data-arte-state', arteState);
+
+    // Expose anim-speed multiplier from ARTE palette (CSS can read this)
+    if (artePalette?.anim_speed != null) {
+      root.style.setProperty('--arte-anim-speed', artePalette.anim_speed);
+    }
+
     if (surfaces) {
-      // Dark mode: apply arousal-driven warm surface tint
       root.style.setProperty('--color-sc-surface',  surfaces.surface);
       root.style.setProperty('--color-sc-surface2', surfaces.surface2);
     } else {
-      // Light mode: remove any stale dark surface overrides so theme vars win
       root.style.removeProperty('--color-sc-surface');
       root.style.removeProperty('--color-sc-surface2');
     }
   }
 
   // Live update from SSE event (immediate, no poll delay)
+  // Uses last known palette to avoid a flat-ERI color regression mid-chat
   useEffect(() => {
     if (liveERI !== null) {
-      applyERI({ eri: liveERI });
+      applyERI({
+        eri:          liveERI,
+        arte_palette: lastPalette.current,
+        arte_state:   lastState.current,
+      });
     }
   }, [liveERI]);
 
-  // Background poll — keeps the UI in sync even outside of active chat
+  // Background poll — keeps UI in sync between chat turns
   useEffect(() => {
     let cancelled = false;
 
@@ -89,3 +122,4 @@ export function useERI(liveERI = null) {
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 }
+

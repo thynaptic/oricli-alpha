@@ -50,6 +50,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
+	"github.com/thynaptic/oricli-go/pkg/oracle"
 )
 
 // GenerationService handles direct requests to Ollama for high-speed prose
@@ -351,6 +352,27 @@ type InteroceptionKit struct {
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
+// toOracleMessages converts the generation pipeline's message format to oracle.Message.
+// Handles both map[string]interface{} (API format) and direct struct access.
+func toOracleMessages(messages interface{}) []oracle.Message {
+	var result []oracle.Message
+	switch v := messages.(type) {
+	case []map[string]string:
+		for _, m := range v {
+			result = append(result, oracle.Message{Role: m["role"], Content: m["content"]})
+		}
+	case []map[string]interface{}:
+		for _, m := range v {
+			role, _ := m["role"].(string)
+			content, _ := m["content"].(string)
+			result = append(result, oracle.Message{Role: role, Content: content})
+		}
+	case []oracle.Message:
+		return v
+	}
+	return result
+}
+
 // All background daemons should use this instead of hardcoded model names so
 // that the same model stays resident in Ollama memory and avoids eviction.
 func DefaultLLMModel() string {
@@ -1378,8 +1400,10 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 				options["_remote_model"] = s.MediumModel
 				log.Printf("[BidGovernor] TierMedium → remote %s @ %s", s.MediumModel, s.RemoteURL)
 			} else {
+				// No remote URL — escalate to oracle CLI if available, else fall back to local
+				options["_escalate_to_oracle"] = true
 				options["use_code_model"] = true
-				log.Printf("[BidGovernor] TierMedium → local fallback (OLLAMA_REMOTE_URL not set)")
+				log.Printf("[BidGovernor] TierMedium → oracle escalation (no OLLAMA_REMOTE_URL)")
 			}
 			options["_bid_tier"] = compute.TierMedium
 		case compute.TierRemote:
@@ -1388,7 +1412,9 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 				options["_remote_model"] = s.ResearchModel
 				log.Printf("[BidGovernor] TierRemote → remote %s @ %s", s.ResearchModel, s.RemoteURL)
 			} else {
-				log.Printf("[BidGovernor] TierRemote → local fallback (OLLAMA_REMOTE_URL not set)")
+				// No remote URL — escalate to oracle CLI if available, else fall back to local
+				options["_escalate_to_oracle"] = true
+				log.Printf("[BidGovernor] TierRemote → oracle escalation (no OLLAMA_REMOTE_URL)")
 			}
 			options["_bid_tier"] = compute.TierRemote
 		default:
@@ -1420,30 +1446,21 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		useCode = true
 	}
 
-	// Complexity router heavy escalation — treat as RunPod primary even if
-	// RUNPOD_PRIMARY=false. Lets specific hard tasks spin up the pod on demand.
+	// Complexity escalation — route heavy requests to oracle CLI (Copilot/Gemini)
+	// instead of RunPod. Zero GPU cost, uses existing subscriptions.
+	// Fires for both the legacy complexity router (_escalate_to_runpod) and
+	// the BidGovernor remote tier (_bid_tier == TierRemote).
 	escalate, _ := options["_escalate_to_runpod"].(bool)
-	if escalate && s.PrimaryMgr != nil && s.PrimaryMgr.IsEnabled() && os.Getenv("RUNPOD_PRIMARY") != "true" {
-		log.Printf("[GenerationService] complexity escalation → PrimaryMgr (RunPod)")
+	escalateOracle, _ := options["_escalate_to_oracle"].(bool)
+	bidTier, _ := options["_bid_tier"].(string)
+	if (escalate || escalateOracle || bidTier == compute.TierRemote) && oracle.Available() {
+		log.Printf("[GenerationService] complexity escalation → oracle CLI (Copilot/Gemini)")
+		oracleMsgs := toOracleMessages(messages)
+		oracleCh := oracle.ChatStream(ctx, oracleMsgs)
 		out := make(chan string, 64)
 		go func() {
 			defer close(out)
-			podState := s.PrimaryMgr.PodState()
-			if podState == StateOff || podState == StateWarming {
-				out <- podCallout("escalation")
-			}
-			ch, err := s.PrimaryMgr.ChatStream(ctx, messages, options)
-			if err != nil {
-				log.Printf("[GenerationService] escalation RunPod failed (%v) — falling back to Ollama", err)
-				out <- podCallout("fallback")
-				if ollamaCh, oErr := s.ollamaChatStream(ctx, messages, model, options); oErr == nil {
-					for tok := range ollamaCh {
-						out <- tok
-					}
-				}
-				return
-			}
-			for tok := range ch {
+			for tok := range oracleCh {
 				out <- tok
 			}
 		}()

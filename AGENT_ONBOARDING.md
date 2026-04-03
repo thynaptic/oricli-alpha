@@ -212,6 +212,8 @@ PB_BASE_URL=https://pocketbase.thynaptic.com
 
 ### How work happens here
 
+0. **VPS Note** → After any UI implementation, you MUST run `scripts/resync_ui.sh` to see changes live.
+
 1. **Idea** → Mike describes direction, often high-level or casual
 2. **Synthesize** → You turn it into a precise technical plan (check `plan.md` in session state first)
 3. **Confirm** → One question max if truly ambiguous

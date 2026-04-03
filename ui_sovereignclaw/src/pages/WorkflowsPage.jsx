@@ -146,8 +146,8 @@ function RagSourcePicker({ value, onChange }) {
   const [indexStatus, setIndexStatus] = useState({});
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    fetch('/connections').then(r => r.json()).then(d => setConnections(Object.values(d.connections || {}))).catch(() => {});
-    fetch('/connections/index/status').then(r => r.json()).then(setIndexStatus).catch(() => {});
+    fetch('/api/connections').then(r => r.json()).then(d => setConnections(Object.values(d.connections || {}))).catch(() => {});
+    fetch('/api/connections/index/status').then(r => r.json()).then(setIndexStatus).catch(() => {});
   }, []);
 
   const indexable = connections.filter(c => c.enabled !== false && (
@@ -209,7 +209,7 @@ const FETCHABLE_CONN_TYPES = new Set([
 function ConnectionPicker({ value, query, onChangeConn, onChangeQuery }) {
   const [connections, setConnections] = useState([]);
   useEffect(() => {
-    fetch('/connections').then(r => r.json()).then(d => {
+    fetch('/api/connections').then(r => r.json()).then(d => {
       const fetchable = Object.values(d.connections || {}).filter(c =>
         c.enabled !== false && FETCHABLE_CONN_TYPES.has(c.id)
       );

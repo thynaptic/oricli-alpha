@@ -5,40 +5,40 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="ORI Studio — Sovereign Intelligence OS. No rented minds." />
-    <meta name="theme-color" content="#E5004C" />
+    <meta name="theme-color" content="#6366F1" />
     <title>ORI Studio</title>
     <!-- Blocking theme init: runs before React, eliminates FOUC on refresh for all themes -->
     <script>
       (function () {
         var DARK = {
-          '--color-sc-bg':         '#080810',
-          '--color-sc-surface':    '#0E0810',
-          '--color-sc-surface2':   '#150A14',
-          '--color-sc-border':     '#1E0A18',
-          '--color-sc-border2':    '#2A0F22',
-          '--color-sc-gold':       '#E5004C',
-          '--color-sc-gold-glow':  '#FF0055',
-          '--color-sc-text':       '#F0ECE8',
-          '--color-sc-text-muted': '#9A8890',
-          '--color-sc-text-dim':   '#4D2F42',
-          '--color-sc-success':    '#06D6A0',
-          '--color-sc-danger':     '#FF4D6D',
-          '--color-sc-blue':       '#4D9EFF',
+          '--color-sc-bg':         '#0C0C11',
+          '--color-sc-surface':    '#13131A',
+          '--color-sc-surface2':   '#1A1A23',
+          '--color-sc-border':     '#22222E',
+          '--color-sc-border2':    '#2C2C3A',
+          '--color-sc-gold':       '#8875FF',
+          '--color-sc-gold-glow':  '#A99BFF',
+          '--color-sc-text':       '#EEEDF2',
+          '--color-sc-text-muted': '#8A8898',
+          '--color-sc-text-dim':   '#47465A',
+          '--color-sc-success':    '#22D3A0',
+          '--color-sc-danger':     '#F06060',
+          '--color-sc-blue':       '#60AAFF',
         };
         var LIGHT = {
-          '--color-sc-bg':         '#F5F0EC',
-          '--color-sc-surface':    '#EDE8E3',
-          '--color-sc-surface2':   '#E5DFD9',
-          '--color-sc-border':     '#D4CDC5',
-          '--color-sc-border2':    '#C5BDB4',
-          '--color-sc-gold':       '#C4001E',
-          '--color-sc-gold-glow':  '#E5003A',
-          '--color-sc-text':       '#1A1214',
-          '--color-sc-text-muted': '#6B5F68',
-          '--color-sc-text-dim':   '#9E9099',
+          '--color-sc-bg':         '#F7F7FA',
+          '--color-sc-surface':    '#FFFFFF',
+          '--color-sc-surface2':   '#F0F0F5',
+          '--color-sc-border':     '#E2E2EC',
+          '--color-sc-border2':    '#D0D0DE',
+          '--color-sc-gold':       '#6254D6',
+          '--color-sc-gold-glow':  '#7B6EE8',
+          '--color-sc-text':       '#111118',
+          '--color-sc-text-muted': '#4A4A60',
+          '--color-sc-text-dim':   '#8888A0',
           '--color-sc-success':    '#059669',
           '--color-sc-danger':     '#DC2626',
-          '--color-sc-blue':       '#1D4ED8',
+          '--color-sc-blue':       '#2563EB',
         };
         try {
           var theme = 'dark';
@@ -51,13 +51,16 @@
           var r = document.documentElement.style;
           for (var k in vars) r.setProperty(k, vars[k]);
           document.documentElement.setAttribute('data-theme', theme);
+          // Set bg on documentElement immediately — body may not exist yet in <head>
+          document.documentElement.style.background = vars['--color-sc-bg'];
+          document.documentElement.style.color = vars['--color-sc-text'];
           // Kill all transitions until React has rendered once
           document.documentElement.classList.add('sc-no-transition');
         } catch (e) {}
       })();
     </script>
   </head>
-  <body>
+  <body style="background:#0C0C11;color:#EEEDF2;margin:0">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

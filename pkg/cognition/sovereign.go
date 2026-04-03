@@ -20,7 +20,12 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/tools"
 	"github.com/thynaptic/oricli-go/pkg/connectors/mcp"
 	"github.com/thynaptic/oricli-go/pkg/connectors/telegram"
+	"github.com/thynaptic/oricli-go/pkg/flowcompanion"
+	"github.com/thynaptic/oricli-go/pkg/flowtriggers"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
+	"github.com/thynaptic/oricli-go/pkg/oracle"
+	"github.com/thynaptic/oricli-go/pkg/precompute"
+	"github.com/thynaptic/oricli-go/pkg/trapcheck"
 	"github.com/thynaptic/oricli-go/pkg/vdi"
 	"github.com/thynaptic/oricli-go/pkg/voice"
 )
@@ -448,6 +453,9 @@ type SovereignEngine struct {
 	WSHub        EventBroadcaster
 	CurrentSensory SensoryState
 	CurrentHealth HealthSnapshot
+	// Ambient proactive intelligence (ported from FocusOS FlowCompanionEngine)
+	FlowTriggers   *flowtriggers.Service
+	FlowCompanion  *flowcompanion.Engine
 	mu           sync.Mutex
 }
 
@@ -515,6 +523,14 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 	engine.CurrentSensory = engine.Sensory.ComputeSensoryState(0.5, 0.5, "C Major")
 	engine.CurrentHealth = engine.Health.GenerateSnapshot(0, 0, time.Now())
 	engine.Stochastic.Train("I hear you. That sounds really hard. We can figure this out together. Take a breath.", 4)
+
+	// Ambient proactive intelligence — FlowTriggers + FlowCompanion
+	engine.FlowTriggers = flowtriggers.New()
+	engine.FlowTriggers.Start(engine.Resonance.Drift.Events())
+	engine.FlowCompanion = flowcompanion.New(engine.FlowTriggers)
+	engine.FlowCompanion.Start(func() string {
+		return string(engine.Resonance.Current.ARTEState)
+	})
 
 	// Load default profile — gives her a strong personality baseline from boot
 	if p, ok := engine.Profiles.GetProfile("oricli"); ok {
@@ -843,6 +859,41 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 			"(3) State your confidence level explicitly (high / medium / low) and what evidence would change it. " +
 			"Do NOT agree with the user simply because they assert something. " +
 			"If the evidence supports disagreement, state it directly and respectfully."
+	}
+
+	// Trap-question awareness — surgical pattern-specific hints only.
+	// Fires ONLY when known trick-question signatures are detected in the stimulus.
+	// No blanket injection — complexity-gating regressed ARC by 20%, this is targeted.
+	trapHints := trapcheck.Detect(stimulus)
+	if len(trapHints) > 0 {
+		composite += "\n\n" + trapcheck.FormatInjection(trapHints)
+	}
+
+	// Precompute exact answers for arithmetic and symbol-mapping questions.
+	// Fires for large multiplication, QWERTY keyboard shifts, backwards spelling, negation chains, etc.
+	if preResults := precompute.Compute(stimulus); len(preResults) > 0 {
+		composite += "\n\n" + precompute.FormatInjection(preResults)
+	}
+
+	// Oracle escalation — for hard reasoning traps that exceed the local SLM's capability,
+	// shell out to Codex (GPT-4o via CLI) and inject its answer directly.
+	// Skipped if precompute already produced exact answers (math is always right; oracle can be wrong).
+	// Runs in a goroutine with a 25s deadline — if Codex doesn't respond in time, we skip it silently
+	// rather than blocking the pipeline and crashing the server.
+	if oracle.ShouldQuery(stimulus, len(trapHints)) && len(precompute.Compute(stimulus)) == 0 {
+		type oracleResp struct{ result *oracle.Result }
+		ch := make(chan oracleResp, 1)
+		go func() {
+			ch <- oracleResp{oracle.Query(stimulus)}
+		}()
+		select {
+		case resp := <-ch:
+			if resp.result != nil {
+				composite += "\n\n" + oracle.FormatInjection(resp.result)
+			}
+		case <-time.After(25 * time.Second):
+			// Codex took too long — skip oracle for this request
+		}
 	}
 
 	// Hard-cap composite to prevent system-prompt bloat overwhelming the LLM context window.

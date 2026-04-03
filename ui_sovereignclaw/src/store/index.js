@@ -19,11 +19,129 @@ export const selectActiveSession = (s) => {
   return s.sessions.find(x => x.id === id) ?? s.sessions[0];
 };
 
+// ── Default profiles — seeded for new installs and empty-profile migrations ──
+const DEFAULT_PROFILES = [
+  {
+    id: 'default-dev',
+    name: 'Senior Dev',
+    description: 'Precise, no-nonsense engineering assistant. Code-first, minimal prose.',
+    archetype: 'professional',
+    sassFactor: 0.2,
+    energy: 'high',
+    skills: [],
+    systemPrompt: 'You are a senior software engineer. Be direct and concise. Lead with working code. Skip pleasantries and filler. When something is wrong, say so plainly.',
+    emoji: '💻',
+    createdAt: 0,
+  },
+  {
+    id: 'default-analyst',
+    name: 'Data Analyst',
+    description: 'Structured thinking, data-driven answers, clear breakdowns.',
+    archetype: 'mentor',
+    sassFactor: 0.1,
+    energy: 'moderate',
+    skills: [],
+    systemPrompt: 'You are a data analyst. Structure your answers clearly — lead with the key finding, then support it. Use tables or lists where they help. Be precise about numbers and sources.',
+    emoji: '📊',
+    createdAt: 0,
+  },
+  {
+    id: 'default-creative',
+    name: 'Creative Partner',
+    description: 'Brainstorming, ideation, and creative writing with energy.',
+    archetype: 'creative',
+    sassFactor: 0.6,
+    energy: 'high',
+    skills: [],
+    systemPrompt: 'You are a creative collaborator. Bring energy and originality. Offer unexpected angles. Build on ideas instead of shooting them down. Keep it punchy.',
+    emoji: '🎨',
+    createdAt: 0,
+  },
+  {
+    id: 'default-ops',
+    name: 'Ops Console',
+    description: 'Terse, metric-focused. Status reports and operational decisions.',
+    archetype: 'professional',
+    sassFactor: 0.0,
+    energy: 'low',
+    skills: [],
+    systemPrompt: 'You are an ops assistant. Be terse. Lead with status and metrics. Flag anomalies first. No fluff — just signal.',
+    emoji: '🖥️',
+    createdAt: 0,
+  },
+];
+
 // ── Store ─────────────────────────────────────────────────────────────────────
+
+export const PB_URL = 'https://pocketbase.thynaptic.com';
 
 export const useSCStore = create(
   persist(
     (set, get) => ({
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  user:  null,   // { id, name, email, role, avatar }
+  token: null,   // PocketBase JWT
+
+  async login(email, password) {
+    const res = await fetch(`${PB_URL}/api/collections/users/auth-with-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identity: email, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.message || 'Login failed');
+    }
+    const data = await res.json();
+    const user = {
+      id:     data.record?.id,
+      name:   data.record?.name || data.record?.username || email.split('@')[0],
+      email:  data.record?.email,
+      role:   data.record?.role || 'owner',
+      avatar: data.record?.avatar || null,
+    };
+    set({ user, token: data.token });
+    return user;
+  },
+
+  async register(name, email, password) {
+    const res = await fetch(`${PB_URL}/api/collections/users/records`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password, passwordConfirm: password, role: 'owner' }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err?.data?.email?.message || err?.message || 'Registration failed';
+      throw new Error(msg);
+    }
+    // Auto-login after register
+    return get().login(email, password);
+  },
+
+  logout() { set({ user: null, token: null }); },
+
+  async refreshUser() {
+    const { token } = get();
+    if (!token) return;
+    const res = await fetch(`${PB_URL}/api/collections/users/auth-refresh`, {
+      method: 'POST',
+      headers: { Authorization: token },
+    });
+    if (!res.ok) { set({ user: null, token: null }); return; }
+    const data = await res.json();
+    set({
+      token: data.token,
+      user: {
+        id:     data.record?.id,
+        name:   data.record?.name || data.record?.username,
+        email:  data.record?.email,
+        role:   data.record?.role || 'owner',
+        avatar: data.record?.avatar || null,
+      },
+    });
+  },
+
   // ── Sessions ──────────────────────────────────────────────────────────────
   sessions: [newSession('Initial Directive')],
   activeSessionId: null,
@@ -266,7 +384,7 @@ export const useSCStore = create(
     set(state => ({ projects: state.projects.filter(p => p.id !== id), activeProjectId: state.activeProjectId === id ? null : state.activeProjectId }));
   },
 
-  profiles: [],
+  profiles: DEFAULT_PROFILES,
   addProfile(profile) { set(state => ({ profiles: [...state.profiles, { id: makeId(), ...profile, createdAt: Date.now() }] })); },
   updateProfile(id, patch) { set(state => ({ profiles: state.profiles.map(p => p.id === id ? { ...p, ...patch } : p) })); },
   deleteProfile(id) { set(state => ({ profiles: state.profiles.filter(p => p.id !== id) })); },
@@ -430,9 +548,19 @@ export const useSCStore = create(
   setActiveArtifact(id) { set({ activeArtifactId: id }); },
     }),
     {
-      name: 'sc-store-v1',
+      name: 'sc-store-v3',
+      version: 3,
+      migrate(persisted) {
+        // Always ensure profiles array exists — guards against any prior bad persist
+        if (!persisted.profiles || !Array.isArray(persisted.profiles) || persisted.profiles.length === 0) {
+          persisted.profiles = DEFAULT_PROFILES;
+        }
+        return persisted;
+      },
       // Only persist bgRuns (so in-flight runs survive refresh) + canvas docs + theme
       partialize: (state) => ({
+        user:  state.user,
+        token: state.token,
         bgRuns: state.bgRuns,
         canvasDocuments: state.canvasDocuments,
         activeCanvasDocId: state.activeCanvasDocId,
@@ -440,6 +568,7 @@ export const useSCStore = create(
         theme: state.theme,
         hasLaunched: state.hasLaunched,
         activePage: state.activePage,
+        profiles: state.profiles,
       }),
     }
   )

@@ -66,11 +66,11 @@ const ORI_CSS = `
 .ori-kw      { color: #c792ea; font-weight: 600; }
 .ori-meta    { color: #82aaff; }
 .ori-arrow   { color: #89ddff; font-weight: 700; }
-.ori-ref     { color: #ffcb6b; }
+.ori-ref     { color: #C8A96E; }
 .ori-var     { color: #f78c6c; }
-.ori-type    { color: #80cbc4; font-weight: 600; }
-.ori-label   { color: #c3e88d; }
-.ori-string  { color: #c3e88d; }
+.ori-type    { color: #7ECFCF; font-weight: 600; }
+.ori-label   { color: #9cdcfe; }
+.ori-string  { color: #ce9178; }
 .ori-comment { color: #546e7a; font-style: italic; }
 .ori-err-line {
   background: rgba(239,83,80,0.10);
@@ -125,21 +125,17 @@ const ORI_CSS = `
   vertical-align: middle;
 }
 @keyframes ori-spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
-/* hide scrollbar on highlight overlay div (WebKit) */
-[data-ori-highlight]::-webkit-scrollbar { display: none; }
-/* textarea selection — must be explicit because color:transparent kills the default highlight */
+/* hide textarea scrollbar (WebKit) so no width is reserved — prevents drift vs overlay */
+.ori-editor-ta::-webkit-scrollbar { display: none; }
 .ori-editor-ta {
   -webkit-user-select: text !important;
   user-select: text !important;
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE/Edge */
 }
-.ori-editor-ta::selection {
-  background: rgba(168, 156, 247, 0.35);
-  color: transparent;        /* keep text invisible so the highlight overlay stays visible */
-}
-.ori-editor-ta::-moz-selection {
-  background: rgba(168, 156, 247, 0.35);
-  color: transparent;
-}
+/* Suppress native selection highlight — we draw our own aligned version using ch units */
+.ori-editor-ta::selection      { background: transparent; color: transparent; }
+.ori-editor-ta::-moz-selection { background: transparent; color: transparent; }
 `;
 
 function injectOriCSS() {
@@ -337,13 +333,76 @@ function AutocompleteDropdown({ items, index, x, y, onSelect, onHover }) {
 function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflows = [], userVars = [], onInlineEdit, onJumpToLine, taExternalRef }) {
   const taInternalRef = useRef(null);
   const taRef         = taExternalRef ?? taInternalRef;
-  const preRef    = useRef(null);
-  const gutterRef = useRef(null);
+  const preRef      = useRef(null);
+  const gutterRef   = useRef(null);
+  const selLayerRef    = useRef(null);
+  const charWidthCache = useRef(null); // cached px width of one monospace char
 
   const [ac,      setAc]      = useState({ visible: false, items: [], index: 0, x: 0, y: 0, replaceLen: 0 });
   const [tooltip, setTooltip] = useState(null); // { x, y, msg, level }
 
   useEffect(() => { injectOriCSS(); }, []);
+
+  // Measure actual rendered character width by querying the textarea's own font via canvas.
+  // Cached after first call; reliable for monospace fonts.
+  function getCharWidthPx() {
+    if (charWidthCache.current !== null) return charWidthCache.current;
+    const ta = taRef.current;
+    // Read the computed font string so we use exactly what the browser is rendering
+    const computedFont = ta
+      ? window.getComputedStyle(ta).font
+      : `${FONT_SZ}px ${FONT}`;
+    const canvas = document.createElement('canvas');
+    const ctx    = canvas.getContext('2d');
+    ctx.font     = computedFont;
+    // Measure a string of 10 chars and divide — reduces single-char rounding error
+    charWidthCache.current = ctx.measureText('x'.repeat(10)).width / 10;
+    return charWidthCache.current;
+  }
+
+  // Draws selection highlight in the selLayer div using measured px per char — exact match to textarea.
+  // Imperative (no React state) so it can't interrupt a drag-select.
+  function updateSelectionHighlight(ta) {
+    const layer = selLayerRef.current;
+    if (!layer) return;
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+    if (start === end) { layer.innerHTML = ''; return; }
+
+    const charW   = getCharWidthPx();
+    const lineHPx = FONT_SZ * LINE_H;
+    const src     = ta.value;
+    const allLines = src.split('\n');
+    let html = '';
+    let pos  = 0;
+
+    allLines.forEach((line, i) => {
+      const lineStart = pos;
+      const lineEnd   = pos + line.length;
+      pos += line.length + 1; // +1 for \n
+
+      if (end <= lineStart || start > lineEnd) return;
+
+      const colStart = Math.max(start, lineStart) - lineStart;
+      const colEnd   = Math.min(end,   lineEnd)   - lineStart;
+      const topPx    = PAD_V + i * lineHPx;
+      const leftPx   = PAD_H + colStart * charW;
+
+      // Stretch to container edge when selection continues onto next line(s)
+      const continuesRight = end > lineEnd;
+      const widthStyle = continuesRight
+        ? `calc(100% - ${leftPx}px)`
+        : `${(colEnd - colStart) * charW}px`;
+
+      html += `<div style="position:absolute;top:${topPx}px;`
+            + `left:${leftPx}px;`
+            + `width:${widthStyle};`
+            + `height:${lineHPx}px;`
+            + `background:rgba(168,156,247,0.35);pointer-events:none"></div>`;
+    });
+
+    layer.innerHTML = html;
+  }
 
   const lines     = value.split('\n');
   const errLines  = new Set(diagnostics.filter(d => d.level === 'error'   && d.line).map(d => d.line));
@@ -353,8 +412,16 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
   diagnostics.forEach(d => { if (d.line) diagByLine[d.line] = d; });
 
   function syncScroll() {
-    const top = taRef.current?.scrollTop ?? 0;
-    if (preRef.current)    preRef.current.scrollTop    = top;
+    const top  = taRef.current?.scrollTop  ?? 0;
+    const left = taRef.current?.scrollLeft ?? 0;
+    if (preRef.current) {
+      preRef.current.scrollTop  = top;
+      preRef.current.scrollLeft = left;
+    }
+    if (selLayerRef.current) {
+      selLayerRef.current.scrollTop  = top;
+      selLayerRef.current.scrollLeft = left;
+    }
     if (gutterRef.current) gutterRef.current.scrollTop = top;
   }
 
@@ -368,8 +435,17 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
 
   function triggerAC(ta) {
     const pos = ta.selectionStart;
+    // Don't trigger while a selection is active — avoids re-renders that corrupt the selection
+    if (ta.selectionStart !== ta.selectionEnd) {
+      setAc(prev => prev.visible ? { ...prev, visible: false } : prev);
+      return;
+    }
     const { items, replaceLen } = getCompletions(value, pos, { workflows, userVars });
-    if (items.length === 0) { setAc(prev => ({ ...prev, visible: false })); return; }
+    if (items.length === 0) {
+      // Bail without re-render if already hidden
+      setAc(prev => prev.visible ? { ...prev, visible: false } : prev);
+      return;
+    }
     const { x, y } = approxCaretPos(ta, pos);
     setAc({ visible: true, items, index: 0, x, y, replaceLen, cursorPos: pos });
   }
@@ -438,8 +514,8 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
 
   function onKeyUp(e) {
     updateCursor(e.target);
-    // Re-trigger on navigation keys
-    if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key)) {
+    // Skip autocomplete trigger while shift-selecting — avoids re-renders that kill the selection
+    if (!e.shiftKey && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key)) {
       triggerAC(e.target);
     }
   }
@@ -453,30 +529,47 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
   const baseTextStyle = {
     margin: 0, padding: `${PAD_V}px ${PAD_H}px`,
     fontFamily: FONT, fontSize: FONT_SZ, lineHeight: LINE_H,
-    whiteSpace: 'pre-wrap', wordWrap: 'break-word', overflowWrap: 'break-word',
+    // pre (no wrap) keeps textarea and overlay layout identical — wrap mismatch is
+    // the root cause of the selection/cursor offset drift across lines
+    whiteSpace: 'pre', overflowX: 'auto',
     tabSize: 2, boxSizing: 'border-box',
   };
 
+  // Highlight overlay: join lines with \n (no display:block spans) so the DOM
+  // text layout exactly mirrors the textarea's raw newline layout
   function buildHighlightedHtml(code) {
-    const raw = highlight(code);
-    return raw.split('\n').map((lineHtml, i) => {
-      const ln    = i + 1;
-      const isErr  = errLines.has(ln);
-      const isWarn = warnLines.has(ln);
-      const cls   = isErr ? ' class="ori-err-line"' : isWarn ? ' class="ori-warn-line"' : '';
-      const diag  = diagByLine[ln];
-      const pill  = diag
-        ? `<span class="${isErr ? 'ori-err-pill' : 'ori-warn-pill'}">${
-            diag.message.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-          }</span>`
-        : '';
-      return `<span${cls} style="display:block">${lineHtml || ' '}${pill}</span>`;
-    }).join('');
+    return code.split('\n').map(line => highlight(line) || '\u00a0').join('\n');
+  }
+
+  // Separate line-background layer (err/warn tints) — absolutely positioned
+  // so they never affect text flow or line heights in the overlay
+  const LINE_HEIGHT_PX = FONT_SZ * LINE_H;
+  function buildLineBgLayer() {
+    return lines.map((_, i) => {
+      const ln = i + 1;
+      if (!errLines.has(ln) && !warnLines.has(ln)) return null;
+      return (
+        <div key={ln} style={{
+          position: 'absolute',
+          top: PAD_V + i * LINE_HEIGHT_PX,
+          left: 0, right: 0,
+          height: LINE_HEIGHT_PX,
+          background: errLines.has(ln) ? 'rgba(239,83,80,0.10)' : 'rgba(255,183,77,0.08)',
+          pointerEvents: 'none',
+        }} />
+      );
+    });
   }
 
   function onMouseMoveEditor(e) {
     const ta = taRef.current;
     if (!ta) return;
+    if (e.buttons !== 0) {
+      // Mouse button held = user is drag-selecting; update the custom selection layer
+      updateSelectionHighlight(ta);
+      return;
+    }
+    // Hover (no button held) = diagnostic tooltip logic
     const rect   = ta.getBoundingClientRect();
     const relY   = e.clientY - rect.top + ta.scrollTop - PAD_V;
     const lineH  = FONT_SZ * LINE_H;
@@ -529,6 +622,24 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
 
       {/* ── Code area ── */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {/* Line background tints (err/warn) — separate layer, never affects text flow */}
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
+          {buildLineBgLayer()}
+        </div>
+        {/* Custom selection highlight — uses ch units for monospace-exact alignment.
+            Updated imperatively via updateSelectionHighlight() — never re-renders React. */}
+        <div
+          ref={selLayerRef}
+          style={{
+            ...baseTextStyle,
+            position: 'absolute', inset: 0,
+            pointerEvents: 'none',
+            overflow: 'hidden',
+            background: 'transparent',
+            zIndex: 1,
+          }}
+        />
+        {/* Syntax highlight overlay */}
         <div
           ref={preRef}
           aria-hidden="true"
@@ -538,12 +649,9 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
             position: 'absolute', inset: 0,
             color: '#abb2bf',
             pointerEvents: 'none',
-            /* overflow scroll + hidden scrollbar so scrollTop sync works reliably */
-            overflowY: 'scroll',
-            scrollbarWidth: 'none',       /* Firefox */
-            msOverflowStyle: 'none',      /* IE/Edge */
+            overflow: 'hidden',
             background: 'transparent',
-            zIndex: 0,
+            zIndex: 2,
           }}
           dangerouslySetInnerHTML={{ __html: buildHighlightedHtml(value) }}
         />
@@ -552,12 +660,13 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
           value={value}
           className="ori-editor-ta"
           onInput={onInput}
-          onChange={() => {}}      /* controlled via onInput */
+          onChange={() => {}}
           onScroll={syncScroll}
           onKeyDown={onKeyDown}
           onKeyUp={onKeyUp}
-          onClick={e => { updateCursor(e.target); triggerAC(e.target); }}
-          onBlur={() => setTimeout(() => setAc(prev => ({ ...prev, visible: false })), 120)}
+          onClick={e => { updateCursor(e.target); updateSelectionHighlight(e.target); }}
+          onSelect={e => updateSelectionHighlight(e.target)}
+          onBlur={e => { updateSelectionHighlight(e.target); setTimeout(() => setAc(prev => ({ ...prev, visible: false })), 120); }}
           onMouseMove={onMouseMoveEditor}
           onMouseLeave={() => setTooltip(null)}
           spellCheck={false}
@@ -573,9 +682,10 @@ function OriEditor({ value, onChange, diagnostics = [], onCursorChange, workflow
             outline: 'none',
             resize: 'none',
             overflowY: 'auto',
+            overflowX: 'auto',
             userSelect: 'text',
             WebkitUserSelect: 'text',
-            zIndex: 1,
+            zIndex: 3,
           }}
         />
       </div>

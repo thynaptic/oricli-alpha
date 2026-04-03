@@ -205,7 +205,7 @@ function ProfileCard({ profile, onDelete, onEdit }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: 'var(--font-grotesk)', fontWeight: 700, fontSize: 14, color: 'var(--color-sc-text)' }}>{profile.name}</div>
           <div style={{ fontSize: 11, color: 'var(--color-sc-text-muted)', marginTop: 2 }}>
-            {profile.skills.length > 0 ? profile.skills.map(s => s.replace(/_/g, ' ')).join(', ') : 'No skills assigned'}
+            {(profile.skills?.length > 0) ? profile.skills.map(s => s.replace(/_/g, ' ')).join(', ') : 'No skills assigned'}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 4, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>
@@ -236,7 +236,10 @@ function ProfileCard({ profile, onDelete, onEdit }) {
 }
 
 function ProfileForm({ initial, onSave, onCancel }) {
-  const [form, setForm] = useState(initial ?? EMPTY_FORM);
+  const [form, setForm] = useState(() => {
+    const base = initial ?? EMPTY_FORM;
+    return { ...base, skills: Array.isArray(base.skills) ? base.skills : [] };
+  });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   function toggleSkill(sk) {
