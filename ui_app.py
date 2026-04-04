@@ -3980,10 +3980,20 @@ def _run_workflow_job(wf_id: str, run_id: str) -> None:
         recipient = triggered_by[len("email:"):]
         wf_name = wf.get("name", "Workflow")
         all_wfs = _load_workflows()
-        # Strip HTML tags and summarize via Ollama for clean email output
+        # Extract main content and summarize via Ollama for clean email output
         import re as _re, html as _html_mod
-        cleaned = _html_mod.unescape(_re.sub(r'<[^>]+>', ' ', final_output))
-        cleaned = _re.sub(r'\s{3,}', '\n\n', cleaned).strip()
+        try:
+            from bs4 import BeautifulSoup as _BS
+            soup = _BS(final_output, "html.parser")
+            for tag in soup(["nav", "header", "footer", "script", "style", "aside"]):
+                tag.decompose()
+            main = soup.find("main") or soup.find("article") or soup.find(id="content") or soup
+            cleaned = _html_mod.unescape(main.get_text(separator="\n"))
+        except Exception:
+            cleaned = _html_mod.unescape(_re.sub(r'<[^>]+>', ' ', final_output))
+        # Drop short lines (nav crumbs, single words, menu items)
+        lines = [l.strip() for l in cleaned.splitlines() if len(l.strip()) > 40]
+        cleaned = "\n\n".join(lines[:60]).strip() or cleaned[:2000]
         try:
             import requests as _req
             summ_resp = _req.post(
