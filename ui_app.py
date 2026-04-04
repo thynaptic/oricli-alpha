@@ -1515,6 +1515,74 @@ _EMAIL_CLIENTS_LOCK = threading.Lock()
 _NOTES_FILE = Path(__file__).parent / ".oricli" / "notes.json"
 _NOTES_LOCK = threading.Lock()
 
+# ── Subscription store ────────────────────────────────────────────────────────
+_SUBS_FILE = Path(__file__).parent / ".oricli" / "subscriptions.json"
+_SUBS_LOCK = threading.Lock()
+
+def _load_subs() -> list:
+    try:
+        if _SUBS_FILE.exists():
+            return json.loads(_SUBS_FILE.read_text())
+    except Exception:
+        pass
+    return []
+
+def _save_subs(subs: list) -> None:
+    _SUBS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _SUBS_FILE.write_text(json.dumps(subs, indent=2))
+
+def _schedule_subscription(sub: dict) -> None:
+    """Register an APScheduler cron job for a subscription."""
+    job_id = f"sub_{sub['id']}"
+    try:
+        _SCHEDULER.remove_job(job_id)
+    except Exception:
+        pass
+    try:
+        from apscheduler.triggers.cron import CronTrigger
+        trigger = CronTrigger.from_crontab(sub["cron_expr"])
+        _SCHEDULER.add_job(
+            _fire_subscription, trigger,
+            args=[sub["id"]], id=job_id, replace_existing=True,
+        )
+        log.info("[subscriptions] scheduled %s: %s", sub["id"][:8], sub["cron_expr"])
+    except Exception as exc:
+        log.warning("[subscriptions] schedule failed for %s: %s", sub["id"][:8], exc)
+
+def _fire_subscription(sub_id: str) -> None:
+    """APScheduler calls this to fire a subscribed workflow run."""
+    with _SUBS_LOCK:
+        subs = _load_subs()
+    sub = next((s for s in subs if s["id"] == sub_id), None)
+    if not sub:
+        return
+    wf_id   = sub["wf_id"]
+    run_id  = str(uuid.uuid4())
+    wf_name = sub["wf_name"]
+    client_email = sub["client_email"]
+    with _WFR_LOCK:
+        runs = _load_runs()
+        runs[run_id] = {
+            "id": run_id, "wf_id": wf_id, "wf_name": wf_name,
+            "status": "queued", "steps": [],
+            "created": datetime.now(timezone.utc).isoformat(),
+            "final_output": None, "doc_text": "", "save_to_memory": False,
+            "doc_filename": "", "user_vars": {},
+            "triggered_by": f"email:{client_email}",
+        }
+        _save_runs(runs)
+    import threading as _t2
+    _t2.Thread(target=_run_workflow_job, args=(wf_id, run_id), daemon=True).start()
+    log.info("[subscriptions] fired run %s for sub %s (%s)", run_id[:8], sub_id[:8], wf_name)
+
+def _boot_subscriptions() -> None:
+    """Re-register all active subscriptions with APScheduler on startup."""
+    with _SUBS_LOCK:
+        subs = _load_subs()
+    for sub in subs:
+        _schedule_subscription(sub)
+    log.info("[subscriptions] booted %d subscription(s)", len(subs))
+
 def _load_notes_store() -> list:
     try:
         if _NOTES_FILE.exists():
@@ -1527,7 +1595,69 @@ def _save_notes_store(notes: list) -> None:
     _NOTES_FILE.parent.mkdir(parents=True, exist_ok=True)
     _NOTES_FILE.write_text(json.dumps(notes, indent=2))
 
-@app.route("/api/notes", methods=["GET"])
+
+@app.route("/api/board", methods=["GET"])
+def api_board() -> Response:
+    """Returns completed workflow runs with final_output for the Board page."""
+    with _WFR_LOCK:
+        all_runs = _load_runs()
+    with _WF_LOCK:
+        wf_list = _load_workflows()
+    wf_map = {w["id"]: w["name"] for w in wf_list}
+
+    def _classify(title: str, content: str) -> str:
+        t = (title + " " + content).lower()
+        if any(k in t for k in ("report","metrics","kpi","revenue","sales","analytics","performance")): return "report"
+        if any(k in t for k in ("research","analysis","study","findings","investigate","overview")): return "research"
+        if any(k in t for k in ("draft","copy","write","email","message","template","compose")): return "draft"
+        if any(k in t for k in ("summary","summar","digest","brief","tldr","recap")): return "summary"
+        return "other"
+
+    def _source(run: dict) -> str:
+        tb = run.get("triggered_by", "")
+        if tb.startswith("email:"): return "email"
+        if tb.startswith("schedule"): return "scheduled"
+        return "manual"
+
+    import html as _hmod, re as _re
+    items = []
+    for r in all_runs.values():
+        if r.get("status") != "done": continue
+        raw_output = r.get("final_output") or ""
+        if not raw_output.strip(): continue
+        # Clean output for snippet
+        clean = _hmod.unescape(_re.sub(r'<[^>]+>', ' ', raw_output))
+        clean = _re.sub(r'\s{2,}', ' ', clean).strip()
+        wf_name = r.get("wf_name") or wf_map.get(r.get("wf_id",""), "")
+        if not wf_name:
+            lines = [l.strip() for l in clean.split('\n') if len(l.strip()) > 8]
+            first_line = ""
+            for l in lines:
+                cleaned = _re.sub(r'[*_`#>\-]+', '', l).strip()
+                cleaned = _re.sub(r'\s{2,}', ' ', cleaned).strip()
+                # Skip TL;DR prefix, URL-heavy lines, error lines
+                if _re.match(r'(TL;DR|https?://|\[error)', cleaned, _re.I): continue
+                first_line = cleaned; break
+            if not first_line and lines:
+                first_line = _re.sub(r'[*_`#>\-]+', '', lines[0]).strip()[:50]
+            wf_name = first_line[:50] if first_line else "Run"
+        items.append({
+            "id":        r["id"],
+            "wf_id":     r.get("wf_id",""),
+            "wf_name":   wf_name,
+            "type":      _classify(wf_name, clean),
+            "source":    _source(r),
+            "snippet":   clean[:200],
+            "output":    clean[:8000],
+            "created":   r.get("created",""),
+            "finished":  r.get("finished",""),
+        })
+
+    items.sort(key=lambda x: x["finished"], reverse=True)
+    return jsonify({"items": items})
+
+
+
 def api_notes_list() -> Response:
     with _NOTES_LOCK:
         return jsonify({"notes": _load_notes_store()})
@@ -1768,7 +1898,8 @@ def api_email_inbound() -> Response:
     print(f"[email-inbound] from={data.get('from','')} subject={subject!r} body_preview={body[:80]!r}", flush=True)
 
     # If subject isn't a known command, scan entire body for a command line
-    KNOWN_CMDS = {"RUN", "LIST", "STATUS", "STOP", "NOTE", "ASK", "BRIEF", "REMIND", "REPORT", "HELP", "APPROVE", "YES", "REJECT", "NO"}
+    KNOWN_CMDS = {"RUN", "LIST", "STATUS", "STOP", "NOTE", "ASK", "BRIEF", "REMIND", "REPORT", "HELP",
+                  "SUBSCRIBE", "UNSUBSCRIBE", "SUBSCRIPTIONS", "APPROVE", "YES", "REJECT", "NO"}
     cmd_parts = subject.split(None, 1)
     cmd_check = cmd_parts[0].upper() if cmd_parts else ""
     if cmd_check not in KNOWN_CMDS and body:
@@ -1796,18 +1927,24 @@ def api_email_inbound() -> Response:
     thread = threads.get(in_reply_to) if in_reply_to else None
 
     if thread:
-        first_line   = next((l.strip() for l in body.splitlines() if l.strip() and not l.strip().startswith(">")), "").upper()
+        # Pull the first non-quoted non-empty line as the user's reply
+        reply_lines = [l.strip() for l in body.splitlines()
+                       if l.strip() and not l.strip().startswith(">")]
+        first_line  = reply_lines[0].upper() if reply_lines else ""
+        full_reply  = "\n".join(reply_lines).strip()
+
         APPROVE_CMDS = {"APPROVE", "YES", "OK", "CONFIRMED", "CONFIRM"}
         REJECT_CMDS  = {"REJECT", "NO", "CANCEL", "DENIED", "DENY"}
 
-        # If first line is a command (RUN/LIST/etc), fall through to command mode
+        # If first line is a hard command → fall through to command mode
         first_word = first_line.split()[0] if first_line.split() else ""
-        if first_word in {"RUN", "LIST", "STATUS", "STOP"}:
-            thread = None  # treat as fresh command
-        else:
-            action = "approve" if first_line in APPROVE_CMDS else \
-                     "reject"  if first_line in REJECT_CMDS  else "reply"
+        if first_word in {"RUN", "LIST", "STATUS", "STOP", "NOTE", "ASK",
+                          "BRIEF", "REMIND", "REPORT", "HELP",
+                          "SUBSCRIBE", "UNSUBSCRIBE", "SUBSCRIPTIONS"}:
+            thread = None  # treat as a fresh command below
 
+        elif first_line in APPROVE_CMDS or first_line in REJECT_CMDS:
+            action = "approve" if first_line in APPROVE_CMDS else "reject"
             with _WFR_LOCK:
                 runs = _load_runs()
                 run  = runs.get(thread["run_id"])
@@ -1819,17 +1956,67 @@ def api_email_inbound() -> Response:
                     })
                     if action == "approve":
                         run["email_approved"] = True
-                        run.setdefault("notes", []).append(
-                            f"[Email APPROVED by {sender}]")
-                    elif action == "reject":
+                        run.setdefault("notes", []).append(f"[Email APPROVED by {sender}]")
+                    else:
                         run["status"]   = "cancelled"
                         run["finished"] = datetime.now(timezone.utc).isoformat()
-                        run.setdefault("notes", []).append(
-                            f"[Email REJECTED by {sender}]")
+                        run.setdefault("notes", []).append(f"[Email REJECTED by {sender}]")
                     _save_runs(runs)
-
-            app.logger.info(f"[email-reply] {action} from {sender} → run {thread['run_id']}")
             return jsonify({"ok": True, "mode": "reply", "action": action})
+
+        else:
+            # ── Contextual follow-up question about a completed run ──────────
+            import re as _re2
+            _m2 = _re2.search(r'<([^>]+)>', sender)
+            _reply_sender = _m2.group(1).lower() if _m2 else sender.lower()
+
+            with _WFR_LOCK:
+                runs    = _load_runs()
+                run_ctx = runs.get(thread["run_id"], {})
+            run_output = run_ctx.get("final_output", "")
+            wf_name    = run_ctx.get("wf_name") or "workflow"
+
+            # Clean output for context
+            import html as _hmod2
+            clean_ctx = _hmod2.unescape(_re2.sub(r'<[^>]+>', ' ', run_output))
+            clean_ctx = _re2.sub(r'\s{2,}', ' ', clean_ctx).strip()[:5000]
+
+            # Ask Ollama for a contextual answer
+            answer = ""
+            try:
+                import requests as _rq2
+                resp2 = _rq2.post(
+                    f"{os.environ.get('OLLAMA_BASE','http://localhost:11434')}/api/generate",
+                    json={
+                        "model": "ministral3b:latest",
+                        "prompt": (
+                            f"You are ORI, an AI assistant. The user asked a follow-up question about "
+                            f"the output of a workflow called \"{wf_name}\".\n\n"
+                            f"WORKFLOW OUTPUT:\n{clean_ctx}\n\n"
+                            f"USER QUESTION:\n{full_reply}\n\n"
+                            f"Answer concisely in plain prose. No markdown headers. Be direct."
+                        ),
+                        "stream": False,
+                    },
+                    timeout=45,
+                )
+                answer = resp2.json().get("response", "").strip() if resp2.ok else ""
+            except Exception:
+                pass
+
+            if not answer:
+                answer = f"Sorry, I couldn't process that follow-up right now. Try emailing ASK {full_reply[:80]}"
+
+            _all_wfs_ctx = _load_workflows()
+            _send_email(
+                _reply_sender,
+                f"ORI: Re — {wf_name}",
+                f"Hi,\n\n{answer}\n\n"
+                f"(Follow-up to run {thread['run_id'][:8]})\n\n"
+                + _ori_action_footer(_all_wfs_ctx),
+                wf_id=thread.get("wf_id"), run_id=thread.get("run_id"),
+            )
+            return jsonify({"ok": True, "mode": "reply", "action": "followup"})
 
     # ── Mode 2: Command email ────────────────────────────────────────────────
     # Normalize sender — Resend may include display name: "Mike <email@x.com>"
@@ -2088,22 +2275,178 @@ def api_email_inbound() -> Response:
         base = "ori@inbound.thynaptic.com"
         help_lines = [
             f"Hi {name}, here's everything ORI can do via email:\n",
-            f"  RUN <workflow>   → mailto:{base}?subject=RUN%20Claude%20Overview",
-            f"  LIST             → mailto:{base}?subject=LIST",
-            f"  STATUS           → mailto:{base}?subject=STATUS",
-            f"  STOP <run-id>    → mailto:{base}?subject=STOP%20<run-id>",
-            f"  NOTE <text>      → mailto:{base}?subject=NOTE%20your%20note%20here",
-            f"  ASK <question>   → mailto:{base}?subject=ASK%20how%20did%20last%20week%20go",
-            f"  BRIEF            → mailto:{base}?subject=BRIEF",
-            f"  REMIND <text>    → mailto:{base}?subject=REMIND%20call%20Acme%20tomorrow%209am",
-            f"  REPORT           → mailto:{base}?subject=REPORT",
-            f"  HELP             → mailto:{base}?subject=HELP",
+            f"  RUN <workflow>           → mailto:{base}?subject=RUN%20Claude%20Overview",
+            f"  LIST                     → mailto:{base}?subject=LIST",
+            f"  STATUS                   → mailto:{base}?subject=STATUS",
+            f"  STOP <run-id>            → mailto:{base}?subject=STOP%20<run-id>",
+            f"  NOTE <text>              → mailto:{base}?subject=NOTE%20your%20note%20here",
+            f"  ASK <question>           → mailto:{base}?subject=ASK%20how%20did%20last%20week%20go",
+            f"  BRIEF                    → mailto:{base}?subject=BRIEF",
+            f"  REMIND <text>            → mailto:{base}?subject=REMIND%20call%20Acme%20tomorrow%209am",
+            f"  REPORT                   → mailto:{base}?subject=REPORT",
+            f"  SUBSCRIBE <wf> daily     → mailto:{base}?subject=SUBSCRIBE%20Claude%20Overview%20daily",
+            f"  SUBSCRIBE <wf> every monday 9am",
+            f"  SUBSCRIPTIONS            → mailto:{base}?subject=SUBSCRIPTIONS",
+            f"  UNSUBSCRIBE <wf>         → mailto:{base}?subject=UNSUBSCRIBE%20Claude%20Overview",
+            f"  HELP                     → mailto:{base}?subject=HELP",
             "\nTap any link above to open a pre-filled email.",
             "— ORI Studio",
         ]
         _send_email(sender_email, "ORI: Command Reference",
             "\n".join(help_lines))
         return jsonify({"ok": True, "mode": "command", "cmd": "HELP"})
+
+    elif cmd == "SUBSCRIBE":
+        # Parse: SUBSCRIBE <workflow name> <schedule>
+        # e.g.  "Claude Overview every day 9am"
+        #       "Claude Overview daily"
+        #       "Claude Overview every monday"
+        #       "Claude Overview weekly"
+        import re as _re_sub
+        # Try to split off a schedule suffix from cmd_arg
+        _sched_pat = _re_sub.compile(
+            r'\s+(every\s+(?:day|monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekday|weekend)|'
+            r'daily|weekly|hourly|every\s+\d+\s*(?:hours?|mins?))'
+            r'(?:\s+(?:at\s+)?(\d{1,2}:\d{2}|\d{1,2}(?:am|pm)))?$',
+            _re_sub.IGNORECASE,
+        )
+        _m_sched = _sched_pat.search(cmd_arg)
+        if _m_sched:
+            wf_name_raw = cmd_arg[:_m_sched.start()].strip()
+            sched_str   = _m_sched.group(0).strip()
+        else:
+            # No schedule suffix — treat whole arg as wf name, default to daily 9am
+            wf_name_raw = cmd_arg.strip()
+            sched_str   = "daily"
+
+        # Parse time
+        _time_m = _re_sub.search(r'(\d{1,2}):(\d{2})|(\d{1,2})(am|pm)', sched_str, _re_sub.IGNORECASE)
+        hour, minute = 9, 0
+        if _time_m:
+            if _time_m.group(1):
+                hour, minute = int(_time_m.group(1)), int(_time_m.group(2))
+            else:
+                h = int(_time_m.group(3))
+                suffix = _time_m.group(4).lower()
+                hour = h if suffix == 'am' else (h + 12 if h < 12 else 12)
+                minute = 0
+
+        # Build cron expression
+        sched_lower = sched_str.lower()
+        DOW_MAP = {"monday":"mon","tuesday":"tue","wednesday":"wed","thursday":"thu",
+                   "friday":"fri","saturday":"sat","sunday":"sun"}
+        _dow = next((DOW_MAP[d] for d in DOW_MAP if d in sched_lower), None)
+        if _dow:
+            cron_expr    = f"{minute} {hour} * * {_dow}"
+            schedule_desc = f"every {_dow.capitalize()} at {hour:02d}:{minute:02d}"
+        elif "daily" in sched_lower or "every day" in sched_lower:
+            cron_expr    = f"{minute} {hour} * * *"
+            schedule_desc = f"daily at {hour:02d}:{minute:02d}"
+        elif "weekly" in sched_lower:
+            cron_expr    = f"{minute} {hour} * * mon"
+            schedule_desc = f"every Monday at {hour:02d}:{minute:02d}"
+        elif "weekday" in sched_lower:
+            cron_expr    = f"{minute} {hour} * * mon-fri"
+            schedule_desc = f"weekdays at {hour:02d}:{minute:02d}"
+        elif "hourly" in sched_lower:
+            cron_expr    = f"0 * * * *"
+            schedule_desc = "every hour"
+        else:
+            cron_expr    = f"{minute} {hour} * * *"
+            schedule_desc = f"daily at {hour:02d}:{minute:02d}"
+
+        # Match workflow
+        with _WF_LOCK:
+            all_wfs_sub = _load_workflows()
+        wf_sub = next((w for w in all_wfs_sub
+                       if w["name"].lower() == wf_name_raw.lower()
+                       or w["id"].startswith(wf_name_raw)), None)
+        if not wf_sub:
+            _send_email(sender_email, f"ORI: Workflow not found — {wf_name_raw}",
+                f"Hi {name},\n\nNo workflow named \"{wf_name_raw}\" found.\n\n"
+                + _ori_action_footer(all_wfs))
+            return jsonify({"ok": True, "mode": "command", "cmd": "SUBSCRIBE", "result": "not_found"})
+
+        # Check for duplicate subscription
+        with _SUBS_LOCK:
+            subs_list = _load_subs()
+        existing = next((s for s in subs_list
+                         if s["client_email"] == sender_email and s["wf_id"] == wf_sub["id"]), None)
+        if existing:
+            # Update schedule
+            existing["cron_expr"]    = cron_expr
+            existing["schedule_desc"] = schedule_desc
+            with _SUBS_LOCK:
+                _save_subs(subs_list)
+            _schedule_subscription(existing)
+            _send_email(sender_email, f"ORI: Subscription updated — {wf_sub['name']}",
+                f"Hi {name},\n\nUpdated: \"{wf_sub['name']}\" will now run {schedule_desc}.\n\n"
+                + _ori_action_footer(all_wfs))
+            return jsonify({"ok": True, "mode": "command", "cmd": "SUBSCRIBE", "result": "updated"})
+
+        # Create new subscription
+        new_sub = {
+            "id":           str(uuid.uuid4()),
+            "client_email": sender_email,
+            "wf_id":        wf_sub["id"],
+            "wf_name":      wf_sub["name"],
+            "cron_expr":    cron_expr,
+            "schedule_desc": schedule_desc,
+            "created":      datetime.now(timezone.utc).isoformat(),
+        }
+        with _SUBS_LOCK:
+            subs_list.append(new_sub)
+            _save_subs(subs_list)
+        _schedule_subscription(new_sub)
+        _send_email(sender_email, f"ORI: Subscribed ✓ — {wf_sub['name']}",
+            f"Hi {name},\n\n✓ Subscribed to \"{wf_sub['name']}\" — {schedule_desc}.\n\n"
+            f"ORI will run it automatically and email you the results.\n\n"
+            f"To cancel:  → mailto:ori@inbound.thynaptic.com?subject=UNSUBSCRIBE%20{wf_sub['name'].replace(' ','%20')}\n"
+            f"To list all: → mailto:ori@inbound.thynaptic.com?subject=SUBSCRIPTIONS\n\n"
+            + _ori_action_footer(all_wfs))
+        return jsonify({"ok": True, "mode": "command", "cmd": "SUBSCRIBE", "result": "created"})
+
+    elif cmd == "UNSUBSCRIBE":
+        with _SUBS_LOCK:
+            subs_list = _load_subs()
+        removed = [s for s in subs_list
+                   if s["client_email"] == sender_email
+                   and (s["wf_name"].lower() == cmd_arg.lower() or s["wf_id"].startswith(cmd_arg))]
+        if not removed:
+            _send_email(sender_email, "ORI: No subscription found",
+                f"Hi {name},\n\nNo active subscription for \"{cmd_arg}\".\n\n"
+                + _ori_action_footer(all_wfs))
+            return jsonify({"ok": True, "mode": "command", "cmd": "UNSUBSCRIBE", "result": "not_found"})
+        new_list = [s for s in subs_list if s not in removed]
+        with _SUBS_LOCK:
+            _save_subs(new_list)
+        for s in removed:
+            try: _SCHEDULER.remove_job(f"sub_{s['id']}")
+            except Exception: pass
+        names = ", ".join(f"\"{s['wf_name']}\"" for s in removed)
+        _send_email(sender_email, f"ORI: Unsubscribed — {removed[0]['wf_name']}",
+            f"Hi {name},\n\n✓ Unsubscribed from {names}. No more automatic runs.\n\n"
+            + _ori_action_footer(all_wfs))
+        return jsonify({"ok": True, "mode": "command", "cmd": "UNSUBSCRIBE"})
+
+    elif cmd == "SUBSCRIPTIONS":
+        with _SUBS_LOCK:
+            subs_list = _load_subs()
+        my_subs = [s for s in subs_list if s["client_email"] == sender_email]
+        if not my_subs:
+            _send_email(sender_email, "ORI: No active subscriptions",
+                f"Hi {name},\n\nNo active subscriptions yet.\n\n"
+                f"To subscribe:  → mailto:ori@inbound.thynaptic.com?subject=SUBSCRIBE%20<workflow>%20daily\n\n"
+                + _ori_action_footer(all_wfs))
+            return jsonify({"ok": True, "mode": "command", "cmd": "SUBSCRIPTIONS", "count": 0})
+        lines = [f"Hi {name}, your active subscriptions:\n"]
+        for s in my_subs:
+            unsub_link = f"mailto:ori@inbound.thynaptic.com?subject=UNSUBSCRIBE%20{s['wf_name'].replace(' ','%20')}"
+            lines.append(f"  • {s['wf_name']} — {s['schedule_desc']}")
+            lines.append(f"    Cancel → {unsub_link}")
+        _send_email(sender_email, "ORI: Your Subscriptions",
+            "\n".join(lines) + "\n\n" + _ori_action_footer(all_wfs))
+        return jsonify({"ok": True, "mode": "command", "cmd": "SUBSCRIPTIONS", "count": len(my_subs)})
 
     elif cmd == "LIST":
         if all_wfs:
@@ -4319,6 +4662,7 @@ def _run_workflow_job(wf_id: str, run_id: str) -> None:
             f"Hi,\n\nYour workflow \"{wf_name}\" finished.\n\n"
             f"{summary}\n\n"
             + _ori_action_footer(all_wfs),
+            wf_id=wf["id"], run_id=run_id,
         )
 
 
@@ -4432,11 +4776,15 @@ def workflow_ingest_doc() -> Response:
 def run_workflow(wf_id: str) -> Response:
     body = request.get_json(silent=True) or {}
     run_id = str(uuid.uuid4())
+    with _WF_LOCK:
+        _wf_list = _load_workflows()
+    _wf_name = next((w["name"] for w in _wf_list if w["id"] == wf_id), "Workflow")
     with _WFR_LOCK:
         runs = _load_runs()
         runs[run_id] = {
             "id":           run_id,
             "wf_id":        wf_id,
+            "wf_name":      _wf_name,
             "status":       "queued",
             "steps":        [],
             "created":      datetime.now(timezone.utc).isoformat(),
@@ -4445,6 +4793,7 @@ def run_workflow(wf_id: str) -> Response:
             "save_to_memory": bool(body.get("save_to_memory", False)),
             "doc_filename": body.get("doc_filename", ""),
             "user_vars":    body.get("user_vars") or {},
+            "triggered_by": body.get("triggered_by", "manual"),
         }
         _save_runs(runs)
     t = threading.Thread(target=_run_workflow_job, args=(wf_id, run_id), daemon=True)
@@ -6865,6 +7214,7 @@ def main() -> None:
 
         _bootstrap_workflow_schedules()
         _bootstrap_briefing_schedules()
+        _boot_subscriptions()
 
         # Start Flask server (this blocks until server stops)
         app.run(host=host, port=port, debug=False, threaded=True, use_reloader=False)
