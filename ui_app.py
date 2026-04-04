@@ -1527,7 +1527,46 @@ def add_email_client() -> Response:
     return jsonify({"ok": True, "email": email})
 
 
-@app.route("/v1/email/clients/<path:email>", methods=["PATCH"])
+@app.route("/v1/email/register", methods=["POST"])
+def register_email_client() -> Response:
+    """
+    Called after signup — auto-registers the user as an email client.
+    No auth required (public endpoint — only adds, never overwrites).
+    Body: { "email", "name" }
+    """
+    body  = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").lower().strip()
+    name  = (body.get("name")  or email).strip()
+    if not email:
+        return jsonify({"error": "'email' required"}), 400
+
+    with _EMAIL_CLIENTS_LOCK:
+        clients = _load_email_clients()
+        if email in clients:
+            return jsonify({"ok": True, "email": email, "existing": True})
+        # Generate workspace slug for per-user inbound address
+        import re as _re
+        slug = _re.sub(r'[^a-z0-9]', '', name.lower())[:20] or email.split("@")[0][:20]
+        # Ensure slug uniqueness
+        used_slugs = {c.get("slug") for c in clients.values()}
+        base, i = slug, 2
+        while slug in used_slugs:
+            slug = f"{base}{i}"; i += 1
+        client = {
+            "name":             name,
+            "slug":             slug,
+            "inbound_address":  f"{slug}@inbound.thynaptic.com",
+            "briefing":         False,
+            "briefing_time":    "08:00",
+            "timezone":         "UTC",
+            "added_at":         datetime.now(timezone.utc).isoformat(),
+        }
+        clients[email] = client
+        _save_email_clients(clients)
+    return jsonify({"ok": True, "email": email, "inbound_address": client["inbound_address"]})
+
+
+
 def update_email_client(email: str) -> Response:
     """Update briefing settings for an existing client."""
     auth = request.headers.get("Authorization", "")
@@ -1596,6 +1635,18 @@ def api_email_inbound() -> Response:
     sender  = data.get("from", "")
     subject = (data.get("subject") or "").strip()
     body    = (data.get("text") or "").strip()
+
+    # Resolve which client this email was sent TO (per-user inbound address)
+    to_addresses = data.get("to", [])
+    if isinstance(to_addresses, str):
+        to_addresses = [to_addresses]
+    inbound_slug = None
+    for addr in to_addresses:
+        import re as _re2
+        m = _re2.match(r'([^@]+)@inbound\.thynaptic\.com', addr.lower().strip())
+        if m:
+            inbound_slug = m.group(1)
+            break
 
     # Strip common email client prefixes and ORI's own subject prefixes
     import re as _re
@@ -1674,7 +1725,13 @@ def api_email_inbound() -> Response:
     import re as _re
     _m = _re.search(r'<([^>]+)>', sender)
     sender_email = _m.group(1).lower() if _m else sender.lower()
-    client = _load_email_clients().get(sender_email)
+    all_clients = _load_email_clients()
+    # Resolve client: first by slug (per-user inbound), then by sender email
+    client = None
+    if inbound_slug:
+        client = next((c for c in all_clients.values() if c.get("slug") == inbound_slug), None)
+    if not client:
+        client = all_clients.get(sender_email)
     if not client:
         app.logger.info(f"[email-cmd] unauthorized: {sender}")
         _send_email(
@@ -3923,11 +3980,29 @@ def _run_workflow_job(wf_id: str, run_id: str) -> None:
         recipient = triggered_by[len("email:"):]
         wf_name = wf.get("name", "Workflow")
         all_wfs = _load_workflows()
+        # Strip HTML tags and summarize via Ollama for clean email output
+        import re as _re, html as _html_mod
+        cleaned = _html_mod.unescape(_re.sub(r'<[^>]+>', ' ', final_output))
+        cleaned = _re.sub(r'\s{3,}', '\n\n', cleaned).strip()
+        try:
+            import requests as _req
+            summ_resp = _req.post(
+                f"{os.environ.get('OLLAMA_BASE','http://localhost:11434')}/api/generate",
+                json={
+                    "model": "ministral3b:latest",
+                    "prompt": f"Summarize this in 3–5 clean sentences for an email. No markdown, no headers, plain prose:\n\n{cleaned[:4000]}",
+                    "stream": False,
+                },
+                timeout=30,
+            )
+            summary = summ_resp.json().get("response", "").strip() if summ_resp.ok else cleaned[:1000]
+        except Exception:
+            summary = cleaned[:1000]
         _send_email(
             recipient,
             f"ORI: \"{wf_name}\" complete ✓",
             f"Hi,\n\nYour workflow \"{wf_name}\" finished.\n\n"
-            f"{'─' * 40}\n{final_output}\n{'─' * 40}\n"
+            f"{summary}\n\n"
             + _ori_action_footer(all_wfs),
         )
 

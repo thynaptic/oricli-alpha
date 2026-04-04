@@ -115,6 +115,12 @@ export const useSCStore = create(
       const msg = err?.data?.email?.message || err?.message || 'Registration failed';
       throw new Error(msg);
     }
+    // Auto-register as email client (fire-and-forget)
+    fetch(`${API_BASE}/v1/email/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name }),
+    }).catch(() => {});
     // Auto-login after register
     return get().login(email, password);
   },
