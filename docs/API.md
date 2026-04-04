@@ -97,9 +97,9 @@ All protected routes require an `Authorization` header with a Bearer token.
 Authorization: Bearer glm.<prefix>.<secret>
 ```
 
-- Tokens are provisioned via `/v1/admin/tenants/:id/keys`.
+- Tokens are provisioned via the CLI (`oricli key new`) or the UI (`/settings/keys` on thynaptic.com), or directly via the REST admin endpoints below.
 - The server validates tokens using **Argon2id** hashing.
-- Admin routes (`/v1/admin/*`) require a separate admin key.
+- Admin routes (`/admin/v1/*`) require a key with `admin:write` scope.
 - Swarm peer routes use **SPP (Swarm Peer Protocol)** auth on the WebSocket upgrade.
 
 **Token format:**
@@ -109,6 +109,48 @@ Authorization: Bearer glm.<prefix>.<secret>
 | `glm` | Fixed prefix identifying an Oricli API key |
 | `<prefix>` | Short human-readable tenant identifier |
 | `<secret>` | Cryptographically random secret |
+
+**Quickstart — provision a key in under 30 seconds:**
+
+```bash
+# CLI (recommended for agents and local dev)
+oricli key new --name "My App"
+#   ✓ Tenant ID: abc-123
+#   GLM_API_KEY=glm_4f9e...c31a   ← copy this, shown once
+
+# Optional: write directly to a .env file
+oricli key new --name "My App" --write-env ./.env
+
+# Scoped key (chat only, expires 2027)
+oricli key new --name "Mobile App" \
+  --scope "runtime:chat" \
+  --ttl "2027-01-01T00:00:00Z"
+
+# List all provisioned tenants
+oricli key list
+```
+
+The CLI requires an `admin:write`-scoped key set in `~/.oricli/config.yaml` (`api_key` field) or the `ORICLI_API_KEY` env var.
+
+**Use in any OpenAI-compatible SDK:**
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://oricli.thynaptic.com",
+    api_key=os.environ["GLM_API_KEY"],
+)
+```
+
+```javascript
+import OpenAI from "openai"
+
+const client = new OpenAI({
+  baseURL: "https://oricli.thynaptic.com",
+  apiKey: process.env.GLM_API_KEY,
+})
+```
 
 ---
 
@@ -881,41 +923,111 @@ Purge skill trace logs for a specific swarm node.
 
 ### Admin (Tenants & Keys)
 
-> **Auth:** Admin key required (separate from standard Bearer token).
+> **Auth:** Key with `admin:write` scope required.  
+> **Base path:** `https://oricli.thynaptic.com` (or `http://localhost:8089` locally)
+
+The CLI (`oricli key`) is the recommended interface. These REST endpoints are what the CLI wraps — use them directly for programmatic provisioning.
 
 ---
 
-#### `POST /v1/admin/tenants`
+#### `POST /admin/v1/tenants`
 
-Create a new tenant.
+Create a new tenant (app identity).
 
 **Body:**
 ```json
-{ "name": "acme-corp", "plan": "enterprise" }
+{ "name": "ORI Home" }
 ```
 
-**Response:** `201 Created` with tenant object including ID.
+**Response:** `201 Created`
+```json
+{
+  "id": "abc123",
+  "name": "ORI Home",
+  "status": "active",
+  "created_at": "2026-04-04T15:00:00Z"
+}
+```
+
+> Use the returned `id` to issue keys for this tenant.
 
 ---
 
-#### `GET /v1/admin/tenants`
+#### `GET /admin/v1/tenants`
 
 List all tenants.
 
-**Response:** Array of tenant objects.
+**Response:** `200 OK`
+```json
+{
+  "tenants": [
+    { "id": "abc123", "name": "ORI Home", "status": "active", "created_at": "..." },
+    { "id": "def456", "name": "Mobile App", "status": "active", "created_at": "..." }
+  ]
+}
+```
 
 ---
 
-#### `POST /v1/admin/tenants/:id/keys`
+#### `POST /admin/v1/tenants/:id/keys`
 
-Provision a new API key for a tenant.
+Provision a new API key for a tenant. The full key is returned **once only**.
 
-**Response:**
+**Body:**
 ```json
-{ "key": "glm.<prefix>.<secret>", "tenant_id": "...", "created_at": "..." }
+{
+  "scopes": ["runtime:*"],
+  "expires_at": "2027-01-01T00:00:00Z"
+}
 ```
 
-> ⚠️ The full key is only returned once at creation time.
+- `scopes` — array of permission scopes. Defaults to `["runtime:*"]` if omitted.
+- `expires_at` — optional RFC3339 expiry timestamp.
+
+**Available scopes:**
+
+| Scope | Access |
+|---|---|
+| `runtime:*` | Full runtime — chat, embeddings, tools, memory |
+| `runtime:chat` | Chat completions only |
+| `runtime:embed` | Embeddings only |
+| `admin:write` | Tenant + key management (admin operations) |
+
+**Response:** `201 Created`
+```json
+{
+  "api_key": "glm_4f9ec31a...",
+  "record": {
+    "id": "key-uuid",
+    "tenant_id": "abc123",
+    "prefix": "4f9e",
+    "scopes": ["runtime:*"],
+    "status": "active",
+    "created_at": "2026-04-04T15:00:00Z"
+  }
+}
+```
+
+> ⚠️ `api_key` is shown **once** at creation time and never stored in plaintext. Copy it immediately.
+
+---
+
+**Full two-step flow (REST):**
+```bash
+# 1. Create tenant
+TENANT=$(curl -s -X POST https://oricli.thynaptic.com/admin/v1/tenants \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"ORI Home"}' | jq -r '.id')
+
+# 2. Issue key
+curl -s -X POST https://oricli.thynaptic.com/admin/v1/tenants/$TENANT/keys \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"scopes":["runtime:*"]}' | jq '.api_key'
+```
+
+Or just: `oricli key new --name "ORI Home"`
 
 ---
 
