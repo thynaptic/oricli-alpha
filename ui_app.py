@@ -1621,6 +1621,32 @@ def register_email_client() -> Response:
         }
         clients[email] = client
         _save_email_clients(clients)
+    # Send onboarding email (fire-and-forget thread so register returns fast)
+    import threading as _ot
+    def _send_onboarding(to, client_name, inbound_addr):
+        wfs = _load_workflows()
+        first_wf = wfs[0]["name"] if wfs else None
+        base = inbound_addr
+        lines = [
+            f"Hey {client_name},\n",
+            "Your ORI workspace is live. You're already set up — no installs, no dashboard to learn.",
+            "",
+            f"Your personal command address: {base}",
+            "",
+            "Try these now (tap to open a pre-filled email):",
+            f"  • See your workflows  → mailto:{base}?subject=LIST",
+            f"  • Save a quick note   → mailto:{base}?subject=NOTE%20First%20note%20from%20ORI",
+        ]
+        if first_wf:
+            slug = first_wf.replace(" ", "%20")
+            lines.append(f"  • Run your first workflow  → mailto:{base}?subject=RUN%20{slug}")
+        lines += [
+            "",
+            "Reply HELP anytime to see all commands.",
+            "— ORI Studio",
+        ]
+        _send_email(to, "Welcome to ORI — your workspace is ready", "\n".join(lines))
+    _ot.Thread(target=_send_onboarding, args=(email, client["name"], client["inbound_address"]), daemon=True).start()
     return jsonify({"ok": True, "email": email, "inbound_address": client["inbound_address"]})
 
 
@@ -1715,7 +1741,7 @@ def api_email_inbound() -> Response:
     print(f"[email-inbound] from={data.get('from','')} subject={subject!r} body_preview={body[:80]!r}", flush=True)
 
     # If subject isn't a known command, scan entire body for a command line
-    KNOWN_CMDS = {"RUN", "LIST", "STATUS", "STOP", "NOTE", "APPROVE", "YES", "REJECT", "NO"}
+    KNOWN_CMDS = {"RUN", "LIST", "STATUS", "STOP", "NOTE", "ASK", "BRIEF", "REMIND", "REPORT", "HELP", "APPROVE", "YES", "REJECT", "NO"}
     cmd_parts = subject.split(None, 1)
     cmd_check = cmd_parts[0].upper() if cmd_parts else ""
     if cmd_check not in KNOWN_CMDS and body:
@@ -1894,6 +1920,136 @@ def api_email_inbound() -> Response:
             f"Hi {name},\n\n📝 Saved to your Notebook as \"{note_title}\".\n\n"
             + _ori_action_footer(all_wfs))
         return jsonify({"ok": True, "mode": "command", "cmd": "NOTE", "title": note_title})
+
+    elif cmd == "ASK":
+        question = (cmd_arg or body or "").strip()
+        if not question:
+            _send_email(sender_email, "ORI: Ask me something",
+                f"Hi {name},\n\nSend: ASK <your question>\n\n" + _ori_action_footer(all_wfs))
+            return jsonify({"ok": True, "mode": "command", "cmd": "ASK", "result": "empty"})
+        # Build context from recent notes + run history
+        with _NOTES_LOCK:
+            notes_ctx = _load_notes_store()[:10]
+        with _WFR_LOCK:
+            runs_ctx = _load_runs()
+        wf_map = {w["id"]: w["name"] for w in all_wfs}
+        recent_runs = sorted(runs_ctx.values(), key=lambda r: r.get("created",""), reverse=True)[:10]
+        notes_text = "\n".join(f"- [{n['title']}]: {n['content'][:200]}" for n in notes_ctx) or "None"
+        runs_text  = "\n".join(
+            f"- {wf_map.get(r.get('wf_id',''),'?')}: {r['status']} on {r.get('created','?')[:10]}"
+            for r in recent_runs
+        ) or "None"
+        context_block = f"User notes:\n{notes_text}\n\nRecent workflow runs:\n{runs_text}"
+        try:
+            import requests as _req3
+            a_resp = _req3.post(
+                f"{os.environ.get('OLLAMA_BASE','http://localhost:11434')}/api/generate",
+                json={"model": "ministral3b:latest",
+                      "prompt": f"You are ORI, an AI assistant for a business owner. Answer their question using the context below. Be concise and direct — 3-5 sentences max. Plain prose, no markdown.\n\nContext:\n{context_block}\n\nQuestion: {question}",
+                      "stream": False},
+                timeout=45,
+            )
+            answer = a_resp.json().get("response","").strip() if a_resp.ok else "I couldn't process that right now. Try again shortly."
+        except Exception:
+            answer = "I couldn't process that right now. Try again shortly."
+        _send_email(sender_email, f"ORI: {question[:50]}",
+            f"Hi {name},\n\n{answer}\n\n" + _ori_action_footer(all_wfs))
+        return jsonify({"ok": True, "mode": "command", "cmd": "ASK"})
+
+    elif cmd == "BRIEF":
+        _send_briefing(sender_email)
+        return jsonify({"ok": True, "mode": "command", "cmd": "BRIEF"})
+
+    elif cmd == "REMIND":
+        remind_text = (cmd_arg or body or "").strip()
+        if not remind_text:
+            _send_email(sender_email, "ORI: Set a reminder",
+                f"Hi {name},\n\nSend: REMIND <text> <time>\nExample: REMIND call Acme tomorrow 9am\n\n" + _ori_action_footer(all_wfs))
+            return jsonify({"ok": True, "mode": "command", "cmd": "REMIND", "result": "empty"})
+        # Parse fire time — try regex first, fallback to Ollama
+        import re as _re3
+        fire_dt = None
+        now_utc = datetime.now(timezone.utc)
+        # Simple patterns: "tomorrow HH:MM", "today HH:MM", weekday names
+        time_match = _re3.search(r'(\d{1,2}):(\d{2})\s*(am|pm)?', remind_text, _re3.IGNORECASE)
+        hour, minute = (9, 0)
+        if time_match:
+            hour = int(time_match.group(1))
+            minute = int(time_match.group(2))
+            if time_match.group(3) and time_match.group(3).lower() == 'pm' and hour < 12:
+                hour += 12
+        day_offset = 1  # default tomorrow
+        if _re3.search(r'\btoday\b', remind_text, _re3.IGNORECASE): day_offset = 0
+        if _re3.search(r'\btomorrow\b', remind_text, _re3.IGNORECASE): day_offset = 1
+        weekdays = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']
+        for i, wd in enumerate(weekdays):
+            if _re3.search(rf'\b{wd}\b', remind_text, _re3.IGNORECASE):
+                days_ahead = (i - now_utc.weekday()) % 7 or 7
+                day_offset = days_ahead
+                break
+        fire_dt = (now_utc.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                   + __import__('datetime').timedelta(days=day_offset))
+        # Store reminder
+        _REMINDERS_FILE = Path(__file__).parent / ".oricli" / "reminders.json"
+        _REMINDERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            reminders = json.loads(_REMINDERS_FILE.read_text()) if _REMINDERS_FILE.exists() else []
+        except Exception:
+            reminders = []
+        rid = str(uuid.uuid4())[:8]
+        reminders.append({"id": rid, "email": sender_email, "text": remind_text,
+                          "fire_at": fire_dt.isoformat()})
+        _REMINDERS_FILE.write_text(json.dumps(reminders, indent=2))
+        # Schedule one-shot job
+        if _SCHEDULER_AVAILABLE:
+            def _fire_reminder(email, text, reminder_id):
+                all_wfs2 = _load_workflows()
+                _send_email(email, f"ORI: ⏰ Reminder — {text[:50]}",
+                    f"Hi,\n\nYour reminder:\n\n  {text}\n\n" + _ori_action_footer(all_wfs2))
+            try:
+                _SCHEDULER.add_job(_fire_reminder, trigger="date", run_date=fire_dt,
+                                   args=[sender_email, remind_text, rid], id=f"remind_{rid}")
+            except Exception:
+                pass
+        fire_str = fire_dt.strftime("%A %b %-d at %-I:%M %p UTC")
+        _send_email(sender_email, "ORI: Reminder set ⏰",
+            f"Hi {name},\n\n⏰ Got it. I'll remind you on {fire_str}:\n\n  {remind_text}\n\n" + _ori_action_footer(all_wfs))
+        return jsonify({"ok": True, "mode": "command", "cmd": "REMIND", "fire_at": fire_dt.isoformat()})
+
+    elif cmd == "REPORT":
+        with _WFR_LOCK:
+            runs_all = _load_runs()
+        wf_map = {w["id"]: w["name"] for w in all_wfs}
+        recent = sorted(runs_all.values(), key=lambda r: r.get("created",""), reverse=True)[:10]
+        status_icons = {"done": "✓", "error": "✗", "running": "⟳", "queued": "…", "cancelled": "⊘"}
+        run_lines = "\n".join(
+            f"  {status_icons.get(r['status'],'?')} {wf_map.get(r.get('wf_id',''),'?')}  —  {r['status']}  ({r.get('created','')[:10]})"
+            for r in recent
+        ) or "  No runs yet."
+        _send_email(sender_email, "ORI: Activity Report",
+            f"Hi {name},\n\nLast {len(recent)} runs:\n\n{run_lines}\n\n" + _ori_action_footer(all_wfs))
+        return jsonify({"ok": True, "mode": "command", "cmd": "REPORT"})
+
+    elif cmd == "HELP":
+        base = "ori@inbound.thynaptic.com"
+        help_lines = [
+            f"Hi {name}, here's everything ORI can do via email:\n",
+            f"  RUN <workflow>   → mailto:{base}?subject=RUN%20Claude%20Overview",
+            f"  LIST             → mailto:{base}?subject=LIST",
+            f"  STATUS           → mailto:{base}?subject=STATUS",
+            f"  STOP <run-id>    → mailto:{base}?subject=STOP%20<run-id>",
+            f"  NOTE <text>      → mailto:{base}?subject=NOTE%20your%20note%20here",
+            f"  ASK <question>   → mailto:{base}?subject=ASK%20how%20did%20last%20week%20go",
+            f"  BRIEF            → mailto:{base}?subject=BRIEF",
+            f"  REMIND <text>    → mailto:{base}?subject=REMIND%20call%20Acme%20tomorrow%209am",
+            f"  REPORT           → mailto:{base}?subject=REPORT",
+            f"  HELP             → mailto:{base}?subject=HELP",
+            "\nTap any link above to open a pre-filled email.",
+            "— ORI Studio",
+        ]
+        _send_email(sender_email, "ORI: Command Reference",
+            "\n".join(help_lines))
+        return jsonify({"ok": True, "mode": "command", "cmd": "HELP"})
 
     elif cmd == "LIST":
         if all_wfs:
