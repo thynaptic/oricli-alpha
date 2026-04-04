@@ -1425,6 +1425,33 @@ def _body_to_html(text: str) -> str:
     )
 
 
+def _local_now(tz_name: str = "UTC") -> datetime:
+    """Return current datetime in the given IANA timezone string."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(tz_name))
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
+def _greeting(local_dt: datetime) -> str:
+    h = local_dt.hour
+    if h < 12:  return "Good morning"
+    if h < 17:  return "Good afternoon"
+    return "Good evening"
+
+
+def _fmt_local(dt_utc: datetime, tz_name: str) -> str:
+    """Format a UTC datetime in the user's local timezone."""
+    try:
+        from zoneinfo import ZoneInfo
+        local = dt_utc.astimezone(ZoneInfo(tz_name))
+        return local.strftime("%A %b %-d at %-I:%M %p %Z")
+    except Exception:
+        return dt_utc.strftime("%A %b %-d at %-I:%M %p UTC")
+
+
+
 def _send_email(
     to: str,
     subject: str,
@@ -1872,7 +1899,7 @@ def api_email_inbound() -> Response:
         with _WFR_LOCK:
             runs = _load_runs()
             runs[run_id] = {
-                "id": run_id, "wf_id": wf["id"], "status": "queued",
+                "id": run_id, "wf_id": wf["id"], "wf_name": wf["name"], "status": "queued",
                 "steps": [], "created": datetime.now(timezone.utc).isoformat(),
                 "final_output": None, "doc_text": "", "save_to_memory": False,
                 "doc_filename": "", "user_vars": user_vars,
@@ -2011,7 +2038,8 @@ def api_email_inbound() -> Response:
                                    args=[sender_email, remind_text, rid], id=f"remind_{rid}")
             except Exception:
                 pass
-        fire_str = fire_dt.strftime("%A %b %-d at %-I:%M %p UTC")
+        tz       = client.get("timezone", "UTC")
+        fire_str = _fmt_local(fire_dt, tz)
         _send_email(sender_email, "ORI: Reminder set ⏰",
             f"Hi {name},\n\n⏰ Got it. I'll remind you on {fire_str}:\n\n  {remind_text}\n\n" + _ori_action_footer(all_wfs))
         return jsonify({"ok": True, "mode": "command", "cmd": "REMIND", "fire_at": fire_dt.isoformat()})
@@ -2022,12 +2050,38 @@ def api_email_inbound() -> Response:
         wf_map = {w["id"]: w["name"] for w in all_wfs}
         recent = sorted(runs_all.values(), key=lambda r: r.get("created",""), reverse=True)[:10]
         status_icons = {"done": "✓", "error": "✗", "running": "⟳", "queued": "…", "cancelled": "⊘"}
+        status_colors = {"done": "#22c55e", "error": "#ef4444", "running": "#6366f1", "queued": "#f59e0b", "cancelled": "#9ca3af"}
+        def _run_wf_name(r):
+            return r.get("wf_name") or wf_map.get(r.get("wf_id",""), "Deleted workflow")
+        # Plain text fallback
         run_lines = "\n".join(
-            f"  {status_icons.get(r['status'],'?')} {wf_map.get(r.get('wf_id',''),'?')}  —  {r['status']}  ({r.get('created','')[:10]})"
+            f"  {status_icons.get(r['status'],'?')}  {_run_wf_name(r)}  —  {r['status']}  ({r.get('created','')[:10]})"
             for r in recent
         ) or "  No runs yet."
-        _send_email(sender_email, "ORI: Activity Report",
-            f"Hi {name},\n\nLast {len(recent)} runs:\n\n{run_lines}\n\n" + _ori_action_footer(all_wfs))
+        plain = f"Hi {name},\n\nLast {len(recent)} runs:\n\n{run_lines}\n\n" + _ori_action_footer(all_wfs)
+        # HTML table
+        rows = "".join(
+            f"<tr><td style='padding:8px 12px;border-bottom:1px solid #1f2937;color:{status_colors.get(r['status'],'#9ca3af')};font-size:16px;'>"
+            f"{status_icons.get(r['status'],'?')}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid #1f2937;color:#f9fafb;font-weight:500;'>{_run_wf_name(r)}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid #1f2937;color:#9ca3af;'>{r['status']}</td>"
+            f"<td style='padding:8px 12px;border-bottom:1px solid #1f2937;color:#9ca3af;font-size:12px;'>{r.get('created','')[:10]}</td></tr>"
+            for r in recent
+        ) or "<tr><td colspan='4' style='padding:16px;color:#9ca3af;'>No runs yet.</td></tr>"
+        html = (
+            f'<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#111827;color:#f9fafb;">'
+            f'<p style="margin:0 0 16px;">Hi {name},</p>'
+            f'<p style="margin:0 0 16px;color:#9ca3af;">Last {len(recent)} runs:</p>'
+            f'<table style="width:100%;border-collapse:collapse;background:#1f2937;border-radius:8px;overflow:hidden;">'
+            f'<thead><tr>'
+            f'<th style="padding:10px 12px;text-align:left;color:#9ca3af;font-size:11px;text-transform:uppercase;border-bottom:1px solid #374151;"></th>'
+            f'<th style="padding:10px 12px;text-align:left;color:#9ca3af;font-size:11px;text-transform:uppercase;border-bottom:1px solid #374151;">Workflow</th>'
+            f'<th style="padding:10px 12px;text-align:left;color:#9ca3af;font-size:11px;text-transform:uppercase;border-bottom:1px solid #374151;">Status</th>'
+            f'<th style="padding:10px 12px;text-align:left;color:#9ca3af;font-size:11px;text-transform:uppercase;border-bottom:1px solid #374151;">Date</th>'
+            f'</tr></thead><tbody>{rows}</tbody></table>'
+            + _body_to_html(_ori_action_footer(all_wfs)) + '</div>'
+        )
+        _send_email(sender_email, "ORI: Activity Report", plain, html=html)
         return jsonify({"ok": True, "mode": "command", "cmd": "REPORT"})
 
     elif cmd == "HELP":
@@ -3573,10 +3627,13 @@ def _run_workflow_schedule(wf_id: str) -> None:
     """APScheduler callback — fires a workflow run."""
     import uuid as _uuid, threading as _threading
     run_id = str(_uuid.uuid4())
+    with _WF_LOCK:
+        wf_list = _load_workflows()
+    wf_name = next((w["name"] for w in wf_list if w["id"] == wf_id), wf_id)
     with _WFR_LOCK:
         runs = _load_runs()
         runs[run_id] = {
-            "id": run_id, "wf_id": wf_id, "status": "queued",
+            "id": run_id, "wf_id": wf_id, "wf_name": wf_name, "status": "queued",
             "steps": [], "created": datetime.now(timezone.utc).isoformat(),
             "final_output": None, "doc_text": "", "save_to_memory": False,
             "doc_filename": "", "user_vars": {},
@@ -3605,7 +3662,8 @@ def _send_briefing(client_email: str) -> None:
         return
 
     name = client.get("name", "there")
-    now  = datetime.now(timezone.utc)
+    tz   = client.get("timezone", "UTC")
+    now  = _local_now(tz)
     day  = now.strftime("%A, %B %-d")
 
     # ── Overnight runs (last 24h) ─────────────────────────────────────────────
@@ -3614,7 +3672,7 @@ def _send_briefing(client_email: str) -> None:
     with _WF_LOCK:
         wf_map = {w["id"]: w["name"] for w in _load_workflows()}
 
-    cutoff   = now.timestamp() - 86400
+    cutoff   = datetime.now(timezone.utc).timestamp() - 86400
     recent   = [r for r in runs.values()
                 if r.get("created") and
                 datetime.fromisoformat(r["created"].replace("Z","+00:00")).timestamp() > cutoff]
@@ -3634,7 +3692,7 @@ def _send_briefing(client_email: str) -> None:
                  and w.get("status") != "paused"]
 
     # ── Build email body ──────────────────────────────────────────────────────
-    lines = [f"Good morning {name} ☀️", f"", f"Your ORI briefing for {day}.", ""]
+    lines = [f"{_greeting(now)} {name} ☀️", f"", f"Your ORI briefing for {day}.", ""]
 
     if done_runs or error_runs:
         lines.append("OVERNIGHT")
