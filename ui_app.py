@@ -1385,6 +1385,7 @@ def _ori_action_footer(workflows: list | None = None) -> str:
         "Quick actions — tap to send:",
         f"  • List workflows  → mailto:{base}?subject=LIST",
         f"  • Check status    → mailto:{base}?subject=STATUS",
+        f"  • Save a note     → mailto:{base}?subject=NOTE%20your%20note%20here",
     ]
     if workflows:
         for w in workflows[:5]:
@@ -1482,6 +1483,63 @@ def api_send_email() -> Response:
 # ── Authorized email clients (email command interface) ────────────────────────
 _EMAIL_CLIENTS_FILE = Path(__file__).parent / ".oricli" / "email_clients.json"
 _EMAIL_CLIENTS_LOCK = threading.Lock()
+
+# ── Notes store ───────────────────────────────────────────────────────────────
+_NOTES_FILE = Path(__file__).parent / ".oricli" / "notes.json"
+_NOTES_LOCK = threading.Lock()
+
+def _load_notes_store() -> list:
+    try:
+        if _NOTES_FILE.exists():
+            return json.loads(_NOTES_FILE.read_text())
+    except Exception:
+        pass
+    return []
+
+def _save_notes_store(notes: list) -> None:
+    _NOTES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _NOTES_FILE.write_text(json.dumps(notes, indent=2))
+
+@app.route("/api/notes", methods=["GET"])
+def api_notes_list() -> Response:
+    with _NOTES_LOCK:
+        return jsonify({"notes": _load_notes_store()})
+
+@app.route("/api/notes", methods=["POST"])
+def api_notes_create() -> Response:
+    body    = request.get_json(silent=True) or {}
+    title   = (body.get("title") or "Untitled").strip()
+    content = (body.get("content") or "").strip()
+    note = {"id": str(int(datetime.now(timezone.utc).timestamp() * 1000)),
+            "title": title, "content": content,
+            "updatedAt": int(datetime.now(timezone.utc).timestamp() * 1000)}
+    with _NOTES_LOCK:
+        notes = _load_notes_store()
+        notes.insert(0, note)
+        _save_notes_store(notes)
+    return jsonify(note), 201
+
+@app.route("/api/notes/<note_id>", methods=["PATCH"])
+def api_notes_update(note_id: str) -> Response:
+    body = request.get_json(silent=True) or {}
+    with _NOTES_LOCK:
+        notes = _load_notes_store()
+        note  = next((n for n in notes if n["id"] == note_id), None)
+        if not note:
+            return jsonify({"error": "not found"}), 404
+        if "title"   in body: note["title"]   = body["title"]
+        if "content" in body: note["content"] = body["content"]
+        note["updatedAt"] = int(datetime.now(timezone.utc).timestamp() * 1000)
+        _save_notes_store(notes)
+    return jsonify(note)
+
+@app.route("/api/notes/<note_id>", methods=["DELETE"])
+def api_notes_delete(note_id: str) -> Response:
+    with _NOTES_LOCK:
+        notes = _load_notes_store()
+        notes = [n for n in notes if n["id"] != note_id]
+        _save_notes_store(notes)
+    return jsonify({"ok": True})
 
 def _load_email_clients() -> dict:
     try:
@@ -1657,7 +1715,7 @@ def api_email_inbound() -> Response:
     print(f"[email-inbound] from={data.get('from','')} subject={subject!r} body_preview={body[:80]!r}", flush=True)
 
     # If subject isn't a known command, scan entire body for a command line
-    KNOWN_CMDS = {"RUN", "LIST", "STATUS", "STOP", "APPROVE", "YES", "REJECT", "NO"}
+    KNOWN_CMDS = {"RUN", "LIST", "STATUS", "STOP", "NOTE", "APPROVE", "YES", "REJECT", "NO"}
     cmd_parts = subject.split(None, 1)
     cmd_check = cmd_parts[0].upper() if cmd_parts else ""
     if cmd_check not in KNOWN_CMDS and body:
@@ -1803,6 +1861,39 @@ def api_email_inbound() -> Response:
             + _ori_action_footer(all_wfs),
             wf_id=wf["id"], run_id=run_id)
         return jsonify({"ok": True, "mode": "command", "cmd": "RUN", "run_id": run_id})
+
+    elif cmd == "NOTE":
+        note_content = cmd_arg or body
+        if not note_content:
+            _send_email(sender_email, "ORI: Note needs content",
+                f"Hi {name},\n\nSend: NOTE <your note> in the subject, or put the note in the email body.\n\n"
+                + _ori_action_footer(all_wfs))
+            return jsonify({"ok": True, "mode": "command", "cmd": "NOTE", "result": "empty"})
+        # Generate 2-3 word title via Ollama
+        try:
+            import requests as _req2
+            t_resp = _req2.post(
+                f"{os.environ.get('OLLAMA_BASE','http://localhost:11434')}/api/generate",
+                json={"model": "ministral3b:latest",
+                      "prompt": f"Give this note a title of 2-3 words max. Reply with ONLY the title, no punctuation:\n\n{note_content[:500]}",
+                      "stream": False},
+                timeout=15,
+            )
+            note_title = t_resp.json().get("response", "").strip().strip('"').strip("'") if t_resp.ok else "Email Note"
+            note_title = " ".join(note_title.split()[:4])  # hard cap 4 words
+        except Exception:
+            note_title = "Email Note"
+        note = {"id": str(int(datetime.now(timezone.utc).timestamp() * 1000)),
+                "title": note_title, "content": note_content,
+                "updatedAt": int(datetime.now(timezone.utc).timestamp() * 1000)}
+        with _NOTES_LOCK:
+            existing = _load_notes_store()
+            existing.insert(0, note)
+            _save_notes_store(existing)
+        _send_email(sender_email, f"ORI: Note saved — \"{note_title}\"",
+            f"Hi {name},\n\n📝 Saved to your Notebook as \"{note_title}\".\n\n"
+            + _ori_action_footer(all_wfs))
+        return jsonify({"ok": True, "mode": "command", "cmd": "NOTE", "title": note_title})
 
     elif cmd == "LIST":
         if all_wfs:
