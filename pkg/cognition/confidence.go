@@ -125,6 +125,19 @@ var reSessionIntrospective = regexp.MustCompile(
 
 var reShortChat = regexp.MustCompile(`^[a-zA-Z'\s,!.?]{1,30}$`)
 
+// IsSessionIntrospective returns true when the query is about the current
+// session, conversation history, or real-time clock — no web search needed,
+// and ideal for Oracle temporal routing with a minimal prompt.
+func IsSessionIntrospective(s string) bool {
+	return reSessionIntrospective.MatchString(s)
+}
+
+// IsConversationalShort returns true for brief social/greeting messages that
+// don't need Oracle-quality reasoning — local Ollama fast path is fine.
+func IsConversationalShort(lower string) bool {
+	return isConversational(lower)
+}
+
 func isConversational(lower string) bool {
 	if reConversational.MatchString(lower) {
 		return true

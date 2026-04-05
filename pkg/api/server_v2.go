@@ -34,6 +34,7 @@ import (
 	githubconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/github"
 	notionconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/notion"
 	"github.com/thynaptic/oricli-go/pkg/enterprise/rag"
+	"github.com/thynaptic/oricli-go/pkg/oracle"
 	"github.com/thynaptic/oricli-go/pkg/reform"
 	"github.com/thynaptic/oricli-go/pkg/safety"
 	"github.com/thynaptic/oricli-go/pkg/scl"
@@ -979,8 +980,6 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		})
 		return
 	}
-
-	// Check session-level suspicion — hard-blocked sessions get a 429
 	if s.Agent.SovEngine.Suspicion.IsHardBlocked(sessionKey) {
 		remaining := s.Agent.SovEngine.Suspicion.BlockTimeRemaining(sessionKey)
 		c.Header("Retry-After", remaining.String())
@@ -1043,6 +1042,12 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Non-streaming clients (LiveBench, curl, SDK callers) must send stream:false.
 	// The UI always sends stream:true (or omits it, defaulting to SSE via request header).
 	useSSE := req.Stream
+	// Mark chat model as active early — before any cache/embed calls — so the
+	// L2 semantic cache (which uses the Ollama embedder) skips on cold starts
+	// and avoids a 30-90s all-minilm cold-load blocking the first request.
+	service.SetChatModelActive(true)
+	defer service.SetChatModelActive(false)
+
 	// ── Semantic response cache check ────────────────────────────────────────
 	// L1 (exact hash) is always checked. L2 (vector) only when model is idle.
 	// On hit: stream the cached response as SSE (or return JSON for non-streaming).
@@ -1090,7 +1095,6 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 
 	chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
-
 	heartbeatDone := make(chan struct{})
 	if useSSE {
 		// Commit to SSE NOW — before any blocking I/O (ProcessInference, Ollama warm-up).
@@ -1139,11 +1143,6 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
 		c.Writer.Flush()
 	}
-
-	// Mark chat model as active — prevents Embed() from cold-loading all-minilm
-	// and evicting qwen3 from Ollama's single memory slot during the pipeline.
-	service.SetChatModelActive(true)
-	defer service.SetChatModelActive(false)
 
 	// ── Benchmark / direct mode ──────────────────────────────────────────────
 	// oricli-bench or X-Benchmark-Mode:true skips ProcessInference entirely.
@@ -1237,12 +1236,73 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		s.Agent.SovEngine.Clock.RecordEvent(sessionID, cognition.EventRoleUser, lastMsg)
 	}
 
+	// ── Temporal fast-path — bypass sovereign pipeline entirely ──────────────
+	// Session/temporal queries ("what time is it", "recap what we discussed", etc.)
+	// already have their answer in the temporal block. Skip ProcessInference
+	// (which would fire oracle.Query for trap checks, adding unnecessary latency).
+	if oracle.Available() && cognition.IsSessionIntrospective(lastMsg) {
+		log.Printf("[Oracle] TierTemporal fast-path for: %.60s", lastMsg)
+		temporalBlock := s.Agent.SovEngine.Clock.FormatForPrompt(sessionID)
+		temporalMsgs := []oracle.Message{
+			{Role: "system", Content: "You are ORI, a sovereign AI assistant. Answer the user's question using only the temporal context below.\n\n" + temporalBlock},
+			{Role: "user", Content: lastMsg},
+		}
+		var streamCancel context.CancelFunc
+		streamCtx, streamCancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 5*time.Minute)
+		defer streamCancel()
+		if useSSE {
+			go func() {
+				select {
+				case <-c.Request.Context().Done():
+					streamCancel()
+				case <-streamCtx.Done():
+				}
+			}()
+		}
+		tokenCh := oracle.ChatStream(streamCtx, temporalMsgs)
+		if useSSE { close(heartbeatDone) }
+		var rb strings.Builder
+		for tok := range tokenCh {
+			rb.WriteString(tok)
+			if useSSE {
+				chunk := map[string]interface{}{
+					"id": chatID, "object": "chat.completion.chunk",
+					"choices": []map[string]interface{}{
+						{"index": 0, "delta": map[string]interface{}{"role": "assistant", "content": tok}, "finish_reason": nil},
+					},
+				}
+				data, _ := json.Marshal(chunk)
+				c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+				c.Writer.Flush()
+			}
+		}
+		responseText := rb.String()
+		if useSSE {
+			doneChunk := map[string]interface{}{
+				"id": chatID, "object": "chat.completion.chunk",
+				"choices": []map[string]interface{}{{"index": 0, "delta": map[string]interface{}{}, "finish_reason": "stop"}},
+			}
+			data, _ := json.Marshal(doneChunk)
+			c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+			c.Writer.Flush()
+		} else {
+			c.JSON(http.StatusOK, gin.H{
+				"id": chatID, "object": "chat.completion", "model": modelName,
+				"choices": []gin.H{{"index": 0, "message": gin.H{"role": "assistant", "content": responseText}, "finish_reason": "stop"}},
+				"usage": gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+			})
+		}
+		if responseText != "" {
+			s.Agent.SovEngine.Clock.RecordEvent(sessionID, cognition.EventRoleAssistant, responseText)
+		}
+		return
+	}
+
 	// When a Space is active, suppress web search inside ProcessInference — Space RAG is the source of truth.
 	inferCtx := ctx
 	if req.SpaceID != "" {
 		inferCtx = context.WithValue(ctx, cognition.CtxKeySpaceMode, true)
 	}
-
 	sovTrace, err := s.Agent.SovEngine.ProcessInference(inferCtx, lastMsg)
 	if err != nil {
 		sseError("sovereign engine failure")
@@ -1486,12 +1546,35 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			}
 		}()
 	}
-	tokenCh, err := s.Agent.GenService.ChatStream(streamCtx, msgs, streamOpts)
-	if err != nil {
-		if useSSE { close(heartbeatDone) }
-		sseError(err.Error())
-		return
+	// ── Oracle routing — classify query and pick backend ─────────────────────
+	// TierOllamaFast    → local qwen3:1.7b (greetings, trivial social turns)
+	// TierOracleDefault → Oracle with full enriched context (unlimited gpt-5-mini, no weak spots)
+	// Note: TierOracleTemporal is handled above (early-exit before ProcessInference).
+	var tokenCh <-chan string
+
+	oracleTier := oracle.Classify(lastMsg)
+	if !oracle.Available() {
+		oracleTier = oracle.TierOllamaFast // graceful degrade if copilot CLI absent
 	}
+
+	switch oracleTier {
+	case oracle.TierOracleDefault:
+		// Full enriched context (RAG, web search, SCL already injected into msgs).
+		// Oracle reasons far better than qwen3:1.7b on the same rich context.
+		log.Printf("[Oracle] TierDefault → full context for: %.60s", lastMsg)
+		tokenCh = oracle.ChatStream(streamCtx, oracle.ConvertMsgs(msgs))
+
+	default: // TierOllamaFast
+		// Short conversational turns — local model is fast enough.
+		var ollamaErr error
+		tokenCh, ollamaErr = s.Agent.GenService.ChatStream(streamCtx, msgs, streamOpts)
+		if ollamaErr != nil {
+			if useSSE { close(heartbeatDone) }
+			sseError(ollamaErr.Error())
+			return
+		}
+	}
+
 	// Stop pipeline heartbeat — token-stream ticker takes over from here.
 	if useSSE { close(heartbeatDone) }
 

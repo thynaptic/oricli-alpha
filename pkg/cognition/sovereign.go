@@ -465,6 +465,11 @@ type SovereignEngine struct {
 	FlowTriggers   *flowtriggers.Service
 	FlowCompanion  *flowcompanion.Engine
 	mu           sync.Mutex
+	// inferPipeline serializes the full slow ProcessInference pipeline (mode engines
+	// call Ollama inside, which can take 30-90s on CPU-only hardware).
+	// Unlike mu, this supports trylock with timeout so HTTP handlers stay responsive
+	// even when a background or concurrent inference is running.
+	inferPipeline sync.Mutex
 }
 
 func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *SovereignEngine {
@@ -572,10 +577,39 @@ func (e *SovereignEngine) SetWSHub(hub EventBroadcaster) {
 	}
 }
 
+// buildFastComposite returns a minimal system prompt for use when the full inference
+// pipeline is busy. It skips all slow I/O (mode engines, web search, enterprise RAG,
+// oracle check) and returns just the essential identity + behavioral rules.
+func (e *SovereignEngine) buildFastComposite() string {
+	composite := e.Builder.BuildCompositePrompt(e, "")
+	if e.Constitution != nil && e.Constitution.HasRules() {
+		composite = e.Constitution.Inject() + "\n\n" + composite
+	}
+	composite += "\n\n" + e.SCAI.Constitution.GetSystemPrompt()
+	return composite
+}
+
 // ProcessInference implements the exact 11-step Aurora cognitive sequence.
 func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string) (string, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	// Non-blocking trylock with 5s deadline — mode engines (CBR/PAL/ReAct/etc.) call
+	// Ollama INSIDE this function while holding the pipeline lock (30-90s on CPU-only
+	// hardware). Without a deadline, concurrent HTTP requests block indefinitely.
+	// On timeout we return a lightweight fallback composite; the caller gets a prompt
+	// and the response stream still works, just without deep enrichment.
+	const pipelineTimeout = 5 * time.Second
+	deadline := time.Now().Add(pipelineTimeout)
+	for !e.inferPipeline.TryLock() {
+		if time.Now().After(deadline) {
+			log.Printf("[SovereignEngine] pipeline busy — returning fast composite for: %.60q", stimulus)
+			return e.buildFastComposite(), nil
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	defer e.inferPipeline.Unlock()
 
 	inferenceStart := time.Now()
 	sovLevel := 0
