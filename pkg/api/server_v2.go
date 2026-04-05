@@ -478,6 +478,9 @@ func (s *ServerV2) setupRoutes() {
 		// Agent Vibe Studio — natural language agent creation
 		protected.POST("/agents/vibe", s.handleAgentVibe)
 
+		// Workspaces — agentic desktop task execution (SSE)
+		protected.POST("/workspaces/run", s.handleWorkspaceRun)
+
 		// Vision — image analysis via moondream (CPU-safe, local Ollama)
 		protected.POST("/vision/analyze", s.handleVisionAnalyze)
 

@@ -1610,12 +1610,12 @@ func (s *GenerationService) ollamaChatStream(ctx context.Context, messages []map
 			payload["options"].(map[string]interface{})[k] = v
 		}
 	}
+	// JSON mode — forces Ollama to emit only valid JSON (top-level field)
+	if format, ok := options["format"].(string); ok {
+		payload["format"] = format
+	}
 
 	body, _ := json.Marshal(payload)
-	// Use an independent context — do NOT inherit the client request context.
-	// The client context is cancelled on disconnect or Cloudflare proxy timeout
-	// (typically 100s), which would kill Ollama mid-load on a cold-start VPS.
-	// We give Ollama a generous 5-minute budget regardless of what the client does.
 	ollamaCtx, ollamaCancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	req, err := http.NewRequestWithContext(ollamaCtx, "POST", s.GenerateURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {
