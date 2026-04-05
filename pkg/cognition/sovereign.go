@@ -30,6 +30,12 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/voice"
 )
 
+// CtxKeySpaceMode is a context key: when set to true in a request context,
+// ProcessInference skips web search and defers to Space RAG as the authoritative source.
+type ctxKeySpaceMode struct{}
+
+var CtxKeySpaceMode = ctxKeySpaceMode{}
+
 // --- Pillar 1: Subconscious Field ---
 type SubconsciousField struct {
 	FieldVector []float32
@@ -747,6 +753,10 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	}
 	// Skip parallel web search for modes that already did targeted search (Active, ReAct)
 	skipWebSearch := mode == ModeActive || mode == ModeReAct || mode == ModeDebate || mode == ModeCausal || mode == ModeDiscover || mode == ModeConsistency || mode == ModeCrossdomainBridge || mode == ModeAdaptive
+	// Space mode: Space RAG is authoritative — skip web search to avoid contamination.
+	if ctx.Value(CtxKeySpaceMode) == true {
+		skipWebSearch = true
+	}
 	webCh := make(chan webResult, 1)
 	if !skipWebSearch && e.SearXNG != nil && e.SearXNG.IsAvailable() {
 		if needsSearch, sq := DetectUncertainty(stimulus); needsSearch {

@@ -895,7 +895,6 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
 	// Studio requests (ORI Studio vibe chat) must NOT pollute general memory — DSL workflow
 	// responses written to MemoryBank would bleed into identity/capability RAG recalls.
 	isStudioContext := c.GetHeader("X-Ori-Context") == "studio"
@@ -1047,7 +1046,8 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Skip cache when caller forces a specific reasoning engine or manifest — they
 	// explicitly want fresh inference through the requested engine.
 	forcedEngine := c.GetHeader("X-Reasoning-Mode") != "" || c.GetHeader("X-ORI-Manifest") != ""
-	if !forcedEngine && s.ResponseCache != nil && lastMsg != "" {
+	// Space requests must bypass cache — the same query yields different answers per space.
+	if !forcedEngine && req.SpaceID == "" && s.ResponseCache != nil && lastMsg != "" {
 		if cached, hit := s.ResponseCache.Get(c.Request.Context(), lastMsg); hit {
 			chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
 			if !useSSE {
@@ -1228,7 +1228,13 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Set per-request session ID so BeliefStateTracker can maintain per-session fog-of-war state.
 	s.Agent.SovEngine.CurrentSessionID = sessionID
 
-	sovTrace, err := s.Agent.SovEngine.ProcessInference(ctx, lastMsg)
+	// When a Space is active, suppress web search inside ProcessInference — Space RAG is the source of truth.
+	inferCtx := ctx
+	if req.SpaceID != "" {
+		inferCtx = context.WithValue(ctx, cognition.CtxKeySpaceMode, true)
+	}
+
+	sovTrace, err := s.Agent.SovEngine.ProcessInference(inferCtx, lastMsg)
 	if err != nil {
 		sseError("sovereign engine failure")
 		return
@@ -1291,24 +1297,36 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		}
 	}
 	// Space RAG: inject knowledge from the request's Space namespace.
+	// Strategy: inject chunks into the LAST user message (not system prompt) — small models
+	// follow "use this context to answer" patterns far more reliably than system-level instructions.
+	var spaceRAGPrefix string
 	if req.SpaceID != "" && lastMsg != "" {
 		spaceLayer, spaceErr := s.resolveEnterpriseLayer(req.SpaceID)
-		if spaceErr == nil {
+		if spaceErr != nil {
+			log.Printf("[Spaces:RAG] failed to resolve layer for %q: %v", req.SpaceID, spaceErr)
+		} else {
 			spaceCtx, spaceCancel := context.WithTimeout(c.Request.Context(), 6*time.Second)
 			spaceResults, spaceQueryErr := spaceLayer.QueryKnowledge(spaceCtx, lastMsg, 5)
 			spaceCancel()
-			if spaceQueryErr == nil && len(spaceResults) > 0 {
+			if spaceQueryErr != nil {
+				log.Printf("[Spaces:RAG] query error for %q: %v", req.SpaceID, spaceQueryErr)
+			} else if len(spaceResults) == 0 {
+				log.Printf("[Spaces:RAG] no results for space %q — collection may be empty or embedder cold", req.SpaceID)
+			} else {
+				log.Printf("[Spaces:RAG] injecting %d chunks for space %q", len(spaceResults), req.SpaceID)
 				spaceName := req.SpaceID
 				if rec, ok := s.spacesStore.Get(req.SpaceID); ok {
 					spaceName = rec.Name
 				}
 				var sb strings.Builder
-				sb.WriteString("### Space Context (from: " + spaceName + ")\n")
-				for _, seg := range spaceResults {
-					sb.WriteString(seg + "\n")
+				sb.WriteString("The following documents are from your knowledge base (Space: " + spaceName + "). ")
+				sb.WriteString("Use them to answer the question below. The people and topics described in these documents are external — not you.\n\n")
+				for i, seg := range spaceResults {
+					sb.WriteString(fmt.Sprintf("--- Document %d ---\n%s\n\n", i+1, seg))
 				}
-				sb.WriteString("---")
-				systemContent = sb.String() + "\n\n" + systemContent
+				sb.WriteString("--- End of Documents ---\n\n")
+				sb.WriteString("Question: ")
+				spaceRAGPrefix = sb.String()
 			}
 		}
 	}
@@ -1351,6 +1369,14 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			role = "daddy"
 		}
 		msgs[i+1] = map[string]string{"role": role, "content": m.Content}
+	}
+	// Prepend Space RAG context to the last user message so small models see
+	// "here are the docs → answer this question" as a single grounded turn.
+	if spaceRAGPrefix != "" && len(msgs) > 1 {
+		lastIdx := len(msgs) - 1
+		if msgs[lastIdx]["role"] == "user" {
+			msgs[lastIdx]["content"] = spaceRAGPrefix + msgs[lastIdx]["content"]
+		}
 	}
 
 	// Detect trigger-word action intent and dispatch async agent task
@@ -1560,7 +1586,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 	// Store in semantic cache — async, never blocks. Skips canvas/code outputs
 	// (too context-specific to be reusable) and action-dispatched responses.
-	if s.ResponseCache != nil && lastMsg != "" && !isCanvasMode && dispatch == nil {
+	if s.ResponseCache != nil && lastMsg != "" && !isCanvasMode && dispatch == nil && req.SpaceID == "" {
 		s.ResponseCache.Put(lastMsg, responseText)
 	}
 

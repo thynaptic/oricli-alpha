@@ -251,10 +251,19 @@ func (s *ServerV2) handleListSpaceDocuments(c *gin.Context) {
 		return
 	}
 
-	files := make([]string, 0, len(entries))
+	type fileInfo struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+	}
+	files := make([]fileInfo, 0, len(entries))
 	for _, e := range entries {
 		if !e.IsDir() {
-			files = append(files, e.Name())
+			info, err := e.Info()
+			size := int64(0)
+			if err == nil {
+				size = info.Size()
+			}
+			files = append(files, fileInfo{Name: e.Name(), Size: size})
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"files": files})
