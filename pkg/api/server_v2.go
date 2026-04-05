@@ -1232,6 +1232,10 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	s.Agent.SovEngine.CurrentSessionID = sessionID
 	// Record activity for temporal clock — marks session start on first message, updates last-seen.
 	s.Agent.SovEngine.Clock.RecordActivity(sessionID)
+	// Log user message into session event timeline.
+	if lastMsg != "" {
+		s.Agent.SovEngine.Clock.RecordEvent(sessionID, cognition.EventRoleUser, lastMsg)
+	}
 
 	// When a Space is active, suppress web search inside ProcessInference — Space RAG is the source of truth.
 	inferCtx := ctx
@@ -1572,6 +1576,11 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		responseText, _ = s.Agent.SovEngine.AuditCanvasOutput(responseText)
 	} else {
 		responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
+	}
+
+	// Log assistant response into session event timeline.
+	if responseText != "" {
+		s.Agent.SovEngine.Clock.RecordEvent(sessionID, cognition.EventRoleAssistant, responseText)
 	}
 
 	// Non-streaming response — return buffered result as plain JSON now that we have it.
