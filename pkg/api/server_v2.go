@@ -1230,6 +1230,8 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 
 	// Set per-request session ID so BeliefStateTracker can maintain per-session fog-of-war state.
 	s.Agent.SovEngine.CurrentSessionID = sessionID
+	// Record activity for temporal clock — marks session start on first message, updates last-seen.
+	s.Agent.SovEngine.Clock.RecordActivity(sessionID)
 
 	// When a Space is active, suppress web search inside ProcessInference — Space RAG is the source of truth.
 	inferCtx := ctx

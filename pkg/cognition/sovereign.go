@@ -450,6 +450,8 @@ type SovereignEngine struct {
 	BeliefTracker    *BeliefStateTracker
 	// CurrentSessionID is set per-request in server_v2 so BeliefTracker can key by session.
 	CurrentSessionID string
+	// Clock is the sovereign temporal awareness engine — gives ORI a real sense of now.
+	Clock        *TemporalClock
 	Voice        *voice.VoicePiperService
 	Reform       interface{}
 	Curiosity    interface{}
@@ -523,6 +525,7 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 	engine.Generator.GenService = genService // Initialize the GenService correctly
 	engine.GenService = genService           // Direct access for reasoning mode engines
 	engine.BeliefTracker = NewBeliefStateTracker()
+	engine.Clock = NewTemporalClock()
 	engine.Vision = vdi.NewVisionGroundingService(genService)
 	engine.ToT = NewToTEngine(engine.Generator)
 	engine.Audit = NewAuditEngine(engine)

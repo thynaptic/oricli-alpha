@@ -59,8 +59,13 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 	// 6. Action Context (Experience Journal)
 	sections = append(sections, e.Actions.FormatForPrompt(""))
 
-	// 7. Social Context (Session Management)
-	sections = append(sections, "### OPERATIONAL CONTEXT:\nYou are running in Go-native Sovereign Mode. Priority: Execution Precision.")
+	// 7. Temporal Awareness — real wall-clock, session age, message count
+	// Replaces the static "OPERATIONAL CONTEXT" placeholder with live temporal data.
+	if e.Clock != nil {
+		sections = append(sections, e.Clock.FormatForPrompt(e.CurrentSessionID))
+	} else {
+		sections = append(sections, "### OPERATIONAL CONTEXT:\nYou are running in Go-native Sovereign Mode. Priority: Execution Precision.")
+	}
 
 	// 8. Feedback Override (Logic vs Emotion)
 	if strings.Contains(strings.ToLower(stimulus), "logic") || strings.Contains(strings.ToLower(stimulus), "fact") {
