@@ -113,6 +113,7 @@ type ServerV2 struct {
 	Constitution     *service.LivingConstitution
 	entLayers        sync.Map // namespace -> *enterprise.Layer cache
 	entJobs          sync.Map // job_id -> *enterpriseLearnJob
+	spacesStore      *SpacesStore
 
 	// SPP: Sovereign Peer Protocol (Phase 4)
 	SwarmRegistry *swarm.PeerRegistry
@@ -280,6 +281,9 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		ImageGen:     service.NewImageGenManager(),
 	}
 
+	// Initialize Spaces store
+	s.spacesStore = NewSpacesStore("data/spaces.json")
+
 	// Bootstrap PocketBase long-term memory bank
 	mb := service.NewMemoryBank()
 	s.MemoryBank = mb
@@ -432,6 +436,10 @@ func (s *ServerV2) setupRoutes() {
 	v1.GET("/traces", s.handleGetTraces)
 	v1.GET("/loglines", s.handleLogLines)
 	v1.GET("/modules", s.handleListModules)
+	// App self-registration — no user auth required; protected by shared registration token.
+	// Used by first-party apps (ORI Home, ORI Mobile, etc.) to provision their own GLM key
+	// on first boot without needing a pre-existing key.
+	v1.POST("/app/register", s.handleAppRegister)
 	// Prometheus metrics endpoint — scraped by local Prometheus container
 	v1.GET("/metrics", func(c *gin.Context) {
 		s.Metrics.PrometheusHandler().ServeHTTP(c.Writer, c.Request)
@@ -482,6 +490,13 @@ func (s *ServerV2) setupRoutes() {
 		protected.GET("/enterprise/learn/:job_id", s.handleEnterpriseLearnStatus)
 		protected.GET("/enterprise/knowledge/search", s.handleEnterpriseSearch)
 		protected.DELETE("/enterprise/knowledge", s.handleEnterpriseClear)
+
+		// Spaces — named project containers with scoped RAG knowledge
+		protected.GET("/spaces", s.handleListSpaces)
+		protected.POST("/spaces", s.handleCreateSpace)
+		protected.DELETE("/spaces/:id", s.handleDeleteSpace)
+		protected.POST("/spaces/:id/documents", s.handleSpaceDocumentUpload)
+		protected.GET("/spaces/:id/documents", s.handleListSpaceDocuments)
 
 		// Tenant Admin — owner-key only (AdminOnly middleware enforced)
 		admin := protected.Group("/admin", tenantauth.AdminOnly())
@@ -695,6 +710,62 @@ func (s *ServerV2) setupRoutes() {
 
 func (s *ServerV2) handleHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ready", "system": "oricli-alpha-v2", "pure_go": true})
+}
+
+// handleAppRegister — POST /v1/app/register
+//
+// Allows first-party Thynaptic apps (ORI Home, ORI Mobile, etc.) to self-provision
+// a GLM API key on first boot without needing a pre-existing key.
+//
+// The caller must supply the shared ORI_APP_REG_TOKEN (set in the backbone service env).
+// On success a scoped key (runtime:chat only) is returned — shown once, never again.
+//
+// Request:
+//   {"registration_token":"<ORI_APP_REG_TOKEN>","app_name":"ORI Home","device_id":"<uuid>"}
+//
+// Response 201:
+//   {"api_key":"glm.xxx.yyy","base_url":"https://glm.thynaptic.com/v1","scopes":["runtime:chat"]}
+func (s *ServerV2) handleAppRegister(c *gin.Context) {
+	regToken := os.Getenv("ORI_APP_REG_TOKEN")
+	if regToken == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "app registration not enabled on this server"})
+		return
+	}
+
+	var req struct {
+		RegistrationToken string `json:"registration_token" binding:"required"`
+		AppName           string `json:"app_name"           binding:"required"`
+		DeviceID          string `json:"device_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.RegistrationToken != regToken {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid registration token"})
+		return
+	}
+
+	tenantID := "app:" + strings.ToLower(strings.ReplaceAll(req.AppName, " ", "-"))
+	if req.DeviceID != "" {
+		tenantID = tenantID + ":" + req.DeviceID
+	}
+
+	scopes := []string{"runtime:chat"}
+	raw, _, err := s.auth.GenerateAPIKey(c.Request.Context(), tenantID, scopes, nil)
+	if err != nil {
+		log.Printf("[AppRegister] key gen failed for %s: %v", tenantID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to provision key"})
+		return
+	}
+
+	log.Printf("[AppRegister] issued key for app=%q device=%q tenant=%s", req.AppName, req.DeviceID, tenantID)
+	c.JSON(http.StatusCreated, gin.H{
+		"api_key":  raw,
+		"base_url": "https://glm.thynaptic.com/v1",
+		"scopes":   scopes,
+	})
 }
 
 // handleERI returns the current Ecospheric Resonance Index and swarm state.
@@ -1216,6 +1287,28 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			ragCtx := service.FormatRAGContext(frags, 1200)
 			if ragCtx != "" {
 				systemContent = ragCtx + "\n\n---\n\n" + systemContent
+			}
+		}
+	}
+	// Space RAG: inject knowledge from the request's Space namespace.
+	if req.SpaceID != "" && lastMsg != "" {
+		spaceLayer, spaceErr := s.resolveEnterpriseLayer(req.SpaceID)
+		if spaceErr == nil {
+			spaceCtx, spaceCancel := context.WithTimeout(c.Request.Context(), 6*time.Second)
+			spaceResults, spaceQueryErr := spaceLayer.QueryKnowledge(spaceCtx, lastMsg, 5)
+			spaceCancel()
+			if spaceQueryErr == nil && len(spaceResults) > 0 {
+				spaceName := req.SpaceID
+				if rec, ok := s.spacesStore.Get(req.SpaceID); ok {
+					spaceName = rec.Name
+				}
+				var sb strings.Builder
+				sb.WriteString("### Space Context (from: " + spaceName + ")\n")
+				for _, seg := range spaceResults {
+					sb.WriteString(seg + "\n")
+				}
+				sb.WriteString("---")
+				systemContent = sb.String() + "\n\n" + systemContent
 			}
 		}
 	}

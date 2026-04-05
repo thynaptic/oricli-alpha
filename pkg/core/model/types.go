@@ -26,6 +26,7 @@ type ChatCompletionRequest struct {
 	Temperature      *float64                `json:"temperature,omitempty"`
 	MaxTokens        *int                    `json:"max_tokens,omitempty"`
 	Stream           bool                    `json:"stream,omitempty"`
+	SpaceID          string                  `json:"space_id,omitempty"`
 }
 
 type CognitionRequest struct {
