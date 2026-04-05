@@ -112,12 +112,15 @@ var reConversational = regexp.MustCompile(
 // real-time clock — all answerable from temporal context, no web search needed.
 var reSessionIntrospective = regexp.MustCompile(
 	`(?i)(what (?:did (?:we|i)|have we) (?:talk|discuss|say|cover|work)|` +
+		`what (?:are|were) we (?:working on|building|doing|discussing|talking about)|` +
 		`(?:recap|summari[sz]e|summary|overview|timeline|walk me through) (?:of |our |what |this )?(?:session|conversation|chat|talk|discussion|we)|` +
 		`how long (?:have we|has this session|we've been|have i been)|` +
 		`when did (?:we|i|this session) (?:start|begin)|` +
 		`(?:what|current) time|what's the time|what time is it|` +
 		`how long (?:ago|have)|how long (?:since|has)|` +
 		`(?:session|conversation) (?:start|age|duration|length)|` +
+		`what did we (?:last|previously)|` +
+		`last (?:session|conversation|time we (?:talked|chatted))|` +
 		`how long (?:we've been|we have been))`)
 
 var reShortChat = regexp.MustCompile(`^[a-zA-Z'\s,!.?]{1,30}$`)

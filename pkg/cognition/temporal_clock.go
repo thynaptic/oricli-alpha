@@ -1,7 +1,11 @@
 package cognition
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +46,7 @@ type sessionState struct {
 type TemporalClock struct {
 	bootTime time.Time
 	sessions map[string]*sessionState
+	store    ChronosStore // optional persistence backend
 	mu       sync.RWMutex
 }
 
@@ -144,6 +149,11 @@ func (c *TemporalClock) FormatForPrompt(sessionID string) string {
 		sb.WriteString("Session: new\n")
 	}
 
+	// Previous sessions — cross-boot recall from ChronosStore
+	if prev := c.formatPreviousSessions(now); prev != "" {
+		sb.WriteString(prev)
+	}
+
 	return sb.String()
 }
 
@@ -198,4 +208,177 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%d days", days)
 	}
 	return fmt.Sprintf("%d days %d hours", days, hrs)
+}
+
+// ─── Cross-session Chronos Persistence ───────────────────────────────────────
+
+// ChronosSummary is the serialisable record of a completed session.
+type ChronosSummary struct {
+	SessionID    string    `json:"session_id"`
+	StartedAt    time.Time `json:"started_at"`
+	EndedAt      time.Time `json:"ended_at"`
+	MessageCount int       `json:"message_count"`
+	TopicLine    string    `json:"topic_line"` // first user message — proxy for session topic
+	Events       []string  `json:"events"`     // 80-char summaries, newest last
+}
+
+// ChronosStore is the persistence interface for session summaries.
+// Implemented by JSONChronosStore (flat-file) — injectable for testing or upgrade.
+type ChronosStore interface {
+	Save(summary ChronosSummary) error
+	LoadRecent(n int) ([]ChronosSummary, error)
+}
+
+// SetStore injects a ChronosStore into the clock. Must be called before first use.
+func (c *TemporalClock) SetStore(store ChronosStore) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.store = store
+}
+
+// PersistSession saves the named session's summary to the store and removes it
+// from the in-memory map. Safe to call on shutdown or explicit session close.
+func (c *TemporalClock) PersistSession(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	c.mu.Lock()
+	sess, ok := c.sessions[sessionID]
+	if !ok || c.store == nil {
+		c.mu.Unlock()
+		return
+	}
+	now := time.Now().UTC()
+
+	// Build event string list from ring buffer
+	evStrings := make([]string, len(sess.Events))
+	for i, ev := range sess.Events {
+		evStrings[i] = fmt.Sprintf("[%s] %s: %s", ev.At.Format("15:04"), ev.Role, ev.Summary)
+	}
+
+	// Topic line = first user message (if any)
+	topicLine := ""
+	for _, ev := range sess.Events {
+		if ev.Role == EventRoleUser {
+			topicLine = ev.Summary
+			break
+		}
+	}
+
+	summary := ChronosSummary{
+		SessionID:    sessionID,
+		StartedAt:    sess.StartedAt,
+		EndedAt:      now,
+		MessageCount: sess.MessageCount,
+		TopicLine:    topicLine,
+		Events:       evStrings,
+	}
+	delete(c.sessions, sessionID)
+	c.mu.Unlock()
+
+	_ = c.store.Save(summary)
+}
+
+// PersistAllSessions flushes every active in-memory session. Call on server shutdown.
+func (c *TemporalClock) PersistAllSessions() {
+	c.mu.RLock()
+	ids := make([]string, 0, len(c.sessions))
+	for id := range c.sessions {
+		ids = append(ids, id)
+	}
+	c.mu.RUnlock()
+	for _, id := range ids {
+		c.PersistSession(id)
+	}
+}
+
+// ─── FormatForPrompt — updated to include previous sessions ──────────────────
+
+// formatPreviousSessions appends the last N persisted sessions to the temporal block.
+func (c *TemporalClock) formatPreviousSessions(now time.Time) string {
+	if c.store == nil {
+		return ""
+	}
+	summaries, err := c.store.LoadRecent(3)
+	if err != nil || len(summaries) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("\nPrevious sessions (reference these when asked about past conversations):\n")
+	for _, s := range summaries {
+		age := formatDuration(now.Sub(s.EndedAt))
+		dur := formatDuration(s.EndedAt.Sub(s.StartedAt))
+		line := fmt.Sprintf("  • %s ago (%s, %d msgs)",
+			age, dur, s.MessageCount)
+		if s.TopicLine != "" {
+			line += fmt.Sprintf(" — %q", s.TopicLine)
+		}
+		sb.WriteString(line + "\n")
+	}
+	return sb.String()
+}
+
+// ─── JSON flat-file ChronosStore ─────────────────────────────────────────────
+
+const chronosDir = ".memory/session_chronos"
+
+// JSONChronosStore persists session summaries as individual JSON files under
+// chronosDir. Files are named by EndedAt timestamp for natural sort order.
+type JSONChronosStore struct {
+	dir string
+}
+
+// NewJSONChronosStore creates (or opens) the store at dir.
+func NewJSONChronosStore(dir string) (*JSONChronosStore, error) {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("chronos store: mkdir %s: %w", dir, err)
+	}
+	return &JSONChronosStore{dir: dir}, nil
+}
+
+// Save writes the summary as a JSON file. Filename: <EndedAt unix ns>.json
+func (s *JSONChronosStore) Save(summary ChronosSummary) error {
+	name := fmt.Sprintf("%d.json", summary.EndedAt.UnixNano())
+	path := filepath.Join(s.dir, name)
+	data, err := json.MarshalIndent(summary, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+// LoadRecent returns the n most recent summaries, newest first.
+func (s *JSONChronosStore) LoadRecent(n int) ([]ChronosSummary, error) {
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	// Filter to .json files and sort descending (newest filename = highest unix ns)
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
+			files = append(files, e.Name())
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(files)))
+
+	var results []ChronosSummary
+	for _, fname := range files {
+		if len(results) >= n {
+			break
+		}
+		data, err := os.ReadFile(filepath.Join(s.dir, fname))
+		if err != nil {
+			continue
+		}
+		var sum ChronosSummary
+		if err := json.Unmarshal(data, &sum); err != nil {
+			continue
+		}
+		results = append(results, sum)
+	}
+	return results, nil
 }

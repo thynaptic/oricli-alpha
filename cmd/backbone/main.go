@@ -182,6 +182,14 @@ func main() {
 	// 5. Intelligence Synthesis (Sovereign Engine)
 	log.Println("[Boot] Initializing Sovereign Engine...")
 	sovEngine := cognition.NewSovereignEngine(genService, swarmBus)
+
+	// Wire Chronos persistent store — cross-session session summaries written on shutdown.
+	if chronosStore, err := cognition.NewJSONChronosStore(filepath.Join(".memory", "session_chronos")); err != nil {
+		log.Printf("[Boot] ChronosStore init warning: %v (session history will be in-memory only)", err)
+	} else {
+		sovEngine.Clock.SetStore(chronosStore)
+		log.Println("[Boot] Chronos session store online — cross-session recall enabled.")
+	}
 	
 	// Initialize GoalService + GoalExecutor (DAG Autonomous Execution)
 	goalDataPath := "/home/mike/Mavaia/.oricli/global_objectives.jsonl"
@@ -1093,6 +1101,7 @@ func main() {
 	<-stop
 
 	log.Println("[System] Initiating graceful shutdown...")
+	sovEngine.Clock.PersistAllSessions()
 	sovEngine.VDI.Stop()
 	sovEngine.MCP.StopAll()
 	mb.Close()
