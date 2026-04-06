@@ -105,6 +105,7 @@ logs/
 *.bak
 *.swp
 *~
+node_modules/
 
 # Model files (large)
 *.bin
@@ -164,6 +165,8 @@ oricli_ui/
 
 # UI static build output
 ui_static/
+browserd/.playwright/
+browserd/.state/
 
 # Go test cache
 /tmp/

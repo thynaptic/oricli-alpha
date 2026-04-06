@@ -122,6 +122,11 @@ type Config struct {
 	ToolServerClientID                 string
 	ToolCallingMaxIterations           int
 	ToolCallingTimeoutSeconds          int
+	BrowserAutomationEnabled           bool
+	BrowserServiceBaseURL              string
+	BrowserServiceAPIKey               string
+	BrowserAllowedDomains              []string
+	BrowserRequestTimeoutSeconds       int
 	MetaReasoningEnabled               bool
 	MetaReasoningDefaultProfile        string
 	MetaReasoningAcceptThreshold       float64
@@ -273,6 +278,11 @@ func Load() Config {
 		ToolServerClientID:                 env("GLM_TOOL_SERVER_CLIENT_ID", ""),
 		ToolCallingMaxIterations:           envInt("GLM_TOOL_CALLING_MAX_ITERATIONS", 4),
 		ToolCallingTimeoutSeconds:          envInt("GLM_TOOL_CALLING_TIMEOUT_SECONDS", 60),
+		BrowserAutomationEnabled:           envBool("BROWSER_AUTOMATION_ENABLED", false),
+		BrowserServiceBaseURL:              env("BROWSER_SERVICE_BASE_URL", "http://127.0.0.1:7791"),
+		BrowserServiceAPIKey:               env("BROWSER_SERVICE_API_KEY", ""),
+		BrowserAllowedDomains:              splitCSV(env("BROWSER_ALLOWED_DOMAINS", "localhost,127.0.0.1")),
+		BrowserRequestTimeoutSeconds:       envInt("BROWSER_REQUEST_TIMEOUT_SECONDS", 45),
 		MetaReasoningEnabled:               envBool("GLM_META_REASONING_ENABLED", true),
 		MetaReasoningDefaultProfile:        env("GLM_META_REASONING_DEFAULT_PROFILE", "default"),
 		MetaReasoningAcceptThreshold:       envFloat("GLM_META_REASONING_ACCEPT_THRESHOLD", 0.72),

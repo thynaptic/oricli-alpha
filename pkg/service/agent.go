@@ -103,26 +103,26 @@ type toolCall struct {
 }
 
 func (s *GoAgentService) decideNextStep(query, context string, history []map[string]string, sovTrace string) (string, *toolCall, error) {
-        // Build personality-aware system prompt
-        personalityID := "gen_z_cousin" // Default
-        systemInstructions, temp := s.PersonaService.BuildSystemInstructions(personalityID)
+	// Build personality-aware system prompt
+	personalityID := "gen_z_cousin" // Default
+	systemInstructions, temp := s.PersonaService.BuildSystemInstructions(personalityID)
 
-        exampleFinalAnswer := `{
+	exampleFinalAnswer := `{
   "thought": "Here is your joke: Why did the chicken cross the road? To get to the other side!",
   "tool_call": null
 }`
 
-        detector := NewInstructionFollowingDetector()
-        if detector.IsTaskExecution(query) {
-                systemInstructions = detector.GetTaskSystemPrompt()
-                temp = 0.1 // Precision mode
-                exampleFinalAnswer = `{
+	detector := NewInstructionFollowingDetector()
+	if detector.IsTaskExecution(query) {
+		systemInstructions = detector.GetTaskSystemPrompt()
+		temp = 0.1 // Precision mode
+		exampleFinalAnswer = `{
   "thought": "id,name\n1,Alice\n2,Bob",
   "tool_call": null
 }`
-        }
+	}
 
-        systemPrompt := fmt.Sprintf(`%s
+	systemPrompt := fmt.Sprintf(`%s
 
 %s
 
@@ -139,6 +139,22 @@ Available Tools:
    - Params: {"operation": "solve_zebra_puzzle", "input": "full puzzle text here"}
 4. spatial_reasoning_solver (operations: "solve_spatial_problem")
    - Params: {"operation": "solve_spatial_problem", "input": "puzzle text here"}
+5. browser_create_session
+   - Params: {"headless": true, "viewport_width": 1440, "viewport_height": 900}
+6. browser_open
+   - Params: {"session_id": "...", "url": "http://localhost:3000", "wait_until": "networkidle"}
+7. browser_snapshot
+   - Params: {"session_id": "..."}
+8. browser_action
+   - Params: {"session_id": "...", "action": "click|fill|press|wait_for|get_text", "ref": "@e1", "selector": "...", "label": "Email", "text_query": "Sign in", "role": "button", "name": "Continue", "url_pattern": "**/dashboard", "text": "...", "key": "Enter", "timeout_ms": 10000}
+9. browser_screenshot
+   - Params: {"session_id": "...", "full_page": false}
+10. browser_save_state
+   - Params: {"session_id": "...", "state_name": "dashboard_login"}
+11. browser_load_state
+   - Params: {"state_name": "dashboard_login", "headless": true, "viewport_width": 1440, "viewport_height": 900}
+12. browser_close
+   - Params: {"session_id": "..."}
 
 Example Tool Call:
 {
@@ -151,19 +167,19 @@ Example Final Answer:
 
 Output Format (JSON ONLY):`, systemInstructions, sovTrace, exampleFinalAnswer)
 
-        userPrompt := fmt.Sprintf("User Query: %s\n\nCurrent Context: %s", query, context)
+	userPrompt := fmt.Sprintf("User Query: %s\n\nCurrent Context: %s", query, context)
 
-        // Direct call to GenService
-        resp, err := s.GenService.Chat([]map[string]string{
-                {"role": "system", "content": systemPrompt},
-                {"role": "user", "content": userPrompt},
-        }, map[string]interface{}{"temperature": temp})
+	// Direct call to GenService
+	resp, err := s.GenService.Chat([]map[string]string{
+		{"role": "system", "content": systemPrompt},
+		{"role": "user", "content": userPrompt},
+	}, map[string]interface{}{"temperature": temp})
 	if err != nil {
 		return "", nil, err
 	}
 
 	text, _ := resp["text"].(string)
-	
+
 	// Try to parse JSON from the response
 	var decision struct {
 		Thought  string    `json:"thought"`

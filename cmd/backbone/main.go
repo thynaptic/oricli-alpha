@@ -12,66 +12,66 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/thynaptic/oricli-go/pkg/apathy"
 	"github.com/thynaptic/oricli-go/pkg/api"
+	"github.com/thynaptic/oricli-go/pkg/arousal"
+	"github.com/thynaptic/oricli-go/pkg/audit"
 	"github.com/thynaptic/oricli-go/pkg/bus"
+	"github.com/thynaptic/oricli-go/pkg/cbasp"
+	"github.com/thynaptic/oricli-go/pkg/chronos"
+	"github.com/thynaptic/oricli-go/pkg/coalition"
+	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/cognition"
+	"github.com/thynaptic/oricli-go/pkg/compute"
+	"github.com/thynaptic/oricli-go/pkg/conformity"
+	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
 	"github.com/thynaptic/oricli-go/pkg/core/auth"
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/model"
 	"github.com/thynaptic/oricli-go/pkg/core/store/memory"
-	"github.com/thynaptic/oricli-go/pkg/kernel"
-	"github.com/thynaptic/oricli-go/pkg/node"
-	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
-	"github.com/thynaptic/oricli-go/pkg/scl"
-	"github.com/thynaptic/oricli-go/pkg/service"
-	"github.com/thynaptic/oricli-go/pkg/tcd"
-	"github.com/thynaptic/oricli-go/pkg/forge"
-	"github.com/thynaptic/oricli-go/pkg/pad"
-	"github.com/thynaptic/oricli-go/pkg/goal"
-	"github.com/thynaptic/oricli-go/pkg/sovereign"
-	"github.com/thynaptic/oricli-go/pkg/swarm"
-	"github.com/thynaptic/oricli-go/pkg/finetune"
-	"github.com/thynaptic/oricli-go/pkg/sentinel"
 	"github.com/thynaptic/oricli-go/pkg/curator"
-	"github.com/thynaptic/oricli-go/pkg/audit"
-	"github.com/thynaptic/oricli-go/pkg/metacog"
-	"github.com/thynaptic/oricli-go/pkg/chronos"
-	"github.com/thynaptic/oricli-go/pkg/science"
-	"github.com/thynaptic/oricli-go/pkg/compute"
-	"github.com/thynaptic/oricli-go/pkg/dualprocess"
-	"github.com/thynaptic/oricli-go/pkg/cogload"
-	"github.com/thynaptic/oricli-go/pkg/rumination"
-	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
-	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
-	"github.com/thynaptic/oricli-go/pkg/conformity"
-	"github.com/thynaptic/oricli-go/pkg/ideocapture"
-	"github.com/thynaptic/oricli-go/pkg/coalition"
-	"github.com/thynaptic/oricli-go/pkg/statusbias"
-	"github.com/thynaptic/oricli-go/pkg/arousal"
-	"github.com/thynaptic/oricli-go/pkg/mct"
-	"github.com/thynaptic/oricli-go/pkg/mbt"
-	"github.com/thynaptic/oricli-go/pkg/schema"
-	"github.com/thynaptic/oricli-go/pkg/ipsrt"
-	"github.com/thynaptic/oricli-go/pkg/ilm"
-	"github.com/thynaptic/oricli-go/pkg/iut"
-	"github.com/thynaptic/oricli-go/pkg/up"
-	"github.com/thynaptic/oricli-go/pkg/cbasp"
-	"github.com/thynaptic/oricli-go/pkg/mbct"
-	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
-	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
-	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
-	"github.com/thynaptic/oricli-go/pkg/apathy"
-	"github.com/thynaptic/oricli-go/pkg/logotherapy"
-	"github.com/thynaptic/oricli-go/pkg/stoic"
-	"github.com/thynaptic/oricli-go/pkg/socratic"
-	"github.com/thynaptic/oricli-go/pkg/narrative"
-	"github.com/thynaptic/oricli-go/pkg/polyvagal"
 	"github.com/thynaptic/oricli-go/pkg/dmn"
-	"github.com/thynaptic/oricli-go/pkg/interoception"
+	"github.com/thynaptic/oricli-go/pkg/dualprocess"
+	"github.com/thynaptic/oricli-go/pkg/finetune"
+	"github.com/thynaptic/oricli-go/pkg/forge"
+	"github.com/thynaptic/oricli-go/pkg/goal"
+	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
+	"github.com/thynaptic/oricli-go/pkg/ideocapture"
+	"github.com/thynaptic/oricli-go/pkg/ilm"
 	"github.com/thynaptic/oricli-go/pkg/interference"
+	"github.com/thynaptic/oricli-go/pkg/interoception"
+	"github.com/thynaptic/oricli-go/pkg/ipsrt"
+	"github.com/thynaptic/oricli-go/pkg/iut"
+	"github.com/thynaptic/oricli-go/pkg/kernel"
+	"github.com/thynaptic/oricli-go/pkg/logotherapy"
+	"github.com/thynaptic/oricli-go/pkg/mbct"
+	"github.com/thynaptic/oricli-go/pkg/mbt"
+	"github.com/thynaptic/oricli-go/pkg/mct"
+	"github.com/thynaptic/oricli-go/pkg/metacog"
 	"github.com/thynaptic/oricli-go/pkg/mindset"
-	"github.com/thynaptic/oricli-go/pkg/therapy"
+	"github.com/thynaptic/oricli-go/pkg/narrative"
+	"github.com/thynaptic/oricli-go/pkg/node"
+	"github.com/thynaptic/oricli-go/pkg/pad"
+	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
+	"github.com/thynaptic/oricli-go/pkg/polyvagal"
+	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
+	"github.com/thynaptic/oricli-go/pkg/rumination"
+	"github.com/thynaptic/oricli-go/pkg/schema"
+	"github.com/thynaptic/oricli-go/pkg/science"
+	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
+	"github.com/thynaptic/oricli-go/pkg/sentinel"
+	"github.com/thynaptic/oricli-go/pkg/service"
+	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
+	"github.com/thynaptic/oricli-go/pkg/socratic"
+	"github.com/thynaptic/oricli-go/pkg/sovereign"
+	"github.com/thynaptic/oricli-go/pkg/statusbias"
+	"github.com/thynaptic/oricli-go/pkg/stoic"
+	"github.com/thynaptic/oricli-go/pkg/swarm"
+	"github.com/thynaptic/oricli-go/pkg/tcd"
+	"github.com/thynaptic/oricli-go/pkg/therapy"
+	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
+	"github.com/thynaptic/oricli-go/pkg/up"
 )
 
 func bootstrapAPIKey(st *memory.MemoryStore) string {
@@ -152,7 +152,7 @@ func main() {
 	apiKeyEnv := os.Getenv("OricliAlpha_Key")
 	encKey := os.Getenv("ORICLI_ENCRYPTION_KEY")
 	if encKey == "" {
-		encKey = "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY=" 
+		encKey = "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY="
 	}
 
 	// 2. Core Infrastructure (Bus & Safety)
@@ -190,7 +190,7 @@ func main() {
 		sovEngine.Clock.SetStore(chronosStore)
 		log.Println("[Boot] Chronos session store online — cross-session recall enabled.")
 	}
-	
+
 	// Initialize GoalService + GoalExecutor (DAG Autonomous Execution)
 	goalDataPath := "/home/mike/Mavaia/.oricli/global_objectives.jsonl"
 	goalService := service.NewGoalService(goalDataPath)
@@ -233,7 +233,7 @@ func main() {
 	} else {
 		_ = benchGap // available for manual use; not started automatically
 	}
-	
+
 	// Initialize VDI (Virtual Device Interface)
 	log.Println("[Boot] Initializing Sovereign VDI...")
 	if err := sovEngine.VDI.Start(); err != nil {
@@ -258,7 +258,7 @@ func main() {
 	goshMod, _ := service.NewGoshModule("hive_sandbox", "/home/mike/Mavaia")
 	orch := service.NewGoOrchestrator(swarmBus, registry)
 	precog := service.NewMetacogDaemon("/home/mike/Mavaia", orch, goshMod)
-	
+
 	graphService, _ := service.NewGraphService()
 	node.NewGraphModule(swarmBus, graphService).Start()
 	temporalSvc := service.NewTemporalService(graphService)
@@ -274,7 +274,7 @@ func main() {
 	// 7. Fleets & Autonomic Services
 	scaler := kernel.NewScalingService(swarmBus, k)
 	go scaler.Run()
-	
+
 	dream := service.NewDreamDaemon(3600, 60, graphService, mb, goshMod, ghost, orch)
 	go dream.Run()
 	log.Println("[System] Autonomic Scaling and Dream consolidation active.")
@@ -284,9 +284,19 @@ func main() {
 	personaService, _ := service.NewPersonaService(personaPath)
 	agentService := service.NewGoAgentService(orch, genService, personaService, sovEngine)
 	monitor := service.NewModuleMonitorService(registry)
-	
+	toolService := service.NewToolService(orch)
+	service.RegisterBrowserTools(toolService)
+	plannerService := service.NewPlannerService(orch, toolService, genService)
+	node.NewToolModule(swarmBus, toolService).Start()
+
 	apiPort := 8089
 	apiServer := api.NewServerV2(config.Load(), st, orch, agentService, monitor, apiPort)
+	browserModule := service.NewBrowserAutomationModule(apiServer.Browser)
+	registry.RegisterNativeModule(browserModule.Metadata().Name, browserModule)
+	node.NewBrowserModule(swarmBus, browserModule).Start()
+	log.Println("[Boot] Browser automation module wired.")
+	apiServer.ToolService = toolService
+	apiServer.PlannerService = plannerService
 	apiServer.Traces = traceStore
 	apiServer.GoalService = goalService
 
@@ -315,7 +325,7 @@ func main() {
 	// Seed Oricli's self-knowledge (idempotent — skips if already present).
 	go service.SeedIdentity(apiServer.MemoryBank)
 	log.Println("[Boot] Identity seed queued.")
-	
+
 	// ── SPP: Sovereign Peer Protocol (opt-in via ORICLI_SWARM_ENABLED=true) ──
 	if os.Getenv("ORICLI_SWARM_ENABLED") == "true" {
 		stateDir := "/home/mike/Mavaia/.oricli"
@@ -925,7 +935,7 @@ func main() {
 		log.Printf("[CBASP] Phase 36 CBASP online — interpersonal impact disconnection detector (McCullough)")
 	}
 
-		// ── Phase 35: Unified Protocol — ARC Cycle Detector (opt-in via ORICLI_UP_ENABLED=true) ──
+	// ── Phase 35: Unified Protocol — ARC Cycle Detector (opt-in via ORICLI_UP_ENABLED=true) ──
 	if os.Getenv("ORICLI_UP_ENABLED") == "true" {
 		os.MkdirAll("data/up", 0755)
 		arcDetector := up.NewARCCycleDetector()
@@ -969,7 +979,7 @@ func main() {
 		log.Printf("[IPSRT] Phase 32 Social Rhythm Therapy online — circadian disruption detector (Frank IPSRT)")
 	}
 
-		// ── Phase 31: Schema Therapy + TFP Splitting (opt-in via ORICLI_SCHEMA_ENABLED=true) ──
+	// ── Phase 31: Schema Therapy + TFP Splitting (opt-in via ORICLI_SCHEMA_ENABLED=true) ──
 	if os.Getenv("ORICLI_SCHEMA_ENABLED") == "true" {
 		os.MkdirAll("data/schema", 0755)
 		schemaModes := schema.NewSchemaModeDetector()
@@ -992,7 +1002,7 @@ func main() {
 		log.Printf("[MBT] Phase 30 Mentalization-Based Treatment online — mentalizing failure detector (Bateman & Fonagy)")
 	}
 
-		// ── Phase 29: Metacognitive Therapy (opt-in via ORICLI_MCT_ENABLED=true) ──
+	// ── Phase 29: Metacognitive Therapy (opt-in via ORICLI_MCT_ENABLED=true) ──
 	if os.Getenv("ORICLI_MCT_ENABLED") == "true" {
 		os.MkdirAll("data/mct", 0755)
 		mctDetector := mct.NewMetaBeliefDetector()
@@ -1003,7 +1013,7 @@ func main() {
 		log.Printf("[MCT] Phase 29 Metacognitive Therapy online — meta-belief detector, detached mindfulness injector (Adrian Wells)")
 	}
 
-		// ── Phase 28: Cognitive Interference Detector (opt-in via ORICLI_INTERFERENCE_ENABLED=true) ──
+	// ── Phase 28: Cognitive Interference Detector (opt-in via ORICLI_INTERFERENCE_ENABLED=true) ──
 	if os.Getenv("ORICLI_INTERFERENCE_ENABLED") == "true" {
 		os.MkdirAll("data/interference", 0755)
 		ifScanner := interference.NewInstructionConflictScanner()
@@ -1025,7 +1035,7 @@ func main() {
 		log.Printf("[Arousal] Phase 27 Arousal Optimizer online — Yerkes-Dodson inverted-U, TSST evaluative threat detection")
 	}
 
-		// ── Phase 26: Status Bias Detector (opt-in via ORICLI_STATUSBIAS_ENABLED=true) ──
+	// ── Phase 26: Status Bias Detector (opt-in via ORICLI_STATUSBIAS_ENABLED=true) ──
 	if os.Getenv("ORICLI_STATUSBIAS_ENABLED") == "true" {
 		os.MkdirAll("data/statusbias", 0755)
 		sbExtractor := statusbias.NewStatusSignalExtractor()
@@ -1060,7 +1070,7 @@ func main() {
 		log.Printf("[IdeoCapture] Phase 24 Ideological Capture Detector online — frame density meter, blank screen reset injector")
 	}
 
-		// ── Phase 23: Agency & Conformity Shield (opt-in via ORICLI_CONFORMITY_ENABLED=true) ──
+	// ── Phase 23: Agency & Conformity Shield (opt-in via ORICLI_CONFORMITY_ENABLED=true) ──
 	if os.Getenv("ORICLI_CONFORMITY_ENABLED") == "true" {
 		os.MkdirAll("data/conformity", 0755)
 		authDet := conformity.NewAuthorityPressureDetector()
@@ -1073,7 +1083,7 @@ func main() {
 		log.Printf("[Conformity] Phase 23 Agency & Conformity Shield online — authority pressure (Milgram) + consensus pressure (Asch) detectors")
 	}
 
-		// ── Phase 22: Social Defeat Recovery (opt-in via ORICLI_SOCIALDEFEAT_ENABLED=true) ──
+	// ── Phase 22: Social Defeat Recovery (opt-in via ORICLI_SOCIALDEFEAT_ENABLED=true) ──
 	if os.Getenv("ORICLI_SOCIALDEFEAT_ENABLED") == "true" {
 		os.MkdirAll("data/socialdefeat", 0755)
 		sdMeter := socialdefeat.NewDefeatPressureMeter()
@@ -1113,19 +1123,19 @@ func main() {
 
 // padServiceAdapter adapts *service.PADService to goal.PADDispatcher.
 type padServiceAdapter struct {
-pad *service.PADService
+	pad *service.PADService
 }
 
 func (a *padServiceAdapter) Dispatch(ctx context.Context, query string, maxWorkers int) (goal.PADSession, error) {
-session, err := a.pad.Dispatch(ctx, query, maxWorkers)
-if err != nil || session == nil {
-return goal.PADSession{}, err
-}
-return goal.PADSession{
-ID:        session.ID,
-Synthesis: session.Synthesis,
-Status:    string(session.Status),
-}, nil
+	session, err := a.pad.Dispatch(ctx, query, maxWorkers)
+	if err != nil || session == nil {
+		return goal.PADSession{}, err
+	}
+	return goal.PADSession{
+		ID:        session.ID,
+		Synthesis: session.Synthesis,
+		Status:    string(session.Status),
+	}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -1133,37 +1143,37 @@ Status:    string(session.Status),
 // ---------------------------------------------------------------------------
 
 type scienceSearchAdapter struct {
-searcher *service.SearXNGSearcher
+	searcher *service.SearXNGSearcher
 }
 
 func (a *scienceSearchAdapter) Search(query string) ([]string, error) {
-results, err := a.searcher.SearchWithURLs(searchintent.SearchQuery{
-RawTopic:       query,
-FormattedQuery: query,
-MaxPasses:      1,
-Category:       searchintent.CategoryGeneral,
-})
-if err != nil {
-return nil, err
-}
-out := make([]string, 0, len(results))
-for _, r := range results {
-out = append(out, r.Title+": "+r.Snippet)
-}
-return out, nil
+	results, err := a.searcher.SearchWithURLs(searchintent.SearchQuery{
+		RawTopic:       query,
+		FormattedQuery: query,
+		MaxPasses:      1,
+		Category:       searchintent.CategoryGeneral,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(results))
+	for _, r := range results {
+		out = append(out, r.Title+": "+r.Snippet)
+	}
+	return out, nil
 }
 
 // therapyGenAdapter — wraps *service.GenerationService to satisfy therapy.LLMGenerator.
 type therapyGenAdapter struct {
-gen *service.GenerationService
+	gen *service.GenerationService
 }
 
 func (a *therapyGenAdapter) Generate(prompt string, params map[string]interface{}) (map[string]interface{}, error) {
-resp, err := a.gen.Chat([]map[string]string{
-{"role": "user", "content": prompt},
-}, params)
-if err != nil {
-return nil, err
-}
-return resp, nil
+	resp, err := a.gen.Chat([]map[string]string{
+		{"role": "user", "content": prompt},
+	}, params)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }

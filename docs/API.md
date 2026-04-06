@@ -21,6 +21,7 @@ This is the single source of truth for the Oricli-Alpha API. Use it to integrate
    - [Goals](#goals)
    - [Memory & Documents](#memory--documents)
    - [Vision & Agents](#vision--agents)
+   - [Browser Automation & Tool Planning](#browser-automation--tool-planning)
    - [Sovereign Identity](#sovereign-identity)
    - [Enterprise RAG](#enterprise-rag)
    - [Sharing & Feedback](#sharing--feedback)
@@ -165,6 +166,70 @@ No authentication required.
 Serves a shared Canvas document directly in the browser (HTML, code, or Markdown). Created via [`POST /v1/share`](#post-v1share).
 
 **Response:** `text/html` rendered document or raw content based on `doc_type`.
+
+---
+
+### `POST /v1/app/register`
+
+Self-provisioning endpoint for first-party Thynaptic apps (ORI Home, ORI Mobile, etc.). Lets an app provision its own GLM key on first boot without needing a pre-existing key or admin access.
+
+**No Authorization header required.**
+
+**Request body:**
+
+```json
+{
+  "registration_token": "<ORI_APP_REG_TOKEN>",
+  "app_name": "ORI Home",
+  "device_id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+}
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `registration_token` | ✅ | Shared secret configured on the server via `ORI_APP_REG_TOKEN` env var |
+| `app_name` | ✅ | Human-readable app name — used to construct the tenant ID |
+| `device_id` | Optional | UUID or machine ID — appended to tenant ID for per-device keys |
+
+**Response `201`:**
+
+```json
+{
+  "api_key": "glm.ori-home-3f2504e0.R4ndOmS3cr3t...",
+  "base_url": "https://glm.thynaptic.com/v1",
+  "scopes": ["runtime:chat"]
+}
+```
+
+⚠️ The `api_key` is shown **once only**. Store it immediately (e.g. OS keychain, electron-store encrypted).
+
+**Errors:**
+
+| Code | Meaning |
+|---|---|
+| `400` | Missing required fields |
+| `401` | Invalid or missing `registration_token` |
+| `503` | Registration not enabled on this server (`ORI_APP_REG_TOKEN` not set) |
+
+**ORI Home integration pattern:**
+
+```javascript
+// In app.whenReady() — only runs if no stored key
+const storedKey = await keystore.get("glm_api_key")
+if (!storedKey) {
+  const res = await fetch("https://glm.thynaptic.com/v1/app/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      registration_token: import.meta.env.VITE_ORI_APP_REG_TOKEN,
+      app_name: "ORI Home",
+      device_id: await getMachineId(),
+    }),
+  })
+  const { api_key } = await res.json()
+  await keystore.set("glm_api_key", api_key)
+}
+```
 
 ---
 
@@ -563,6 +628,378 @@ Analyze an image with a natural language prompt using the vision pipeline.
 ```
 
 **Response:** Vision analysis result with structured description and any detected elements.
+
+---
+
+### Browser Automation & Tool Planning
+
+The browser runtime is a sovereign Playwright-backed service exposed through the Go backbone. It supports direct browser control under `/v1/browser/*` and planner-driven tool discovery/execution under `/v1/tools/*`.
+
+Browser automation is gated by server config:
+
+- `BROWSER_AUTOMATION_ENABLED=true`
+- `BROWSER_SERVICE_BASE_URL=http://127.0.0.1:7791`
+- `BROWSER_SERVICE_API_KEY=<secret>`
+- `BROWSER_ALLOWED_DOMAINS=example.com,localhost,...`
+
+All routes below require bearer auth and return `503` if browser automation or the planner service is disabled.
+
+---
+
+#### `GET /v1/browser/health`
+
+Check browser worker availability and the current active session count.
+
+**Response:**
+```json
+{
+  "ok": true,
+  "sessions": 0
+}
+```
+
+---
+
+#### `POST /v1/browser/sessions`
+
+Create a fresh browser session.
+
+**Request:**
+```json
+{
+  "headless": true,
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "session_id": "sess_abc123",
+  "url": "about:blank",
+  "title": ""
+}
+```
+
+---
+
+#### `POST /v1/browser/open`
+
+Open a URL in an existing browser session.
+
+**Request:**
+```json
+{
+  "session_id": "sess_abc123",
+  "url": "https://example.com",
+  "wait_until": "networkidle"
+}
+```
+
+`url` is validated against `BROWSER_ALLOWED_DOMAINS`.
+
+---
+
+#### `GET /v1/browser/snapshot?session_id=<id>`
+
+Capture the current page snapshot and interactive element refs.
+
+**Response:**
+```json
+{
+  "ok": true,
+  "session_id": "sess_abc123",
+  "url": "https://example.com/",
+  "title": "Example Domain",
+  "snapshot": {
+    "url": "https://example.com/",
+    "title": "Example Domain",
+    "capturedAt": "2026-04-06T19:00:00Z",
+    "elements": [
+      {
+        "ref": "@e1",
+        "tag": "a",
+        "role": "link",
+        "text": "More information...",
+        "selector": "a[href='https://www.iana.org/domains/example']",
+        "enabled": true,
+        "visible": true
+      }
+    ]
+  }
+}
+```
+
+Element refs such as `@e1` are ephemeral and should be treated as valid only for the current page state.
+
+---
+
+#### `POST /v1/browser/action`
+
+Execute a browser action against a session.
+
+**Request:**
+```json
+{
+  "session_id": "sess_abc123",
+  "action": "fill",
+  "label": "Email",
+  "text": "bro@ori.test",
+  "timeout_ms": 10000
+}
+```
+
+Supported `action` values:
+
+- `click`
+- `fill`
+- `press`
+- `wait_for`
+- `get_text`
+
+Supported targeting fields:
+
+- `ref`
+- `selector`
+- `label`
+- `text_query`
+- `role`
+- `name`
+- `url_pattern`
+
+Examples:
+```json
+{
+  "session_id": "sess_abc123",
+  "action": "click",
+  "role": "button",
+  "name": "Sign in"
+}
+```
+
+```json
+{
+  "session_id": "sess_abc123",
+  "action": "wait_for",
+  "url_pattern": "/dashboard",
+  "timeout_ms": 15000
+}
+```
+
+---
+
+#### `POST /v1/browser/screenshot`
+
+Capture a screenshot for the active page.
+
+**Request:**
+```json
+{
+  "session_id": "sess_abc123",
+  "full_page": false
+}
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "path": "browserd/.playwright/sess_abc123-1775489907455.png",
+  "url": "https://example.com/",
+  "title": "Example Domain"
+}
+```
+
+---
+
+#### `POST /v1/browser/state/save`
+
+Persist the current browser storage state for later reuse.
+
+**Request:**
+```json
+{
+  "session_id": "sess_abc123",
+  "state_name": "app_example_com_login"
+}
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "session_id": "sess_abc123",
+  "state_name": "app_example_com_login",
+  "path": "browserd/.state/app_example_com_login.json"
+}
+```
+
+---
+
+#### `POST /v1/browser/state/load`
+
+Create a browser session from a saved storage state.
+
+**Request:**
+```json
+{
+  "state_name": "app_example_com_login",
+  "headless": true,
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  }
+}
+```
+
+**Response:** Same shape as `POST /v1/browser/sessions`, with the restored `session_id`.
+
+---
+
+#### `DELETE /v1/browser/sessions`
+
+Close a browser session.
+
+**Request:**
+```json
+{
+  "session_id": "sess_abc123"
+}
+```
+
+**Response:**
+```json
+{
+  "ok": true
+}
+```
+
+---
+
+#### `GET /v1/tools`
+
+List the live tool registry.
+
+For browser automation, the registry includes:
+
+- `browser_create_session`
+- `browser_open`
+- `browser_snapshot`
+- `browser_action`
+- `browser_screenshot`
+- `browser_save_state`
+- `browser_load_state`
+- `browser_close`
+
+---
+
+#### `POST /v1/tools/plan`
+
+Create a tool execution plan from natural language.
+
+**Request:**
+```json
+{
+  "query": "Open https://app.example.com/login, fill \"Email\" with \"bro@ori.test\", click \"Sign in\" button, and remember this login for reuse later"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "fd80477a",
+  "query": "Open https://app.example.com/login, fill \"Email\" with \"bro@ori.test\", click \"Sign in\" button, and remember this login for reuse later",
+  "steps": [
+    {
+      "id": "step_1",
+      "order": 1,
+      "tool_name": "browser_create_session",
+      "arguments": {
+        "headless": true,
+        "viewport_width": 1440,
+        "viewport_height": 900
+      },
+      "description": "Create a fresh browser session."
+    },
+    {
+      "id": "step_6",
+      "order": 6,
+      "tool_name": "browser_save_state",
+      "arguments": {
+        "session_id": "$session_id",
+        "state_name": "app_example_com_login"
+      },
+      "description": "Persist the current browser storage state for reuse."
+    }
+  ],
+  "estimated_total_time": 24,
+  "can_execute_in_parallel": false,
+  "created_at": 1775502261
+}
+```
+
+Planner heuristics currently support:
+
+- browser open/snapshot/screenshot flows
+- semantic browser actions using quoted labels and button names
+- unquoted login flows such as `enter email ... and password ... click sign in`
+- remembered-login persistence requests such as `remember this login` or `reuse this later`
+
+For remembered-login flows without an explicit state name, the planner infers one from the target URL:
+
+- `https://app.example.com/login` → `app_example_com_login`
+
+---
+
+#### `POST /v1/tools/execute-plan`
+
+Execute a previously created plan and return step outputs plus promoted browser lifecycle fields.
+
+**Request:** Use the plan body returned by `POST /v1/tools/plan`.
+
+**Response:**
+```json
+{
+  "plan_id": "plan_test",
+  "completed_steps": ["step_1"],
+  "failed_steps": [],
+  "skipped_steps": [],
+  "bindings": {
+    "state_name": "app_example_com_login",
+    "session_id": "sess_keep"
+  },
+  "saved_state_name": "app_example_com_login",
+  "active_session_id": "sess_keep",
+  "auto_closed_session_id": "sess_closed",
+  "cleanup_actions": [
+    "Closed browser session sess_closed automatically."
+  ],
+  "final_response": "Executed in 1.00s; saved state \"app_example_com_login\"",
+  "total_time": 1,
+  "step_results": {
+    "step_1": "{\"ok\":true,\"state_name\":\"app_example_com_login\"}"
+  }
+}
+```
+
+Browser-specific response fields:
+
+| Field | Meaning |
+|---|---|
+| `saved_state_name` | Promoted from the `browser_save_state` result when a plan persists session state |
+| `active_session_id` | Set when the plan intentionally keeps a browser session alive |
+| `auto_closed_session_id` | Set when plan execution automatically closed a session at the end |
+| `bindings` | Raw binding map populated from prior tool outputs such as `session_id` and `state_name` |
+
+Automatic cleanup behavior:
+
+- browser plans auto-close sessions by default after execution
+- cleanup is skipped when the plan already includes `browser_close`
+- cleanup is skipped when the query explicitly asks to keep or reuse the session
 
 ---
 

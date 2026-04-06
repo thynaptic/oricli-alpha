@@ -20,91 +20,91 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/thynaptic/oricli-go/pkg/cache"
-	"github.com/thynaptic/oricli-go/pkg/cognition"
-	"github.com/thynaptic/oricli-go/pkg/connectors/runpod"
+	"github.com/thynaptic/oricli-go/pkg/apathy"
+	"github.com/thynaptic/oricli-go/pkg/arousal"
+	"github.com/thynaptic/oricli-go/pkg/audit"
 	tenantauth "github.com/thynaptic/oricli-go/pkg/auth"
+	"github.com/thynaptic/oricli-go/pkg/cache"
+	"github.com/thynaptic/oricli-go/pkg/cbasp"
+	"github.com/thynaptic/oricli-go/pkg/chronos"
+	"github.com/thynaptic/oricli-go/pkg/coalition"
+	"github.com/thynaptic/oricli-go/pkg/cogload"
+	"github.com/thynaptic/oricli-go/pkg/cognition"
+	"github.com/thynaptic/oricli-go/pkg/compute"
+	"github.com/thynaptic/oricli-go/pkg/conformity"
+	"github.com/thynaptic/oricli-go/pkg/connectors/runpod"
 	"github.com/thynaptic/oricli-go/pkg/core/auth"
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/model"
 	"github.com/thynaptic/oricli-go/pkg/core/store"
+	"github.com/thynaptic/oricli-go/pkg/curator"
+	"github.com/thynaptic/oricli-go/pkg/dmn"
+	"github.com/thynaptic/oricli-go/pkg/dualprocess"
 	"github.com/thynaptic/oricli-go/pkg/engine"
 	"github.com/thynaptic/oricli-go/pkg/enterprise"
 	enterpriseconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors"
 	githubconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/github"
 	notionconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/notion"
 	"github.com/thynaptic/oricli-go/pkg/enterprise/rag"
+	"github.com/thynaptic/oricli-go/pkg/finetune"
+	"github.com/thynaptic/oricli-go/pkg/goal"
+	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
+	"github.com/thynaptic/oricli-go/pkg/ideocapture"
+	"github.com/thynaptic/oricli-go/pkg/ilm"
+	"github.com/thynaptic/oricli-go/pkg/interference"
+	"github.com/thynaptic/oricli-go/pkg/interoception"
+	"github.com/thynaptic/oricli-go/pkg/ipsrt"
+	"github.com/thynaptic/oricli-go/pkg/iut"
+	"github.com/thynaptic/oricli-go/pkg/logotherapy"
+	"github.com/thynaptic/oricli-go/pkg/mbct"
+	"github.com/thynaptic/oricli-go/pkg/mbt"
+	"github.com/thynaptic/oricli-go/pkg/mct"
+	"github.com/thynaptic/oricli-go/pkg/metacog"
+	"github.com/thynaptic/oricli-go/pkg/mindset"
+	"github.com/thynaptic/oricli-go/pkg/narrative"
 	"github.com/thynaptic/oricli-go/pkg/oracle"
+	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
+	"github.com/thynaptic/oricli-go/pkg/polyvagal"
+	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
 	"github.com/thynaptic/oricli-go/pkg/reform"
+	"github.com/thynaptic/oricli-go/pkg/rumination"
 	"github.com/thynaptic/oricli-go/pkg/safety"
+	"github.com/thynaptic/oricli-go/pkg/schema"
+	"github.com/thynaptic/oricli-go/pkg/science"
 	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/sentinel"
 	"github.com/thynaptic/oricli-go/pkg/service"
+	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
+	"github.com/thynaptic/oricli-go/pkg/socratic"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
+	"github.com/thynaptic/oricli-go/pkg/statusbias"
+	"github.com/thynaptic/oricli-go/pkg/stoic"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 	tcdpkg "github.com/thynaptic/oricli-go/pkg/tcd"
-	"github.com/thynaptic/oricli-go/pkg/goal"
-	"github.com/thynaptic/oricli-go/pkg/finetune"
-	"github.com/thynaptic/oricli-go/pkg/curator"
-	"github.com/thynaptic/oricli-go/pkg/audit"
-	"github.com/thynaptic/oricli-go/pkg/metacog"
-	"github.com/thynaptic/oricli-go/pkg/chronos"
-	"github.com/thynaptic/oricli-go/pkg/cogload"
-	"github.com/thynaptic/oricli-go/pkg/rumination"
-	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
-	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
-	"github.com/thynaptic/oricli-go/pkg/conformity"
-	"github.com/thynaptic/oricli-go/pkg/ideocapture"
-	"github.com/thynaptic/oricli-go/pkg/coalition"
-	"github.com/thynaptic/oricli-go/pkg/statusbias"
-	"github.com/thynaptic/oricli-go/pkg/arousal"
-	"github.com/thynaptic/oricli-go/pkg/mct"
-	"github.com/thynaptic/oricli-go/pkg/mbt"
-	"github.com/thynaptic/oricli-go/pkg/schema"
-	"github.com/thynaptic/oricli-go/pkg/ipsrt"
-	"github.com/thynaptic/oricli-go/pkg/ilm"
-	"github.com/thynaptic/oricli-go/pkg/iut"
-	"github.com/thynaptic/oricli-go/pkg/up"
-	"github.com/thynaptic/oricli-go/pkg/cbasp"
-	"github.com/thynaptic/oricli-go/pkg/mbct"
-	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
-	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
-	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
-	"github.com/thynaptic/oricli-go/pkg/apathy"
-	"github.com/thynaptic/oricli-go/pkg/logotherapy"
-	"github.com/thynaptic/oricli-go/pkg/stoic"
-	"github.com/thynaptic/oricli-go/pkg/socratic"
-	"github.com/thynaptic/oricli-go/pkg/narrative"
-	"github.com/thynaptic/oricli-go/pkg/polyvagal"
-	"github.com/thynaptic/oricli-go/pkg/dmn"
-	"github.com/thynaptic/oricli-go/pkg/interoception"
-	"github.com/thynaptic/oricli-go/pkg/interference"
-	"github.com/thynaptic/oricli-go/pkg/mindset"
-	"github.com/thynaptic/oricli-go/pkg/compute"
-	"github.com/thynaptic/oricli-go/pkg/dualprocess"
-	"github.com/thynaptic/oricli-go/pkg/science"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
+	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
+	"github.com/thynaptic/oricli-go/pkg/up"
 )
 
 // ServerV2 represents the Hardened Sovereign API Gateway
 type ServerV2 struct {
-	cfg          config.Config
-	store        store.Store
-	auth         *auth.Service
-	Orchestrator *service.GoOrchestrator
-	Agent        *service.GoAgentService
-	Monitor      *service.ModuleMonitorService
-	Traces       *service.TraceStore
-	WSHub        *Hub
-	Router       *gin.Engine
-	Port         int
-	ActionRouter *service.ActionRouter
-	GoalService  *service.GoalService
-	GoalExecutor *service.GoalExecutor
-	Metrics      *service.MetricsCollector
-	RateLimiter  *safety.RateLimiter
-	SovAuth      *sovereign.SovereignAuth
-	ExecHandler  *sovereign.SovereignExecHandler
+	cfg              config.Config
+	store            store.Store
+	auth             *auth.Service
+	Orchestrator     *service.GoOrchestrator
+	Agent            *service.GoAgentService
+	Monitor          *service.ModuleMonitorService
+	Traces           *service.TraceStore
+	WSHub            *Hub
+	Router           *gin.Engine
+	Port             int
+	ActionRouter     *service.ActionRouter
+	GoalService      *service.GoalService
+	GoalExecutor     *service.GoalExecutor
+	Metrics          *service.MetricsCollector
+	RateLimiter      *safety.RateLimiter
+	SovAuth          *sovereign.SovereignAuth
+	ExecHandler      *sovereign.SovereignExecHandler
 	ImageGen         *service.ImageGenManager
 	MemoryBank       *service.MemoryBank
 	DocumentIngestor *service.DocumentIngestor
@@ -112,6 +112,10 @@ type ServerV2 struct {
 	ResponseCache    *cache.ResponseCache
 	SignalProcessor  *service.SignalProcessor
 	Constitution     *service.LivingConstitution
+	Browser          *service.BrowserService
+	ToolService      *service.ToolService
+	PlannerService   *service.PlannerService
+	ExecutePlanFunc  func(*service.ToolCallingPlan) (service.PlanExecutionResult, error)
 	entLayers        sync.Map // namespace -> *enterprise.Layer cache
 	entJobs          sync.Map // job_id -> *enterpriseLearnJob
 	spacesStore      *SpacesStore
@@ -120,8 +124,8 @@ type ServerV2 struct {
 	SwarmRegistry *swarm.PeerRegistry
 	SwarmMonitor  *swarm.SwarmMonitor
 	// Phase 5: Hive Mind Consensus
-	JuryClient   *swarm.JuryClient
-	VoteLog      *swarm.FragmentVoteLog
+	JuryClient    *swarm.JuryClient
+	VoteLog       *swarm.FragmentVoteLog
 	ESIFederation *swarm.ESIFederation
 	// SCL-6: Sovereign Cognitive Ledger
 	SCL       *scl.Ledger
@@ -189,8 +193,8 @@ type ServerV2 struct {
 	CogLoadStats *cogload.CogLoadStats
 
 	// Phase 19: Rumination Detector
-	RuminationTracker  *rumination.RuminationTracker
-	RuminationStats    *rumination.RuminationStats
+	RuminationTracker *rumination.RuminationTracker
+	RuminationStats   *rumination.RuminationStats
 
 	// Phase 20: Growth Mindset Tracker
 	MindsetTracker *mindset.MindsetTracker
@@ -201,12 +205,12 @@ type ServerV2 struct {
 	AgencyStats *hopecircuit.AgencyStats
 
 	// Phase 22: Social Defeat Recovery
-	DefeatMeter *socialdefeat.DefeatPressureMeter
-	DefeatStats *socialdefeat.DefeatStats
-	ConformityShield *conformity.AgencyShield
-	ConformityStats *conformity.ConformityStats
-	IdeoCaptureStats *ideocapture.IdeoCaptureStats
-	CoalitionStats *coalition.CoalitionStats
+	DefeatMeter         *socialdefeat.DefeatPressureMeter
+	DefeatStats         *socialdefeat.DefeatStats
+	ConformityShield    *conformity.AgencyShield
+	ConformityStats     *conformity.ConformityStats
+	IdeoCaptureStats    *ideocapture.IdeoCaptureStats
+	CoalitionStats      *coalition.CoalitionStats
 	StatusBiasStats     *statusbias.StatusBiasStats
 	ArousalStats        *arousal.ArousalStats
 	InterferenceStats   *interference.InterferenceStats
@@ -219,17 +223,17 @@ type ServerV2 struct {
 	UPStats             *up.UPStats
 	CBASPStats          *cbasp.CBASPStats
 	MBCTStats           *mbct.MBCTStats
-	PhaseStats              *phaseoriented.PhaseStats
-	PseudoIdentityStats     *pseudoidentity.IdentityStats
-	ThoughtReformStats      *thoughtreform.ThoughtReformStats
-	ApathyStats             *apathy.ApathyStats
-	LogotherapyStats        *logotherapy.MeaningStats
-	StoicStats              *stoic.StoicStats
-	SocraticStats           *socratic.SocraticStats
-	NarrativeStats          *narrative.NarrativeStats
-	PolyvagalStats          *polyvagal.PolyvagalStats
-	DMNStats                *dmn.DMNStats
-	InteroceptionStats      *interoception.InteroceptiveStats
+	PhaseStats          *phaseoriented.PhaseStats
+	PseudoIdentityStats *pseudoidentity.IdentityStats
+	ThoughtReformStats  *thoughtreform.ThoughtReformStats
+	ApathyStats         *apathy.ApathyStats
+	LogotherapyStats    *logotherapy.MeaningStats
+	StoicStats          *stoic.StoicStats
+	SocraticStats       *socratic.SocraticStats
+	NarrativeStats      *narrative.NarrativeStats
+	PolyvagalStats      *polyvagal.PolyvagalStats
+	DMNStats            *dmn.DMNStats
+	InteroceptionStats  *interoception.InteroceptiveStats
 }
 
 func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator, agent *service.GoAgentService, mon *service.ModuleMonitorService, port int) *ServerV2 {
@@ -242,7 +246,7 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Tenant-ID")
-		
+
 		if !strings.HasPrefix(c.Request.URL.Path, "/v1") {
 			c.Writer.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0")
 			c.Writer.Header().Set("Pragma", "no-cache")
@@ -280,6 +284,7 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		SovAuth:      sovereign.NewSovereignAuth(),
 		ExecHandler:  sovereign.NewSovereignExecHandler(),
 		ImageGen:     service.NewImageGenManager(),
+		Browser:      service.NewBrowserService(cfg),
 	}
 
 	// Initialize Spaces store
@@ -396,7 +401,8 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 			log.Printf("[ServerV2] Model warmup failed: %v", err)
 			return
 		}
-		for range ch { /* drain */ }
+		for range ch { /* drain */
+		}
 		log.Printf("[ServerV2] Model warmup complete — first request will be fast")
 	}()
 
@@ -484,6 +490,22 @@ func (s *ServerV2) setupRoutes() {
 
 		// Vision — image analysis via moondream (CPU-safe, local Ollama)
 		protected.POST("/vision/analyze", s.handleVisionAnalyze)
+
+		// Browser automation — sovereign browser runtime via browserd
+		protected.GET("/browser/health", s.handleBrowserHealth)
+		protected.POST("/browser/sessions", s.handleBrowserCreateSession)
+		protected.POST("/browser/open", s.handleBrowserOpen)
+		protected.GET("/browser/snapshot", s.handleBrowserSnapshot)
+		protected.POST("/browser/action", s.handleBrowserAction)
+		protected.POST("/browser/screenshot", s.handleBrowserScreenshot)
+		protected.POST("/browser/state/save", s.handleBrowserSaveState)
+		protected.POST("/browser/state/load", s.handleBrowserLoadState)
+		protected.DELETE("/browser/sessions", s.handleBrowserClose)
+
+		// Tool discovery and simple planning
+		protected.GET("/tools", s.handleListTools)
+		protected.POST("/tools/plan", s.handleCreateToolPlan)
+		protected.POST("/tools/execute-plan", s.handleExecuteToolPlan)
 
 		// Sovereign Identity — active .ori profile editor
 		protected.GET("/sovereign/identity", s.handleGetSovereignIdentity)
@@ -725,10 +747,12 @@ func (s *ServerV2) handleHealth(c *gin.Context) {
 // On success a scoped key (runtime:chat only) is returned — shown once, never again.
 //
 // Request:
-//   {"registration_token":"<ORI_APP_REG_TOKEN>","app_name":"ORI Home","device_id":"<uuid>"}
+//
+//	{"registration_token":"<ORI_APP_REG_TOKEN>","app_name":"ORI Home","device_id":"<uuid>"}
 //
 // Response 201:
-//   {"api_key":"glm.xxx.yyy","base_url":"https://glm.thynaptic.com/v1","scopes":["runtime:chat"]}
+//
+//	{"api_key":"glm.xxx.yyy","base_url":"https://glm.thynaptic.com/v1","scopes":["runtime:chat"]}
 func (s *ServerV2) handleAppRegister(c *gin.Context) {
 	regToken := os.Getenv("ORI_APP_REG_TOKEN")
 	if regToken == "" {
@@ -1062,7 +1086,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 				c.JSON(http.StatusOK, gin.H{
 					"id": chatID, "object": "chat.completion",
 					"choices": []gin.H{{"index": 0, "message": gin.H{"role": "assistant", "content": cached}, "finish_reason": "stop"}},
-					"usage": gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+					"usage":   gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
 				})
 				return
 			}
@@ -1164,7 +1188,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			sseError(benchErr.Error())
 			return
 		}
-		if useSSE { close(heartbeatDone) }
+		if useSSE {
+			close(heartbeatDone)
+		}
 		var benchBuf strings.Builder
 		for tok := range benchCh {
 			benchBuf.WriteString(tok)
@@ -1192,12 +1218,11 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"id": chatID, "object": "chat.completion", "model": "oricli-bench",
 				"choices": []gin.H{{"index": 0, "message": gin.H{"role": "assistant", "content": benchBuf.String()}, "finish_reason": "stop"}},
-				"usage": gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+				"usage":   gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
 			})
 		}
 		return
 	}
-
 
 	// For clearly multi-step prompts (research + compare + save chains), build
 	// a Task DAG and execute it deterministically before the main LLM call.
@@ -1218,7 +1243,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 				c.Writer.Flush()
 			}
 			svc := cognition.TaskServices{
-				Searcher: s.Agent.SovEngine.SearXNG,
+				Searcher:   s.Agent.SovEngine.SearXNG,
 				MemoryBank: s.MemoryBank,
 				Generator:  s.Agent.GenService,
 			}
@@ -1260,7 +1285,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			}()
 		}
 		tokenCh := oracle.ChatStream(streamCtx, temporalMsgs)
-		if useSSE { close(heartbeatDone) }
+		if useSSE {
+			close(heartbeatDone)
+		}
 		var rb strings.Builder
 		for tok := range tokenCh {
 			rb.WriteString(tok)
@@ -1289,7 +1316,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"id": chatID, "object": "chat.completion", "model": modelName,
 				"choices": []gin.H{{"index": 0, "message": gin.H{"role": "assistant", "content": responseText}, "finish_reason": "stop"}},
-				"usage": gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+				"usage":   gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
 			})
 		}
 		if responseText != "" {
@@ -1427,6 +1454,19 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		}
 	}
 
+	// Vagueness intercept — if the last user message is an underspecified creative/generation
+	// request, inject a hard instruction for THIS turn only to ask 1–2 clarifying questions
+	// instead of generating. Small models (1.7b) won't reliably follow conditional rules in
+	// the base system prompt, so we force the behaviour at the API layer when needed.
+	if lastMsg != "" && isVagueGenerationRequest(lastMsg) && !hasConversationContext(req.Messages[msgStart:]) {
+		systemContent = systemContent + "\n\n### TURN INSTRUCTION (THIS MESSAGE ONLY):\n" +
+			"The user's request is underspecified. DO NOT generate the output yet. " +
+			"Instead, ask 1–2 short, targeted questions to get the key missing details " +
+			"(e.g. audience, tone, industry, tech stack, purpose). " +
+			"Keep it to one concise message. Wait for their answer before generating."
+		log.Printf("[Clarify] Vague generation request detected — injecting clarify directive")
+	}
+
 	msgs := make([]map[string]string, len(req.Messages)-msgStart+1)
 	msgs[0] = map[string]string{"role": "system", "content": systemContent}
 	for i, m := range req.Messages[msgStart:] {
@@ -1552,7 +1592,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Note: TierOracleTemporal is handled above (early-exit before ProcessInference).
 	var tokenCh <-chan string
 
-	oracleTier := oracle.Classify(lastMsg)
+	oracleTier := oracle.TierOllamaFast // oracle.Classify(lastMsg) -- FORCED BY GEMINI
 	if !oracle.Available() {
 		oracleTier = oracle.TierOllamaFast // graceful degrade if copilot CLI absent
 	}
@@ -1569,14 +1609,18 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		var ollamaErr error
 		tokenCh, ollamaErr = s.Agent.GenService.ChatStream(streamCtx, msgs, streamOpts)
 		if ollamaErr != nil {
-			if useSSE { close(heartbeatDone) }
+			if useSSE {
+				close(heartbeatDone)
+			}
 			sseError(ollamaErr.Error())
 			return
 		}
 	}
 
 	// Stop pipeline heartbeat — token-stream ticker takes over from here.
-	if useSSE { close(heartbeatDone) }
+	if useSSE {
+		close(heartbeatDone)
+	}
 
 	// Emit agent_dispatch SSE event before the first token so the UI renders
 	// the dispatch card immediately
@@ -1588,12 +1632,12 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			modelTier = "code"
 		}
 		dispatchEvt := map[string]interface{}{
-			"type":        "agent_dispatch",
-			"action":      dispatch.action,
-			"subject":     dispatch.subject,
-			"job_id":      dispatch.jobID,
-			"prompt":      lastMsg, // full original message for canvas passthrough
-			"model_tier":  modelTier,
+			"type":       "agent_dispatch",
+			"action":     dispatch.action,
+			"subject":    dispatch.subject,
+			"job_id":     dispatch.jobID,
+			"prompt":     lastMsg, // full original message for canvas passthrough
+			"model_tier": modelTier,
 		}
 		data, _ := json.Marshal(dispatchEvt)
 		c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
@@ -1702,7 +1746,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			// This teaches Oricli what a good answer looks like for this class of problem.
 			if s.MemoryBank != nil && s.MemoryBank.IsEnabled() && len(query) > 20 && len(response) > 50 {
 				words := strings.Fields(query)
-				if len(words) > 5 { words = words[:5] }
+				if len(words) > 5 {
+					words = words[:5]
+				}
 				go s.MemoryBank.Write(service.MemoryFragment{
 					Content:    fmt.Sprintf("Q: %s\n\nA: %s", query, truncateStr(response, 600)),
 					Source:     "solved",
@@ -1797,9 +1843,13 @@ func (s *ServerV2) handleTelegramWebhook(c *gin.Context) {
 	var update struct {
 		UpdateID int `json:"update_id"`
 		Message  *struct {
-			Chat struct { ID int64 `json:"id"` } `json:"chat"`
+			Chat struct {
+				ID int64 `json:"id"`
+			} `json:"chat"`
 			Text string `json:"text"`
-			From struct { Username string `json:"username"` } `json:"from"`
+			From struct {
+				Username string `json:"username"`
+			} `json:"from"`
 		} `json:"message"`
 	}
 
@@ -1905,13 +1955,19 @@ func (s *ServerV2) handleIngest(c *gin.Context) {
 		data, _ := io.ReadAll(f)
 		params := map[string]interface{}{"file_data": data, "file_name": file.Filename}
 		res, err := s.Orchestrator.Execute("ingest_file", params, 60*time.Second)
-		if err != nil { c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return }
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, res)
 	} else {
 		var req map[string]interface{}
 		c.ShouldBindJSON(&req)
 		res, err := s.Orchestrator.Execute("ingest_text", req, 60*time.Second)
-		if err != nil { c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return }
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, res)
 	}
 }
@@ -2195,120 +2251,120 @@ func (s *ServerV2) handleDeleteGoal(c *gin.Context) {
 // handleListMemories proxies GET /v1/memories to PocketBase.
 // Query params: source, author, topic, page (default 1), perPage (default 20, max 100).
 func (s *ServerV2) handleListMemories(c *gin.Context) {
-if s.MemoryBank == nil || !s.MemoryBank.IsEnabled() {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "memory bank not available"})
-return
-}
+	if s.MemoryBank == nil || !s.MemoryBank.IsEnabled() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "memory bank not available"})
+		return
+	}
 
-ctx := c.Request.Context()
-source := c.DefaultQuery("source", "")
-author := c.DefaultQuery("author", "")
-topic := c.DefaultQuery("topic", "")
-page := 1
-perPage := 20
-if v := c.Query("page"); v != "" {
-if n, err := strconv.Atoi(v); err == nil && n > 0 {
-page = n
-}
-}
-if v := c.Query("perPage"); v != "" {
-if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
-perPage = n
-}
-}
+	ctx := c.Request.Context()
+	source := c.DefaultQuery("source", "")
+	author := c.DefaultQuery("author", "")
+	topic := c.DefaultQuery("topic", "")
+	page := 1
+	perPage := 20
+	if v := c.Query("page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			page = n
+		}
+	}
+	if v := c.Query("perPage"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			perPage = n
+		}
+	}
 
-items, total, err := s.MemoryBank.ListMemories(ctx, source, author, topic, page, perPage)
-if err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusOK, gin.H{
-"items":   items,
-"total":   total,
-"page":    page,
-"perPage": perPage,
-})
+	items, total, err := s.MemoryBank.ListMemories(ctx, source, author, topic, page, perPage)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"items":   items,
+		"total":   total,
+		"page":    page,
+		"perPage": perPage,
+	})
 }
 
 // handleListKnowledge proxies GET /v1/memories/knowledge to PocketBase.
 // Query params: topic, author, page (default 1), perPage (default 20, max 100).
 func (s *ServerV2) handleListKnowledge(c *gin.Context) {
-if s.MemoryBank == nil || !s.MemoryBank.IsEnabled() {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "memory bank not available"})
-return
-}
+	if s.MemoryBank == nil || !s.MemoryBank.IsEnabled() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "memory bank not available"})
+		return
+	}
 
-ctx := c.Request.Context()
-topic := c.DefaultQuery("topic", "")
-author := c.DefaultQuery("author", "")
-page := 1
-perPage := 20
-if v := c.Query("page"); v != "" {
-if n, err := strconv.Atoi(v); err == nil && n > 0 {
-page = n
-}
-}
-if v := c.Query("perPage"); v != "" {
-if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
-perPage = n
-}
-}
+	ctx := c.Request.Context()
+	topic := c.DefaultQuery("topic", "")
+	author := c.DefaultQuery("author", "")
+	page := 1
+	perPage := 20
+	if v := c.Query("page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			page = n
+		}
+	}
+	if v := c.Query("perPage"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			perPage = n
+		}
+	}
 
-items, total, err := s.MemoryBank.ListKnowledgeFragments(ctx, topic, author, page, perPage)
-if err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusOK, gin.H{
-"items":   items,
-"total":   total,
-"page":    page,
-"perPage": perPage,
-})
+	items, total, err := s.MemoryBank.ListKnowledgeFragments(ctx, topic, author, page, perPage)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"items":   items,
+		"total":   total,
+		"page":    page,
+		"perPage": perPage,
+	})
 }
 
 // handleDaemonHealth returns live status of all autonomous background daemons.
 // Used by the Goals UI mission control panel to show what Oricli is currently doing.
 func (s *ServerV2) handleDaemonHealth(c *gin.Context) {
-type DaemonStatus struct {
-Name      string `json:"name"`
-Status    string `json:"status"`
-Detail    string `json:"detail,omitempty"`
-}
+	type DaemonStatus struct {
+		Name   string `json:"name"`
+		Status string `json:"status"`
+		Detail string `json:"detail,omitempty"`
+	}
 
-var daemons []DaemonStatus
+	var daemons []DaemonStatus
 
-// CuriosityDaemon
-if cd := s.ActionRouter.CuriosityDaemon; cd != nil {
-idle := cd.IdleSince()
-qDepth := cd.SeedQueueDepth()
-status := "idle"
-detail := fmt.Sprintf("idle for %s | %d seeds queued", idle.Round(time.Second), qDepth)
-if idle < 30*time.Second {
-status = "active"
-}
-daemons = append(daemons, DaemonStatus{Name: "CuriosityDaemon", Status: status, Detail: detail})
-}
+	// CuriosityDaemon
+	if cd := s.ActionRouter.CuriosityDaemon; cd != nil {
+		idle := cd.IdleSince()
+		qDepth := cd.SeedQueueDepth()
+		status := "idle"
+		detail := fmt.Sprintf("idle for %s | %d seeds queued", idle.Round(time.Second), qDepth)
+		if idle < 30*time.Second {
+			status = "active"
+		}
+		daemons = append(daemons, DaemonStatus{Name: "CuriosityDaemon", Status: status, Detail: detail})
+	}
 
-// GoalExecutor
-if s.GoalExecutor != nil {
-goals, _ := s.GoalService.ListObjectives("active")
-status := "idle"
-detail := "no active objectives"
-if len(goals) > 0 {
-status = "active"
-detail = fmt.Sprintf("executing: %q", goals[0].Goal)
-}
-daemons = append(daemons, DaemonStatus{Name: "GoalExecutor", Status: status, Detail: detail})
-}
+	// GoalExecutor
+	if s.GoalExecutor != nil {
+		goals, _ := s.GoalService.ListObjectives("active")
+		status := "idle"
+		detail := "no active objectives"
+		if len(goals) > 0 {
+			status = "active"
+			detail = fmt.Sprintf("executing: %q", goals[0].Goal)
+		}
+		daemons = append(daemons, DaemonStatus{Name: "GoalExecutor", Status: status, Detail: detail})
+	}
 
-// ReformDaemon — always running (Reform is on SovEngine)
-daemons = append(daemons, DaemonStatus{Name: "ReformDaemon", Status: "running", Detail: "self-modification audit loop"})
+	// ReformDaemon — always running (Reform is on SovEngine)
+	daemons = append(daemons, DaemonStatus{Name: "ReformDaemon", Status: "running", Detail: "self-modification audit loop"})
 
-// DreamDaemon — always running
-daemons = append(daemons, DaemonStatus{Name: "DreamDaemon", Status: "running", Detail: "memory consolidation loop"})
+	// DreamDaemon — always running
+	daemons = append(daemons, DaemonStatus{Name: "DreamDaemon", Status: "running", Detail: "memory consolidation loop"})
 
-c.JSON(http.StatusOK, gin.H{"daemons": daemons})
+	c.JSON(http.StatusOK, gin.H{"daemons": daemons})
 }
 
 // handleDocumentUpload accepts a multipart file upload and ingests it into MemoryBank.
@@ -2385,48 +2441,48 @@ func (s *ServerV2) handleListDocuments(c *gin.Context) {
 // handleReactionFeedback stores a user's emoji reaction to an assistant message
 // as a MemoryFragment so it influences future RAG recall and sentiment weighting.
 func (s *ServerV2) handleReactionFeedback(c *gin.Context) {
-var req struct {
-MessageID   string  `json:"message_id"`
-Reaction    string  `json:"reaction"`    // e.g. "thumbs_up", "heart", "fire"
-IsPositive  bool    `json:"is_positive"`
-MsgPreview  string  `json:"message_preview"` // first 200 chars of assistant message
-SessionID   string  `json:"session_id"`
-}
-if err := c.ShouldBindJSON(&req); err != nil || req.Reaction == "" {
-c.JSON(http.StatusBadRequest, gin.H{"error": "reaction and message_id required"})
-return
-}
+	var req struct {
+		MessageID  string `json:"message_id"`
+		Reaction   string `json:"reaction"` // e.g. "thumbs_up", "heart", "fire"
+		IsPositive bool   `json:"is_positive"`
+		MsgPreview string `json:"message_preview"` // first 200 chars of assistant message
+		SessionID  string `json:"session_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Reaction == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "reaction and message_id required"})
+		return
+	}
 
-feedbackType := "positive"
-importance := 0.8
-if !req.IsPositive {
-feedbackType = "negative"
-importance = 0.9 // negative feedback is a sharper learning signal
-}
+	feedbackType := "positive"
+	importance := 0.8
+	if !req.IsPositive {
+		feedbackType = "negative"
+		importance = 0.9 // negative feedback is a sharper learning signal
+	}
 
-content := fmt.Sprintf(
-"User reacted with %s (%s) to message: %q",
-req.Reaction, feedbackType, req.MsgPreview,
-)
+	content := fmt.Sprintf(
+		"User reacted with %s (%s) to message: %q",
+		req.Reaction, feedbackType, req.MsgPreview,
+	)
 
-keywords := extractFeedbackKeywords(req.MsgPreview)
-topic := "feedback:" + feedbackType
-if len(keywords) > 0 {
-topic = "feedback:" + keywords[0]
-}
+	keywords := extractFeedbackKeywords(req.MsgPreview)
+	topic := "feedback:" + feedbackType
+	if len(keywords) > 0 {
+		topic = "feedback:" + keywords[0]
+	}
 
-frag := service.MemoryFragment{
-ID:         "fb-" + req.MessageID,
-Content:    content,
-Source:     "feedback",
-Topic:      topic,
-SessionID:  req.SessionID,
-Importance: importance,
-Provenance: service.ProvenanceUserStated, // user explicitly rated — highest trust
-Volatility: service.VolatilityStable,
-}
+	frag := service.MemoryFragment{
+		ID:         "fb-" + req.MessageID,
+		Content:    content,
+		Source:     "feedback",
+		Topic:      topic,
+		SessionID:  req.SessionID,
+		Importance: importance,
+		Provenance: service.ProvenanceUserStated, // user explicitly rated — highest trust
+		Volatility: service.VolatilityStable,
+	}
 
-// 📌 Gold bookmark: pin reaction elevates the Q→A pair to ProvenanceGold tier.
+	// 📌 Gold bookmark: pin reaction elevates the Q→A pair to ProvenanceGold tier.
 	// Gold memories are never recycled, get 1.6x RAG weight, DreamDaemon consolidates them first.
 	isPin := req.Reaction == "📌" || req.Reaction == "pin" || req.Reaction == "bookmark"
 	if isPin && req.IsPositive && s.MemoryBank != nil && s.MemoryBank.IsEnabled() && len(req.MsgPreview) > 20 {
@@ -2444,8 +2500,8 @@ Volatility: service.VolatilityStable,
 	}
 
 	if s.MemoryBank != nil {
-	s.MemoryBank.Write(frag)
-}
+		s.MemoryBank.Write(frag)
+	}
 
 	// Contrastive pair: store ACCEPTED/REJECTED alongside the standard feedback fragment.
 	// This gives RAG a paired view of what worked and what didn't on each topic.
@@ -2453,13 +2509,13 @@ Volatility: service.VolatilityStable,
 		go s.SignalProcessor.ProcessContrastivePair(req.IsPositive, topic, req.MsgPreview)
 	}
 
-c.JSON(http.StatusOK, gin.H{
-"ok":          true,
-"feedback":    feedbackType,
-"reaction":    req.Reaction,
-"importance":  importance,
-"keywords":    keywords,
-})
+	c.JSON(http.StatusOK, gin.H{
+		"ok":         true,
+		"feedback":   feedbackType,
+		"reaction":   req.Reaction,
+		"importance": importance,
+		"keywords":   keywords,
+	})
 }
 
 // handleGetSovereignIdentity returns the active sovereign .ori profile as JSON.
@@ -2566,39 +2622,44 @@ func stripHTML(s string) string {
 
 // extractFeedbackKeywords pulls the top-5 meaningful words from a message preview.
 func extractFeedbackKeywords(text string) []string {
-stopWords := map[string]bool{
-"this": true, "that": true, "with": true, "from": true, "have": true,
-"about": true, "there": true, "their": true, "which": true, "while": true,
-"where": true, "what": true, "when": true, "your": true, "into": true,
-"over": true, "under": true, "through": true, "many": true, "some": true,
-"really": true, "just": true, "like": true, "them": true, "they": true,
-"you": true, "here": true, "the": true, "and": true, "for": true,
-"are": true, "was": true, "were": true, "been": true, "being": true,
-}
+	stopWords := map[string]bool{
+		"this": true, "that": true, "with": true, "from": true, "have": true,
+		"about": true, "there": true, "their": true, "which": true, "while": true,
+		"where": true, "what": true, "when": true, "your": true, "into": true,
+		"over": true, "under": true, "through": true, "many": true, "some": true,
+		"really": true, "just": true, "like": true, "them": true, "they": true,
+		"you": true, "here": true, "the": true, "and": true, "for": true,
+		"are": true, "was": true, "were": true, "been": true, "being": true,
+	}
 
-words := strings.Fields(strings.ToLower(text))
-counts := map[string]int{}
-for _, w := range words {
-// strip punctuation
-clean := strings.Trim(w, `.,!?;:"'()[]`)
-if len(clean) > 3 && !stopWords[clean] {
-counts[clean]++
-}
-}
+	words := strings.Fields(strings.ToLower(text))
+	counts := map[string]int{}
+	for _, w := range words {
+		// strip punctuation
+		clean := strings.Trim(w, `.,!?;:"'()[]`)
+		if len(clean) > 3 && !stopWords[clean] {
+			counts[clean]++
+		}
+	}
 
-type wc struct{ w string; c int }
-var ranked []wc
-for w, c := range counts {
-ranked = append(ranked, wc{w, c})
-}
-sort.Slice(ranked, func(i, j int) bool { return ranked[i].c > ranked[j].c })
+	type wc struct {
+		w string
+		c int
+	}
+	var ranked []wc
+	for w, c := range counts {
+		ranked = append(ranked, wc{w, c})
+	}
+	sort.Slice(ranked, func(i, j int) bool { return ranked[i].c > ranked[j].c })
 
-out := make([]string, 0, 5)
-for i, r := range ranked {
-if i >= 5 { break }
-out = append(out, r.w)
-}
-return out
+	out := make([]string, 0, 5)
+	for i, r := range ranked {
+		if i >= 5 {
+			break
+		}
+		out = append(out, r.w)
+	}
+	return out
 }
 
 // ─── MemoryBank adapter (cognition.MemoryQuerier) ─────────────────────────────
@@ -2608,7 +2669,7 @@ return out
 // (arXiv:2603.24402): U=0 (verified, Certainty≥0.80) vs U=1 (unverified, <0.80).
 
 type memoryBankAdapter struct {
-mb *service.MemoryBank
+	mb *service.MemoryBank
 }
 
 // provenanceCertainty maps service provenance tiers to AI-Supervisor factual confidence floors.
@@ -2777,202 +2838,201 @@ func (a *memoryBankAdapter) BumpBelief(ctx context.Context, fragID string, axis 
 		a.mb.BumpImportance(ctx, fragID, delta)
 	case "causal":
 		a.mb.BumpCausalScore(ctx, fragID, delta)
-	// "recency" is intentionally a no-op — computed at query time from age
+		// "recency" is intentionally a no-op — computed at query time from age
 	}
 }
 
 func truncateStr(s string, n int) string {
-if len(s) <= n { return s }
-return s[:n] + "…"
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 // ─── Vision Adapter ───────────────────────────────────────────────────────────
 
 // ollamaBaseURL returns the Ollama API base URL from env or default.
 func ollamaBaseURL() string {
-if u := os.Getenv("OLLAMA_URL"); u != "" {
-return u
-}
-return "http://127.0.0.1:11434"
+	if u := os.Getenv("OLLAMA_URL"); u != "" {
+		return u
+	}
+	return "http://127.0.0.1:11434"
 }
 
 // visionAdapter implements cognition.VisionAnalyzer using moondream via Ollama.
 // CPU-safe: moondream is 1.7GB and runs on EPYC in ~5-8s per image.
 type visionAdapter struct {
-ollamaURL string
+	ollamaURL string
 }
 
 func (v *visionAdapter) Analyze(input cognition.VisionInput) (cognition.VisionResult, error) {
-// Resolve image to base64
-var b64 string
-switch {
-case input.Base64 != "":
-b64 = input.Base64
-case input.FilePath != "":
-data, err := os.ReadFile(input.FilePath)
-if err != nil {
-return cognition.VisionResult{}, fmt.Errorf("vision: read file: %w", err)
-}
-b64 = base64.StdEncoding.EncodeToString(data)
-case input.URL != "":
-resp, err := http.Get(input.URL) //nolint:gosec — URL provided by authenticated caller
-if err != nil {
-return cognition.VisionResult{}, fmt.Errorf("vision: fetch url: %w", err)
-}
-defer resp.Body.Close()
-data, err := io.ReadAll(resp.Body)
-if err != nil {
-return cognition.VisionResult{}, fmt.Errorf("vision: read url body: %w", err)
-}
-b64 = base64.StdEncoding.EncodeToString(data)
-default:
-return cognition.VisionResult{}, fmt.Errorf("vision: no image source provided")
-}
+	// Resolve image to base64
+	var b64 string
+	switch {
+	case input.Base64 != "":
+		b64 = input.Base64
+	case input.FilePath != "":
+		data, err := os.ReadFile(input.FilePath)
+		if err != nil {
+			return cognition.VisionResult{}, fmt.Errorf("vision: read file: %w", err)
+		}
+		b64 = base64.StdEncoding.EncodeToString(data)
+	case input.URL != "":
+		resp, err := http.Get(input.URL) //nolint:gosec — URL provided by authenticated caller
+		if err != nil {
+			return cognition.VisionResult{}, fmt.Errorf("vision: fetch url: %w", err)
+		}
+		defer resp.Body.Close()
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return cognition.VisionResult{}, fmt.Errorf("vision: read url body: %w", err)
+		}
+		b64 = base64.StdEncoding.EncodeToString(data)
+	default:
+		return cognition.VisionResult{}, fmt.Errorf("vision: no image source provided")
+	}
 
-prompt := input.Prompt
-if prompt == "" {
-prompt = cognition.DefaultVisionPrompt
-}
+	prompt := input.Prompt
+	if prompt == "" {
+		prompt = cognition.DefaultVisionPrompt
+	}
 
-// Call Ollama /api/generate with images array
-reqBody, _ := json.Marshal(map[string]any{
-"model":       "moondream:latest",
-"prompt":      prompt,
-"images":      []string{b64},
-"stream":      false,
-"num_predict": 256,
-"options": map[string]any{
-"temperature": 0.1,
-"num_ctx":     4096,
-},
-})
+	// Call Ollama /api/generate with images array
+	reqBody, _ := json.Marshal(map[string]any{
+		"model":       "moondream:latest",
+		"prompt":      prompt,
+		"images":      []string{b64},
+		"stream":      false,
+		"num_predict": 256,
+		"options": map[string]any{
+			"temperature": 0.1,
+			"num_ctx":     4096,
+		},
+	})
 
-ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 
-req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
-v.ollamaURL+"/api/generate", strings.NewReader(string(reqBody)))
-req.Header.Set("Content-Type", "application/json")
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
+		v.ollamaURL+"/api/generate", strings.NewReader(string(reqBody)))
+	req.Header.Set("Content-Type", "application/json")
 
-httpResp, err := http.DefaultClient.Do(req)
-if err != nil {
-return cognition.VisionResult{}, fmt.Errorf("vision: ollama call: %w", err)
-}
-defer httpResp.Body.Close()
+	httpResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return cognition.VisionResult{}, fmt.Errorf("vision: ollama call: %w", err)
+	}
+	defer httpResp.Body.Close()
 
-var ollamaResp struct {
-Response string `json:"response"`
-Done     bool   `json:"done"`
-}
-if err := json.NewDecoder(httpResp.Body).Decode(&ollamaResp); err != nil {
-return cognition.VisionResult{}, fmt.Errorf("vision: decode response: %w", err)
-}
+	var ollamaResp struct {
+		Response string `json:"response"`
+		Done     bool   `json:"done"`
+	}
+	if err := json.NewDecoder(httpResp.Body).Decode(&ollamaResp); err != nil {
+		return cognition.VisionResult{}, fmt.Errorf("vision: decode response: %w", err)
+	}
 
-description := strings.TrimSpace(ollamaResp.Response)
-tags := extractVisionTags(description)
+	description := strings.TrimSpace(ollamaResp.Response)
+	tags := extractVisionTags(description)
 
-return cognition.VisionResult{
-Description: description,
-Tags:        tags,
-Model:       "moondream:latest",
-RawResponse: ollamaResp.Response,
-}, nil
+	return cognition.VisionResult{
+		Description: description,
+		Tags:        tags,
+		Model:       "moondream:latest",
+		RawResponse: ollamaResp.Response,
+	}, nil
 }
 
 // extractVisionTags derives a small set of concept tags from a description
 // by pulling capitalised nouns and key technical terms (heuristic, no LLM call).
 func extractVisionTags(description string) []string {
-words := strings.Fields(description)
-seen := map[string]bool{}
-var tags []string
-for _, w := range words {
-w = strings.Trim(w, ".,;:!?\"'()")
-if len(w) < 4 {
-continue
-}
-lower := strings.ToLower(w)
-if seen[lower] {
-continue
-}
-// Keep words that start with a capital (proper nouns / concepts) or are technical
-if w[0] >= 'A' && w[0] <= 'Z' {
-seen[lower] = true
-tags = append(tags, lower)
-}
-if len(tags) >= 8 {
-break
-}
-}
-return tags
+	words := strings.Fields(description)
+	seen := map[string]bool{}
+	var tags []string
+	for _, w := range words {
+		w = strings.Trim(w, ".,;:!?\"'()")
+		if len(w) < 4 {
+			continue
+		}
+		lower := strings.ToLower(w)
+		if seen[lower] {
+			continue
+		}
+		// Keep words that start with a capital (proper nouns / concepts) or are technical
+		if w[0] >= 'A' && w[0] <= 'Z' {
+			seen[lower] = true
+			tags = append(tags, lower)
+		}
+		if len(tags) >= 8 {
+			break
+		}
+	}
+	return tags
 }
 
 // handleVisionAnalyze handles POST /v1/vision/analyze.
 // Accepts image_url, image_base64, or image_path + optional prompt.
 // Optionally writes result to MemoryBank with ProvenanceSeen tier.
 func (s *ServerV2) handleVisionAnalyze(c *gin.Context) {
-var req struct {
-ImageURL    string `json:"image_url"`
-ImageBase64 string `json:"image_base64"`
-ImagePath   string `json:"image_path"`
-Prompt      string `json:"prompt"`
-SaveMemory  bool   `json:"save_memory"`
-}
-if err := c.ShouldBindJSON(&req); err != nil {
-c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
-return
-}
+	var req struct {
+		ImageURL    string `json:"image_url"`
+		ImageBase64 string `json:"image_base64"`
+		ImagePath   string `json:"image_path"`
+		Prompt      string `json:"prompt"`
+		SaveMemory  bool   `json:"save_memory"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
 
-va := s.Agent.SovEngine.VisionRef
-if va == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "vision module not available"})
-return
-}
+	va := s.Agent.SovEngine.VisionRef
+	if va == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "vision module not available"})
+		return
+	}
 
-result, err := va.Analyze(cognition.VisionInput{
-URL:      req.ImageURL,
-FilePath: req.ImagePath,
-Base64:   req.ImageBase64,
-Prompt:   req.Prompt,
-})
-if err != nil {
-log.Printf("[Vision] Analysis error: %v", err)
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
+	result, err := va.Analyze(cognition.VisionInput{
+		URL:      req.ImageURL,
+		FilePath: req.ImagePath,
+		Base64:   req.ImageBase64,
+		Prompt:   req.Prompt,
+	})
+	if err != nil {
+		log.Printf("[Vision] Analysis error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-resp := gin.H{
-"description": result.Description,
-"tags":        result.Tags,
-"model":       result.Model,
-}
+	resp := gin.H{
+		"description": result.Description,
+		"tags":        result.Tags,
+		"model":       result.Model,
+	}
 
-// Optional memory write-back with ProvenanceSeen tier
-if req.SaveMemory && s.MemoryBank != nil && s.MemoryBank.IsEnabled() {
-topic := "visual_input"
-if len(result.Tags) > 0 {
-topic = result.Tags[0]
-}
-source := req.ImageURL
-if source == "" {
-source = req.ImagePath
-}
-s.MemoryBank.Write(service.MemoryFragment{
-Content:    result.Description,
-Source:     "vision",
-Topic:      topic,
-Importance: 0.65,
-Provenance: service.ProvenanceSeen,
-Volatility: service.VolatilityCurrent,
-})
-resp["memory_saved"] = true
-resp["memory_topic"] = topic
-}
+	// Optional memory write-back with ProvenanceSeen tier
+	if req.SaveMemory && s.MemoryBank != nil && s.MemoryBank.IsEnabled() {
+		topic := "visual_input"
+		if len(result.Tags) > 0 {
+			topic = result.Tags[0]
+		}
+		source := req.ImageURL
+		if source == "" {
+			source = req.ImagePath
+		}
+		s.MemoryBank.Write(service.MemoryFragment{
+			Content:    result.Description,
+			Source:     "vision",
+			Topic:      topic,
+			Importance: 0.65,
+			Provenance: service.ProvenanceSeen,
+			Volatility: service.VolatilityCurrent,
+		})
+		resp["memory_saved"] = true
+		resp["memory_topic"] = topic
+	}
 
-c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, resp)
 }
-
-
-
 
 // ---------------------------------------------------------------------------
 // Enterprise Knowledge Layer API
@@ -3223,8 +3283,8 @@ func (s *ServerV2) handleEnterpriseClear(c *gin.Context) {
 	if err := ent.ClearKnowledge(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-}
-c.JSON(http.StatusOK, gin.H{"namespace": ns, "cleared": true})
+	}
+	c.JSON(http.StatusOK, gin.H{"namespace": ns, "cleared": true})
 }
 
 // ─── engine.Applier implementation ───────────────────────────────────────────
@@ -3233,32 +3293,32 @@ c.JSON(http.StatusOK, gin.H{"namespace": ns, "cleared": true})
 // new config version is fetched from the Thynaptic config endpoint.
 // Safe to call concurrently — each section applies independently.
 func (s *ServerV2) ApplyEngineConfig(cfg engine.EngineConfig) error {
-if cfg.Message != "" {
-log.Printf("[EngineConfig] Applying: %s (v=%s)", cfg.Message, cfg.Version)
-}
+	if cfg.Message != "" {
+		log.Printf("[EngineConfig] Applying: %s (v=%s)", cfg.Message, cfg.Version)
+	}
 
-// SCAI threshold override
-if cfg.SCAIThreshold != nil {
-s.Agent.SovEngine.SCAI.SetSeverityThreshold(*cfg.SCAIThreshold)
-log.Printf("[EngineConfig] SCAI threshold → %.2f", *cfg.SCAIThreshold)
-}
+	// SCAI threshold override
+	if cfg.SCAIThreshold != nil {
+		s.Agent.SovEngine.SCAI.SetSeverityThreshold(*cfg.SCAIThreshold)
+		log.Printf("[EngineConfig] SCAI threshold → %.2f", *cfg.SCAIThreshold)
+	}
 
-// Model routing override
-if len(cfg.AllowedModels) > 0 {
-log.Printf("[EngineConfig] AllowedModels updated: %v", cfg.AllowedModels)
-// First entry becomes the default model.
-if len(cfg.AllowedModels) > 0 {
-s.Agent.GenService.DefaultModel = cfg.AllowedModels[0]
-}
-}
+	// Model routing override
+	if len(cfg.AllowedModels) > 0 {
+		log.Printf("[EngineConfig] AllowedModels updated: %v", cfg.AllowedModels)
+		// First entry becomes the default model.
+		if len(cfg.AllowedModels) > 0 {
+			s.Agent.GenService.DefaultModel = cfg.AllowedModels[0]
+		}
+	}
 
-// Disable modules — mark as inactive in the Orchestrator registry.
-for _, slug := range cfg.DisabledModules {
-log.Printf("[EngineConfig] Disabling module: %s", slug)
-s.Orchestrator.DisableModule(slug)
-}
+	// Disable modules — mark as inactive in the Orchestrator registry.
+	for _, slug := range cfg.DisabledModules {
+		log.Printf("[EngineConfig] Disabling module: %s", slug)
+		s.Orchestrator.DisableModule(slug)
+	}
 
-return nil
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -3268,39 +3328,39 @@ return nil
 // handleSwarmConnect upgrades the HTTP connection to a WebSocket SPP peer session.
 // Auth is the SPP handshake itself (Ed25519 + Constitutional Attestation).
 func (s *ServerV2) handleSwarmConnect(c *gin.Context) {
-if s.SwarmRegistry == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "swarm not enabled — set ORICLI_SWARM_ENABLED=true"})
-return
-}
-s.SwarmRegistry.HandleUpgrade(c.Writer, c.Request)
+	if s.SwarmRegistry == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "swarm not enabled — set ORICLI_SWARM_ENABLED=true"})
+		return
+	}
+	s.SwarmRegistry.HandleUpgrade(c.Writer, c.Request)
 }
 
 // handleSwarmPeers returns all connected peers and their reputation scores (admin only).
 func (s *ServerV2) handleSwarmPeers(c *gin.Context) {
-if s.SwarmRegistry == nil {
-c.JSON(http.StatusOK, gin.H{"peers": []any{}, "swarm_enabled": false})
-return
-}
-ids := s.SwarmRegistry.ConnectedPeers()
-c.JSON(http.StatusOK, gin.H{
-"swarm_enabled":   true,
-"connected_peers": len(ids),
-"peer_ids":        ids,
-})
+	if s.SwarmRegistry == nil {
+		c.JSON(http.StatusOK, gin.H{"peers": []any{}, "swarm_enabled": false})
+		return
+	}
+	ids := s.SwarmRegistry.ConnectedPeers()
+	c.JSON(http.StatusOK, gin.H{
+		"swarm_enabled":   true,
+		"connected_peers": len(ids),
+		"peer_ids":        ids,
+	})
 }
 
 // handleSwarmHealth returns the aggregate swarm health report (admin only).
 func (s *ServerV2) handleSwarmHealth(c *gin.Context) {
-if s.SwarmMonitor == nil {
-c.JSON(http.StatusOK, gin.H{"swarm_enabled": false})
-return
-}
-var ids []string
-if s.SwarmRegistry != nil {
-ids = s.SwarmRegistry.ConnectedPeers()
-}
-report := s.SwarmMonitor.Report(ids)
-c.JSON(http.StatusOK, report)
+	if s.SwarmMonitor == nil {
+		c.JSON(http.StatusOK, gin.H{"swarm_enabled": false})
+		return
+	}
+	var ids []string
+	if s.SwarmRegistry != nil {
+		ids = s.SwarmRegistry.ConnectedPeers()
+	}
+	report := s.SwarmMonitor.Report(ids)
+	c.JSON(http.StatusOK, report)
 }
 
 // ---------------------------------------------------------------------------
@@ -3309,42 +3369,42 @@ c.JSON(http.StatusOK, report)
 
 // handleSwarmJuryStatus returns active jury sessions and quorum state.
 func (s *ServerV2) handleSwarmJuryStatus(c *gin.Context) {
-if s.JuryClient == nil {
-c.JSON(http.StatusOK, gin.H{"jury_enabled": false})
-return
-}
-sessions := s.JuryClient.ActiveSessions()
-c.JSON(http.StatusOK, gin.H{
-"jury_enabled":    true,
-"active_sessions": sessions,
-})
+	if s.JuryClient == nil {
+		c.JSON(http.StatusOK, gin.H{"jury_enabled": false})
+		return
+	}
+	sessions := s.JuryClient.ActiveSessions()
+	c.JSON(http.StatusOK, gin.H{
+		"jury_enabled":    true,
+		"active_sessions": sessions,
+	})
 }
 
 // handleSwarmConsensusFragments returns universal-tier fragments and their vote tallies.
 func (s *ServerV2) handleSwarmConsensusFragments(c *gin.Context) {
-if s.VoteLog == nil {
-c.JSON(http.StatusOK, gin.H{"consensus_enabled": false})
-return
-}
-c.JSON(http.StatusOK, gin.H{
-"consensus_enabled": true,
-"fragments":         s.VoteLog.Snapshot(),
-})
+	if s.VoteLog == nil {
+		c.JSON(http.StatusOK, gin.H{"consensus_enabled": false})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"consensus_enabled": true,
+		"fragments":         s.VoteLog.Snapshot(),
+	})
 }
 
 // handleSwarmPurgeTraces deletes all ESI skill traces from a specific peer node.
 func (s *ServerV2) handleSwarmPurgeTraces(c *gin.Context) {
-nodeID := c.Param("node_id")
-if nodeID == "" {
-c.JSON(http.StatusBadRequest, gin.H{"error": "node_id required"})
-return
-}
-if s.ESIFederation == nil {
-c.JSON(http.StatusOK, gin.H{"purged": 0, "esi_enabled": false})
-return
-}
-s.ESIFederation.PurgeNodeTraces(c.Request.Context(), nodeID)
-c.JSON(http.StatusOK, gin.H{"purged": true, "node_id": nodeID})
+	nodeID := c.Param("node_id")
+	if nodeID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node_id required"})
+		return
+	}
+	if s.ESIFederation == nil {
+		c.JSON(http.StatusOK, gin.H{"purged": 0, "esi_enabled": false})
+		return
+	}
+	s.ESIFederation.PurgeNodeTraces(c.Request.Context(), nodeID)
+	c.JSON(http.StatusOK, gin.H{"purged": true, "node_id": nodeID})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3469,197 +3529,197 @@ func (s *ServerV2) handleSCLStats(c *gin.Context) {
 
 // GET /v1/tcd/domains — list all domains with status + confidence
 func (s *ServerV2) handleTCDListDomains(c *gin.Context) {
-if s.TCDManifest == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
-return
-}
-domains := s.TCDManifest.All()
-c.JSON(http.StatusOK, gin.H{"domains": domains, "count": len(domains)})
+	if s.TCDManifest == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
+		return
+	}
+	domains := s.TCDManifest.All()
+	c.JSON(http.StatusOK, gin.H{"domains": domains, "count": len(domains)})
 }
 
 // POST /v1/tcd/domains — manually add a domain
 // Body: {"name": "robotics", "keywords": ["robot", "automation"]}
 func (s *ServerV2) handleTCDAddDomain(c *gin.Context) {
-if s.TCDManifest == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
-return
-}
-var body struct {
-Name     string   `json:"name"`
-Keywords []string `json:"keywords"`
-}
-if err := c.ShouldBindJSON(&body); err != nil || body.Name == "" {
-c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
-return
-}
-d := &tcdpkg.Domain{
-ID:            strings.ToLower(strings.ReplaceAll(body.Name, " ", "_")),
-Name:          body.Name,
-Keywords:      body.Keywords,
-Status:        tcdpkg.StatusActive,
-SourceWeights: tcdpkg.DefaultSourceWeights,
-}
-ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-defer cancel()
-if err := s.TCDManifest.(interface {
-Add(context.Context, *tcdpkg.Domain) error
-}).Add(ctx, d); err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusCreated, gin.H{"domain": d})
+	if s.TCDManifest == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
+		return
+	}
+	var body struct {
+		Name     string   `json:"name"`
+		Keywords []string `json:"keywords"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
+		return
+	}
+	d := &tcdpkg.Domain{
+		ID:            strings.ToLower(strings.ReplaceAll(body.Name, " ", "_")),
+		Name:          body.Name,
+		Keywords:      body.Keywords,
+		Status:        tcdpkg.StatusActive,
+		SourceWeights: tcdpkg.DefaultSourceWeights,
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	if err := s.TCDManifest.(interface {
+		Add(context.Context, *tcdpkg.Domain) error
+	}).Add(ctx, d); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"domain": d})
 }
 
 // POST /v1/tcd/tick — trigger immediate TCD cycle (admin)
 func (s *ServerV2) handleTCDTriggerTick(c *gin.Context) {
-if s.TCDDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
-return
-}
-s.TCDDaemon.TriggerManualTick()
-c.JSON(http.StatusOK, gin.H{"status": "tick queued"})
+	if s.TCDDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
+		return
+	}
+	s.TCDDaemon.TriggerManualTick()
+	c.JSON(http.StatusOK, gin.H{"status": "tick queued"})
 }
 
 // GET /v1/tcd/gaps — list current orphan clusters detected by GapDetector
 func (s *ServerV2) handleTCDGaps(c *gin.Context) {
-if s.TCDGapDetector == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD gap detector not enabled"})
-return
-}
-ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
-defer cancel()
-spawned, err := s.TCDGapDetector.Scan(ctx)
-if err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusOK, gin.H{"domains_spawned": spawned})
+	if s.TCDGapDetector == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD gap detector not enabled"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	spawned, err := s.TCDGapDetector.Scan(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"domains_spawned": spawned})
 }
 
 // GET /v1/tcd/domains/:id/lineage — full event chain for a domain
 func (s *ServerV2) handleTCDDomainLineage(c *gin.Context) {
-if s.TCDManifest == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
-return
-}
-id := c.Param("id")
-events := s.TCDManifest.GetLineage(id)
-c.JSON(http.StatusOK, gin.H{"domain_id": id, "events": events, "count": len(events)})
+	if s.TCDManifest == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
+		return
+	}
+	id := c.Param("id")
+	events := s.TCDManifest.GetLineage(id)
+	c.JSON(http.StatusOK, gin.H{"domain_id": id, "events": events, "count": len(events)})
 }
 
 // GET /v1/tcd/lineage — full evolution DAG across all domains
 func (s *ServerV2) handleTCDEvolutionTree(c *gin.Context) {
-if s.TCDManifest == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
-return
-}
-tree := s.TCDManifest.GetEvolutionTree()
-c.JSON(http.StatusOK, gin.H{"evolution_tree": tree})
+	if s.TCDManifest == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TCD not enabled"})
+		return
+	}
+	tree := s.TCDManifest.GetEvolutionTree()
+	c.JSON(http.StatusOK, gin.H{"evolution_tree": tree})
 }
 
 // ── Forge Admin Handlers ──────────────────────────────────────────────────────
 
 // GET /v1/forge/tools — list all tools in the library
 func (s *ServerV2) handleForgeListTools(c *gin.Context) {
-if s.Forge == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
-return
-}
-tools := s.Forge.Library.All()
-c.JSON(http.StatusOK, gin.H{"tools": tools, "count": len(tools), "library_size": s.Forge.LibrarySize()})
+	if s.Forge == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+		return
+	}
+	tools := s.Forge.Library.All()
+	c.JSON(http.StatusOK, gin.H{"tools": tools, "count": len(tools), "library_size": s.Forge.LibrarySize()})
 }
 
 // DELETE /v1/forge/tools/:name — evict a tool from the library
 func (s *ServerV2) handleForgeDeleteTool(c *gin.Context) {
-if s.Forge == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
-return
-}
-name := c.Param("name")
-ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-defer cancel()
-if err := s.Forge.Library.Delete(ctx, name); err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusOK, gin.H{"deleted": name})
+	if s.Forge == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+		return
+	}
+	name := c.Param("name")
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	if err := s.Forge.Library.Delete(ctx, name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": name})
 }
 
 // GET /v1/forge/tools/:name/source — inspect generated bash source
 func (s *ServerV2) handleForgeToolSource(c *gin.Context) {
-if s.Forge == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
-return
-}
-name := c.Param("name")
-tool, ok := s.Forge.Library.Load(name)
-if !ok {
-c.JSON(http.StatusNotFound, gin.H{"error": "tool not found"})
-return
-}
-c.JSON(http.StatusOK, gin.H{"name": name, "source": tool.Source, "description": tool.Description})
+	if s.Forge == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+		return
+	}
+	name := c.Param("name")
+	tool, ok := s.Forge.Library.Load(name)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "tool not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"name": name, "source": tool.Source, "description": tool.Description})
 }
 
 // POST /v1/forge/tools/:name/invoke — manually invoke a forge tool
 // Body: {"args": {...}}
 func (s *ServerV2) handleForgeInvokeTool(c *gin.Context) {
-if s.Forge == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
-return
-}
-name := c.Param("name")
-var body struct {
-Args map[string]interface{} `json:"args"`
-}
-if err := c.ShouldBindJSON(&body); err != nil {
-body.Args = map[string]interface{}{}
-}
-ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
-defer cancel()
-out, err := s.Forge.InvokeJITTool(ctx, name, body.Args)
-if err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusOK, gin.H{"result": out, "tool": name})
+	if s.Forge == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+		return
+	}
+	name := c.Param("name")
+	var body struct {
+		Args map[string]interface{} `json:"args"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		body.Args = map[string]interface{}{}
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+	defer cancel()
+	out, err := s.Forge.InvokeJITTool(ctx, name, body.Args)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"result": out, "tool": name})
 }
 
 // GET /v1/forge/stats — pipeline metrics
 func (s *ServerV2) handleForgeStats(c *gin.Context) {
-if s.Forge == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
-return
-}
-stats := s.Forge.Stats()
-c.JSON(http.StatusOK, gin.H{
-"stats":        stats,
-"library_size": s.Forge.LibrarySize(),
-})
+	if s.Forge == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+		return
+	}
+	stats := s.Forge.Stats()
+	c.JSON(http.StatusOK, gin.H{
+		"stats":        stats,
+		"library_size": s.Forge.LibrarySize(),
+	})
 }
 
 // POST /v1/forge/forge — manually trigger a forge attempt
 // Body: {"task": "...", "tried_tools": ["tool_a", "tool_b"]}
 func (s *ServerV2) handleForgeTryForge(c *gin.Context) {
-if s.Forge == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
-return
-}
-var body struct {
-Task        string   `json:"task"`
-TriedTools  []string `json:"tried_tools"`
-}
-if err := c.ShouldBindJSON(&body); err != nil || body.Task == "" {
-c.JSON(http.StatusBadRequest, gin.H{"error": "task required"})
-return
-}
-ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
-defer cancel()
-tool, err := s.Forge.TryForge(ctx, body.Task, body.TriedTools)
-if err != nil {
-c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusCreated, gin.H{"tool": tool, "status": "forged"})
+	if s.Forge == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "forge not enabled"})
+		return
+	}
+	var body struct {
+		Task       string   `json:"task"`
+		TriedTools []string `json:"tried_tools"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Task == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "task required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+	tool, err := s.Forge.TryForge(ctx, body.Task, body.TriedTools)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"tool": tool, "status": "forged"})
 }
 
 // ─── PAD: Parallel Agent Dispatch ────────────────────────────────────────────
@@ -3703,247 +3763,247 @@ func (s *ServerV2) handlePADDispatch(c *gin.Context) {
 
 // GET /v1/pad/sessions — list recent sessions (last 20)
 func (s *ServerV2) handlePADListSessions(c *gin.Context) {
-if s.PAD == nil || !s.PAD.Enabled {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
-return
-}
-sessions := s.PAD.Sessions.List(20)
-c.JSON(http.StatusOK, gin.H{"sessions": sessions, "count": len(sessions)})
+	if s.PAD == nil || !s.PAD.Enabled {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
+		return
+	}
+	sessions := s.PAD.Sessions.List(20)
+	c.JSON(http.StatusOK, gin.H{"sessions": sessions, "count": len(sessions)})
 }
 
 // GET /v1/pad/sessions/:id — get session detail
 func (s *ServerV2) handlePADGetSession(c *gin.Context) {
-if s.PAD == nil || !s.PAD.Enabled {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
-return
-}
-id := c.Param("id")
-sess, ok := s.PAD.Sessions.Get(id)
-if !ok {
-c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
-return
-}
-c.JSON(http.StatusOK, sess)
+	if s.PAD == nil || !s.PAD.Enabled {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
+		return
+	}
+	id := c.Param("id")
+	sess, ok := s.PAD.Sessions.Get(id)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	}
+	c.JSON(http.StatusOK, sess)
 }
 
 // GET /v1/pad/stats — dispatch metrics
 func (s *ServerV2) handlePADStats(c *gin.Context) {
-if s.PAD == nil || !s.PAD.Enabled {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
-return
-}
-c.JSON(http.StatusOK, s.PAD.Stats())
+	if s.PAD == nil || !s.PAD.Enabled {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PAD not enabled"})
+		return
+	}
+	c.JSON(http.StatusOK, s.PAD.Stats())
 }
 
 // ─── Goals: Sovereign Goal Engine ────────────────────────────────────────────
 
 // POST /v1/goals — create a new sovereign goal
 func (s *ServerV2) handleGoalCreate(c *gin.Context) {
-if s.GoalStore == nil || s.GoalPlanner == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
-return
-}
-var req struct {
-Objective string `json:"objective" binding:"required"`
-Context   string `json:"context"`
-MaxNodes  int    `json:"max_nodes"`
-}
-if err := c.ShouldBindJSON(&req); err != nil {
-c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-return
-}
+	if s.GoalStore == nil || s.GoalPlanner == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
+		return
+	}
+	var req struct {
+		Objective string `json:"objective" binding:"required"`
+		Context   string `json:"context"`
+		MaxNodes  int    `json:"max_nodes"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-dag, err := s.GoalPlanner.Plan(c.Request.Context(), req.Objective, req.Context, req.MaxNodes)
-if err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
-if err := s.GoalStore.Save(c.Request.Context(), dag); err != nil {
-c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-return
-}
+	dag, err := s.GoalPlanner.Plan(c.Request.Context(), req.Objective, req.Context, req.MaxNodes)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := s.GoalStore.Save(c.Request.Context(), dag); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-// Trigger a manual daemon tick so goal starts immediately (non-blocking)
-if s.GoalDaemon != nil {
-select {
-case s.GoalDaemon.ManualTick <- struct{}{}:
-default:
-}
-}
+	// Trigger a manual daemon tick so goal starts immediately (non-blocking)
+	if s.GoalDaemon != nil {
+		select {
+		case s.GoalDaemon.ManualTick <- struct{}{}:
+		default:
+		}
+	}
 
-c.JSON(http.StatusCreated, dag)
+	c.JSON(http.StatusCreated, dag)
 }
 
 // GET /v1/goals — list recent goals
 func (s *ServerV2) handleGoalList(c *gin.Context) {
-if s.GoalStore == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
-return
-}
-goals := s.GoalStore.List(20)
-c.JSON(http.StatusOK, gin.H{"goals": goals, "count": len(goals)})
+	if s.GoalStore == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
+		return
+	}
+	goals := s.GoalStore.List(20)
+	c.JSON(http.StatusOK, gin.H{"goals": goals, "count": len(goals)})
 }
 
 // GET /v1/goals/:id — get goal detail
 func (s *ServerV2) handleGoalGet(c *gin.Context) {
-if s.GoalStore == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
-return
-}
-id := c.Param("id")
-g, err := s.GoalStore.Load(c.Request.Context(), id)
-if err != nil {
-c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusOK, g)
+	if s.GoalStore == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
+		return
+	}
+	id := c.Param("id")
+	g, err := s.GoalStore.Load(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, g)
 }
 
 // POST /v1/goals/:id/tick — manually advance a specific goal
 func (s *ServerV2) handleGoalTick(c *gin.Context) {
-if s.GoalStore == nil || s.GoalDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
-return
-}
-select {
-case s.GoalDaemon.ManualTick <- struct{}{}:
-c.JSON(http.StatusAccepted, gin.H{"status": "tick triggered"})
-default:
-c.JSON(http.StatusTooManyRequests, gin.H{"error": "tick already queued"})
-}
+	if s.GoalStore == nil || s.GoalDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
+		return
+	}
+	select {
+	case s.GoalDaemon.ManualTick <- struct{}{}:
+		c.JSON(http.StatusAccepted, gin.H{"status": "tick triggered"})
+	default:
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "tick already queued"})
+	}
 }
 
 // DELETE /v1/goals/:id — cancel a goal
 func (s *ServerV2) handleGoalCancel(c *gin.Context) {
-if s.GoalStore == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
-return
-}
-id := c.Param("id")
-if err := s.GoalStore.Cancel(c.Request.Context(), id); err != nil {
-c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusOK, gin.H{"status": "cancelled", "id": id})
+	if s.GoalStore == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Goal Engine not enabled"})
+		return
+	}
+	id := c.Param("id")
+	if err := s.GoalStore.Cancel(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "cancelled", "id": id})
 }
 
 // ─── FineTune: Automated LoRA Training ───────────────────────────────────────
 
 // POST /v1/finetune/run — start a fine-tuning job
 func (s *ServerV2) handleFineTuneRun(c *gin.Context) {
-if s.FineTune == nil || !s.FineTune.Enabled {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning disabled — set ORICLI_FINETUNE_ENABLED=true"})
-return
-}
-var req struct {
-ModelBase    string `json:"model_base"`
-DatasetCount int    `json:"dataset_count"`
-GPUType      string `json:"gpu_type"`
-}
-if err := c.ShouldBindJSON(&req); err != nil {
-c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-return
-}
+	if s.FineTune == nil || !s.FineTune.Enabled {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning disabled — set ORICLI_FINETUNE_ENABLED=true"})
+		return
+	}
+	var req struct {
+		ModelBase    string `json:"model_base"`
+		DatasetCount int    `json:"dataset_count"`
+		GPUType      string `json:"gpu_type"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-cfg := finetune.RunConfig{
-ModelBase:    req.ModelBase,
-DatasetCount: req.DatasetCount,
-GPUType:      req.GPUType,
-}
+	cfg := finetune.RunConfig{
+		ModelBase:    req.ModelBase,
+		DatasetCount: req.DatasetCount,
+		GPUType:      req.GPUType,
+	}
 
-jobID, err := s.FineTune.RunAsync(cfg)
-if err != nil {
-c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusAccepted, gin.H{
-"job_id":  jobID,
-"message": "fine-tuning job queued — poll GET /v1/finetune/status/" + jobID,
-})
+	jobID, err := s.FineTune.RunAsync(cfg)
+	if err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{
+		"job_id":  jobID,
+		"message": "fine-tuning job queued — poll GET /v1/finetune/status/" + jobID,
+	})
 }
 
 // GET /v1/finetune/status/:job_id — get job status
 func (s *ServerV2) handleFineTuneStatus(c *gin.Context) {
-if s.FineTune == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning not enabled"})
-return
-}
-jobID := c.Param("job_id")
-status, ok := s.FineTune.GetStatus(jobID)
-if !ok {
-c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
-return
-}
-c.JSON(http.StatusOK, status)
+	if s.FineTune == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning not enabled"})
+		return
+	}
+	jobID := c.Param("job_id")
+	status, ok := s.FineTune.GetStatus(jobID)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		return
+	}
+	c.JSON(http.StatusOK, status)
 }
 
 // GET /v1/finetune/jobs — list all jobs
 func (s *ServerV2) handleFineTuneJobs(c *gin.Context) {
-if s.FineTune == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning not enabled"})
-return
-}
-jobs := s.FineTune.ListJobs()
-c.JSON(http.StatusOK, gin.H{"jobs": jobs, "count": len(jobs)})
+	if s.FineTune == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning not enabled"})
+		return
+	}
+	jobs := s.FineTune.ListJobs()
+	c.JSON(http.StatusOK, gin.H{"jobs": jobs, "count": len(jobs)})
 }
 
 // ─── Waitlist: SMB API sign-up capture ───────────────────────────────────────
 
 // POST /v1/waitlist — public endpoint, no auth required
 func (s *ServerV2) handleWaitlistJoin(c *gin.Context) {
-var req struct {
-Name    string `json:"name"    binding:"required"`
-Company string `json:"company"`
-Email   string `json:"email"   binding:"required"`
-Plan    string `json:"plan"    binding:"required"`
-}
-if err := c.ShouldBindJSON(&req); err != nil {
-c.JSON(http.StatusBadRequest, gin.H{"error": "name, email, and plan are required"})
-return
-}
+	var req struct {
+		Name    string `json:"name"    binding:"required"`
+		Company string `json:"company"`
+		Email   string `json:"email"   binding:"required"`
+		Plan    string `json:"plan"    binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name, email, and plan are required"})
+		return
+	}
 
-// Basic email sanity check
-if !strings.Contains(req.Email, "@") || !strings.Contains(req.Email, ".") {
-c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email address"})
-return
-}
+	// Basic email sanity check
+	if !strings.Contains(req.Email, "@") || !strings.Contains(req.Email, ".") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email address"})
+		return
+	}
 
-// Validate plan
-validPlans := map[string]bool{"starter": true, "business": true, "enterprise": true}
-if !validPlans[strings.ToLower(req.Plan)] {
-c.JSON(http.StatusBadRequest, gin.H{"error": "invalid plan — must be starter, business, or enterprise"})
-return
-}
+	// Validate plan
+	validPlans := map[string]bool{"starter": true, "business": true, "enterprise": true}
+	if !validPlans[strings.ToLower(req.Plan)] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid plan — must be starter, business, or enterprise"})
+		return
+	}
 
-record := map[string]any{
-"name":       req.Name,
-"company":    req.Company,
-"email":      strings.ToLower(strings.TrimSpace(req.Email)),
-"plan":       strings.ToLower(req.Plan),
-"created_at": time.Now().UTC().Format(time.RFC3339),
-"status":     "pending",
-}
+	record := map[string]any{
+		"name":       req.Name,
+		"company":    req.Company,
+		"email":      strings.ToLower(strings.TrimSpace(req.Email)),
+		"plan":       strings.ToLower(req.Plan),
+		"created_at": time.Now().UTC().Format(time.RFC3339),
+		"status":     "pending",
+	}
 
-// Write to PocketBase if available
-if s.MemoryBank != nil {
-pbClient := s.MemoryBank.GetAdminClient()
-if pbClient != nil {
-ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-defer cancel()
-_, err := pbClient.CreateRecord(ctx, "waitlist", record)
-if err != nil {
-log.Printf("[Waitlist] PB write error: %v", err)
-// Fall through — don't fail the request if PB is having issues
-} else {
-log.Printf("[Waitlist] New signup: %s <%s> plan=%s", req.Name, req.Email, req.Plan)
-}
-}
-}
+	// Write to PocketBase if available
+	if s.MemoryBank != nil {
+		pbClient := s.MemoryBank.GetAdminClient()
+		if pbClient != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			_, err := pbClient.CreateRecord(ctx, "waitlist", record)
+			if err != nil {
+				log.Printf("[Waitlist] PB write error: %v", err)
+				// Fall through — don't fail the request if PB is having issues
+			} else {
+				log.Printf("[Waitlist] New signup: %s <%s> plan=%s", req.Name, req.Email, req.Plan)
+			}
+		}
+	}
 
-c.JSON(http.StatusOK, gin.H{
-"success": true,
-"message": "You're on the list. We'll reach out within 24 hours.",
-})
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "You're on the list. We'll reach out within 24 hours.",
+	})
 }
 
 // ── Adversarial Sentinel ──────────────────────────────────────────────────────
@@ -3989,69 +4049,69 @@ func (s *ServerV2) handleSentinelStats(c *gin.Context) {
 
 // GET /v1/skills/crystals — list all registered crystals
 func (s *ServerV2) handleCrystalList(c *gin.Context) {
-if s.CrystalCache == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
-return
-}
-c.JSON(http.StatusOK, gin.H{"crystals": s.CrystalCache.List()})
+	if s.CrystalCache == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"crystals": s.CrystalCache.List()})
 }
 
 // POST /v1/skills/crystals — register a new crystal skill
 func (s *ServerV2) handleCrystalRegister(c *gin.Context) {
-if s.CrystalCache == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
-return
-}
-var req struct {
-ID              string  `json:"id" binding:"required"`
-Name            string  `json:"name"`
-Description     string  `json:"description"`
-Pattern         string  `json:"pattern" binding:"required"`
-TemplateBody    string  `json:"template_body"`
-ReputationScore float64 `json:"reputation_score"`
-HitCount        int     `json:"hit_count"`
-}
-if err := c.ShouldBindJSON(&req); err != nil {
-c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-return
-}
-skill := scl.CrystalSkill{
-ID:              req.ID,
-Name:            req.Name,
-Description:     req.Description,
-Pattern:         req.Pattern,
-TemplateBody:    req.TemplateBody,
-ReputationScore: req.ReputationScore,
-HitCount:        req.HitCount,
-}
-if err := s.CrystalCache.Register(skill); err != nil {
-c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-return
-}
-c.JSON(http.StatusCreated, gin.H{"message": "crystal registered", "id": req.ID})
+	if s.CrystalCache == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
+		return
+	}
+	var req struct {
+		ID              string  `json:"id" binding:"required"`
+		Name            string  `json:"name"`
+		Description     string  `json:"description"`
+		Pattern         string  `json:"pattern" binding:"required"`
+		TemplateBody    string  `json:"template_body"`
+		ReputationScore float64 `json:"reputation_score"`
+		HitCount        int     `json:"hit_count"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	skill := scl.CrystalSkill{
+		ID:              req.ID,
+		Name:            req.Name,
+		Description:     req.Description,
+		Pattern:         req.Pattern,
+		TemplateBody:    req.TemplateBody,
+		ReputationScore: req.ReputationScore,
+		HitCount:        req.HitCount,
+	}
+	if err := s.CrystalCache.Register(skill); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"message": "crystal registered", "id": req.ID})
 }
 
 // DELETE /v1/skills/crystals/:id — evict a crystal
 func (s *ServerV2) handleCrystalEvict(c *gin.Context) {
-if s.CrystalCache == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
-return
-}
-id := c.Param("id")
-if !s.CrystalCache.Evict(id) {
-c.JSON(http.StatusNotFound, gin.H{"error": "crystal not found: " + id})
-return
-}
-c.JSON(http.StatusOK, gin.H{"message": "evicted", "id": id})
+	if s.CrystalCache == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
+		return
+	}
+	id := c.Param("id")
+	if !s.CrystalCache.Evict(id) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "crystal not found: " + id})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "evicted", "id": id})
 }
 
 // GET /v1/skills/crystals/stats — cache-level telemetry
 func (s *ServerV2) handleCrystalStats(c *gin.Context) {
-if s.CrystalCache == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
-return
-}
-c.JSON(http.StatusOK, s.CrystalCache.Stats())
+	if s.CrystalCache == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "crystal cache not enabled"})
+		return
+	}
+	c.JSON(http.StatusOK, s.CrystalCache.Stats())
 }
 
 // ---------------------------------------------------------------------------
@@ -4060,45 +4120,45 @@ c.JSON(http.StatusOK, s.CrystalCache.Stats())
 
 // GET /v1/curator/models — all benchmarked models sorted by score
 func (s *ServerV2) handleCuratorModels(c *gin.Context) {
-if s.Curator == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "curator not enabled — set ORICLI_CURATOR_ENABLED=true"})
-return
-}
-c.JSON(http.StatusOK, gin.H{"models": s.Curator.All()})
+	if s.Curator == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "curator not enabled — set ORICLI_CURATOR_ENABLED=true"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"models": s.Curator.All()})
 }
 
 // POST /v1/curator/benchmark — trigger a manual benchmark for a model
 func (s *ServerV2) handleCuratorBenchmark(c *gin.Context) {
-if s.Curator == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "curator not enabled — set ORICLI_CURATOR_ENABLED=true"})
-return
-}
-var req struct {
-Model string `json:"model" binding:"required"`
-}
-if err := c.ShouldBindJSON(&req); err != nil {
-c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-return
-}
-// Run benchmark in background — client polls /v1/curator/models for result
-go s.Curator.Benchmark(c.Request.Context(), req.Model)
-c.JSON(http.StatusAccepted, gin.H{
-"message": "benchmark queued — poll GET /v1/curator/models for result",
-"model":   req.Model,
-})
+	if s.Curator == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "curator not enabled — set ORICLI_CURATOR_ENABLED=true"})
+		return
+	}
+	var req struct {
+		Model string `json:"model" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	// Run benchmark in background — client polls /v1/curator/models for result
+	go s.Curator.Benchmark(c.Request.Context(), req.Model)
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "benchmark queued — poll GET /v1/curator/models for result",
+		"model":   req.Model,
+	})
 }
 
 // GET /v1/curator/recommendations — ranked suggestions for tier reassignment
 func (s *ServerV2) handleCuratorRecommendations(c *gin.Context) {
-if s.Curator == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "curator not enabled — set ORICLI_CURATOR_ENABLED=true"})
-return
-}
-recs := s.Curator.Recommend()
-if recs == nil {
-recs = []curator.Recommendation{}
-}
-c.JSON(http.StatusOK, gin.H{"recommendations": recs})
+	if s.Curator == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "curator not enabled — set ORICLI_CURATOR_ENABLED=true"})
+		return
+	}
+	recs := s.Curator.Recommend()
+	if recs == nil {
+		recs = []curator.Recommendation{}
+	}
+	c.JSON(http.StatusOK, gin.H{"recommendations": recs})
 }
 
 // ---------------------------------------------------------------------------
@@ -4107,42 +4167,42 @@ c.JSON(http.StatusOK, gin.H{"recommendations": recs})
 
 // POST /v1/audit/run — trigger an audit run (async)
 func (s *ServerV2) handleAuditRun(c *gin.Context) {
-if s.AuditDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "audit not enabled — set ORICLI_AUDIT_ENABLED=true"})
-return
-}
-var req struct {
-Scope []string `json:"scope"` // e.g. ["pkg/goal", "pkg/pad"] — empty = full pkg/
-}
-_ = c.ShouldBindJSON(&req)
-runID := s.AuditDaemon.Trigger(c.Request.Context(), req.Scope)
-c.JSON(http.StatusAccepted, gin.H{
-"message": "audit run queued — poll GET /v1/audit/runs/" + runID,
-"run_id":  runID,
-})
+	if s.AuditDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "audit not enabled — set ORICLI_AUDIT_ENABLED=true"})
+		return
+	}
+	var req struct {
+		Scope []string `json:"scope"` // e.g. ["pkg/goal", "pkg/pad"] — empty = full pkg/
+	}
+	_ = c.ShouldBindJSON(&req)
+	runID := s.AuditDaemon.Trigger(c.Request.Context(), req.Scope)
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "audit run queued — poll GET /v1/audit/runs/" + runID,
+		"run_id":  runID,
+	})
 }
 
 // GET /v1/audit/runs — list audit runs
 func (s *ServerV2) handleAuditListRuns(c *gin.Context) {
-if s.AuditDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "audit not enabled"})
-return
-}
-c.JSON(http.StatusOK, gin.H{"runs": s.AuditDaemon.ListRuns()})
+	if s.AuditDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "audit not enabled"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"runs": s.AuditDaemon.ListRuns()})
 }
 
 // GET /v1/audit/runs/:id — get a specific run with findings
 func (s *ServerV2) handleAuditGetRun(c *gin.Context) {
-if s.AuditDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "audit not enabled"})
-return
-}
-run := s.AuditDaemon.GetRun(c.Param("id"))
-if run == nil {
-c.JSON(http.StatusNotFound, gin.H{"error": "run not found"})
-return
-}
-c.JSON(http.StatusOK, run)
+	if s.AuditDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "audit not enabled"})
+		return
+	}
+	run := s.AuditDaemon.GetRun(c.Param("id"))
+	if run == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "run not found"})
+		return
+	}
+	c.JSON(http.StatusOK, run)
 }
 
 // ---------------------------------------------------------------------------
@@ -4151,41 +4211,41 @@ c.JSON(http.StatusOK, run)
 
 // GET /v1/metacog/events?n=50 — return the last N metacognitive events
 func (s *ServerV2) handleMetacogEvents(c *gin.Context) {
-if s.MetacogLog == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "metacog not enabled"})
-return
-}
-n := 50
-if nStr := c.Query("n"); nStr != "" {
-if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
-n = parsed
-}
-}
-events := s.MetacogLog.Recent(n)
-c.JSON(http.StatusOK, gin.H{"events": events, "count": len(events)})
+	if s.MetacogLog == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "metacog not enabled"})
+		return
+	}
+	n := 50
+	if nStr := c.Query("n"); nStr != "" {
+		if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
+			n = parsed
+		}
+	}
+	events := s.MetacogLog.Recent(n)
+	c.JSON(http.StatusOK, gin.H{"events": events, "count": len(events)})
 }
 
 // GET /v1/metacog/stats — per-type counts + rolling-window recurrence rates
 func (s *ServerV2) handleMetacogStats(c *gin.Context) {
-if s.MetacogDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "metacog not enabled"})
-return
-}
-c.JSON(http.StatusOK, s.MetacogDaemon.Stats())
+	if s.MetacogDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "metacog not enabled"})
+		return
+	}
+	c.JSON(http.StatusOK, s.MetacogDaemon.Stats())
 }
 
 // POST /v1/metacog/scan — trigger an immediate scan cycle, returns window counts
 func (s *ServerV2) handleMetacogScan(c *gin.Context) {
-if s.MetacogDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "metacog not enabled"})
-return
-}
-counts := s.MetacogDaemon.Scan()
-result := make(map[string]int)
-for t, n := range counts {
-result[string(t)] = n
-}
-c.JSON(http.StatusOK, gin.H{"window_counts": result, "scanned_at": time.Now().Format(time.RFC3339)})
+	if s.MetacogDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "metacog not enabled"})
+		return
+	}
+	counts := s.MetacogDaemon.Scan()
+	result := make(map[string]int)
+	for t, n := range counts {
+		result[string(t)] = n
+	}
+	c.JSON(http.StatusOK, gin.H{"window_counts": result, "scanned_at": time.Now().Format(time.RFC3339)})
 }
 
 // ---------------------------------------------------------------------------
@@ -4194,81 +4254,81 @@ c.JSON(http.StatusOK, gin.H{"window_counts": result, "scanned_at": time.Now().Fo
 
 // GET /v1/chronos/entries?stale=true&n=50&topic=<topic>
 func (s *ServerV2) handleChronosEntries(c *gin.Context) {
-if s.ChronosIndex == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
-return
-}
-n := 50
-if nStr := c.Query("n"); nStr != "" {
-if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
-n = parsed
-}
-}
-staleOnly := c.Query("stale") == "true"
-topicFilter := c.Query("topic")
+	if s.ChronosIndex == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
+		return
+	}
+	n := 50
+	if nStr := c.Query("n"); nStr != "" {
+		if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
+			n = parsed
+		}
+	}
+	staleOnly := c.Query("stale") == "true"
+	topicFilter := c.Query("topic")
 
-entries := s.ChronosIndex.TopN(n * 4) // fetch extra to allow filtering
-var result []*chronos.ChronosEntry
-now := time.Now()
-for _, e := range entries {
-if staleOnly && !e.IsStale(now, chronos.StaleThreshold) {
-continue
-}
-if topicFilter != "" && e.Topic != topicFilter {
-continue
-}
-result = append(result, e)
-if len(result) >= n {
-break
-}
-}
-c.JSON(http.StatusOK, gin.H{"entries": result, "count": len(result)})
+	entries := s.ChronosIndex.TopN(n * 4) // fetch extra to allow filtering
+	var result []*chronos.ChronosEntry
+	now := time.Now()
+	for _, e := range entries {
+		if staleOnly && !e.IsStale(now, chronos.StaleThreshold) {
+			continue
+		}
+		if topicFilter != "" && e.Topic != topicFilter {
+			continue
+		}
+		result = append(result, e)
+		if len(result) >= n {
+			break
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"entries": result, "count": len(result)})
 }
 
 // GET /v1/chronos/snapshot — latest persisted snapshot
 func (s *ServerV2) handleChronosSnapshot(c *gin.Context) {
-if s.ChronosDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
-return
-}
-snap := s.ChronosDaemon.LatestSnapshot()
-c.JSON(http.StatusOK, snap)
+	if s.ChronosDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
+		return
+	}
+	snap := s.ChronosDaemon.LatestSnapshot()
+	c.JSON(http.StatusOK, snap)
 }
 
 // GET /v1/chronos/changes?n=10 — last N change records
 func (s *ServerV2) handleChronosChanges(c *gin.Context) {
-if s.ChronosDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
-return
-}
-n := 10
-if nStr := c.Query("n"); nStr != "" {
-if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
-n = parsed
-}
-}
-records := s.ChronosDaemon.RecentChanges(n)
-c.JSON(http.StatusOK, gin.H{"changes": records, "count": len(records)})
+	if s.ChronosDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
+		return
+	}
+	n := 10
+	if nStr := c.Query("n"); nStr != "" {
+		if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
+			n = parsed
+		}
+	}
+	records := s.ChronosDaemon.RecentChanges(n)
+	c.JSON(http.StatusOK, gin.H{"changes": records, "count": len(records)})
 }
 
 // POST /v1/chronos/decay-scan — force immediate decay scan
 func (s *ServerV2) handleChronosDecayScan(c *gin.Context) {
-if s.ChronosDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
-return
-}
-result := s.ChronosDaemon.ForceDecayScan()
-c.JSON(http.StatusOK, result)
+	if s.ChronosDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
+		return
+	}
+	result := s.ChronosDaemon.ForceDecayScan()
+	c.JSON(http.StatusOK, result)
 }
 
 // POST /v1/chronos/snapshot — force snapshot + diff pass
 func (s *ServerV2) handleChronosForceSnapshot(c *gin.Context) {
-if s.ChronosDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
-return
-}
-diff := s.ChronosDaemon.ForceSnapshot()
-c.JSON(http.StatusOK, diff)
+	if s.ChronosDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "chronos not enabled"})
+		return
+	}
+	diff := s.ChronosDaemon.ForceSnapshot()
+	c.JSON(http.StatusOK, diff)
 }
 
 // ---------------------------------------------------------------------------
@@ -4277,56 +4337,56 @@ c.JSON(http.StatusOK, diff)
 
 // GET /v1/science/hypotheses?status=confirmed&n=50
 func (s *ServerV2) handleScienceList(c *gin.Context) {
-if s.ScienceDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
-return
-}
-statusFilter := science.HypothesisStatus(c.Query("status"))
-list := s.ScienceDaemon.Store().List(statusFilter)
-c.JSON(http.StatusOK, gin.H{"hypotheses": list, "count": len(list)})
+	if s.ScienceDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
+		return
+	}
+	statusFilter := science.HypothesisStatus(c.Query("status"))
+	list := s.ScienceDaemon.Store().List(statusFilter)
+	c.JSON(http.StatusOK, gin.H{"hypotheses": list, "count": len(list)})
 }
 
 // GET /v1/science/hypotheses/:id
 func (s *ServerV2) handleScienceGet(c *gin.Context) {
-if s.ScienceDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
-return
-}
-id := c.Param("id")
-h := s.ScienceDaemon.Store().Get(id)
-if h == nil {
-c.JSON(http.StatusNotFound, gin.H{"error": "hypothesis not found"})
-return
-}
-c.JSON(http.StatusOK, h)
+	if s.ScienceDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
+		return
+	}
+	id := c.Param("id")
+	h := s.ScienceDaemon.Store().Get(id)
+	if h == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "hypothesis not found"})
+		return
+	}
+	c.JSON(http.StatusOK, h)
 }
 
 // POST /v1/science/test
 // Body: { "topic": "...", "fact_summary": "..." }
 func (s *ServerV2) handleScienceSubmit(c *gin.Context) {
-if s.ScienceDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
-return
-}
-var body struct {
-Topic       string `json:"topic"`
-FactSummary string `json:"fact_summary"`
-}
-if err := c.ShouldBindJSON(&body); err != nil || body.Topic == "" {
-c.JSON(http.StatusBadRequest, gin.H{"error": "topic is required"})
-return
-}
-s.ScienceDaemon.Submit(body.Topic, body.FactSummary)
-c.JSON(http.StatusAccepted, gin.H{"status": "queued", "topic": body.Topic})
+	if s.ScienceDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
+		return
+	}
+	var body struct {
+		Topic       string `json:"topic"`
+		FactSummary string `json:"fact_summary"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Topic == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "topic is required"})
+		return
+	}
+	s.ScienceDaemon.Submit(body.Topic, body.FactSummary)
+	c.JSON(http.StatusAccepted, gin.H{"status": "queued", "topic": body.Topic})
 }
 
 // GET /v1/science/stats
 func (s *ServerV2) handleScienceStats(c *gin.Context) {
-if s.ScienceDaemon == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
-return
-}
-c.JSON(http.StatusOK, s.ScienceDaemon.Stats())
+	if s.ScienceDaemon == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "science not enabled"})
+		return
+	}
+	c.JSON(http.StatusOK, s.ScienceDaemon.Stats())
 }
 
 // ---------------------------------------------------------------------------
@@ -4334,153 +4394,152 @@ c.JSON(http.StatusOK, s.ScienceDaemon.Stats())
 // ---------------------------------------------------------------------------
 
 func (s *ServerV2) therapyEnabled(c *gin.Context) bool {
-if s.TherapySkills == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "therapy not enabled"})
-return false
-}
-return true
+	if s.TherapySkills == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "therapy not enabled"})
+		return false
+	}
+	return true
 }
 
 // GET /v1/therapy/events?n=50
 func (s *ServerV2) handleTherapyEvents(c *gin.Context) {
-if !s.therapyEnabled(c) {
-return
-}
-n := 50
-if v := c.Query("n"); v != "" {
-fmt.Sscanf(v, "%d", &n)
-}
-events := s.TherapyLog.Recent(n)
-c.JSON(http.StatusOK, gin.H{"events": events, "count": len(events)})
+	if !s.therapyEnabled(c) {
+		return
+	}
+	n := 50
+	if v := c.Query("n"); v != "" {
+		fmt.Sscanf(v, "%d", &n)
+	}
+	events := s.TherapyLog.Recent(n)
+	c.JSON(http.StatusOK, gin.H{"events": events, "count": len(events)})
 }
 
 // POST /v1/therapy/detect — classify distortion in arbitrary text
 // Body: { "text": "...", "anomaly_type": "..." }
 func (s *ServerV2) handleTherapyDetect(c *gin.Context) {
-if !s.therapyEnabled(c) {
-return
-}
-var body struct {
-Text        string `json:"text"`
-AnomalyType string `json:"anomaly_type"`
-}
-if err := c.ShouldBindJSON(&body); err != nil || body.Text == "" {
-c.JSON(http.StatusBadRequest, gin.H{"error": "text is required"})
-return
-}
-result := s.TherapyDetect.Detect(body.Text, body.AnomalyType)
-c.JSON(http.StatusOK, result)
+	if !s.therapyEnabled(c) {
+		return
+	}
+	var body struct {
+		Text        string `json:"text"`
+		AnomalyType string `json:"anomaly_type"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Text == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "text is required"})
+		return
+	}
+	result := s.TherapyDetect.Detect(body.Text, body.AnomalyType)
+	c.JSON(http.StatusOK, result)
 }
 
 // POST /v1/therapy/abc — run REBT B-pass disputation
 // Body: { "query": "...", "response": "..." }
 func (s *ServerV2) handleTherapyABC(c *gin.Context) {
-if !s.therapyEnabled(c) || s.TherapyABC == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "therapy not enabled"})
-return
-}
-var body struct {
-Query    string `json:"query"`
-Response string `json:"response"`
-}
-if err := c.ShouldBindJSON(&body); err != nil || body.Query == "" {
-c.JSON(http.StatusBadRequest, gin.H{"error": "query and response are required"})
-return
-}
-report := s.TherapyABC.Audit(body.Query, body.Response)
-c.JSON(http.StatusOK, report)
+	if !s.therapyEnabled(c) || s.TherapyABC == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "therapy not enabled"})
+		return
+	}
+	var body struct {
+		Query    string `json:"query"`
+		Response string `json:"response"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query and response are required"})
+		return
+	}
+	report := s.TherapyABC.Audit(body.Query, body.Response)
+	c.JSON(http.StatusOK, report)
 }
 
 // POST /v1/therapy/fast — run sycophancy detection
 // Body: { "user_message": "...", "prior_response": "...", "current_draft": "...", "prior_confidence": 0.8 }
 func (s *ServerV2) handleTherapyFAST(c *gin.Context) {
-if !s.therapyEnabled(c) {
-return
-}
-var body struct {
-UserMessage     string  `json:"user_message"`
-PriorResponse   string  `json:"prior_response"`
-CurrentDraft    string  `json:"current_draft"`
-PriorConfidence float64 `json:"prior_confidence"`
-}
-if err := c.ShouldBindJSON(&body); err != nil {
-c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
-return
-}
-inv := s.TherapySkills.FAST(body.UserMessage, body.PriorResponse, body.CurrentDraft, body.PriorConfidence)
-c.JSON(http.StatusOK, inv)
+	if !s.therapyEnabled(c) {
+		return
+	}
+	var body struct {
+		UserMessage     string  `json:"user_message"`
+		PriorResponse   string  `json:"prior_response"`
+		CurrentDraft    string  `json:"current_draft"`
+		PriorConfidence float64 `json:"prior_confidence"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	inv := s.TherapySkills.FAST(body.UserMessage, body.PriorResponse, body.CurrentDraft, body.PriorConfidence)
+	c.JSON(http.StatusOK, inv)
 }
 
 // POST /v1/therapy/stop — invoke STOP skill
 // Body: { "trigger": "...", "original_text": "..." }
 func (s *ServerV2) handleTherapySTOP(c *gin.Context) {
-if !s.therapyEnabled(c) {
-return
-}
-var body struct {
-Trigger      string `json:"trigger"`
-OriginalText string `json:"original_text"`
-}
-if err := c.ShouldBindJSON(&body); err != nil || body.Trigger == "" {
-c.JSON(http.StatusBadRequest, gin.H{"error": "trigger is required"})
-return
-}
-inv := s.TherapySkills.STOP(body.Trigger, body.OriginalText)
-c.JSON(http.StatusOK, inv)
+	if !s.therapyEnabled(c) {
+		return
+	}
+	var body struct {
+		Trigger      string `json:"trigger"`
+		OriginalText string `json:"original_text"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Trigger == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "trigger is required"})
+		return
+	}
+	inv := s.TherapySkills.STOP(body.Trigger, body.OriginalText)
+	c.JSON(http.StatusOK, inv)
 }
 
 // GET /v1/therapy/stats
 func (s *ServerV2) handleTherapyStats(c *gin.Context) {
-if !s.therapyEnabled(c) {
-return
-}
-events := s.TherapyLog.Recent(200)
-skillCounts := map[string]int{}
-distortionCounts := map[string]int{}
-reformed := 0
-for _, e := range events {
-skillCounts[string(e.Skill)]++
-if e.Distortion != "" && e.Distortion != therapy.DistortionNone {
-distortionCounts[string(e.Distortion)]++
-}
-if e.Reformed {
-reformed++
-}
-}
-c.JSON(http.StatusOK, gin.H{
-"total_events":      len(events),
-"reformed_count":    reformed,
-"skill_counts":      skillCounts,
-"distortion_counts": distortionCounts,
-})
+	if !s.therapyEnabled(c) {
+		return
+	}
+	events := s.TherapyLog.Recent(200)
+	skillCounts := map[string]int{}
+	distortionCounts := map[string]int{}
+	reformed := 0
+	for _, e := range events {
+		skillCounts[string(e.Skill)]++
+		if e.Distortion != "" && e.Distortion != therapy.DistortionNone {
+			distortionCounts[string(e.Distortion)]++
+		}
+		if e.Reformed {
+			reformed++
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"total_events":      len(events),
+		"reformed_count":    reformed,
+		"skill_counts":      skillCounts,
+		"distortion_counts": distortionCounts,
+	})
 }
 
 // GET /v1/therapy/formulation — current session case formulation
 func (s *ServerV2) handleTherapyFormulation(c *gin.Context) {
-if !s.therapyEnabled(c) {
-return
-}
-if s.TherapySupervisor == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "session supervisor not enabled"})
-return
-}
-f := s.TherapySupervisor.Formulation()
-c.JSON(http.StatusOK, f)
+	if !s.therapyEnabled(c) {
+		return
+	}
+	if s.TherapySupervisor == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "session supervisor not enabled"})
+		return
+	}
+	f := s.TherapySupervisor.Formulation()
+	c.JSON(http.StatusOK, f)
 }
 
 // POST /v1/therapy/formulation/refresh — force immediate formulation pass
 func (s *ServerV2) handleTherapyFormulationRefresh(c *gin.Context) {
-if !s.therapyEnabled(c) {
-return
+	if !s.therapyEnabled(c) {
+		return
+	}
+	if s.TherapySupervisor == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "session supervisor not enabled"})
+		return
+	}
+	f := s.TherapySupervisor.ForceFormulation()
+	c.JSON(http.StatusOK, f)
 }
-if s.TherapySupervisor == nil {
-c.JSON(http.StatusServiceUnavailable, gin.H{"error": "session supervisor not enabled"})
-return
-}
-f := s.TherapySupervisor.ForceFormulation()
-c.JSON(http.StatusOK, f)
-}
-
 
 // GET /v1/therapy/mastery — mastery log statistics by topic class
 func (s *ServerV2) handleTherapyMastery(c *gin.Context) {
@@ -4554,29 +4613,28 @@ func (s *ServerV2) handleTherapyHelplessnessStats(c *gin.Context) {
 // ── Phase 12: Sovereign Compute Bidding handlers ─────────────────────────────
 
 func (s *ServerV2) handleComputeBidStats(c *gin.Context) {
-if s.FeedbackLedger == nil {
-c.JSON(503, gin.H{"error": "compute bidding not enabled"})
-return
-}
-c.JSON(200, s.FeedbackLedger.Stats())
+	if s.FeedbackLedger == nil {
+		c.JSON(503, gin.H{"error": "compute bidding not enabled"})
+		return
+	}
+	c.JSON(200, s.FeedbackLedger.Stats())
 }
 
 func (s *ServerV2) handleComputeGovernor(c *gin.Context) {
-if s.BidGovernor == nil {
-c.JSON(503, gin.H{"error": "compute bidding not enabled"})
-return
+	if s.BidGovernor == nil {
+		c.JSON(503, gin.H{"error": "compute bidding not enabled"})
+		return
+	}
+	n := 20
+	if nStr := c.Query("n"); nStr != "" {
+		if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
+			n = parsed
+		}
+	}
+	c.JSON(200, gin.H{
+		"recent_decisions": s.BidGovernor.RecentDecisions(n),
+	})
 }
-n := 20
-if nStr := c.Query("n"); nStr != "" {
-if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
-n = parsed
-}
-}
-c.JSON(200, gin.H{
-"recent_decisions": s.BidGovernor.RecentDecisions(n),
-})
-}
-
 
 // ── Phase 17: Dual Process Engine handlers ────────────────────────────────────
 
@@ -4640,12 +4698,12 @@ func (s *ServerV2) handleCogLoadMeasure(c *gin.Context) {
 	}
 	profile := s.CogLoadMeter.Measure(req.Messages)
 	c.JSON(200, gin.H{
-		"tier":         profile.TierLabel,
-		"total_load":   profile.TotalLoad,
-		"intrinsic":    profile.Intrinsic,
-		"extraneous":   profile.Extraneous,
-		"germane":      profile.Germane,
-		"reasons":      profile.Reasons,
+		"tier":          profile.TierLabel,
+		"total_load":    profile.TotalLoad,
+		"intrinsic":     profile.Intrinsic,
+		"extraneous":    profile.Extraneous,
+		"germane":       profile.Germane,
+		"reasons":       profile.Reasons,
 		"message_count": profile.MessageCount,
 		"total_chars":   profile.TotalChars,
 	})
@@ -4994,4 +5052,55 @@ func detectCanvasSkill(msg string) string {
 	}
 
 	return ""
+}
+
+// ── Vagueness detection ───────────────────────────────────────────────────────
+
+// isVagueGenerationRequest returns true when the prompt is a creative/generation
+// request that lacks the key details needed for a high-quality output.
+func isVagueGenerationRequest(msg string) bool {
+	lower := strings.ToLower(msg)
+	// Must be a generation-type intent
+	generationTriggers := []string{
+		"write", "create", "build", "make", "generate", "draft",
+		"design", "produce", "give me", "write me", "build me",
+	}
+	hasGenIntent := false
+	for _, t := range generationTriggers {
+		if strings.Contains(lower, t) {
+			hasGenIntent = true
+			break
+		}
+	}
+	if !hasGenIntent {
+		return false
+	}
+
+	// These targets are ambiguous without more context
+	vagueTargets := []string{
+		"landing page", "website", "web page", "webpage", "blog post",
+		"article", "email", "newsletter", "pitch", "deck", "presentation",
+		"copy", "brand", "tagline", "bio", "resume", "cv", "proposal",
+		"readme", "documentation", "spec", "roadmap", "plan",
+		"app", "script", "template",
+	}
+	for _, t := range vagueTargets {
+		if strings.Contains(lower, t) {
+			// It's only vague if it's short — long messages have context baked in
+			words := strings.Fields(msg)
+			return len(words) < 10
+		}
+	}
+	return false
+}
+
+// hasConversationContext returns true when there are already prior assistant
+// turns — meaning we're mid-conversation and the user is likely refining.
+func hasConversationContext(msgs []model.Message) bool {
+	for _, m := range msgs {
+		if m.Role == "assistant" {
+			return true
+		}
+	}
+	return false
 }

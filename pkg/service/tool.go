@@ -13,18 +13,18 @@ import (
 
 // ToolResult represents the outcome of a tool execution
 type ToolResult struct {
-	Success   bool                   `json:"success"`
-	Content   string                 `json:"content"`
-	Error     string                 `json:"error,omitempty"`
-	Metadata  map[string]interface{} `json:"metadata"`
+	Success  bool                   `json:"success"`
+	Content  string                 `json:"content"`
+	Error    string                 `json:"error,omitempty"`
+	Metadata map[string]interface{} `json:"metadata"`
 }
 
 // ToolCall represents a specific request to call a tool
 type ToolCall struct {
-	Index    int                    `json:"index,omitempty"`
-	ID       string                 `json:"id,omitempty"`
-	Type     string                 `json:"type,omitempty"`
-	Function ToolCallFunction       `json:"function"`
+	Index    int              `json:"index,omitempty"`
+	ID       string           `json:"id,omitempty"`
+	Type     string           `json:"type,omitempty"`
+	Function ToolCallFunction `json:"function"`
 }
 
 // ToolCallFunction represents the function name and arguments for a tool call
@@ -81,7 +81,11 @@ func (s *ToolService) ExecuteTool(ctx context.Context, name string, arguments ma
 	}
 
 	log.Printf("[ToolService] Routing tool %s to %s.%s", name, tool.ModuleName, tool.Operation)
-	result, err := s.Orchestrator.Execute(fmt.Sprintf("%s.%s", tool.ModuleName, tool.Operation), arguments, 60*time.Second)
+	operation := tool.Operation
+	if tool.ModuleName != "" {
+		operation = fmt.Sprintf("%s.%s", tool.ModuleName, tool.Operation)
+	}
+	result, err := s.Orchestrator.Execute(operation, arguments, 60*time.Second)
 	if err != nil {
 		return ToolResult{Success: false, Error: err.Error()}, err
 	}
@@ -92,9 +96,15 @@ func (s *ToolService) ExecuteTool(ctx context.Context, name string, arguments ma
 func (s *ToolService) formatResult(name string, result interface{}) ToolResult {
 	content := ""
 	if m, ok := result.(map[string]interface{}); ok {
-		if c, ok := m["content"].(string); ok { content = c }
-		if c, ok := m["text"].(string); ok { content = c }
-		if c, ok := m["prediction"].(string); ok { content = c }
+		if c, ok := m["content"].(string); ok {
+			content = c
+		}
+		if c, ok := m["text"].(string); ok {
+			content = c
+		}
+		if c, ok := m["prediction"].(string); ok {
+			content = c
+		}
 	}
 	if content == "" {
 		data, _ := json.Marshal(result)
@@ -154,7 +164,7 @@ func (s *ToolService) ParseToolCalls(response string) []ToolCall {
 
 func (s *ToolService) parseJSONCalls(jsonStr string) []ToolCall {
 	var calls []ToolCall
-	
+
 	// Try standard tool_calls format
 	var wrapped struct {
 		ToolCalls []ToolCall `json:"tool_calls"`
@@ -178,16 +188,20 @@ func (s *ToolService) parseTextPatternCalls(text string) []ToolCall {
 	matches := pattern.FindAllStringSubmatch(text, -1)
 
 	for _, m := range matches {
-		if len(m) < 3 { continue }
+		if len(m) < 3 {
+			continue
+		}
 		name := m[1]
 		argsStr := m[2]
-		
+
 		args := make(map[string]interface{})
 		argPattern := regexp.MustCompile(`(\w+)\s*=\s*["']([^"']+)["']`)
 		argMatches := argPattern.FindAllStringSubmatch(argsStr, -1)
-		
+
 		for _, am := range argMatches {
-			if len(am) < 3 { continue }
+			if len(am) < 3 {
+				continue
+			}
 			args[am[1]] = am[2]
 		}
 
@@ -207,7 +221,9 @@ func (s *ToolService) GenerateSchema(name string) map[string]interface{} {
 	tool, ok := s.Tools[name]
 	s.mu.RUnlock()
 
-	if !ok { return nil }
+	if !ok {
+		return nil
+	}
 
 	return map[string]interface{}{
 		"type": "function",

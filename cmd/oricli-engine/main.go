@@ -40,11 +40,12 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/api"
 	"github.com/thynaptic/oricli-go/pkg/bus"
 	"github.com/thynaptic/oricli-go/pkg/cognition"
+	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
 	"github.com/thynaptic/oricli-go/pkg/core/auth"
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/store/memory"
 	"github.com/thynaptic/oricli-go/pkg/engine"
-	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
+	"github.com/thynaptic/oricli-go/pkg/node"
 	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
@@ -149,8 +150,18 @@ func main() {
 	agentService := service.NewGoAgentService(orch, genService, personaService, sovEngine)
 	monitor := service.NewModuleMonitorService(registry)
 	traceStore := service.NewTraceStore(genService)
+	toolService := service.NewToolService(orch)
+	service.RegisterBrowserTools(toolService)
+	plannerService := service.NewPlannerService(orch, toolService, genService)
+	node.NewToolModule(swarmBus, toolService).Start()
 
 	apiServer := api.NewServerV2(config.Load(), st, orch, agentService, monitor, port)
+	browserModule := service.NewBrowserAutomationModule(apiServer.Browser)
+	registry.RegisterNativeModule(browserModule.Metadata().Name, browserModule)
+	node.NewBrowserModule(swarmBus, browserModule).Start()
+	log.Println("[Engine] Browser automation module wired.")
+	apiServer.ToolService = toolService
+	apiServer.PlannerService = plannerService
 	apiServer.Traces = traceStore
 	apiServer.GoalService = goalService
 
