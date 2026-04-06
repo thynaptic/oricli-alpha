@@ -20,6 +20,28 @@ This repo is the shared ORI platform plus multiple product clients. Do not infer
 
 Internally, treat `vuln.ai` as the public brand for `ORI Red`, not as a separate unrelated product.
 
+## Canonical Domains
+
+| Surface | Domain | Role |
+|---|---|---|
+| ORI Studio | `oristudio.thynaptic.com` | Customer-facing Studio product |
+| ORI Dev | `oridev.thynaptic.com` | Customer-facing Dev product |
+| ORI Home | `home.thynaptic.com` | Reserved public-facing Home surface |
+| ORI Red | `red.thynaptic.com` | Customer-facing Red product |
+| Shared API / auth / runtime | `glm.thynaptic.com` | Shared API surface already used for JIT auth and first-party clients |
+| Docs | `docs.thynaptic.com` | Documentation |
+| Generic dev / staging / scratch | `dev.thynaptic.com` | Non-product infra domain |
+| Demo | `demo.thynaptic.com` | Demos |
+
+Current shared origin behind Cloudflare: `85.31.233.157`
+
+### Domain rules
+
+- Product domains should use explicit product names, not generic nouns.
+- `dev.thynaptic.com` is reserved for infra, staging, previews, or scratch services, not the ORI Dev product.
+- `glm.thynaptic.com` stays stable as the neutral API/auth/runtime endpoint.
+- Public brand aliases like `vuln.ai` can coexist with canonical product domains.
+
 ## Legacy surfaces
 
 | Surface | Paths | Notes |

@@ -203,6 +203,15 @@ Current repo policy:
 - commit product-client changes inside those repos
 - avoid flattening them into the platform repo until we make an explicit migration decision
 
+Canonical domain map:
+- `oristudio.thynaptic.com` — ORI Studio
+- `oridev.thynaptic.com` — ORI Dev
+- `red.thynaptic.com` — ORI Red
+- `home.thynaptic.com` — ORI Home public surface
+- `glm.thynaptic.com` — shared API/auth/runtime surface
+- `docs.thynaptic.com` — docs
+- `dev.thynaptic.com` — generic dev/staging/scratch, not the ORI Dev product
+
 ---
 
 ## License
