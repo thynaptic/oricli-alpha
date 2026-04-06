@@ -147,6 +147,8 @@ bin/
 *.out
 backbone
 backbone_debug
+oricli-engine
+oricli-cli
 
 # Runtime / memory artefacts
 .memory/
@@ -203,3 +205,8 @@ ui_daemon.log
 # Source constitution — proprietary IP, never commit
 data/source_constitution.json
 data/sot_train.jsonl
+
+# Public repo hygiene
+models/
+data/spaces/
+ui_studio/
