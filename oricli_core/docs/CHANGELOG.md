@@ -114,7 +114,7 @@ Newest first. Dates are UTC.
 ### Fixed — Flask env loading
 - Created `scripts/start_ui.sh` — sources `.env` before `exec python3 ui_app.py`
 - Fixes `RESEND_API_KEY` not being available in nohup grandchild processes
-- Canonical restart method: `nohup /home/mike/Mavaia/scripts/start_ui.sh >> /tmp/oricli_ui.log 2>&1 &`
+- Canonical restart method: `nohup /home/mike/Mavaia/scripts/start_ui.sh >> /tmp/oristudio_ui.log 2>&1 &`
 
 ### Fixed — SPF / Gmail spam
 - Added `include:amazonses.com` to `thynaptic.com` TXT DNS record

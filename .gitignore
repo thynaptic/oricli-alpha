@@ -123,6 +123,7 @@ checkpoints/
 !**/*_config.json
 !**/package.json
 !**/pyproject.toml
+!config/products.json
 !oricli_core/data/agent_profiles.json
 !oricli_core/evaluation/test_data/**/*.json
 !oricli_core/evaluation/test_data/**/*.yaml
@@ -161,9 +162,6 @@ oricli_core_old/
 # SovereignClaw UI (separate repo)
 ui_sovereignclaw/
 sovereignclaw-ui.service
-
-# Flutter UI (oricli_ui — separate artefact)
-oricli_ui/
 
 # UI static build output
 ui_static/
@@ -209,4 +207,4 @@ data/sot_train.jsonl
 # Public repo hygiene
 models/
 data/spaces/
-ui_studio/
+products/ori-dev-web/

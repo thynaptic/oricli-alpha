@@ -212,7 +212,7 @@ if ! check_port $UI_PORT; then
 fi
 
 # Clear old log file
-> /tmp/oricli_ui.log
+> /tmp/oristudio_ui.log
 
 # Start server in background (use actual API port)
 # Use unbuffered Python output and ensure environment variables are set
@@ -220,21 +220,21 @@ export MAVAIA_API_BASE="http://localhost:${ACTUAL_API_PORT}"
 export MAVAIA_UI_PORT=$ACTUAL_UI_PORT
 # Load .env so Resend keys and all secrets are always available
 set -a && source "$(dirname "$0")/../.env" 2>/dev/null || true && set +a
-PYTHONUNBUFFERED=1 python3 -u ui_app.py 2>&1 | tee /tmp/oricli_ui.log &
+PYTHONUNBUFFERED=1 python3 -u ui_app.py 2>&1 | tee /tmp/oristudio_ui.log &
 UI_PID=$!
 
 # Log the PID for debugging
-echo "$UI_PID" > /tmp/oricli_ui.pid
+echo "$UI_PID" > /tmp/oristudio_ui.pid
 echo -e "${CYAN}  [DEBUG] UI server PID: $UI_PID${NC}"
 
 # Give Flask more time to start (it can be slow)
 sleep 3
 
 # Show initial log output
-if [ -f /tmp/oricli_ui.log ]; then
-    if [ -s /tmp/oricli_ui.log ]; then
+if [ -f /tmp/oristudio_ui.log ]; then
+    if [ -s /tmp/oristudio_ui.log ]; then
         echo -e "${CYAN}  [INFO] UI server output so far:${NC}"
-        tail -10 /tmp/oricli_ui.log | sed 's/^/    /'
+        tail -10 /tmp/oristudio_ui.log | sed 's/^/    /'
     else
         echo -e "${YELLOW}  [WARN] UI server log is empty (Flask may not have started yet)${NC}"
     fi
@@ -244,7 +244,7 @@ fi
 if ! kill -0 "$UI_PID" 2>/dev/null; then
     echo -e "${RED}  [ERROR] UI server process died immediately${NC}"
     echo -e "${YELLOW}  [INFO] Server output:${NC}"
-    cat /tmp/oricli_ui.log 2>/dev/null || echo "  (no output captured)"
+    cat /tmp/oristudio_ui.log 2>/dev/null || echo "  (no output captured)"
     exit 1
 fi
 
@@ -264,16 +264,16 @@ for i in {1..40}; do
     if ! kill -0 "$UI_PID" 2>/dev/null; then
         echo -e "${RED}  [ERROR] UI server process died${NC}"
         echo -e "${YELLOW}  [INFO] Server output:${NC}"
-        tail -50 /tmp/oricli_ui.log 2>/dev/null || echo "  (no output captured)"
+        tail -50 /tmp/oristudio_ui.log 2>/dev/null || echo "  (no output captured)"
         exit 1
     fi
     # Show progress every 5 seconds
     if [ $((i % 10)) -eq 0 ]; then
         echo -e "${CYAN}  [INFO] Still waiting... (${i}/40)${NC}"
         # Show recent log output
-        if [ -f /tmp/oricli_ui.log ] && [ -s /tmp/oricli_ui.log ]; then
+        if [ -f /tmp/oristudio_ui.log ] && [ -s /tmp/oristudio_ui.log ]; then
             echo -e "${CYAN}  [INFO] Recent UI server output:${NC}"
-            tail -5 /tmp/oricli_ui.log | sed 's/^/    /'
+            tail -5 /tmp/oristudio_ui.log | sed 's/^/    /'
         else
             # Check if port is listening
             if command -v lsof > /dev/null 2>&1 && lsof -i :${ACTUAL_UI_PORT} > /dev/null 2>&1; then
@@ -293,7 +293,7 @@ if [ "$UI_READY" = "false" ]; then
         echo -e "${YELLOW}    Process is not running${NC}"
     fi
     echo -e "${YELLOW}  [INFO] Server output:${NC}"
-    tail -50 /tmp/oricli_ui.log 2>/dev/null || echo "  (no output captured)"
+    tail -50 /tmp/oristudio_ui.log 2>/dev/null || echo "  (no output captured)"
     exit 1
 fi
 
@@ -316,7 +316,7 @@ echo -e "${YELLOW}  [NOTE] If you see 403 errors, try accessing /docs or /health
 
 echo -e "\n${WHITE}${BOLD}Monitoring:${NC}"
 echo -e "${YELLOW}  API Logs: tail -f /tmp/oricli_api.log${NC}"
-echo -e "${YELLOW}  UI Logs:  tail -f /tmp/oricli_ui.log${NC}"
+echo -e "${YELLOW}  UI Logs:  tail -f /tmp/oristudio_ui.log${NC}"
 
 # Open browser
 if [ "$OPEN_BROWSER" = "true" ]; then

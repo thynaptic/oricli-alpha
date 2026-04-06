@@ -1,0 +1,70 @@
+{
+  "products": [
+    {
+      "id": "studio",
+      "display_name": "ORI Studio",
+      "path": "ui_sovereignclaw",
+      "repo_mode": "in_tree",
+      "app_type": "web",
+      "status": "active",
+      "notes": "Primary Studio web client. Built output is mirrored into ui_static and served by the legacy Flask UI layer."
+    },
+    {
+      "id": "dev",
+      "display_name": "ORI Dev",
+      "path": "products/ori-dev-web",
+      "legacy_path": "ui_studio",
+      "repo_mode": "nested_repo",
+      "app_type": "web",
+      "status": "active",
+      "notes": "Developer-facing product client previously stored under ui_studio. Managed as its own nested Git repo."
+    },
+    {
+      "id": "home",
+      "display_name": "ORI Home",
+      "path": "ORI-Home",
+      "repo_mode": "nested_repo",
+      "app_type": "desktop",
+      "status": "active",
+      "notes": "Electron desktop client. Managed as its own nested Git repo."
+    },
+    {
+      "id": "red",
+      "display_name": "ORI Red",
+      "public_brand": "vuln.ai",
+      "path": "vuln.ai",
+      "repo_mode": "nested_repo",
+      "app_type": "web_backend",
+      "status": "active",
+      "notes": "Security product. Public-facing brand remains vuln.ai. Managed as its own nested Git repo."
+    },
+    {
+      "id": "cli",
+      "display_name": "oricli",
+      "path": "cmd/oricli-cli",
+      "repo_mode": "in_tree",
+      "app_type": "cli",
+      "status": "active",
+      "notes": "Primary Go CLI."
+    }
+  ],
+  "legacy_surfaces": [
+    {
+      "id": "studio_flask",
+      "display_name": "Studio Flask UI layer",
+      "paths": [
+        "ui_app.py",
+        "oricli_core",
+        "ui_static"
+      ],
+      "repo_mode": "in_tree",
+      "status": "legacy",
+      "notes": "Older Python/Flask Studio shell still wired into services, scripts, docs, and startup paths. Migrate-first, not removable yet."
+    }
+  ],
+  "repo_policy": {
+    "default_mode": "in_tree",
+    "nested_repo_rule": "ORI Dev, ORI Home, and ORI Red are currently maintained as nested repos inside the platform workspace. Edit and commit them within their own repos until an explicit flattening or submodule decision is made.",
+    "flattening_rule": "Do not flatten or absorb nested product repos into the platform repo implicitly. Make that a deliberate migration with history and deploy implications reviewed first."
+  }
+}

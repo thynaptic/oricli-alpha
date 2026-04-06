@@ -197,7 +197,7 @@ v0.5.1-alpha is the stable follow-up to our major architectural pivot. This rele
 
 ## [2.1.0] - 2026-03-17
 ### Added
-- **Sovereign CLI**: A powerful, native Python-based cockpit (`oricli.py`) installed as a system command.
+- **Sovereign CLI**: Initial legacy Python CLI cockpit shipped during the transition to the native backbone. This path has since been superseded by the Go CLI.
 - **Chronological Memory Graph**: Full temporal grounding using Neo4j with automated event logging for every interaction.
 - **Native Research Agent**: Autonomous multi-round research module integrated into the Go Hive.
 - **Multi-Modal Bridge**: Support for `qwen2-vl:2b` via the RunPod bridge, enabling visual ingestion and reasoning.

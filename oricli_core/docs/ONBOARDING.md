@@ -90,7 +90,7 @@ RESEND_WEBHOOK_SECRET=whsec_...
 **Always use the startup script** — it sources `.env` before exec so Resend keys are available:
 
 ```bash
-nohup /home/mike/Mavaia/scripts/start_ui.sh >> /tmp/oricli_ui.log 2>&1 &
+nohup /home/mike/Mavaia/scripts/start_ui.sh >> /tmp/oristudio_ui.log 2>&1 &
 ```
 
 > ⚠️ Do NOT use `python3 ui_app.py` directly in a nohup chain — the grandchild process won't inherit env vars set with `export $(...)`.
@@ -103,14 +103,14 @@ curl localhost:5001/health
 
 **Check logs:**
 ```bash
-tail -f /tmp/oricli_ui.log
+tail -f /tmp/oristudio_ui.log
 ```
 
 **Restart (kill old PID first):**
 ```bash
 pgrep -f "ui_app.py" | xargs kill
 sleep 2
-nohup /home/mike/Mavaia/scripts/start_ui.sh >> /tmp/oricli_ui.log 2>&1 &
+nohup /home/mike/Mavaia/scripts/start_ui.sh >> /tmp/oristudio_ui.log 2>&1 &
 ```
 
 ---

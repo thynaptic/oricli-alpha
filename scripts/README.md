@@ -53,12 +53,12 @@ MAVAIA_API_HOST=127.0.0.1 MAVAIA_UI_HOST=127.0.0.1 ./scripts/start_servers.sh
 ### Logs
 
 - API logs: `/tmp/oricli_api.log`
-- UI logs: `/tmp/oricli_ui.log`
+- UI logs: `/tmp/oristudio_ui.log`
 
 View logs in real-time:
 ```bash
 tail -f /tmp/oricli_api.log
-tail -f /tmp/oricli_ui.log
+tail -f /tmp/oristudio_ui.log
 ```
 
 ### Stopping
@@ -90,4 +90,3 @@ Start only the UI server:
 ```bash
 python3 scripts/start_ui.py
 ```
-

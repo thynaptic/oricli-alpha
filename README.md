@@ -178,12 +178,30 @@ See [`INSTALL.md`](INSTALL.md) for full setup instructions.
 |---|---|
 | [`docs/AGLI_Phase_II.md`](docs/AGLI_Phase_II.md) | AGLI roadmap — all 48 phases shipped (P17–P48), full 28-layer pipeline documented |
 | [`docs/API.md`](docs/API.md) | Full API reference — endpoints, auth, examples |
+| [`docs/PRODUCTS.md`](docs/PRODUCTS.md) | Canonical product map — Studio, Dev, Home, Red, CLI, and legacy surfaces |
 | [`docs/public_overview.md`](docs/public_overview.md) | Architecture overview and capability summary |
 | [`docs/AGLI_VISION.md`](docs/AGLI_VISION.md) | Strategic trajectory toward AGLI |
 | [`docs/HIVE_OS_KERNEL_HANDBOOK.md`](docs/HIVE_OS_KERNEL_HANDBOOK.md) | Kernel Ring-0 internals |
 | [`conductor/tech-stack.md`](conductor/tech-stack.md) | Full tech stack with dependency roles |
 | [`INSTALL.md`](INSTALL.md) | Installation and systemd setup |
 | [`QUICKSTART.md`](QUICKSTART.md) | First run and first API call |
+
+## Product Surfaces
+
+The root repo is the shared ORI platform. Product clients currently live alongside it:
+
+- `ui_sovereignclaw/` — ORI Studio web client
+- `products/ori-dev-web/` — ORI Dev web client
+- `ORI-Home/` — ORI Home Electron client
+- `vuln.ai/` — ORI Red under the public `vuln.ai` brand
+- `cmd/oricli-cli/` — primary Go CLI
+
+Legacy surfaces such as `ui_app.py`, `oricli_core/`, and `ui_static/` remain in-tree during the migration. See [`docs/PRODUCTS.md`](docs/PRODUCTS.md) and [`config/products.json`](config/products.json) for the current source of truth.
+
+Current repo policy:
+- `products/ori-dev-web/`, `ORI-Home/`, and `vuln.ai/` are nested product repos
+- commit product-client changes inside those repos
+- avoid flattening them into the platform repo until we make an explicit migration decision
 
 ---
 

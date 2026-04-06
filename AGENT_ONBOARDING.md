@@ -37,6 +37,25 @@
 - A Python FastAPI layer for legacy and ML tooling
 - 250+ brain modules (auto-discovered plugin system)
 
+### Product topology
+
+This repo is the shared platform plus multiple product clients:
+- `ui_sovereignclaw/` — ORI Studio
+- `products/ori-dev-web/` — ORI Dev
+- `ORI-Home/` — ORI Home
+- `vuln.ai/` — ORI Red (`vuln.ai` public brand)
+- `cmd/oricli-cli/` — primary Go CLI
+
+Legacy surfaces still exist in-tree:
+- `ui_app.py` + `oricli_core/` — older Flask/Python Studio layer
+
+Use `config/products.json` and `docs/PRODUCTS.md` as the source of truth during the migration.
+
+Nested repo rule:
+- `products/ori-dev-web/`, `ORI-Home/`, and `vuln.ai/` are currently nested Git repos
+- product-client changes belong in those repos unless we're doing an explicit flattening migration
+- do not assume root-repo `git status` reflects their internal changes
+
 **The Hive** — distributed swarm intelligence. Modules act as micro-agents, bid on tasks via Contract Net Protocol, collaborate via a shared blackboard, and produce consensus answers. It's live.
 
 ### The Vision (don't lose sight of this)
