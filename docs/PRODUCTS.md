@@ -12,6 +12,12 @@ This repo is the shared ORI platform plus multiple product clients. Do not infer
 | ORI Red | `red` | `vuln.ai/` | Web + backend | `nested_repo` | Active |
 | oricli | `cli` | `cmd/oricli-cli/` | CLI | `in_tree` | Active |
 
+## Deployment Notes
+
+- ORI Studio is still served by the legacy Flask shell on `ui_app.py`, backed by `ui_static/`.
+- ORI Dev is intended to be served as a built SPA from `products/ori-dev-web/dist/` using [scripts/start_ori_dev.sh](/home/mike/Mavaia/scripts/start_ori_dev.sh) and [ori-dev-ui.service](/home/mike/Mavaia/ori-dev-ui.service).
+- ORI Home and ORI Red manage their own product-specific runtime inside their nested repos.
+
 ## Public brand aliases
 
 | Product | Public brand |

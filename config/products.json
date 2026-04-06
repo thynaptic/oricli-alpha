@@ -19,7 +19,12 @@
       "repo_mode": "nested_repo",
       "app_type": "web",
       "status": "active",
-      "notes": "Developer-facing product client previously stored under ui_studio. Managed as its own nested Git repo."
+      "notes": "Developer-facing product client previously stored under ui_studio. Managed as its own nested Git repo.",
+      "deploy": {
+        "service_unit": "ori-dev-ui.service",
+        "startup_script": "scripts/start_ori_dev.sh",
+        "origin_url": "http://127.0.0.1:5002"
+      }
     },
     {
       "id": "home",

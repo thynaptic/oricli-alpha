@@ -1,0 +1,21 @@
+[Unit]
+Description=ORI Dev Static UI Server
+After=network.target oricli-backbone.service
+
+[Service]
+Type=simple
+User=mike
+Group=mike
+WorkingDirectory=/home/mike/Mavaia
+Environment=ORI_DEV_DIST_DIR=/home/mike/Mavaia/products/ori-dev-web/dist
+Environment=ORI_DEV_HOST=127.0.0.1
+Environment=ORI_DEV_PORT=5002
+ExecStart=/home/mike/Mavaia/scripts/start_ori_dev.sh
+Restart=always
+RestartSec=10
+LimitNOFILE=65535
+StandardOutput=append:/home/mike/Mavaia/ori-dev-ui.log
+StandardError=append:/home/mike/Mavaia/ori-dev-ui.log
+
+[Install]
+WantedBy=multi-user.target

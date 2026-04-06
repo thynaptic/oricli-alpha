@@ -90,3 +90,19 @@ Start only the UI server:
 ```bash
 python3 scripts/start_ui.py
 ```
+
+### start_ori_dev.sh
+
+Serve the built ORI Dev SPA from `products/ori-dev-web/dist`:
+
+```bash
+./scripts/start_ori_dev.sh
+```
+
+Environment variables:
+
+```bash
+ORI_DEV_DIST_DIR=/home/mike/Mavaia/products/ori-dev-web/dist
+ORI_DEV_HOST=127.0.0.1
+ORI_DEV_PORT=5002
+```
