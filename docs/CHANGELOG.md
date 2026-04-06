@@ -2,93 +2,99 @@
 
 All notable changes to **Oricli-Alpha** are documented here.  
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
-Versions track `VERSION` file. Commits listed for traceability.  
-**AGLI Phase I: Complete as of v8.0.0 (2026-03-31).**
-
----
-
-# Changelog
-
-All notable changes to **Oricli-Alpha** are documented here.  
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
-Versions track `VERSION` file. Commits listed for traceability.  
+This changelog tracks the Go backbone/API layer under `pkg/`, `cmd/`, and `docs/`.  
 **AGLI Phase I: Complete as of v8.0.0. Phase II + III: Complete as of v10.0.0. Phase IV: Complete as of v10.7.0. Phase V: Complete as of v11.0.0 (2026-03-31).**
 
 ---
 
-## [11.3.0] — 2026-04-02 — Ori 3-Tier Model Pipeline — `HEAD`
+## [11.8.0] — 2026-04-06 — Sovereign Browser Automation Planning Stack — `b3a8421`
 
 ### Added
-- **ori: model tiers** — custom Ollama models baked with Ori identity, strict persona rules, and few-shot examples:
-  - `ori:1.7b` — TierLocal, qwen3:1.7b base, VPS Ollama (`localhost:11434`)
-  - `ori:4b` — TierMedium, qwen3:4b base, RunPod pod via SSH tunnel (`localhost:11435`)
-  - `ori:16b` — TierRemote, qwen3:14b base, same RunPod pod via SSH tunnel
-- **`scripts/build_ori_models.sh`** — Modelfile → `ollama create` pipeline; `--remote <url>` for RunPod pods; auto-syncs Modelfiles to S3
-- **`scripts/pod_setup.sh`** — RunPod pod cold-start bootstrap: starts Ollama, S3 blob cache check, model pull, `ollama create ori:$ORI_TIER`; S3 ops non-fatal
-- **`ori-pod-tunnel.service`** — systemd SSH tunnel (`User=mike`, key: `id_ed25519_runpod_mavaia`, `localhost:11435` → pod `localhost:11434`); auto-restarts on drop
-- **`models/Modelfile.ori-{1.7b,4b,16b}`** — baked system prompts, 6+ few-shot Q&A examples, strict greeting rules
-- **RunPod S3 storage** — `s3://s2uvk5nvun/` (endpoint: `https://s3api-eu-ro-1.runpod.io`) for Modelfile and model blob caching
+- **`browserd/` TypeScript worker** — Playwright-backed browser execution service with session lifecycle, DOM snapshots, semantic actions, screenshots, and state save/load
+- **Browser API routes** — `GET /v1/browser/health`, `POST /v1/browser/sessions`, `POST /v1/browser/open`, `GET /v1/browser/snapshot`, `POST /v1/browser/action`, `POST /v1/browser/screenshot`, `POST /v1/browser/state/save`, `POST /v1/browser/state/load`, `DELETE /v1/browser/sessions`
+- **Tool planner/executor routes** — `GET /v1/tools`, `POST /v1/tools/plan`, `POST /v1/tools/execute-plan`
+- **Formal browser tool registry** — `browser_create_session`, `browser_open`, `browser_snapshot`, `browser_action`, `browser_screenshot`, `browser_save_state`, `browser_load_state`, `browser_close`
+- **HTTP-level tests** for the browser planning and execute-plan contracts
+- **Backbone API docs** for the browser runtime and `/v1/tools/*` contract in `docs/API.md`
 
 ### Changed
-- **`BidGovernor` routing** (`pkg/service/generation.go`):
-  - `TierLocal` → `ori:1.7b` on VPS Ollama
-  - `TierMedium` → `ori:4b` via `remoteOllamaChatStream(OLLAMA_REMOTE_URL, OLLAMA_MEDIUM_MODEL)`
-  - `TierRemote` → `ori:16b` via `remoteOllamaChatStream(OLLAMA_REMOTE_URL, OLLAMA_RESEARCH_MODEL)` *(was: stale KoboldCpp flags)*
-- **`isQwen3Based()`** — extended to match `ori:` prefix; fixes think-mode leak where qwen3 base models exposed extended thinking when renamed
-- **`DefaultLLMModel()`** — fallback updated `qwen3:1.7b` → `ori:1.7b`
-- **New env vars**: `OLLAMA_REMOTE_URL`, `OLLAMA_MEDIUM_MODEL`, `OLLAMA_RESEARCH_MODEL` added to `oricli-api.service`
-
----
-
-
-
-### Added
-- **Adaptive Reasoning Engine** (`pkg/cognition/adaptive_engine.go`): New dual-track architecture replaces the static `ModeDiscover` catch-all for high-complexity / ambiguous queries. ARE runs a 3-step loop (Consistency → Debate → Discover) with a **Policy** function selecting the next cognitive tool and a **Value** function scoring answer quality (pure heuristic, < 1ms). Exits early at confidence ≥ 0.75; always returns a non-empty answer. Context: `context.WithoutCancel` detaches ARE from HTTP request context so client disconnection can't kill mid-step reasoning. Each step gets its own 90s timeout.
-- **`ModeAdaptive` constant** (`pkg/cognition/reasoning_modes.go`): Added `ModeAdaptive = 12` to the `ReasoningMode` enum. Updated `String()` and `ParseReasoningMode()`. `ClassifyReasoningMode()` now routes `complexity ≥ 0.55` to `ModeAdaptive` (ARE) instead of `ModeDiscover`.
-- **ARE dispatch in sovereign.go** (`pkg/cognition/sovereign.go`): `case ModeAdaptive` calls `runAdaptive()` which returns a complete answer — `modeHandled = true` skips the downstream standard LLM call. Added to `skipWebSearch` bitmask and balanced-prompting gate.
-- **AnalyzeComplexity: Factor 8 + Factor 9** (`pkg/cognition/adaptive.go`): Factor 8 detects conceptual/explanatory queries (`explain why`, `compare`, `difference between`, `implications of`, `how does`, `when should`, etc.) — previously these scored 0 complexity and bypassed the ARE entirely. Factor 9 adds a bonus for medium-length conceptual queries (15–60 words). Also added `tradeoffs` / `tradeoff` / `trade-offs` variants to Factor 3 exploration keywords. Combined: most "explain X and why Y" questions now score ≥ 0.55 and enter the ARE.
-
-### Fixed
-- **`Generate()` missing `"response"` key** (`pkg/service/generation.go`): All reasoning engines (`runConsistency`, `runDebate`, `runSelfDiscover`, `runPAL`, `runCausal`, `runCBR`, etc.) read `r["response"]` from `GenService.Generate()`. But the `go_ollama_native` and `go_ollama_chat` return paths only included the key `"text"` — `r["response"]` was always `""`. This caused every reasoning engine to silently return empty output and fall through to the final standard LLM call, masking all mode contributions. Fixed by adding `"response": resp` (and `"response": content`) to both return sites. The existing `RunPod` and `CrystalCache` paths already had both keys.
-- **ARE context cancellation** (`pkg/cognition/adaptive_engine.go`): Previous impl passed the raw HTTP request context to `runAdaptive`. When the client timed out or disconnected, `ctx.Err() != nil` caused all ARE steps to be marked as skipped regardless of whether they produced output. Fixed by using `context.WithoutCancel(ctx)` as the ARE base context.
-- **areExecute enrichment runners** (`pkg/cognition/adaptive_engine.go`): `runDebate` and `runSelfDiscover` return composite enrichments (system-prompt context), not final answers. ARE scored these at 0.0. Fixed by adding `areFinalizeWithLLM()` — after enrichment-style runners build their composite, one direct LLM call is made to produce a scorable answer.
-- **arePolicy order** (`pkg/cognition/adaptive_engine.go`): Previous policy started with `ModeDiscover` (composite enrichment, no standalone answer). Changed to Consistency → Debate → Discover, matching answer-quality capability order.
+- **PlannerService** now generates semantic browser plans from natural language, including:
+  - quoted fill/click instructions
+  - unquoted login flows
+  - remembered-login persistence flows with inferred state names
+- **Plan execution** now propagates bindings across steps, auto-closes browser sessions by default, and exposes browser-specific result fields:
+  - `saved_state_name`
+  - `active_session_id`
+  - `auto_closed_session_id`
+- **Agent prompt + tool service** updated so browser tools are discoverable and executable through the existing orchestrator path
 
 ### Verified
-```
-[ARE] start — stimulus len=138 budget=3
-[ARE] step mode=Consistency score=0.82 elapsed=49.632s chars=2654
-[ARE] confidence threshold met (0.82) after 1 step(s)
-[ARE] done — steps=1 final_confidence=0.82
-[SovereignEngine] Pipeline v3.3.0 Complete. Router: Adaptive, Complexity: 0.71
-```
+- `go test ./pkg/api ./pkg/service ...` for planner, browser service, and HTTP handler contracts
+- `go build ./cmd/oricli-engine`
+- Live smoke on `/v1/tools/plan` and `/v1/tools/execute-plan` against temporary `oricli-engine` + `browserd`
 
 ---
 
-
+## [11.7.0] — 2026-04-05 — Process Inference Deadlock Fix + Oracle Routing + Temporal Fast Path — `0395db9`
 
 ### Fixed
-- **CuriosityDaemon topic stop words** (`pkg/service/curiosity_daemon.go`): Added logical connectives (`therefore`, `thus`, `thereby`, `hence`, `consequently`, `however`, `furthermore`, `moreover`, `nevertheless`) to `topicStopWords`. These were being extracted as research topics from bench/logic questions, causing CollySearcher to spam StackExchange with nonsense queries and saturate the Ollama inference queue.
-- **CollySearcher domain blacklist** (`pkg/service/colly_scraper.go`): Added `domainFailures` + `domainBlacklist` maps with `sync.Mutex`. After 3 consecutive 403/429 failures, a hostname is blacklisted for 1 hour. `isBlacklisted()` checked before each `c.Visit()`; `recordFailure()` called in `OnError` and on visit errors. Eliminates infinite retry loops against blocked domains.
+- **ProcessInference deadlock** — replaced the blocking pipeline mutex path with a bounded `TryLock` flow and fast composite fallback to prevent concurrent requests from stalling behind long-running reasoning calls
+- **Oracle routing stability** — introduced explicit Oracle/temporal routing tiers and removed debug auth/trace noise from hot request paths
+- **Temporal fast path** — session-introspective requests now bypass the full enrichment stack and route straight to Oracle with temporal context attached
 
 ### Added
-- **`reLogicEval` routing rule** (`pkg/cognition/reasoning_modes.go`): New regex detects logical argument evaluation questions (`therefore`, `valid argument`, `it follows that`, `modus ponens`, `syllogism`, etc.) and routes them to `ModeConsistency` (3-sample plurality vote) *before* the SELF-DISCOVER complexity≥0.55 catch-all. Empirically: logic bench score ORI 3.8 → 6.4 (+2.7).
-- **PAL rate-problem trigger** (`pkg/cognition/reasoning_modes.go`): Extended `reMath` regex with `how long.*\d|\d.*how long` to catch rate/machine problems (e.g. "how long for 100 machines to make 100 widgets?") that were previously bypassing PAL and landing in SELF-DISCOVER. logic_03 score: 2 → 10.
-- **Intel Bench runner** (`scripts/intel_bench/run_bench.py`, `scripts/intel_bench/questions.json`): 30-question intelligence benchmark across 6 categories (logic/math/code/knowledge/metacog/reasoning), 3 difficulty levels. Fires each question at ORI API + raw Ollama in parallel; saves results JSON for judge scoring.
-- **Benchmark results** (`docs/BENCHMARK_RESULTS.md`): Full intelligence benchmark section with scorecard, key findings, and infrastructure bug table.
-- **Detailed bench report** (`scripts/intel_bench/REPORT.md`): Question-by-question analysis, scoring, and methodology.
+- **`pkg/oracle/router.go`** tier classifier and message conversion utilities
+- **Exported confidence helpers** for session-introspective and conversational-short query detection
 
-### Benchmark Results (ORI Pipeline vs Raw Ollama)
+---
 
-| Category | ORI | Raw | Delta |
-|---|---|---|---|
-| Code | 8.6 | 2.4 | **+6.2** |
-| Math | 9.3 | 9.2 | +0.1 |
-| Logic | 6.4 | 4.4 | **+2.0** |
-| Knowledge | 7.8 | 7.8 | 0.0 (ORI 2–3× faster) |
-| Metacog | ~6.0 | ~6.0 | ~0.0 |
-| Reasoning | ~6.0 | ~6.0 | ~0.0 |
-| **Overall** | **7.4** | **6.3** | **+1.1 ORI** |
+## [11.6.0] — 2026-04-05 — Cross-Session Chronos Persistence — `1d54313`
+
+### Added
+- **Chronos persistence store** — `JSONChronosStore` writes recent session summaries to `.memory/session_chronos/`
+- **Graceful shutdown flush** — active temporal state now persists on server shutdown and is reloaded on next boot
+- **Prompt injection of prior sessions** — recent session summaries are appended to the temporal block for follow-up continuity
+
+### Changed
+- Expanded session-introspective query detection so recap/history questions bypass web search and hit temporal context directly
+
+---
+
+## [11.5.0] — 2026-04-05 — Temporal Layer Phase 1–2 — `3183bd8`, `2b9a5f1`
+
+### Added
+- **Sovereign Clock** — real wall-clock time, uptime, and per-session timing are now injected into prompts
+- **Per-session event timeline** — last-turn summaries with relative timestamps let ORI answer recap questions like "what were we just talking about?"
+
+### Changed
+- Session activity is recorded on every chat turn so temporal prompts stay accurate during conversation
+
+---
+
+## [11.4.0] — 2026-04-05 — Spaces Backend + Workspace Runner — `fa0e2ef`, `3120b56`, `b05499a`
+
+### Added
+- **Spaces backend** — JSON-backed CRUD store, document upload endpoints, and `space_id` chat injection path
+- **Workspace runner** — `POST /v1/workspaces/run` streams planned shell steps and execution summaries over SSE
+- **Oracle race for planning** — Oracle and local model plan in parallel, first valid JSON wins
+
+### Fixed
+- **Spaces RAG injection** now lands in the last user turn instead of the system prompt, which improves small-model adherence
+- **Space mode isolation** suppresses web search and response caching to avoid cross-space contamination
+
+---
+
+## [11.3.0] — 2026-04-02 — Ori 3-Tier Model Pipeline — `2118bb3` → `ac67d67`
+
+### Added
+- **ori model tiers** — `ori:1.7b`, `ori:4b`, `ori:16b` custom Ollama models with Ori identity baked into Modelfiles
+- **Build + pod bootstrap scripts** for local/RunPod model provisioning and S3-backed model caching
+- **SSH tunnel service** to expose remote Ollama from the RunPod pod on localhost
+
+### Changed
+- **BidGovernor routing** now maps local, medium, and remote workloads onto the Ori model tiers
+- **Default model fallback** updated to `ori:1.7b`
+- Added remote-Ollama env vars for medium/research routing
 
 ---
 

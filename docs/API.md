@@ -1,6 +1,6 @@
-# Oricli-Alpha API Reference — v11.0.0
+# Oricli-Alpha API Reference — v11.8.0
 
-**Version:** 11.0.0  
+**Version:** 11.8.0  
 **Maintainer:** Thynaptic Research  
 **Source:** `pkg/api/server_v2.go` · Caddy config `/etc/caddy/Caddyfile`
 
