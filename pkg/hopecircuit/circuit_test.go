@@ -2,29 +2,45 @@ package hopecircuit
 
 import (
 	"testing"
-
-	"github.com/thynaptic/oricli-go/pkg/therapy"
 )
 
+type stubMastery struct {
+	rates    map[string]float64
+	evidence map[string][]string
+}
+
+func (s *stubMastery) SuccessRate(topicClass string) float64 {
+	if rate, ok := s.rates[topicClass]; ok {
+		return rate
+	}
+	return -1
+}
+
+func (s *stubMastery) RecentEvidence(topicClass string, n int) []string {
+	items := s.evidence[topicClass]
+	if len(items) > n {
+		return items[:n]
+	}
+	return items
+}
+
 func newTestLedger(successRate float64, successCount int) *ControllabilityLedger {
-	ml := therapy.NewMasteryLog(100, "/tmp/test_hopecircuit_mastery.json")
-	// Seed with successes for "coding" topic class
+	evidence := make([]string, 0, successCount)
 	for i := 0; i < successCount; i++ {
-		ml.Record("coding", "how do I implement a binary search tree", true)
+		evidence = append(evidence, "how do I implement a binary search tree")
 	}
-	if successRate < 1.0 {
-		// Add some failures to bring rate down
-		failures := int(float64(successCount) * (1.0 - successRate) / successRate)
-		for i := 0; i < failures; i++ {
-			ml.Record("coding", "implement merge sort", false)
-		}
-	}
-	return NewControllabilityLedger(ml)
+	return NewControllabilityLedger(&stubMastery{
+		rates: map[string]float64{
+			"coding": successRate,
+		},
+		evidence: map[string][]string{
+			"coding": evidence,
+		},
+	})
 }
 
 func TestLedger_NoDataReturnsZeroScore(t *testing.T) {
-	ml := therapy.NewMasteryLog(100, "/tmp/test_empty_mastery.json")
-	ledger := NewControllabilityLedger(ml)
+	ledger := NewControllabilityLedger(&stubMastery{})
 	score := ledger.Score("unknown_topic")
 	if score.Score != 0 {
 		t.Errorf("no mastery data should return score=0, got %.2f", score.Score)
@@ -40,9 +56,14 @@ func TestLedger_HighSuccessRateHighScore(t *testing.T) {
 }
 
 func TestLedger_InsufficientCountNoActivation(t *testing.T) {
-	ml := therapy.NewMasteryLog(100, "/tmp/test_single_mastery.json")
-	ml.Record("coding", "one success", true)
-	ledger := NewControllabilityLedger(ml)
+	ledger := NewControllabilityLedger(&stubMastery{
+		rates: map[string]float64{
+			"coding": 1.0,
+		},
+		evidence: map[string][]string{
+			"coding": {"one success"},
+		},
+	})
 	circuit := NewHopeCircuit(ledger)
 	activation := circuit.Activate("coding")
 	if activation.Activated {
@@ -82,13 +103,14 @@ func TestCircuit_StrongTemplateOnHighScore(t *testing.T) {
 }
 
 func TestCircuit_NoActivationLowRate(t *testing.T) {
-	ml := therapy.NewMasteryLog(100, "/tmp/test_low_rate_mastery.json")
-	// Low success rate
-	for i := 0; i < 3; i++ {
-		ml.Record("math", "solve equation", false)
-	}
-	ml.Record("math", "solve equation", true)
-	ledger := NewControllabilityLedger(ml)
+	ledger := NewControllabilityLedger(&stubMastery{
+		rates: map[string]float64{
+			"math": 0.25,
+		},
+		evidence: map[string][]string{
+			"math": {"solve equation"},
+		},
+	})
 	circuit := NewHopeCircuit(ledger)
 	activation := circuit.Activate("math")
 	if activation.Activated {

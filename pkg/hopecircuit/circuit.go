@@ -3,8 +3,6 @@ package hopecircuit
 import (
 	"fmt"
 	"strings"
-
-	"github.com/thynaptic/oricli-go/pkg/therapy"
 )
 
 // contextTemplatesModerate are injected when agency score is moderate (≥ MinAgencyScore, < StrongAgencyScore).
@@ -21,13 +19,20 @@ var contextTemplatesStrong = []string{
 	"[Agency — Mastered] Strong controllability record for %s (%d successes, %.0f%%). Suppress passive defaults — you have a proven track record here. Example: %s",
 }
 
-// ControllabilityLedger computes per-topic agency scores from a MasteryLog.
-type ControllabilityLedger struct {
-	mastery *therapy.MasteryLog
+// MasteryRuntime is the minimal evidence surface HopeCircuit needs.
+// Keeping this local avoids coupling the package to a concrete therapy implementation.
+type MasteryRuntime interface {
+	SuccessRate(topicClass string) float64
+	RecentEvidence(topicClass string, n int) []string
 }
 
-// NewControllabilityLedger creates a ControllabilityLedger bridged to the provided MasteryLog.
-func NewControllabilityLedger(mastery *therapy.MasteryLog) *ControllabilityLedger {
+// ControllabilityLedger computes per-topic agency scores from a mastery evidence source.
+type ControllabilityLedger struct {
+	mastery MasteryRuntime
+}
+
+// NewControllabilityLedger creates a ControllabilityLedger bridged to the provided mastery runtime.
+func NewControllabilityLedger(mastery MasteryRuntime) *ControllabilityLedger {
 	return &ControllabilityLedger{mastery: mastery}
 }
 
@@ -39,8 +44,8 @@ func (cl *ControllabilityLedger) Score(topicClass string) AgencyScore {
 		return AgencyScore{TopicClass: topicClass}
 	}
 
-	recent := cl.mastery.RecentSuccesses(topicClass, 5)
-	successCount := len(recent)
+	recentEvidence := cl.mastery.RecentEvidence(topicClass, 5)
+	successCount := len(recentEvidence)
 
 	// Blend success rate (0.7 weight) with recency signal (0.3 weight)
 	// Recency signal: fraction of recent 5 that are successes (always 1.0 since RecentSuccesses filters)
@@ -50,24 +55,19 @@ func (cl *ControllabilityLedger) Score(topicClass string) AgencyScore {
 	}
 	score := rate*0.7 + recencyBoost
 
-	clips := make([]string, 0, len(recent))
-	for _, e := range recent {
-		clips = append(clips, e.QueryClip)
-	}
-
 	return AgencyScore{
 		TopicClass:     topicClass,
 		Score:          score,
 		SuccessCount:   successCount,
 		SuccessRate:    rate,
-		RecentEvidence: clips,
+		RecentEvidence: recentEvidence,
 	}
 }
 
 // HopeCircuit is the proactive agency activation layer.
 // It fires before generation to suppress the passive default via controllability evidence.
 type HopeCircuit struct {
-	Ledger *ControllabilityLedger
+	Ledger  *ControllabilityLedger
 	tmplIdx int
 }
 
