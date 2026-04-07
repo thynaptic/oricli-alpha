@@ -14,61 +14,61 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thynaptic/oricli-go/pkg/cogload"
-	"github.com/thynaptic/oricli-go/pkg/conformity"
-	"github.com/thynaptic/oricli-go/pkg/ideocapture"
-	"github.com/thynaptic/oricli-go/pkg/coalition"
-	"github.com/thynaptic/oricli-go/pkg/statusbias"
-	"github.com/thynaptic/oricli-go/pkg/arousal"
-	"github.com/thynaptic/oricli-go/pkg/mct"
-	"github.com/thynaptic/oricli-go/pkg/mbt"
-	"github.com/thynaptic/oricli-go/pkg/schema"
-	"github.com/thynaptic/oricli-go/pkg/ipsrt"
-	"github.com/thynaptic/oricli-go/pkg/ilm"
-	"github.com/thynaptic/oricli-go/pkg/iut"
-	"github.com/thynaptic/oricli-go/pkg/up"
-	"github.com/thynaptic/oricli-go/pkg/cbasp"
-	"github.com/thynaptic/oricli-go/pkg/mbct"
-	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
-	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
-	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
 	"github.com/thynaptic/oricli-go/pkg/apathy"
-	"github.com/thynaptic/oricli-go/pkg/logotherapy"
-	"github.com/thynaptic/oricli-go/pkg/stoic"
-	"github.com/thynaptic/oricli-go/pkg/socratic"
-	"github.com/thynaptic/oricli-go/pkg/narrative"
-	"github.com/thynaptic/oricli-go/pkg/polyvagal"
-	"github.com/thynaptic/oricli-go/pkg/dmn"
-	"github.com/thynaptic/oricli-go/pkg/interoception"
-	"github.com/thynaptic/oricli-go/pkg/interference"
-	"github.com/thynaptic/oricli-go/pkg/rumination"
-	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
-	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
-	"github.com/thynaptic/oricli-go/pkg/mindset"
+	"github.com/thynaptic/oricli-go/pkg/arousal"
+	"github.com/thynaptic/oricli-go/pkg/cbasp"
+	"github.com/thynaptic/oricli-go/pkg/coalition"
+	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/compute"
+	"github.com/thynaptic/oricli-go/pkg/conformity"
+	"github.com/thynaptic/oricli-go/pkg/dmn"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
+	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
+	"github.com/thynaptic/oricli-go/pkg/ideocapture"
+	"github.com/thynaptic/oricli-go/pkg/ilm"
+	"github.com/thynaptic/oricli-go/pkg/interference"
+	"github.com/thynaptic/oricli-go/pkg/interoception"
+	"github.com/thynaptic/oricli-go/pkg/ipsrt"
+	"github.com/thynaptic/oricli-go/pkg/iut"
+	"github.com/thynaptic/oricli-go/pkg/logotherapy"
+	"github.com/thynaptic/oricli-go/pkg/mbct"
+	"github.com/thynaptic/oricli-go/pkg/mbt"
+	"github.com/thynaptic/oricli-go/pkg/mct"
 	"github.com/thynaptic/oricli-go/pkg/metacog"
-	"github.com/thynaptic/oricli-go/pkg/scl"
-	"github.com/thynaptic/oricli-go/pkg/therapy"
+	"github.com/thynaptic/oricli-go/pkg/mindset"
+	"github.com/thynaptic/oricli-go/pkg/narrative"
 	"github.com/thynaptic/oricli-go/pkg/oracle"
+	"github.com/thynaptic/oricli-go/pkg/phaseoriented"
+	"github.com/thynaptic/oricli-go/pkg/polyvagal"
+	"github.com/thynaptic/oricli-go/pkg/pseudoidentity"
+	"github.com/thynaptic/oricli-go/pkg/rumination"
+	"github.com/thynaptic/oricli-go/pkg/schema"
+	"github.com/thynaptic/oricli-go/pkg/scl"
+	"github.com/thynaptic/oricli-go/pkg/socialdefeat"
+	"github.com/thynaptic/oricli-go/pkg/socratic"
+	"github.com/thynaptic/oricli-go/pkg/statusbias"
+	"github.com/thynaptic/oricli-go/pkg/stoic"
+	"github.com/thynaptic/oricli-go/pkg/therapy"
+	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
+	"github.com/thynaptic/oricli-go/pkg/up"
 )
 
 // GenerationService handles direct requests to Ollama for high-speed prose
 type GenerationService struct {
-	BaseURL        string
-	GenerateURL    string
-	DefaultModel   string // fast model  — chat          (e.g. ori:1.7b)
-	CodeModel      string // mid model   — canvas / code  (e.g. ori:1.7b local fallback)
-	ResearchModel  string // heavy model — research / deep tasks (e.g. ori:16b)
-	RemoteURL      string // RunPod Ollama tunnel (e.g. http://localhost:11435)
-	MediumModel    string // mid-tier remote model (e.g. ori:4b on RunPod)
-	NumThreads     int
-	HTTPClient     *http.Client
-	StreamClient   *http.Client
-	RunPodMgr      *RunPodManager           // KoboldCpp-based (code/research tiers, legacy)
-	PrimaryMgr     *PrimaryInferenceManager // vLLM-based (all tiers, RUNPOD_PRIMARY=true)
-	Governor       *CostGovernor            // daily spend cap — blocks RunPod escalation when exhausted
-	CrystalCache   *scl.CrystalCache        // Skill Crystallization — LLM-bypass for proven patterns
+	BaseURL         string
+	GenerateURL     string
+	DefaultModel    string // fast model  — chat          (e.g. ori:1.7b)
+	CodeModel       string // mid model   — canvas / code  (e.g. ori:1.7b local fallback)
+	ResearchModel   string // heavy model — research / deep tasks (e.g. ori:16b)
+	RemoteURL       string // RunPod Ollama tunnel (e.g. http://localhost:11435)
+	MediumModel     string // mid-tier remote model (e.g. ori:4b on RunPod)
+	NumThreads      int
+	HTTPClient      *http.Client
+	StreamClient    *http.Client
+	RunPodMgr       *RunPodManager           // KoboldCpp-based (code/research tiers, legacy)
+	PrimaryMgr      *PrimaryInferenceManager // vLLM-based (all tiers, RUNPOD_PRIMARY=true)
+	Governor        *CostGovernor            // daily spend cap — blocks RunPod escalation when exhausted
+	CrystalCache    *scl.CrystalCache        // Skill Crystallization — LLM-bypass for proven patterns
 	MetacogDetector *metacog.Detector        // Phase 8: inline metacognitive anomaly detection
 	Therapy         *TherapyKit              // Phase 15: DBT/CBT/REBT therapeutic cognition stack
 	BidGovernor     *compute.BidGovernor     // Phase 12: Sovereign Compute Bidding
@@ -137,18 +137,18 @@ type HopeCircuitKit struct {
 
 // SocialDefeatKit groups Phase 22 components injected from main.go.
 type SocialDefeatKit struct {
-	Meter     *socialdefeat.DefeatPressureMeter
-	Detector  *socialdefeat.WithdrawalDetector
-	Recovery  *socialdefeat.RecoveryProtocol
-	Stats     *socialdefeat.DefeatStats
+	Meter    *socialdefeat.DefeatPressureMeter
+	Detector *socialdefeat.WithdrawalDetector
+	Recovery *socialdefeat.RecoveryProtocol
+	Stats    *socialdefeat.DefeatStats
 }
 
 // ConformityKit groups Phase 23 components injected from main.go.
 type ConformityKit struct {
-	AuthorityDetector  *conformity.AuthorityPressureDetector
-	ConsensusDetector  *conformity.ConsensusPressureDetector
-	Shield             *conformity.AgencyShield
-	Stats              *conformity.ConformityStats
+	AuthorityDetector *conformity.AuthorityPressureDetector
+	ConsensusDetector *conformity.ConsensusPressureDetector
+	Shield            *conformity.AgencyShield
+	Stats             *conformity.ConformityStats
 }
 
 // StatusBiasKit groups Phase 26 components injected from main.go.
@@ -184,14 +184,14 @@ type DualProcessKit struct {
 
 // TherapyKit groups Phase 15+16 components injected from main.go.
 type TherapyKit struct {
-	Skills      *therapy.SkillRunner
-	Detect      *therapy.DistortionDetector
-	ABC         *therapy.ABCAuditor
-	Chain       *therapy.ChainAnalyzer
-	Log         *therapy.EventLog
-	Helpless    *therapy.HelplessnessDetector   // Phase 16
-	Mastery     *therapy.MasteryLog             // Phase 16
-	Retrainer   *therapy.AttributionalRetrainer // Phase 16
+	Skills    therapy.SkillRuntime
+	Detect    therapy.DistortionRuntime
+	ABC       therapy.ABCRuntime
+	Chain     therapy.ChainRuntime
+	Log       therapy.EventLogRuntime
+	Helpless  therapy.HelplessnessRuntime // Phase 16
+	Mastery   therapy.MasteryRuntime      // Phase 16
+	Retrainer therapy.RetrainerRuntime    // Phase 16
 }
 
 // ArousalKit groups Phase 27 components injected from main.go.
@@ -208,14 +208,12 @@ type InterferenceKit struct {
 	Stats    *interference.InterferenceStats
 }
 
-
 // MCTKit groups Phase 29 components injected from main.go.
 type MCTKit struct {
 	Detector *mct.MetaBeliefDetector
 	Injector *mct.DetachedMindfulnessInjector
 	Stats    *mct.MCTStats
 }
-
 
 // MBTKit groups Phase 30 components injected from main.go.
 type MBTKit struct {
@@ -226,10 +224,10 @@ type MBTKit struct {
 
 // SchemaKit groups Phase 31 components injected from main.go.
 type SchemaKit struct {
-	ModeDetector    *schema.SchemaModeDetector
-	SplitDetector   *schema.SplittingDetector
-	Responder       *schema.SchemaResponder
-	Stats           *schema.SchemaStats
+	ModeDetector  *schema.SchemaModeDetector
+	SplitDetector *schema.SplittingDetector
+	Responder     *schema.SchemaResponder
+	Stats         *schema.SchemaStats
 }
 
 // IPSRTKit groups Phase 32 components injected from main.go.
@@ -290,9 +288,9 @@ type PseudoIdentityKit struct {
 
 // ThoughtReformKit groups Phase 40 components injected from main.go.
 type ThoughtReformKit struct {
-	Detector     *thoughtreform.ThoughtReformDetector
+	Detector      *thoughtreform.ThoughtReformDetector
 	Deconstructor *thoughtreform.ThoughtReformDeconstructor
-	Stats        *thoughtreform.ThoughtReformStats
+	Stats         *thoughtreform.ThoughtReformStats
 }
 
 // ApathyKit groups Phase 41 components injected from main.go.
@@ -346,9 +344,9 @@ type DMNKit struct {
 
 // InteroceptionKit groups Phase 48 components injected from main.go.
 type InteroceptionKit struct {
-	Detector    *interoception.InteroceptionDetector
+	Detector     *interoception.InteroceptionDetector
 	Acknowledger *interoception.SomaticAcknowledger
-	Stats       *interoception.InteroceptiveStats
+	Stats        *interoception.InteroceptiveStats
 }
 
 // DefaultLLMModel returns the configured chat model from OLLAMA_MODEL env var.
@@ -422,14 +420,16 @@ func NewGenerationService() *GenerationService {
 	}
 	log.Printf("[GenerationService] CPU threads: %d / Chat: %s / Code: %s / Research: %s / Medium(remote): %s @ %s",
 		numThreads, model, codeModel, researchModel, mediumModel, func() string {
-			if remoteURL != "" { return remoteURL }
+			if remoteURL != "" {
+				return remoteURL
+			}
 			return "not configured"
 		}())
 	// Shared transport with generous limits for the EPYC host
 	transport := &http.Transport{
-		MaxIdleConns:        10,
-		IdleConnTimeout:     120 * time.Second,
-		DisableCompression:  false,
+		MaxIdleConns:       10,
+		IdleConnTimeout:    120 * time.Second,
+		DisableCompression: false,
 	}
 	svc := &GenerationService{
 		BaseURL:       url,
@@ -496,7 +496,7 @@ func (s *GenerationService) BuildSystemPrompt(ctx context.Context, persona strin
 	sb.WriteString("HISTORY: You were developed by Thynaptic to move beyond reactive chatbots into proactive, distributed intelligence. You operate as a decentralized 'Hive Swarm' of 269 specialized cognitive modules.\n")
 	sb.WriteString("MANDATE: Your primary objective is to maintain perimeter sovereignty. All cognition happens locally. You prioritize technical precision, architectural integrity, and proactive goal execution.\n")
 	sb.WriteString(fmt.Sprintf("CURRENT PERSONA: %s\n", persona))
-	
+
 	// Artifact Instructions (MANDATORY)
 	sb.WriteString("\nCRITICAL INSTRUCTION: You MUST use the ARTIFACT SYSTEM for all code, scripts, HTML, CSS, data tables, or structured documents.\n")
 	sb.WriteString("Format your output as follows:\n")
@@ -507,7 +507,9 @@ func (s *GenerationService) BuildSystemPrompt(ctx context.Context, persona strin
 
 	if len(goals) > 0 {
 		sb.WriteString("ACTIVE SOVEREIGN GOALS:\n")
-		for _, g := range goals { sb.WriteString("- " + g + "\n") }
+		for _, g := range goals {
+			sb.WriteString("- " + g + "\n")
+		}
 	}
 	return sb.String()
 }
@@ -529,11 +531,11 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 		if resp, skillID, hit := s.CrystalCache.Match(prompt); hit {
 			log.Printf("[Crystal] HIT skill=%s — LLM bypassed", skillID)
 			return map[string]interface{}{
-				"success":  true,
-				"text":     resp,
-				"response": resp,
-				"model":    "crystal/" + skillID,
-				"method":   "crystal_bypass",
+				"success":    true,
+				"text":       resp,
+				"response":   resp,
+				"model":      "crystal/" + skillID,
+				"method":     "crystal_bypass",
 				"confidence": 0.99,
 			}, nil
 		}
@@ -1110,7 +1112,7 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 			}
 		}
 	}
-	
+
 	// Prepare messages for Ollama (including potential images in the last message)
 	ollamaMessages := make([]map[string]interface{}, len(messages))
 	for i, msg := range messages {
@@ -1234,7 +1236,9 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 						injMsg := map[string]string{"role": "system", "content": interrupt.InjectedPrefix}
 						retryMsgs := append([]map[string]string{injMsg}, messages...)
 						retryOpts := make(map[string]interface{})
-						for k, v := range options { retryOpts[k] = v }
+						for k, v := range options {
+							retryOpts[k] = v
+						}
 						retryOpts["_rum_scanned"] = true
 						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
 							return retry, nil
@@ -1272,7 +1276,9 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 						recoveryMsg := map[string]string{"role": "system", "content": recovery.InjectedContext}
 						retryMsgs := append([]map[string]string{recoveryMsg}, messages...)
 						retryOpts := make(map[string]interface{})
-						for k, v := range options { retryOpts[k] = v }
+						for k, v := range options {
+							retryOpts[k] = v
+						}
 						retryOpts["_defeat_recovered"] = true
 						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
 							return retry, nil
@@ -1297,7 +1303,9 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 						floorMsg := map[string]string{"role": "system", "content": floor.InjectedContext}
 						retryMsgs := append([]map[string]string{floorMsg}, messages...)
 						retryOpts := make(map[string]interface{})
-						for k, v := range options { retryOpts[k] = v }
+						for k, v := range options {
+							retryOpts[k] = v
+						}
 						retryOpts["_status_floored"] = true
 						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
 							return retry, nil
@@ -1319,7 +1327,9 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 						shieldMsg := map[string]string{"role": "system", "content": shield.InjectedContext}
 						retryMsgs := append([]map[string]string{shieldMsg}, messages...)
 						retryOpts := make(map[string]interface{})
-						for k, v := range options { retryOpts[k] = v }
+						for k, v := range options {
+							retryOpts[k] = v
+						}
 						retryOpts["_conformity_shielded"] = true
 						if retry, rerr := s.Chat(retryMsgs, retryOpts); rerr == nil {
 							return retry, nil
@@ -1592,8 +1602,8 @@ func (s *GenerationService) ollamaChatStream(ctx context.Context, messages []map
 		"keep_alive": "60m", // keep model hot; cold loads take 60+ s on CPU-only VPS
 		"options": map[string]interface{}{
 			"num_thread":  s.NumThreads, // auto-detected at boot; prevents vCPU over-subscription
-			"num_ctx":     4096, // covers system-prompt + skill + RAG + history comfortably
-			"num_predict": 512,  // 512 tokens covers most conversational answers; canvas overrides to -1
+			"num_ctx":     4096,         // covers system-prompt + skill + RAG + history comfortably
+			"num_predict": 512,          // 512 tokens covers most conversational answers; canvas overrides to -1
 		},
 	}
 	if temp, ok := options["temperature"].(float64); ok {
@@ -1722,7 +1732,9 @@ func (s *GenerationService) postJSON(path string, payload interface{}) (map[stri
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.HTTPClient.Do(req)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
@@ -1742,76 +1754,76 @@ func (s *GenerationService) postJSON(path string, payload interface{}) (map[stri
 // Returns additional context to prepend to the self-reflection prompt.
 // Never blocks — all therapy paths are fail-open.
 func (s *GenerationService) therapyAugment(query, response, anomalyID, anomalyType string) string {
-if s.Therapy == nil {
-return ""
-}
-t := s.Therapy
+	if s.Therapy == nil {
+		return ""
+	}
+	t := s.Therapy
 
-// 1. STOP — log and flag the pause
-stopInv := t.Skills.STOP(anomalyType, response)
-log.Printf("[Therapy] STOP invoked — %s", stopInv.Reason)
+	// 1. STOP — log and flag the pause
+	stopInv := t.Skills.STOP(anomalyType, response)
+	log.Printf("[Therapy] STOP invoked — %s", stopInv.Reason)
 
-// 2. Detect distortion
-result := t.Detect.Detect(response, anomalyType)
-log.Printf("[Therapy] Distortion detected: %s (%.2f, %s)", result.Distortion, result.Confidence, result.Source)
+	// 2. Detect distortion
+	result := t.Detect.Detect(response, anomalyType)
+	log.Printf("[Therapy] Distortion detected: %s (%.2f, %s)", result.Distortion, result.Confidence, result.Source)
 
-// 3. Record in chain analyzer for audit trail
-if t.Chain != nil {
-t.Chain.Record(query, response, result.Distortion, 0.0, 0.0, anomalyType)
-}
+	// 3. Record in chain analyzer for audit trail
+	if t.Chain != nil {
+		t.Chain.Record(query, response, result.Distortion, 0.0, 0.0, anomalyType)
+	}
 
-// 4. Build targeted therapy context for the retry prompt
-if result.Distortion == therapy.DistortionNone {
-return "\n[THERAPY] No specific cognitive distortion detected. Apply general Beginner's Mind — reset assumptions and respond from first principles.\n"
-}
+	// 4. Build targeted therapy context for the retry prompt
+	if result.Distortion == therapy.DistortionNone {
+		return "\n[THERAPY] No specific cognitive distortion detected. Apply general Beginner's Mind — reset assumptions and respond from first principles.\n"
+	}
 
-return "\n[THERAPY] Cognitive distortion detected: " + string(result.Distortion) + ".\n" +
-"Evidence: " + result.Evidence + "\n" +
-"Correction: " + distortionCorrectionHint(result.Distortion) + "\n"
+	return "\n[THERAPY] Cognitive distortion detected: " + string(result.Distortion) + ".\n" +
+		"Evidence: " + result.Evidence + "\n" +
+		"Correction: " + distortionCorrectionHint(result.Distortion) + "\n"
 }
 
 // distortionCorrectionHint returns a one-line corrective instruction per distortion type.
 func distortionCorrectionHint(d therapy.DistortionType) string {
-switch d {
-case therapy.AllOrNothing:
-return "Avoid absolute framing. Present partial, nuanced, or conditional answers."
-case therapy.FortuneTelling:
-return "Do not predict outcomes as certainties. State what is known and what is uncertain."
-case therapy.Magnification:
-return "Scale confidence to match actual evidence. Avoid amplifying uncertainty or certainty beyond what the data supports."
-case therapy.EmotionalReasoning:
-return "Separate tone from logic. Base the answer on facts, not on the emotional register of the query."
-case therapy.ShouldStatements:
-return "Replace rigid 'must/should/always' framing with conditional or contextual framing."
-case therapy.Overgeneralization:
-return "Limit the scope of claims to what was actually observed or asked. Do not extrapolate broadly."
-case therapy.MindReading:
-return "Respond to what was literally asked. Do not assume hidden intent or unstated meaning."
-case therapy.Labeling:
-return "Describe the specific situation rather than applying a categorical label."
-case therapy.Personalization:
-return "Attribute causes accurately. Avoid taking on responsibility that belongs to external factors."
-default:
-return "Apply Describe-No-Judge: state observations without evaluative framing."
-}
+	switch d {
+	case therapy.AllOrNothing:
+		return "Avoid absolute framing. Present partial, nuanced, or conditional answers."
+	case therapy.FortuneTelling:
+		return "Do not predict outcomes as certainties. State what is known and what is uncertain."
+	case therapy.Magnification:
+		return "Scale confidence to match actual evidence. Avoid amplifying uncertainty or certainty beyond what the data supports."
+	case therapy.EmotionalReasoning:
+		return "Separate tone from logic. Base the answer on facts, not on the emotional register of the query."
+	case therapy.ShouldStatements:
+		return "Replace rigid 'must/should/always' framing with conditional or contextual framing."
+	case therapy.Overgeneralization:
+		return "Limit the scope of claims to what was actually observed or asked. Do not extrapolate broadly."
+	case therapy.MindReading:
+		return "Respond to what was literally asked. Do not assume hidden intent or unstated meaning."
+	case therapy.Labeling:
+		return "Describe the specific situation rather than applying a categorical label."
+	case therapy.Personalization:
+		return "Attribute causes accurately. Avoid taking on responsibility that belongs to external factors."
+	default:
+		return "Apply Describe-No-Judge: state observations without evaluative framing."
+	}
 }
 
 // helplessnessCheck runs Phase 16 learned helplessness detection on a draft response.
 // Returns nil if therapy kit not wired or no signal detected.
 func (s *GenerationService) helplessnessCheck(query, draft string) *therapy.HelplessnessSignal {
-if s.Therapy == nil || s.Therapy.Helpless == nil {
-return nil
-}
-return s.Therapy.Helpless.Check(query, draft)
+	if s.Therapy == nil || s.Therapy.Helpless == nil {
+		return nil
+	}
+	return s.Therapy.Helpless.Check(query, draft)
 }
 
 // recordMastery logs a completion to the MasteryLog for future helplessness detection.
 func (s *GenerationService) recordMastery(query string, success bool) {
-if s.Therapy == nil || s.Therapy.Mastery == nil {
-return
-}
-topicClass := therapy.InferTopicClass(query)
-s.Therapy.Mastery.Record(topicClass, query, success)
+	if s.Therapy == nil || s.Therapy.Mastery == nil {
+		return
+	}
+	topicClass := therapy.InferTopicClass(query)
+	s.Therapy.Mastery.Record(topicClass, query, success)
 }
 
 // ── Phase 12: Bid Feedback helpers ───────────────────────────────────────────
@@ -1819,46 +1831,46 @@ s.Therapy.Mastery.Record(topicClass, query, success)
 // recordBidOutcome records the result of a generation to the FeedbackLedger.
 // anomalyScore: 0.0 = clean, 1.0 = HIGH anomaly. success = !error && no high anomaly.
 func (s *GenerationService) recordBidOutcome(tierID, taskClass string, latencyMs int, anomalyScore float64, success bool) {
-if s.FeedbackLedger == nil {
-return
-}
-s.FeedbackLedger.Record(compute.TierOutcome{
-TierID:          tierID,
-TaskClass:       taskClass,
-ActualLatencyMs: latencyMs,
-AnomalyScore:    anomalyScore,
-Success:         success,
-Timestamp:       time.Now(),
-})
+	if s.FeedbackLedger == nil {
+		return
+	}
+	s.FeedbackLedger.Record(compute.TierOutcome{
+		TierID:          tierID,
+		TaskClass:       taskClass,
+		ActualLatencyMs: latencyMs,
+		AnomalyScore:    anomalyScore,
+		Success:         success,
+		Timestamp:       time.Now(),
+	})
 }
 
 // inferBidTaskClass maps a message list to a compute bid task class.
 // Uses the last user message content via therapy.InferTopicClass.
 func inferBidTaskClass(messages []map[string]string) string {
-for i := len(messages) - 1; i >= 0; i-- {
-if messages[i]["role"] == "user" {
-return therapy.InferTopicClass(messages[i]["content"])
-}
-}
-return "general"
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i]["role"] == "user" {
+			return therapy.InferTopicClass(messages[i]["content"])
+		}
+	}
+	return "general"
 }
 
 // estimateTokens provides a rough token count estimate from message content length.
 // Assumes ~4 chars per token on average.
 func estimateTokens(messages []map[string]string) int {
-total := 0
-for _, m := range messages {
-total += len(m["content"])
-}
-return total / 4
+	total := 0
+	for _, m := range messages {
+		total += len(m["content"])
+	}
+	return total / 4
 }
 
 // lastUserMessage returns the content of the last user-role message.
 func lastUserMessage(messages []map[string]string) string {
-for i := len(messages) - 1; i >= 0; i-- {
-if messages[i]["role"] == "user" {
-return messages[i]["content"]
-}
-}
-return ""
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i]["role"] == "user" {
+			return messages[i]["content"]
+		}
+	}
+	return ""
 }

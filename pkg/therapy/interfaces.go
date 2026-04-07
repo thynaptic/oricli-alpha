@@ -11,6 +11,11 @@ type DistortionRuntime interface {
 	Detect(text, anomalyType string) DetectionResult
 }
 
+// ChainRuntime is the minimal chain-analysis surface needed outside pkg/therapy.
+type ChainRuntime interface {
+	Record(query, response string, distortion DistortionType, eri, contextLoad float64, anomalyType string)
+}
+
 // ABCRuntime is the minimal ABC audit surface needed outside pkg/therapy.
 type ABCRuntime interface {
 	Audit(query, proposedResponse string) DisputationReport
@@ -32,9 +37,16 @@ type HelplessnessRuntime interface {
 	Check(query, draft string) *HelplessnessSignal
 }
 
+// RetrainerRuntime is the minimal helplessness retraining surface needed outside pkg/therapy.
+type RetrainerRuntime interface {
+	Retrain(signal *HelplessnessSignal) string
+}
+
 // MasteryRuntime is the minimal mastery evidence surface needed outside pkg/therapy.
 type MasteryRuntime interface {
+	Record(topicClass, query string, success bool)
 	SuccessRate(topicClass string) float64
 	RecentSuccesses(topicClass string, n int) []*MasteryEntry
+	RecentEvidence(topicClass string, n int) []string
 	StatsByClass() map[string]map[string]int
 }

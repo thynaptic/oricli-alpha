@@ -775,7 +775,7 @@ func main() {
 	if os.Getenv("ORICLI_HOPECIRCUIT_ENABLED") == "true" {
 		os.MkdirAll("data/hopecircuit", 0755)
 		// Bridge to MasteryLog from Therapy kit (P16 evidence substrate)
-		var masteryBridge *therapy.MasteryLog
+		var masteryBridge hopecircuit.MasteryRuntime
 		if genService.Therapy != nil {
 			masteryBridge = genService.Therapy.Mastery
 		}
