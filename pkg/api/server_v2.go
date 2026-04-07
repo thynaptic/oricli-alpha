@@ -169,15 +169,15 @@ type ServerV2 struct {
 	// ScienceDaemon: Phase 10 Active Science
 	ScienceDaemon *science.ScienceDaemon
 	// TherapyKit: Phase 15 Therapeutic Cognition Stack
-	TherapySkills     *therapy.SkillRunner
-	TherapyDetect     *therapy.DistortionDetector
-	TherapyABC        *therapy.ABCAuditor
+	TherapySkills     therapy.SkillRuntime
+	TherapyDetect     therapy.DistortionRuntime
+	TherapyABC        therapy.ABCRuntime
 	TherapyChain      *therapy.ChainAnalyzer
-	TherapySupervisor *therapy.SessionSupervisor
-	TherapyLog        *therapy.EventLog
+	TherapySupervisor therapy.SessionSupervisorRuntime
+	TherapyLog        therapy.EventLogRuntime
 	// Phase 16: Learned Helplessness Prevention
-	TherapyHelpless  *therapy.HelplessnessDetector
-	TherapyMastery   *therapy.MasteryLog
+	TherapyHelpless  therapy.HelplessnessRuntime
+	TherapyMastery   therapy.MasteryRuntime
 	TherapyRetrainer *therapy.AttributionalRetrainer
 
 	// Phase 12: Sovereign Compute Bidding

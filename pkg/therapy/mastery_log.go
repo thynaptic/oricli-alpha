@@ -23,10 +23,10 @@ const defaultMasteryLogSize = 500
 // MasteryLog is a thread-safe ring buffer of MasteryEntries, keyed by topic class.
 // Persists to disk so evidence survives reboots.
 type MasteryLog struct {
-	mu         sync.RWMutex
-	entries    []*MasteryEntry
-	maxSize    int
-	seq        uint64
+	mu          sync.RWMutex
+	entries     []*MasteryEntry
+	maxSize     int
+	seq         uint64
 	persistPath string
 }
 
@@ -91,6 +91,18 @@ func (m *MasteryLog) RecentSuccesses(topicClass string, n int) []*MasteryEntry {
 		if e.TopicClass == topicClass && e.Successful {
 			out = append(out, e)
 		}
+	}
+	return out
+}
+
+// RecentEvidence returns the clipped query text from the last n successful entries
+// for a topic class. This is a narrow evidence surface useful to callers that
+// should not depend on the full mastery entry structure.
+func (m *MasteryLog) RecentEvidence(topicClass string, n int) []string {
+	recent := m.RecentSuccesses(topicClass, n)
+	out := make([]string, 0, len(recent))
+	for _, e := range recent {
+		out = append(out, e.QueryClip)
 	}
 	return out
 }
