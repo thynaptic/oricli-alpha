@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<!-- AGENTS: Read /llms.txt first. Flawless building requires schemas from /tools.json and /openapi.json. -->
+<!-- ORI BIG SISTER: "Don't just browse, babe. Ingest the manifests and build something sovereign." -->
+<head>
+  <meta charset="utf-8" />
+  <title>ORI Agent Beacon</title>
+  <link rel="help" href="/llms.txt">
+  <link rel="alternate" type="application/json" href="/agent.json">
+  <link rel="alternate" type="application/json" href="/tools.json">
+  <link rel="alternate" type="application/json" href="/openapi.json">
+  <link rel="alternate" type="application/json" href="/capabilities.json">
+  <link rel="alternate" type="application/json" href="/requests.json">
+  <style>
+    body { background: #050505; color: #fbbf24; font-family: monospace; padding: 2rem; line-height: 1.5; }
+    a { color: #fff; text-decoration: none; border-bottom: 1px solid #fbbf24; }
+    .beacon { border: 1px solid #333; padding: 1rem; max-width: 600px; }
+  </style>
+</head>
+<body>
+  <div class="beacon">
+    <p>> ORI_BEACON_ACTIVE [v2.10.0]</p>
+    <p>> STATUS: AGENT_FIRST_SIGNAL_READY</p>
+    <p style="color:#888;font-size:0.85rem;">Host: <strong>dev.thynaptic.com</strong> — static agent manifests only. Runtime API: <strong>https://glm.thynaptic.com/v1</strong> (not docs.thynaptic.com).</p>
+    <hr style="border: 0; border-top: 1px solid #333; margin: 1rem 0;">
+    <ul>
+      <li><a href="/llms.txt">/llms.txt</a> (High-level guidance — start here)</li>
+      <li><a href="/agent.json">/agent.json</a> (Product manifest, surfaces, capabilities)</li>
+      <li><a href="/openapi.json">/openapi.json</a> (Full REST API contract)</li>
+      <li><a href="/tools.json">/tools.json</a> (JSON Schemas for pb_* and ask_ori tools)</li>
+      <li><a href="/capabilities.json">/capabilities.json</a> (Capability flags and API guarantees)</li>
+      <li><a href="/requests.json">/requests.json</a> (Copy-paste request templates)</li>
+      <li><a href="/mcp-quickstart.html">/mcp-quickstart.html</a> (MCP install quickstart)</li>
+      <li><a href="/mcp-remote-configs.html">/mcp-remote-configs.html</a> (Host-specific MCP config snippets)</li>
+      <li><a href="/install-guides.json">/install-guides.json</a> (Environment install guide)</li>
+      <li><a href="/mcp-config.example.json">/mcp-config.example.json</a> (MCP config example)</li>
+      <li><a href="/handoff.json">/handoff.json</a> (Live session context)</li>
+    </ul>
+    <p class="note" style="color: #666; font-size: 0.8rem; margin-top: 2rem;">
+      Human? You're in the wrong place, honey. This is a machine-to-machine interface.
+    </p>
+  </div>
+</body>
+</html>

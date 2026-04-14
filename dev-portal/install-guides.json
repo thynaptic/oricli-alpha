@@ -1,0 +1,71 @@
+{
+  "schema_version": "2026-04-08",
+  "description": "Environment-specific install guidance for ORI MCP v1.",
+  "default_server": {
+    "transport": "streamable_http",
+    "url": "https://dev.thynaptic.com/mcp",
+    "auth": "Authorization: Bearer ori.<prefix>.<secret>"
+  },
+  "environments": {
+    "claude_desktop": {
+      "title": "Claude Desktop",
+      "when_to_use": "Use when installing ORI MCP into Claude Desktop or another host that supports remote MCP over HTTP.",
+      "steps": [
+        "Set ORI_MCP_API_KEY to a valid ORI API key (one key for all integrations).",
+        "Use https://dev.thynaptic.com/mcp as the MCP server URL.",
+        "Send Authorization: Bearer ori.<prefix>.<secret>.",
+        "Restart Claude Desktop."
+      ],
+      "notes": [
+        "If the host only supports stdio MCP, use the Python bridge fallback instead."
+      ]
+    },
+    "codex_cli": {
+      "title": "Codex CLI / remote MCP host",
+      "when_to_use": "Use when the host accepts a remote MCP server URL and bearer auth.",
+      "steps": [
+        "Set ORI_MCP_API_KEY to a valid ORI API key (one key for all integrations).",
+        "Point the host at https://dev.thynaptic.com/mcp.",
+        "Send Authorization: Bearer ori.<prefix>.<secret>.",
+        "Start or reload the MCP host."
+      ]
+    },
+    "cursor_or_vscode_mcp": {
+      "title": "Cursor or VS Code MCP-compatible host",
+      "when_to_use": "Use when the editor supports remote MCP servers over HTTP.",
+      "steps": [
+        "Set ORI_MCP_API_KEY to a valid ORI API key (one key for all integrations).",
+        "Use https://dev.thynaptic.com/mcp as the MCP server URL.",
+        "Configure bearer auth with your GLM key.",
+        "Reload the editor window or the MCP host."
+      ],
+      "notes": [
+        "If the editor only supports stdio MCP, use the Python bridge fallback instead."
+      ]
+    },
+    "mac_portable_tui": {
+      "title": "macOS Portable TUI",
+      "when_to_use": "Use when you want to talk to ORI from a Mac terminal without installing dependencies.",
+      "steps": [
+        "Download the binary from https://dev.thynaptic.com/ori-mac",
+        "Run chmod +x ori-mac",
+        "Set ORI_API_KEY environment variable.",
+        "./ori-mac"
+      ]
+    },
+    "generic": {
+      "title": "Generic remote MCP host",
+      "when_to_use": "Use when the host can connect to a Streamable HTTP MCP endpoint but does not have a dedicated ORI example yet.",
+      "steps": [
+        "Use https://dev.thynaptic.com/mcp as the MCP endpoint.",
+        "Send Authorization: Bearer ori.<prefix>.<secret>.",
+        "Initialize the connection and use tools/list and tools/call normally."
+      ],
+      "notes": [
+        "ORI MCP v1 is a narrow safe toolkit.",
+        "The hosted endpoint supports initialize, tools/list, and tools/call over Streamable HTTP.",
+        "Use the Python bridge fallback only if the host cannot connect to remote MCP."
+      ]
+    }
+  }
+}

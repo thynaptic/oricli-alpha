@@ -1,0 +1,1000 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ORI Runtime API",
+    "version": "2026-04-13",
+    "description": "Complete public API surface for integrating ORI. Base URL: https://glm.thynaptic.com/v1"
+  },
+  "servers": [
+    { "url": "https://glm.thynaptic.com/v1", "description": "Shared runtime" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "ori.<prefix>.<secret>",
+        "description": "Preferred ORI runtime key. Legacy glm.* keys remain valid until rotated."
+      },
+      "bootstrapAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "agb.<prefix>.<secret>"
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "scope": { "type": "string" }
+        }
+      },
+      "ChatMessage": {
+        "type": "object",
+        "required": ["role", "content"],
+        "properties": {
+          "role": { "type": "string", "enum": ["system", "user", "assistant"] },
+          "content": { "type": "string" }
+        }
+      },
+      "ChatCompletionRequest": {
+        "type": "object",
+        "required": ["model", "messages"],
+        "properties": {
+          "model": { "type": "string", "example": "oricli-oracle" },
+          "profile": { "type": ["string", "null"], "description": "Optional working style for the chosen surface. Only honored when the profile belongs to the surface set via X-Ori-Context." },
+          "stream": { "type": "boolean", "default": false, "description": "Enable SSE streaming." },
+          "messages": { "type": "array", "items": { "$ref": "#/components/schemas/ChatMessage" } }
+        }
+      },
+      "ChatCompletionResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "object": { "type": "string" },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "message": { "$ref": "#/components/schemas/ChatMessage" },
+                "finish_reason": { "type": "string" }
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "provider": { "type": "string" },
+              "sass_factor": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Readiness probe",
+        "description": "Public. Returns runtime status.",
+        "responses": {
+          "200": {
+            "description": "Ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "ready" },
+                    "system": { "type": "string", "example": "ori-runtime-v2" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ws": {
+      "get": {
+        "summary": "WebSocket event stream",
+        "description": "Public. Real-time state and event streaming. Upgrades to WebSocket.",
+        "responses": { "101": { "description": "Switching protocols" } }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Prometheus metrics",
+        "description": "Public. Prometheus-compatible metrics for scraping.",
+        "responses": { "200": { "description": "Prometheus text format" } }
+      }
+    },
+    "/app/register": {
+      "post": {
+        "summary": "First-party app self-registration",
+        "description": "Protected by a shared internal registration_token, not a runtime key. Mints a product-scoped ORI runtime key (same one-key-anywhere format) for approved first-party apps (ORI Home, ORI Studio, ORI Mobile, ORI Dev). Not a public self-serve developer key flow.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["app_name"],
+                "properties": {
+                  "app_name": { "type": "string", "example": "ORI Home" },
+                  "device_id": { "type": "string", "example": "home-safe-a" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Runtime key minted for the approved app" },
+          "401": { "description": "Missing or invalid registration token" }
+        }
+      }
+    },
+    "/waitlist": {
+      "post": {
+        "summary": "Join the waitlist",
+        "description": "Public. Marketing → SMB sign-up.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string" },
+                  "name": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Joined waitlist" } }
+      }
+    },
+    "/models": {
+      "get": {
+        "summary": "List available models",
+        "description": "Returns the list of public model IDs. Current public default: oricli-oracle.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Model list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": { "type": "string" },
+                    "data": { "type": "array", "items": { "type": "object" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/register": {
+      "post": {
+        "summary": "Agent-safe bootstrap registration",
+        "description": "Accepts an agb.* bootstrap key and mints a product-scoped ORI runtime key (ori.*, one key anywhere) for an approved first-party app. Bootstrap keys can only mint keys for apps they are explicitly authorized for via bootstrap:app:<normalized-app-name> scope. Bootstrap keys do not grant chat, spaces, email, or admin access on their own.",
+        "security": [{ "bootstrapAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["app_name"],
+                "properties": {
+                  "app_name": { "type": "string", "example": "ORI Mobile" },
+                  "device_id": { "type": "string", "example": "device-123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Minted GLM runtime key for the approved app" },
+          "401": { "description": "Missing or invalid bootstrap key" },
+          "403": { "description": "Bootstrap key lacks required scope for this app" }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "summary": "Hosted ORI MCP endpoint",
+        "description": "Streamable HTTP MCP endpoint at https://dev.thynaptic.com/mcp. Supports initialize, tools/list, and tools/call. Tools include ask_ori, plan_with_ori, review_with_ori, draft_with_ori, send_email_via_ori, recall_memory, store_memory, list_spaces, create_space, get_key_info, check_health, pb_* (PocketBase direct), and Notion formula tools. See /tools.json for full JSON schemas.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "MCP JSON-RPC response" }
+        }
+      }
+    },
+    "/chat/completions": {
+      "post": {
+        "summary": "Chat completion (OpenAI-compatible)",
+        "description": "Main ORI chat endpoint. Requires runtime:chat scope. Use X-Ori-Context to select a surface. Use profile for working style. Responses include a meta block with provider and sass_factor.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "X-Ori-Context",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string", "enum": ["studio", "home", "dev", "red"] },
+            "description": "Product surface selection."
+          },
+          {
+            "name": "X-Session-ID",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Client-generated session ID for conversation history tracking."
+          },
+          {
+            "name": "X-Env-OS",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Dynamic env proprioception: operating system."
+          },
+          {
+            "name": "X-Env-PWD",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Dynamic env proprioception: working directory."
+          },
+          {
+            "name": "X-Env-Project",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Dynamic env proprioception: project name."
+          },
+          {
+            "name": "X-Env-Shell",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Dynamic env proprioception: shell type."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatCompletionRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Chat completion or SSE stream", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatCompletionResponse" } } } },
+          "401": { "description": "Missing or invalid API key.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "403": { "description": "Valid key lacks runtime:chat scope.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/chat/feedback": {
+      "post": {
+        "summary": "Submit vibe/personality feedback",
+        "description": "Submit roasts and lessons to improve future ORI personality consistency. Requires runtime:chat scope.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt", "response"],
+                "properties": {
+                  "prompt": { "type": "string" },
+                  "response": { "type": "string" },
+                  "sass": { "type": "number", "description": "Desired sass factor 0.0-1.0." },
+                  "roast": { "type": "string", "description": "Critique of the response." },
+                  "lesson": { "type": "string", "description": "What ORI should learn from this." }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Feedback recorded" } }
+      }
+    },
+    "/email/send": {
+      "post": {
+        "summary": "Send email via ORI runtime",
+        "description": "Send outbound email through ORI's native runtime email layer. Requires runtime:email:send scope.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["to", "subject", "body"],
+                "properties": {
+                  "to": { "type": "string", "format": "email" },
+                  "subject": { "type": "string" },
+                  "body": { "type": "string", "description": "Plain text body." },
+                  "html": { "type": "string", "description": "Optional HTML version." }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Email sent" } }
+      }
+    },
+    "/vision/analyze": {
+      "post": {
+        "summary": "Image analysis",
+        "description": "Analyze an image via Oracle (Codex). One of image_url, image_base64, or image_path is required.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image_url": { "type": "string", "description": "Public image URL." },
+                  "image_base64": { "type": "string", "description": "Base64-encoded image data." },
+                  "image_path": { "type": "string", "description": "Server-local file path." },
+                  "prompt": { "type": "string", "description": "Optional context prompt." },
+                  "save_memory": { "type": "boolean", "default": false, "description": "If true and MemoryBank is available, stores as a ProvenanceSeen fragment." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "description": { "type": "string" },
+                    "tags": { "type": "array", "items": { "type": "string" } },
+                    "model": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest": {
+      "post": {
+        "summary": "Ingest text into memory",
+        "description": "Feed text into ORI's memory and knowledge systems.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object" } } }
+        },
+        "responses": { "200": { "description": "Ingested" } }
+      }
+    },
+    "/ingest/web": {
+      "post": {
+        "summary": "Ingest a web URL into memory",
+        "description": "Feed a web source into ORI's knowledge/memory systems.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                  "url": { "type": "string", "format": "uri" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Web source ingested" } }
+      }
+    },
+    "/goals": {
+      "get": {
+        "summary": "List goals",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Goal list" } }
+      },
+      "post": {
+        "summary": "Create a goal",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Goal created" } }
+      }
+    },
+    "/goals/{id}": {
+      "get": {
+        "summary": "Get a goal",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Goal" } }
+      },
+      "put": {
+        "summary": "Update a goal",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Updated" } }
+      },
+      "delete": {
+        "summary": "Delete a goal",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/memories": {
+      "get": {
+        "summary": "List memory fragments",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Memory list" } }
+      }
+    },
+    "/memories/knowledge": {
+      "get": {
+        "summary": "List knowledge memories",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Knowledge memory list" } }
+      }
+    },
+    "/documents/upload": {
+      "post": {
+        "summary": "Upload a document",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Document uploaded" } }
+      }
+    },
+    "/documents": {
+      "get": {
+        "summary": "List documents",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Document list" } }
+      }
+    },
+    "/share": {
+      "post": {
+        "summary": "Create a share link",
+        "description": "Creates a permanent public share link for a canvas artifact.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Share created with public URL" } }
+      }
+    },
+    "/shares": {
+      "get": {
+        "summary": "List recent shares",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Share list" } }
+      }
+    },
+    "/agents/vibe": {
+      "post": {
+        "summary": "Natural language agent creation",
+        "description": "Create an ORI agent from a natural language description.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Agent definition created" } }
+      }
+    },
+    "/workspaces/run": {
+      "post": {
+        "summary": "Agentic workspace task execution",
+        "description": "Executes an agentic task in an isolated desktop workspace. Requires runtime:workspaces scope. Returns SSE stream.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "SSE task execution stream" } }
+      }
+    },
+    "/capabilities/agent": {
+      "post": {
+        "summary": "Spawn an autonomous agent",
+        "description": "Spawns an autonomous agent task with graduated autonomy and intent-aware routing. The agent classifies query complexity and selects the appropriate model tier, tool permissions, and effort level automatically. Delegation to a background cloud agent is supported — the response will include is_delegated and pr_link when triggered. Requires runtime:chat scope.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Agent task result" } }
+      }
+    },
+    "/capabilities/research": {
+      "post": {
+        "summary": "Deep research dive",
+        "description": "Triggers a deep research dive using read-only tools at high reasoning effort. Produces a comprehensive report with citations. No file mutations or side effects. Requires runtime:chat scope.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                  "query": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Research report" } }
+      }
+    },
+    "/capabilities/web-search": {
+      "post": {
+        "summary": "Intent-aware web search",
+        "description": "Intent-aware SearXNG lookup. Requires runtime:chat scope.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                  "query": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Search results" } }
+      }
+    },
+    "/capabilities/web-fetch": {
+      "post": {
+        "summary": "RAG-ready URL fetch",
+        "description": "Fetches a URL and returns cleaned, RAG-ready context. Requires runtime:chat scope.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                  "url": { "type": "string", "format": "uri" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Extracted content" } }
+      }
+    },
+    "/capabilities/repo-report": {
+      "post": {
+        "summary": "Repository snapshot",
+        "description": "High-signal technical repository snapshot. Requires runtime:chat scope.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["repo"],
+                "properties": {
+                  "repo": { "type": "string", "description": "Repository path or URL." }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Repository report" } }
+      }
+    },
+    "/browser/health": {
+      "get": {
+        "summary": "Browser runtime health",
+        "description": "Check the sovereign browser runtime (browserd) availability.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Browser health status" } }
+      }
+    },
+    "/browser/sessions": {
+      "post": {
+        "summary": "Create a browser session",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Session created" } }
+      },
+      "delete": {
+        "summary": "Close a browser session",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Session closed" } }
+      }
+    },
+    "/browser/open": {
+      "post": {
+        "summary": "Open a URL in the browser session",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                  "url": { "type": "string", "format": "uri" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Navigated" } }
+      }
+    },
+    "/browser/snapshot": {
+      "get": {
+        "summary": "Get browser accessibility snapshot",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Accessibility tree snapshot" } }
+      }
+    },
+    "/browser/action": {
+      "post": {
+        "summary": "Execute a browser action",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Action result" } }
+      }
+    },
+    "/browser/screenshot": {
+      "post": {
+        "summary": "Take a browser screenshot",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Screenshot data" } }
+      }
+    },
+    "/browser/state/save": {
+      "post": {
+        "summary": "Save browser session state",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "State saved" } }
+      }
+    },
+    "/browser/state/load": {
+      "post": {
+        "summary": "Load browser session state",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "State loaded" } }
+      }
+    },
+    "/tools": {
+      "get": {
+        "summary": "List available tools",
+        "description": "Returns the list of tools available in the current context.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Tool list" } }
+      }
+    },
+    "/tools/plan": {
+      "post": {
+        "summary": "Create a tool execution plan",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Tool plan" } }
+      }
+    },
+    "/tools/execute-plan": {
+      "post": {
+        "summary": "Execute a tool plan",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Execution result" } }
+      }
+    },
+    "/sovereign/identity": {
+      "get": {
+        "summary": "Get sovereign identity / active profile",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Current identity profile" } }
+      },
+      "put": {
+        "summary": "Update sovereign identity / active profile",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/enterprise/learn": {
+      "post": {
+        "summary": "Start an enterprise knowledge ingest job",
+        "description": "Namespace-isolated RAG ingest for SMB tenants.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Job queued", "content": { "application/json": { "schema": { "type": "object", "properties": { "job_id": { "type": "string" } } } } } } }
+      }
+    },
+    "/enterprise/learn/{job_id}": {
+      "get": {
+        "summary": "Get enterprise ingest job status",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "job_id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Job status" } }
+      }
+    },
+    "/enterprise/knowledge/search": {
+      "get": {
+        "summary": "Search enterprise knowledge",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "q", "in": "query", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Search results" } }
+      }
+    },
+    "/enterprise/knowledge": {
+      "delete": {
+        "summary": "Clear enterprise knowledge namespace",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Cleared" } }
+      }
+    },
+    "/spaces": {
+      "get": {
+        "summary": "List spaces",
+        "description": "List named project containers for the authenticated tenant. Requires runtime:spaces scope.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Space list" } }
+      },
+      "post": {
+        "summary": "Create a space",
+        "description": "Creates a new tenant-scoped project space. Requires runtime:spaces scope.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Space created" } }
+      }
+    },
+    "/spaces/{id}": {
+      "delete": {
+        "summary": "Delete a space",
+        "description": "Requires runtime:spaces scope.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/spaces/{id}/documents": {
+      "post": {
+        "summary": "Upload a document to a space",
+        "description": "Requires runtime:spaces scope.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Document uploaded to space" } }
+      },
+      "get": {
+        "summary": "List documents in a space",
+        "description": "Requires runtime:spaces scope.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Document list" } }
+      }
+    },
+    "/sessions": {
+      "get": {
+        "summary": "List chat sessions",
+        "description": "Surface-scoped session list. Requires runtime:chat scope.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "surface", "in": "query", "schema": { "type": "string", "enum": ["studio", "dev", "home", "android", "mobile"] } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": { "200": { "description": "Session list, newest first" } }
+      }
+    },
+    "/sessions/{id}/messages": {
+      "get": {
+        "summary": "Get session message thread",
+        "description": "Full message thread for a session. Requires runtime:chat scope.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 200 } }
+        ],
+        "responses": { "200": { "description": "Message thread" } }
+      }
+    },
+    "/images/generations": {
+      "post": {
+        "summary": "Generate an image",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt"],
+                "properties": {
+                  "prompt": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Generated image" } }
+      }
+    },
+    "/daemons": {
+      "get": {
+        "summary": "Daemon health status",
+        "description": "Returns health status of active ORI background daemons.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Daemon health map" } }
+      }
+    },
+    "/pad/dispatch": {
+      "post": {
+        "summary": "Parallel Agent Dispatch — fan-out",
+        "description": "Dispatch a batch of independent agent tasks in parallel. ORI executes each concurrently and collects results into a PAD session.",
+        "tags": ["Parallel Agent Dispatch"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["tasks"],
+                "properties": {
+                  "tasks": {
+                    "type": "array",
+                    "description": "List of agent tasks to execute in parallel.",
+                    "items": {
+                      "type": "object",
+                      "required": ["goal"],
+                      "properties": {
+                        "goal": { "type": "string", "description": "Natural-language task description." },
+                        "profile": { "type": "string", "description": "Optional working style profile." }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "PAD session created with task results." },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "403": { "description": "Forbidden — insufficient scope.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/pad/sessions": {
+      "get": {
+        "summary": "List PAD sessions",
+        "tags": ["Parallel Agent Dispatch"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Array of PAD sessions." },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/pad/sessions/{id}": {
+      "get": {
+        "summary": "Get PAD session results",
+        "tags": ["Parallel Agent Dispatch"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "PAD session with per-task results." },
+          "404": { "description": "Session not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/pad/stats": {
+      "get": {
+        "summary": "PAD throughput metrics",
+        "tags": ["Parallel Agent Dispatch"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "PAD throughput and latency metrics." } }
+      }
+    },
+    "/sovereign/goals": {
+      "get": {
+        "summary": "List sovereign goals",
+        "description": "Returns all tick-controlled sovereign agent goals for the authenticated tenant.",
+        "tags": ["Sovereign Goals"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Array of sovereign goals." },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      },
+      "post": {
+        "summary": "Create a sovereign goal",
+        "description": "Create a tick-controlled agent goal. Execution is paused between ticks — call POST /sovereign/goals/:id/tick to advance.",
+        "tags": ["Sovereign Goals"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["goal"],
+                "properties": {
+                  "goal": { "type": "string", "description": "Natural-language goal description." },
+                  "max_steps": { "type": "integer", "description": "Maximum number of execution steps.", "default": 10 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Sovereign goal created." },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/sovereign/goals/{id}": {
+      "get": {
+        "summary": "Get sovereign goal state",
+        "tags": ["Sovereign Goals"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Sovereign goal state and step history." },
+          "404": { "description": "Goal not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      },
+      "delete": {
+        "summary": "Cancel a sovereign goal",
+        "tags": ["Sovereign Goals"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Goal cancelled." },
+          "404": { "description": "Goal not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/sovereign/goals/{id}/tick": {
+      "post": {
+        "summary": "Tick a sovereign goal",
+        "description": "Advance a tick-controlled sovereign goal by exactly one execution step. Returns the step result and updated goal state.",
+        "tags": ["Sovereign Goals"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Step result and updated goal state." },
+          "404": { "description": "Goal not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    }
+  }
+}

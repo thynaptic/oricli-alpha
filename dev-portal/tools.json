@@ -1,0 +1,310 @@
+{
+  "name": "ORI Sovereign Toolset",
+  "version": "v2.10.0",
+  "description": "Full JSON schemas for ORI native tools and PocketBase data plane management.",
+  "tools": [
+    {
+      "name": "ask_ori",
+      "description": "Ask ORI a question using the shared runtime.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "question": { "type": "string", "description": "The question or task for ORI." },
+          "surface": { "type": "string", "enum": ["studio", "home", "dev", "red"], "description": "Product surface context. Omit to use the default baseline." },
+          "profile": { "type": "string", "description": "Working style override (e.g. big_sister, dev_architect). Only honored when it belongs to the chosen surface." }
+        },
+        "required": ["question"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "plan_with_ori",
+      "description": "Turn a goal into a short, practical plan.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "goal": { "type": "string", "description": "The goal or objective to plan." },
+          "surface": { "type": "string", "enum": ["studio", "home", "dev", "red"] }
+        },
+        "required": ["goal"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "review_with_ori",
+      "description": "Review a draft, payload, or plan and return structured feedback.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "content": { "type": "string", "description": "The content to review." },
+          "context": { "type": "string", "description": "Optional context about what the content is for." }
+        },
+        "required": ["content"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "draft_with_ori",
+      "description": "Generate a clean first draft for a given prompt.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string", "description": "What to draft." },
+          "surface": { "type": "string", "enum": ["studio", "home", "dev", "red"] }
+        },
+        "required": ["prompt"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "send_email_via_ori",
+      "description": "Send outbound email through ORI's native runtime email layer. Requires runtime:email:send scope.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "to": { "type": "string", "description": "Recipient email address." },
+          "subject": { "type": "string" },
+          "body": { "type": "string", "description": "Plain text email body." },
+          "html": { "type": "string", "description": "Optional HTML version." }
+        },
+        "required": ["to", "subject", "body"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "recall_memory",
+      "description": "Retrieve memory fragments from ORI's memory layer for the authenticated tenant. Requires runtime:chat scope.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "What to search for in memory." },
+          "limit": { "type": "integer", "description": "Max results to return (default 10)." }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "store_memory",
+      "description": "Store a memory fragment into ORI's memory layer for the authenticated tenant. Requires runtime:chat scope.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "content": { "type": "string", "description": "The information to store." },
+          "tags": { "type": "array", "items": { "type": "string" }, "description": "Optional tags for retrieval." }
+        },
+        "required": ["content"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_spaces",
+      "description": "List knowledge Spaces for the authenticated tenant. Requires runtime:spaces scope.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_space",
+      "description": "Create a new tenant-scoped knowledge Space. Requires runtime:spaces scope.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_key_info",
+      "description": "Introspect the current API key — returns scopes, tenant, and app name. Available to any authenticated key.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_health",
+      "description": "Check ORI runtime health. Available to any authenticated key.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "register_first_party_app",
+      "description": "Use a trusted agb.* bootstrap key to mint an approved first-party runtime key via POST /agent/register.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "app_name": { "type": "string", "description": "The first-party app name (e.g. ORI Mobile)." },
+          "device_id": { "type": "string", "description": "Optional device identifier." }
+        },
+        "required": ["app_name"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "design_notion_formula",
+      "description": "Design a Notion formula for a given use case via ORI's Studio-side Notion builder.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string", "description": "What the formula should do." }
+        },
+        "required": ["description"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "repair_notion_formula",
+      "description": "Diagnose and fix a broken Notion formula.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "formula": { "type": "string", "description": "The broken formula string." },
+          "error": { "type": "string", "description": "Optional error message from Notion." }
+        },
+        "required": ["formula"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "explain_notion_formula",
+      "description": "Explain what a Notion formula does in plain language.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "formula": { "type": "string", "description": "The formula to explain." }
+        },
+        "required": ["formula"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_surfaces",
+      "description": "Return the list of valid ORI product surfaces and their available working style profiles.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_working_styles",
+      "description": "Return working style profiles for a given surface.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "surface": { "type": "string", "enum": ["studio", "home", "dev", "red"] }
+        },
+        "required": ["surface"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_request_template",
+      "description": "Return a copy-paste request template for a common ORI API pattern.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "template": { "type": "string", "description": "Template name (e.g. studio, home_streaming, dev_streaming, email_send, capabilities_web_search)." }
+        },
+        "required": ["template"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_capabilities",
+      "description": "Return the ORI capability flags and available governed reflexes.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pb_list_collections",
+      "description": "List all collections in the PocketBase instance.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pb_list_records",
+      "description": "List records from a PocketBase collection with optional filter and sort.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "collection": { "type": "string", "description": "Collection name or ID." },
+          "filter": { "type": "string", "description": "Optional PocketBase filter string (e.g. 'status = \"active\"')." },
+          "sort": { "type": "string", "description": "Optional sort string (e.g. '-created')." },
+          "perPage": { "type": "integer", "description": "Optional results per page (default 30)." }
+        },
+        "required": ["collection"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pb_get_record",
+      "description": "Fetch a single record from a PocketBase collection by ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "collection": { "type": "string", "description": "Collection name or ID." },
+          "id": { "type": "string", "description": "Record ID." }
+        },
+        "required": ["collection", "id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pb_create_record",
+      "description": "Create a new record in a PocketBase collection.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "collection": { "type": "string", "description": "Collection name or ID." },
+          "data": { "type": "object", "description": "Record data map." }
+        },
+        "required": ["collection", "data"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pb_update_record",
+      "description": "Update an existing record in a PocketBase collection by ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "collection": { "type": "string", "description": "Collection name or ID." },
+          "id": { "type": "string", "description": "Record ID." },
+          "data": { "type": "object", "description": "Updated record data map." }
+        },
+        "required": ["collection", "id", "data"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pb_delete_record",
+      "description": "Delete a record from a PocketBase collection by ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "collection": { "type": "string", "description": "Collection name or ID." },
+          "id": { "type": "string", "description": "Record ID." }
+        },
+        "required": ["collection", "id"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

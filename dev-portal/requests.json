@@ -1,0 +1,259 @@
+{
+  "schema_version": "2026-04-14",
+  "description": "Copy-paste request templates for common ORI public API patterns.",
+  "developer_portal_base_url": "https://dev.thynaptic.com",
+  "developer_portal_note": "Static manifests (llms.txt, agent.json, openapi.json, tools.json, requests.json) are published on the developer portal. Every runtime call below uses base_url on glm.thynaptic.com.",
+  "base_url": "https://glm.thynaptic.com/v1",
+  "auth_header": "Authorization: Bearer ori.<prefix>.<secret>",
+  "agent_bootstrap_auth_header": "Authorization: Bearer agb.<prefix>.<secret>",
+  "content_type_header": "Content-Type: application/json",
+  "templates": {
+    "list_modules": {
+      "_comment": "Public — no Authorization header required. Skill ids match .ori skill names for toggles.",
+      "method": "GET",
+      "path": "/modules",
+      "headers": {}
+    },
+    "bare": {
+      "method": "POST",
+      "path": "/chat/completions",
+      "headers": {},
+      "body": {
+        "model": "oricli-oracle",
+        "messages": [{ "role": "user", "content": "In one sentence, what is ORI?" }]
+      }
+    },
+    "chat_with_ori_skills": {
+      "_comment": "Optional ori_skills toggles builtins/customs for this request; X-Ori-Skill is a shorthand for one builtin id.",
+      "method": "POST",
+      "path": "/chat/completions",
+      "headers": { "X-Ori-Context": "dev" },
+      "body": {
+        "model": "oricli-oracle",
+        "ori_skills": {
+          "scope_id": "default",
+          "enabled": ["meeting_intelligence"],
+          "custom": []
+        },
+        "messages": [{ "role": "user", "content": "Summarize standup notes into actions." }]
+      }
+    },
+    "user_skills_prefs_get": {
+      "_comment": "Query: scope_id=default (or your workspace id). Requires runtime:chat.",
+      "method": "GET",
+      "path": "/user/ori-skills/prefs?scope_id=default",
+      "headers": {}
+    },
+    "studio": {
+      "method": "POST",
+      "path": "/chat/completions",
+      "headers": { "X-Ori-Context": "studio" },
+      "body": {
+        "model": "oricli-oracle",
+        "messages": [{ "role": "user", "content": "Summarize what needs my attention this week." }]
+      }
+    },
+    "studio_working_style": {
+      "method": "POST",
+      "path": "/chat/completions",
+      "headers": { "X-Ori-Context": "studio" },
+      "body": {
+        "model": "oricli-oracle",
+        "profile": "studio_customer_comms",
+        "messages": [{ "role": "user", "content": "Draft a friendly but firm follow-up to a late-paying client." }]
+      }
+    },
+    "home_streaming": {
+      "method": "POST",
+      "path": "/chat/completions",
+      "headers": { "X-Ori-Context": "home" },
+      "body": {
+        "model": "oricli-oracle",
+        "stream": true,
+        "messages": [{ "role": "user", "content": "Help me plan tomorrow without overloading it." }]
+      }
+    },
+    "dev": {
+      "method": "POST",
+      "path": "/chat/completions",
+      "headers": { "X-Ori-Context": "dev" },
+      "body": {
+        "model": "oricli-oracle",
+        "messages": [{ "role": "user", "content": "Review this API shape and tell me what is risky." }]
+      }
+    },
+    "dev_streaming": {
+      "method": "POST",
+      "path": "/chat/completions",
+      "headers": { "X-Ori-Context": "dev" },
+      "body": {
+        "model": "oricli-oracle",
+        "stream": true,
+        "messages": [{ "role": "user", "content": "Walk me through refactoring this service layer." }]
+      }
+    },
+    "dev_with_env": {
+      "method": "POST",
+      "path": "/chat/completions",
+      "headers": {
+        "X-Ori-Context": "dev",
+        "X-Env-OS": "linux",
+        "X-Env-PWD": "/home/dev/project",
+        "X-Env-Project": "my-project",
+        "X-Env-Shell": "bash"
+      },
+      "body": {
+        "model": "oricli-oracle",
+        "stream": true,
+        "messages": [{ "role": "user", "content": "What should I tackle next in this repo?" }]
+      }
+    },
+    "red": {
+      "method": "POST",
+      "path": "/chat/completions",
+      "headers": { "X-Ori-Context": "red" },
+      "body": {
+        "model": "oricli-oracle",
+        "profile": "ori_red",
+        "messages": [{ "role": "user", "content": "Audit this endpoint for injection risks." }]
+      }
+    },
+    "with_session": {
+      "method": "POST",
+      "path": "/chat/completions",
+      "headers": {
+        "X-Ori-Context": "studio",
+        "X-Session-ID": "session-<uuid>"
+      },
+      "body": {
+        "model": "oricli-oracle",
+        "messages": [{ "role": "user", "content": "Continue from where we left off." }]
+      }
+    },
+    "home_space_create": {
+      "method": "POST",
+      "path": "/spaces",
+      "headers": {},
+      "body": {
+        "name": "Home Planning",
+        "description": "Private household knowledge space for one Home tenant."
+      }
+    },
+    "email_send": {
+      "method": "POST",
+      "path": "/email/send",
+      "headers": {},
+      "body": {
+        "to": "client@example.com",
+        "subject": "Weekly Report",
+        "body": "Plain text fallback",
+        "html": "<p>Optional HTML version</p>"
+      }
+    },
+    "capabilities_web_search": {
+      "method": "POST",
+      "path": "/capabilities/web-search",
+      "headers": {},
+      "body": {
+        "query": "latest news on sovereign AI infrastructure"
+      }
+    },
+    "capabilities_web_fetch": {
+      "method": "POST",
+      "path": "/capabilities/web-fetch",
+      "headers": {},
+      "body": {
+        "url": "https://example.com/article"
+      }
+    },
+    "capabilities_research": {
+      "method": "POST",
+      "path": "/capabilities/research",
+      "headers": {},
+      "body": {
+        "query": "Compare vector database options for RAG at scale."
+      }
+    },
+    "capabilities_repo_report": {
+      "method": "POST",
+      "path": "/capabilities/repo-report",
+      "headers": {},
+      "body": {
+        "repo": "/home/dev/project"
+      }
+    },
+    "agent_register_mobile": {
+      "method": "POST",
+      "path": "/agent/register",
+      "headers": {},
+      "body": {
+        "app_name": "ORI Mobile",
+        "device_id": "device-123"
+      }
+    },
+    "list_sessions": {
+      "method": "GET",
+      "path": "/sessions?surface=studio&limit=50",
+      "headers": {}
+    },
+    "get_session_messages": {
+      "method": "GET",
+      "path": "/sessions/<id>/messages?limit=200",
+      "headers": {}
+    },
+    "agents_vibe": {
+      "_comment": "Natural-language agent creation. Returns a new agent manifest.",
+      "method": "POST",
+      "path": "/agents/vibe",
+      "headers": {},
+      "body": {
+        "description": "An agent that monitors our GitHub repo for new PRs, drafts a summary, and posts it to our Slack channel."
+      }
+    },
+    "pad_dispatch": {
+      "_comment": "Parallel Agent Dispatch — fan-out multiple agents concurrently.",
+      "method": "POST",
+      "path": "/pad/dispatch",
+      "headers": {},
+      "body": {
+        "tasks": [
+          { "goal": "Summarise the latest news on LLM quantization.", "profile": "dev_assistant" },
+          { "goal": "Check the health of all ORI browser sessions.", "profile": "dev_assistant" },
+          { "goal": "Draft a Twitter thread on agentic memory patterns.", "profile": "studio_social_media" }
+        ]
+      }
+    },
+    "sovereign_goal_create": {
+      "_comment": "Tick-controlled sovereign goal — call /tick to advance each step.",
+      "method": "POST",
+      "path": "/sovereign/goals",
+      "headers": {},
+      "body": {
+        "goal": "Research the top 5 Rust web frameworks and write a comparison report.",
+        "max_steps": 10
+      }
+    },
+    "sovereign_goal_tick": {
+      "_comment": "Advance a sovereign goal by one step. Replace :id with the goal ID.",
+      "method": "POST",
+      "path": "/sovereign/goals/<id>/tick",
+      "headers": {},
+      "body": {}
+    },
+    "pad_sessions": {
+      "method": "GET",
+      "path": "/pad/sessions",
+      "headers": {}
+    },
+    "pad_session_results": {
+      "method": "GET",
+      "path": "/pad/sessions/<id>",
+      "headers": {}
+    },
+    "pad_stats": {
+      "method": "GET",
+      "path": "/pad/stats",
+      "headers": {}
+    }
+  }
+}

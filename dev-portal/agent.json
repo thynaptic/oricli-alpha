@@ -1,0 +1,260 @@
+{
+  "name": "ORI Developer Portal",
+  "schema_version": "2026-04-14",
+  "developer_portal_base_url": "https://dev.thynaptic.com",
+  "developer_portal_note": "Manifests (llms.txt, agent.json, openapi.json, tools.json) are served from the developer portal host. All authenticated API calls use runtime_base_url — not the portal host.",
+  "runtime_base_url": "https://glm.thynaptic.com/v1",
+  "auth": {
+    "type": "bearer",
+    "format": "ori.<prefix>.<secret>",
+    "legacy_formats_accepted": ["glm.<prefix>.<secret>"],
+    "policy": "one_key_anywhere",
+    "policy_description": "A single ORI runtime key authenticates all clients and surfaces. Use headers (e.g. X-Ori-Context) for product behavior, not separate keys."
+  },
+  "agent_bootstrap_auth": {
+    "type": "bearer",
+    "format": "agb.<prefix>.<secret>",
+    "description": "Agent-safe bootstrap key used only for first-party app registration."
+  },
+  "default_model": "oricli-oracle",
+  "default_routing": "oracle_first",
+  "surface_header": "X-Ori-Context",
+  "env_headers": ["X-Env-OS", "X-Env-PWD", "X-Env-Project", "X-Env-Shell"],
+  "default_behavior": {
+    "profile": null,
+    "description": "If no profile is supplied, ORI stays on her default baseline for that surface."
+  },
+  "version": "v2.10.0",
+  "stability": "stable",
+  "breaking_changes": "none expected",
+  "surfaces": {
+    "studio": {
+      "description": "Business operator surface",
+      "profiles": [
+        "studio_customer_comms",
+        "studio_operations",
+        "studio_meetings",
+        "studio_research",
+        "studio_knowledge",
+        "ori_north",
+        "big_sister"
+      ]
+    },
+    "home": {
+      "description": "Personal and household surface",
+      "profiles": [
+        "home_companion",
+        "home_planner",
+        "home_notes",
+        "home_research",
+        "big_sister"
+      ]
+    },
+    "dev": {
+      "description": "Technical builder surface",
+      "profiles": [
+        "dev_builder",
+        "dev_architect",
+        "dev_debugger",
+        "ori_code"
+      ]
+    },
+    "red": {
+      "description": "Security and assurance surface",
+      "profiles": [
+        "ori_red"
+      ]
+    }
+  },
+  "capabilities": {
+    "autonomous_agent": {
+      "endpoint": "POST /v1/capabilities/agent",
+      "description": "High-capability task execution via Copilot.",
+      "scope": "runtime:chat"
+    },
+    "deep_research": {
+      "endpoint": "POST /v1/capabilities/research",
+      "description": "Exhaustive architectural and web research dives.",
+      "scope": "runtime:chat"
+    },
+    "web_search": {
+      "endpoint": "POST /v1/capabilities/web-search",
+      "description": "Intent-aware SearXNG lookups.",
+      "scope": "runtime:chat"
+    },
+    "web_fetch": {
+      "endpoint": "POST /v1/capabilities/web-fetch",
+      "description": "RAG context extraction and cleaning.",
+      "scope": "runtime:chat"
+    },
+    "repo_report": {
+      "endpoint": "POST /v1/capabilities/repo-report",
+      "description": "Technical repository snapshots.",
+      "scope": "runtime:chat"
+    },
+    "sync_identity": {
+      "endpoint": "POST /v1/capabilities/sync-identity",
+      "description": "Sync the active sovereign identity state.",
+      "scope": "runtime:chat"
+    }
+  },
+  "browser_automation": {
+    "description": "Sovereign browser runtime (browserd) for agentic web interaction. All routes require auth.",
+    "endpoints": [
+      { "method": "GET", "path": "/v1/browser/health" },
+      { "method": "POST", "path": "/v1/browser/sessions" },
+      { "method": "POST", "path": "/v1/browser/open" },
+      { "method": "GET", "path": "/v1/browser/snapshot" },
+      { "method": "POST", "path": "/v1/browser/action" },
+      { "method": "POST", "path": "/v1/browser/screenshot" },
+      { "method": "POST", "path": "/v1/browser/state/save" },
+      { "method": "POST", "path": "/v1/browser/state/load" },
+      { "method": "DELETE", "path": "/v1/browser/sessions" }
+    ]
+  },
+  "tool_planning": {
+    "description": "Tool discovery and execution planning.",
+    "endpoints": [
+      { "method": "GET", "path": "/v1/tools" },
+      { "method": "POST", "path": "/v1/tools/plan" },
+      { "method": "POST", "path": "/v1/tools/execute-plan" }
+    ]
+  },
+  "memory": {
+    "description": "ORI memory and knowledge retrieval.",
+    "endpoints": [
+      { "method": "GET", "path": "/v1/memories" },
+      { "method": "GET", "path": "/v1/memories/knowledge" }
+    ]
+  },
+  "skill_discovery": {
+    "description": "List builtin .ori skills (and Go modules) for building external toggles and UIs. Public on the runtime — no API key required.",
+    "endpoint": { "method": "GET", "path": "/v1/modules" }
+  },
+  "user_skills": {
+    "description": "Tenant-scoped skill preferences and custom skill bodies (PocketBase on the runtime). Optional chat field ori_skills merges builtins + inline customs; X-Ori-Skills-Persisted + X-Ori-Skills-Scope merges saved rows for one request.",
+    "scope": "runtime:chat",
+    "endpoints": [
+      { "method": "GET", "path": "/v1/user/ori-skills/prefs", "description": "List saved enabled builtin skill ids for a scope_id." },
+      { "method": "PUT", "path": "/v1/user/ori-skills/prefs", "description": "Replace enabled builtin list for a scope_id." },
+      { "method": "GET", "path": "/v1/user/ori-skills/custom", "description": "List saved custom skills for a scope_id." },
+      { "method": "PUT", "path": "/v1/user/ori-skills/custom/:slug", "description": "Create or update one custom skill by slug." },
+      { "method": "DELETE", "path": "/v1/user/ori-skills/custom/:slug", "description": "Delete a custom skill." }
+    ]
+  },
+  "parallel_agent_dispatch": {
+    "description": "Fan-out multiple independent agent tasks in parallel and collect results. Optimised for workloads where subtasks have no inter-dependencies.",
+    "endpoints": [
+      { "method": "POST", "path": "/v1/pad/dispatch", "description": "Dispatch a batch of agents in parallel." },
+      { "method": "GET", "path": "/v1/pad/sessions", "description": "List PAD sessions." },
+      { "method": "GET", "path": "/v1/pad/sessions/:id", "description": "Get a PAD session and its results." },
+      { "method": "GET", "path": "/v1/pad/stats", "description": "Throughput metrics." }
+    ]
+  },
+  "sovereign_goals": {
+    "description": "Tick-controlled, supervised agent loops. Each execution step requires an explicit POST /:id/tick. Use for human-in-the-loop workflows or step-debuggable agentic pipelines.",
+    "note": "Distinct from /v1/goals (autonomous fire-and-forget). Sovereign goals are paused between ticks.",
+    "endpoints": [
+      { "method": "POST", "path": "/v1/sovereign/goals", "description": "Create a sovereign goal." },
+      { "method": "GET", "path": "/v1/sovereign/goals", "description": "List sovereign goals." },
+      { "method": "GET", "path": "/v1/sovereign/goals/:id", "description": "Get goal state." },
+      { "method": "POST", "path": "/v1/sovereign/goals/:id/tick", "description": "Advance goal by one step." },
+      { "method": "DELETE", "path": "/v1/sovereign/goals/:id", "description": "Cancel goal." }
+    ]
+  },
+  "agent_creation": {
+    "description": "Natural-language agent creation. Describe what you want the agent to do and ORI returns a deployable agent manifest.",
+    "endpoints": [
+      { "method": "POST", "path": "/v1/agents/vibe", "description": "Create an agent from a plain-English description." }
+    ]
+  },
+  "rules": [
+    "Set the surface explicitly.",
+    "Use X-Env headers for dynamic proprioception.",
+    "Do not redefine ORI identity in system prompts.",
+    "Let ORI carry identity, routing, and memory."
+  ],
+  "invariants": [
+    "ORI is always the entrypoint.",
+    "Oracle is mandatory; SLMs are deprecated.",
+    "Surface modifies behavior, not identity.",
+    "Profile is optional and only works when it belongs to the chosen surface."
+  ],
+  "failure_modes": [
+    {
+      "condition": "missing_auth",
+      "result": "401"
+    },
+    {
+      "condition": "missing_required_scope",
+      "result": "403"
+    },
+    {
+      "condition": "invalid_surface",
+      "result": "ignored"
+    },
+    {
+      "condition": "invalid_profile",
+      "result": "ignored"
+    },
+    {
+      "condition": "internal_only_lane",
+      "result": "not accessible via public API"
+    }
+  ],
+  "build_flow": [
+    "Ingest manifests from https://dev.thynaptic.com/ (this portal).",
+    "Point HTTP clients at runtime_base_url (https://glm.thynaptic.com/v1).",
+    "Acquire an ORI API key (ori.<prefix>.<secret>).",
+    "Select the surface only if product context matters.",
+    "Use POST /chat/completions.",
+    "Add streaming only when needed."
+  ],
+  "runtime_scopes": [
+    "runtime:chat",
+    "runtime:chat:feedback",
+    "runtime:email:send",
+    "runtime:models",
+    "runtime:spaces",
+    "runtime:workspaces",
+    "runtime:*"
+  ],
+  "specialized_capabilities": {
+    "notion_formula": "Available through ORI Studio and ORI MCP tools.",
+    "self_improving_vibe_loop": "Available via POST /chat/feedback. Lets agents submit roasts/lessons to improve future ORI personality consistency.",
+    "pocketbase_direct": "Available through ORI MCP tools (pb_*) for authenticated tenants."
+  },
+  "first_party_app_registration": {
+    "endpoint": "POST /app/register",
+    "product_scoped": true,
+    "requires_internal_registration_token": true,
+    "public_self_serve": false,
+    "examples": {
+      "ORI Home": [
+        "runtime:chat",
+        "runtime:chat:feedback",
+        "runtime:email:send",
+        "runtime:models",
+        "runtime:spaces",
+        "runtime:workspaces"
+      ],
+      "ORI Studio": [
+        "runtime:chat",
+        "runtime:chat:feedback",
+        "runtime:email:send",
+        "runtime:models"
+      ],
+      "ORI Dev": [
+        "runtime:chat",
+        "runtime:chat:feedback",
+        "runtime:models"
+      ],
+      "ORI Mobile": [
+        "runtime:chat",
+        "runtime:chat:feedback",
+        "runtime:email:send",
+        "runtime:models"
+      ]
+    }
+  }
+}

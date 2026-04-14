@@ -1,0 +1,84 @@
+{
+  "schema_version": "2026-04-14",
+  "product": "ORI",
+  "public_api": {
+    "chat": true,
+    "email_send": true,
+    "streaming": true,
+    "model_listing": true,
+    "first_party_app_registration": true,
+    "agent_safe_bootstrap": true,
+    "hosted_mcp": true,
+    "surface_context": true,
+    "working_style_selection": true,
+    "scope_enforcement": true,
+    "tenant_scoped_spaces": true,
+    "mcp_memory_read_write": true,
+    "mcp_key_introspection": true,
+    "mcp_health_check": true,
+    "mcp_spaces_management": true,
+    "vision_analysis": true,
+    "mcp_pocketbase_direct": true,
+    "sass_factor_control": true,
+    "agent_routing": true,
+    "graduated_autonomy": true,
+    "custom_agents": true,
+    "agent_delegation": true,
+    "skill_catalog_listing": true,
+    "chat_ori_skills_field": true,
+    "user_skill_preferences_api": true,
+    "user_custom_skills_api": true
+  },
+  "guarantees": [
+    "ORI is the public API entrypoint.",
+    "Plain chat is Oracle-first by default.",
+    "If no profile is supplied, ORI stays on her default baseline for the chosen surface.",
+    "Surface changes behavior and vocabulary, not core identity.",
+    "Developer manifests (llms.txt, agent.json, OpenAPI, tools) are served from dev.thynaptic.com; authenticated API traffic uses glm.thynaptic.com/v1.",
+    "One ORI runtime key (ori.*) works for every integration and client; scopes and headers (for example X-Ori-Context) select behavior — not separate keys per surface.",
+    "Protected runtime routes enforce scopes.",
+    "ORI Home Spaces are tenant-scoped."
+  ],
+  "non_guarantees": [
+    "Oracle is not a public endpoint.",
+    "Internal-only lanes are not selectable through the public API.",
+    "Invalid surface values are not guaranteed to error; they may be ignored.",
+    "Invalid profile values are not guaranteed to error; they may be ignored.",
+    "Legacy unowned Spaces are not auto-adopted by the first tenant that lists Spaces."
+  ],
+  "public_surfaces": [
+    "studio",
+    "home",
+    "dev",
+    "red"
+  ],
+  "public_models": [
+    "oricli-oracle"
+  ],
+  "intended_public_default": {
+    "model": "oricli-oracle",
+    "profile": null
+  },
+  "notes": [
+    "Use a working style only when a specific lane is needed.",
+    "A valid key without the required scope returns 403.",
+    "ORI Home app registration returns chat, email, model, spaces, and workspaces scopes.",
+    "Agent-safe bootstrap keys use the agb.* format and can only mint approved first-party app keys through POST /agent/register.",
+    "Native runtime email sending is available at POST /email/send.",
+    "Notion formula assistance is available through ORI Studio and ORI MCP.",
+    "Hosted ORI MCP is available at https://dev.thynaptic.com/mcp.",
+    "MCP tools recall_memory and store_memory require runtime:chat scope.",
+    "MCP tools list_spaces and create_space require runtime:spaces scope.",
+    "get_key_info and check_health are available to any authenticated key with no additional scope.",
+    "API keys generated via the admin endpoint now persist across backbone restarts.",
+    "MCP tools pb_* provide direct PocketBase record and collection management.",
+    "Sass Factor system (default 0.65) now drives personality wit and pushback across all surfaces.",
+    "POST /capabilities/agent routes through intent-aware agent classification. Query complexity determines model tier (fast/default/heavy), autonomy level (observe/suggest/execute/commit), and effort. The response includes is_delegated and pr_link when the task is handed off as a background job.",
+    "POST /capabilities/research always runs at observe autonomy (read-only, no file mutations) with high reasoning effort. Suitable for safe, side-effect-free research calls from external integrations.",
+    "Graduated autonomy levels: Level0 (read-only), Level1 (draft/plan only), Level2 (write + run, no git), Level3 (full autopilot including git commit). External /capabilities/agent calls start at Level2 minimum.",
+    "Custom specialist agents (architect, security, test, debug, docs) are selected automatically based on query intent signals.",
+    "GET /v1/modules lists builtin .ori skills publicly (no API key).",
+    "Chat requests may include ori_skills (enabled ids, custom bodies) and/or headers X-Ori-Skill, X-Ori-Skills-Persisted, X-Ori-Skills-Scope for one-shot merge of saved PocketBase skill rows.",
+    "GET/PUT /v1/user/ori-skills/prefs and GET/PUT/DELETE /v1/user/ori-skills/custom/* persist tenant skill state (runtime:chat)."
+  ]
+}

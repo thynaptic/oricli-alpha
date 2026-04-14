@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ORI MCP Quickstart</title>
+    <meta
+      name="description"
+      content="Quickstart for installing and using ORI MCP in agent hosts."
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="page-header">
+        <div class="eyebrow">ORI MCP</div>
+        <h1>Quickstart</h1>
+        <p class="lead">
+          Connect your IDE or agent host to the hosted ORI MCP endpoint, then start using the narrow tool set.
+        </p>
+      </header>
+
+      <section class="doc-section">
+        <div class="section-label">Install</div>
+        <h2>Minimum setup</h2>
+        <ol>
+          <li>Use the hosted endpoint <code>https://dev.thynaptic.com/mcp</code>.</li>
+          <li>Set or supply a valid ORI API key.</li>
+          <li>Send <code>Authorization: Bearer ori.&lt;prefix&gt;.&lt;secret&gt;</code> (legacy <code>glm.&lt;prefix&gt;.&lt;secret&gt;</code> is also accepted by the runtime).</li>
+          <li>Reload the MCP host.</li>
+        </ol>
+      </section>
+
+      <section class="doc-section">
+        <div class="section-label">Config</div>
+        <h2>Hosted MCP endpoint</h2>
+        <pre class="code-block"><code>URL: https://dev.thynaptic.com/mcp
+Authorization: Bearer ori.&lt;prefix&gt;.&lt;secret&gt;
+
+Bootstrap-only auth:
+Authorization: Bearer agb.&lt;prefix&gt;.&lt;secret&gt;</code></pre>
+        <p class="note">
+          Host-specific variants live in <a href="/install-guides.json">/install-guides.json</a>.
+          If your host only supports stdio MCP, use the Python bridge fallback described there.
+          For copy-paste host snippets, use <a href="/mcp-remote-configs.html">Remote Configs</a>.
+        </p>
+      </section>
+
+      <section class="doc-section">
+        <div class="section-label">Use</div>
+        <h2>Start with these tools</h2>
+        <ul>
+          <li><code>ask_ori</code> — general reasoning through the shared ORI runtime</li>
+          <li><code>register_first_party_app</code> — use a trusted <code>agb</code> bootstrap key to mint an approved first-party runtime key</li>
+          <li><code>plan_with_ori</code> — turn a goal into a short practical plan</li>
+          <li><code>review_with_ori</code> — review drafts, payloads, or plans</li>
+          <li><code>draft_with_ori</code> — generate a clean first draft</li>
+          <li><code>send_email_via_ori</code> — send outbound email through ORI's native runtime email layer</li>
+          <li><code>design_notion_formula</code>, <code>repair_notion_formula</code>, and <code>explain_notion_formula</code> — work on Notion formulas through ORI's Studio-side Notion builder layer</li>
+          <li><code>list_surfaces</code> and <code>list_working_styles</code> — choose the right lane first</li>
+        </ul>
+      </section>
+
+      <section class="doc-section">
+        <div class="section-label">Patterns</div>
+        <h2>Good defaults</h2>
+        <ul>
+          <li>Use <code>ask_ori</code> when the host needs ORI's baseline reasoning.</li>
+          <li>Use a surface only when product context matters.</li>
+          <li>Use a profile only when a specific working style is needed.</li>
+          <li>Use <code>get_request_template</code> and <code>get_capabilities</code> when the host needs exact contracts.</li>
+        </ul>
+      </section>
+
+      <section class="doc-section">
+        <div class="section-label">Links</div>
+        <h2>Related files</h2>
+        <ul>
+          <li><a href="/">Developer portal</a></li>
+          <li><a href="/mcp-remote-configs.html">Remote Configs</a></li>
+          <li><a href="/llms.txt">llms.txt</a></li>
+          <li><a href="/agent.json">agent.json</a></li>
+          <li><a href="/mcp-config.example.json">mcp-config.example.json</a></li>
+          <li><a href="/install-guides.json">install-guides.json</a></li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ORI MCP Remote Configs</title>
+    <meta
+      name="description"
+      content="Copy-paste remote MCP config snippets for ORI in Claude Desktop, Cursor, VS Code, and Codex-style hosts."
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="page-header">
+        <div class="eyebrow">ORI MCP</div>
+        <h1>Remote Configs</h1>
+        <p class="lead">
+          Use these snippets when your host supports a remote MCP endpoint over HTTP.
+        </p>
+      </header>
+
+      <section class="doc-section">
+        <div class="section-label">Endpoint</div>
+        <h2>Shared remote MCP</h2>
+        <pre class="code-block"><code>URL: https://dev.thynaptic.com/mcp
+Authorization: Bearer ori.&lt;prefix&gt;.&lt;secret&gt;</code></pre>
+      </section>
+
+      <section class="doc-section">
+        <div class="section-label">Claude Desktop</div>
+        <h2>Remote entry</h2>
+        <p class="note">Use when the host supports remote MCP server URLs directly.</p>
+        <pre class="code-block"><code>{
+  "mcpServers": {
+    "ori": {
+      "type": "http",
+      "url": "https://dev.thynaptic.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ori.&lt;prefix&gt;.&lt;secret&gt;",
+        "X-Env-OS": "Darwin",
+        "X-Env-PWD": "/Users/dev/project",
+        "X-Env-Project": "My Project"
+      }
+    }
+  }
+}</code></pre>
+      </section>
+
+      <section class="doc-section">
+        <div class="section-label">Cursor / VS Code</div>
+        <h2>Remote entry</h2>
+        <p class="note">Use when the editor's MCP settings accept a remote URL and custom headers.</p>
+        <pre class="code-block"><code>{
+  "name": "ori",
+  "type": "http",
+  "url": "https://dev.thynaptic.com/mcp",
+  "headers": {
+    "Authorization": "Bearer ori.&lt;prefix&gt;.&lt;secret&gt;",
+    "X-Env-OS": "Darwin",
+    "X-Env-PWD": "/Users/dev/project",
+    "X-Env-Project": "My Project"
+  }
+}</code></pre>
+      </section>
+
+      <section class="doc-section">
+        <div class="section-label">Codex / Generic</div>
+        <h2>Remote entry</h2>
+        <p class="note">Use this shape for any MCP host that supports remote HTTP transport.</p>
+        <pre class="code-block"><code>{
+  "name": "ori",
+  "transport": "streamable_http",
+  "url": "https://dev.thynaptic.com/mcp",
+  "headers": {
+    "Authorization": "Bearer ori.&lt;prefix&gt;.&lt;secret&gt;",
+    "X-Env-OS": "Darwin",
+    "X-Env-PWD": "/Users/dev/project",
+    "X-Env-Project": "My Project"
+  }
+}</code></pre>
+      </section>
+
+      <section class="doc-section">
+        <div class="section-label">Fallback</div>
+        <h2>If the host only supports stdio</h2>
+        <p class="note">
+          Use the Python bridge fallback and the example at <a href="/mcp-config.example.json">/mcp-config.example.json</a>.
+        </p>
+      </section>
+
+      <section class="doc-section">
+        <div class="section-label">Links</div>
+        <h2>Related files</h2>
+        <ul>
+          <li><a href="/mcp-quickstart.html">MCP Quickstart</a></li>
+          <li><a href="/install-guides.json">install-guides.json</a></li>
+          <li><a href="/agent.json">agent.json</a></li>
+          <li><a href="/llms.txt">llms.txt</a></li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

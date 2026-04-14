@@ -128,6 +128,8 @@ checkpoints/
 !oricli_core/evaluation/test_data/**/*.json
 !oricli_core/evaluation/test_data/**/*.yaml
 !oricli_core/evaluation/test_data/**/*.yml
+# Developer portal (dev.thynaptic.com) — version manifest JSON
+!dev-portal/**/*.json
 
 # Internal Reports
 technical_reports/

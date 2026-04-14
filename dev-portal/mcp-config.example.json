@@ -1,0 +1,25 @@
+{
+  "_comment": "Hosted ORI MCP endpoint (preferred). Works with any host that supports Streamable HTTP MCP.",
+  "mcpServers": {
+    "ori": {
+      "transport": "http",
+      "url": "https://dev.thynaptic.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ori.<prefix>.<secret>"
+      }
+    }
+  },
+  "_fallback": {
+    "_comment": "Stdio Python bridge fallback — use only when the host cannot connect to a remote HTTP MCP endpoint.",
+    "mcpServers": {
+      "ori": {
+        "command": "python3",
+        "args": ["/absolute/path/to/Mavaia/scripts/ori_mcp_server.py"],
+        "env": {
+          "ORI_MCP_API_KEY": "ori.<prefix>.<secret>",
+          "ORI_MCP_API_BASE": "https://glm.thynaptic.com/v1"
+        }
+      }
+    }
+  }
+}
