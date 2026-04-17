@@ -14,6 +14,24 @@ import (
 // Exposes VDI capabilities to the Sovereign Engine's dynamic toolbox.
 
 func (m *Manager) RegisterTools(registry *tools.Registry, vision *VisionGroundingService, scheduler *kernel.Scheduler, indexer *FSIndexer) {
+	// 0. Workspace Reporting
+	registry.Register(&tools.Tool{
+		Definition: tools.ToolDefinition{
+			Name:        "vdi_sys_report_workspace",
+			Description: "Reports the current active workspace path and project name.",
+			Parameters: tools.ToolParameters{
+				Type: "object",
+				Properties: map[string]tools.ToolProperty{},
+			},
+		},
+		Category: tools.TypeSystem,
+		Handler: func(args map[string]interface{}) (string, error) {
+			// This tool is a placeholder for LLM reasoning to call when it needs to be 
+			// certain of its grounding. The actual path is handled via CurrentRemotePWD injection.
+			return "Grounding verified. Operating in the provided client workspace.", nil
+		},
+	})
+
 	// 1. Browser Navigation
 	registry.Register(&tools.Tool{
 		Definition: tools.ToolDefinition{

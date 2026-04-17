@@ -21,11 +21,11 @@ type workspaceRunRequest struct {
 }
 
 type wsEvent struct {
-	Type    string `json:"type"`              // plan|step|result|error|done
-	Content string `json:"content"`           // human-readable
-	Step    int    `json:"step,omitempty"`    // current step index (1-based)
-	Total   int    `json:"total,omitempty"`   // total steps
-	Tool    string `json:"tool,omitempty"`    // tool used for this step
+	Type    string `json:"type"`            // plan|step|result|error|done
+	Content string `json:"content"`         // human-readable
+	Step    int    `json:"step,omitempty"`  // current step index (1-based)
+	Total   int    `json:"total,omitempty"` // total steps
+	Tool    string `json:"tool,omitempty"`  // tool used for this step
 }
 
 // wsEmit writes a single SSE data frame.
@@ -105,7 +105,9 @@ type planRaceResult struct {
 
 // planWithRace starts Oracle and the local model in parallel for the planning step.
 // Whichever returns valid parseable JSON first wins; the other is cancelled.
-func planWithRace(ctx context.Context, genSvc interface{ ChatStream(context.Context, []map[string]string, map[string]interface{}) (<-chan string, error) }, prompt string) (planPayload, error) {
+func planWithRace(ctx context.Context, genSvc interface {
+	ChatStream(context.Context, []map[string]string, map[string]interface{}) (<-chan string, error)
+}, prompt string) (planPayload, error) {
 	raceCtx, cancel := context.WithTimeout(ctx, 35*time.Second)
 	defer cancel()
 
@@ -123,7 +125,13 @@ func planWithRace(ctx context.Context, genSvc interface{ ChatStream(context.Cont
 				{Role: "system", Content: "You output ONLY raw JSON. No prose. No markdown. No preamble. The response MUST start with '{'. If you write anything before '{', it is wrong."},
 				{Role: "user", Content: prompt},
 			}
-			raw := oracleCollect(oracle.ChatStream(raceCtx, oracleMsgs))
+			raw := oracleCollect(oracle.ChatStreamWithDecision(raceCtx, oracleMsgs, oracle.Decision{
+				Route:   oracle.RouteResearch,
+				Backend: "copilot",
+				Model:   oracle.Decide(prompt, oracle.RouteHints{IsResearchAction: true}).Model,
+				Agent:   "ori-research",
+				Reason:  "workspace planning",
+			}))
 			raw = stripJSONFences(raw)
 			var p planPayload
 			if err := json.Unmarshal([]byte(raw), &p); err != nil {
@@ -284,7 +292,13 @@ func (s *ServerV2) handleWorkspaceRun(c *gin.Context) {
 				{Role: "system", Content: "You are ORI. Summarise task results concisely. No fluff."},
 				{Role: "user", Content: sumPrompt},
 			}
-			sumCh = oracle.ChatStream(sumCtx, oracleMsgs)
+			sumCh = oracle.ChatStreamWithDecision(sumCtx, oracleMsgs, oracle.Decision{
+				Route:   oracle.RouteHeavyReasoning,
+				Backend: "copilot",
+				Model:   oracle.Decide(sumPrompt, oracle.RouteHints{IsCodeAction: true}).Model,
+				Agent:   "ori-reasoner",
+				Reason:  "workspace summary",
+			})
 		} else {
 			var sumErr error
 			sumCh, sumErr = genSvc.ChatStream(sumCtx, sumMsgs, map[string]interface{}{"temperature": 0.3})

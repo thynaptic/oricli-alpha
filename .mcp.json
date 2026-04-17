@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "ori-runtime": {
+      "type": "http",
+      "url": "https://glm.thynaptic.com/v1/mcp",
+      "headers": {
+        "Authorization": "Bearer ${COPILOT_MCP_ORI_API_KEY}",
+        "X-Ori-Context": "dev",
+        "X-Ori-Workspace-Project": "Mavaia",
+        "X-Ori-Workspace-Root": "/home/mike/Mavaia"
+      },
+      "tools": [
+        "get_key_info",
+        "check_health",
+        "get_capabilities",
+        "list_surfaces",
+        "list_working_styles",
+        "get_request_template"
+      ]
+    }
+  }
+}

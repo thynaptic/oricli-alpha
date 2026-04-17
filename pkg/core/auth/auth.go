@@ -32,6 +32,11 @@ type Service struct {
 	store store.Store
 }
 
+var allowedKeyPrefixes = map[string]struct{}{
+	"ori": {},
+	"glm": {}, // legacy support
+}
+
 func NewService(st store.Store) *Service {
 	return &Service{store: st}
 }
@@ -47,7 +52,7 @@ func (s *Service) GenerateAPIKey(ctx context.Context, tenantID string, scopes []
 	}
 	prefix := base64.RawURLEncoding.EncodeToString(prefixBytes)
 	secret := base64.RawURLEncoding.EncodeToString(secretBytes)
-	raw = fmt.Sprintf("glm.%s.%s", prefix, secret)
+	raw = fmt.Sprintf("ori.%s.%s", prefix, secret)
 	hash, err := hashSecret(raw)
 	if err != nil {
 		return "", model.APIKeyRecord{}, err
@@ -71,7 +76,7 @@ func (s *Service) GenerateAPIKey(ctx context.Context, tenantID string, scopes []
 // Useful for persisted keys on restart.
 func (s *Service) RegisterAPIKey(ctx context.Context, raw, tenantID string, scopes []string, expiresAt *time.Time) (model.APIKeyRecord, error) {
 	parts := strings.Split(raw, ".")
-	if len(parts) != 3 || parts[0] != "glm" {
+	if len(parts) != 3 || !isAllowedKeyPrefix(parts[0]) {
 		return model.APIKeyRecord{}, errors.New("invalid key format")
 	}
 	prefix := parts[1]
@@ -93,7 +98,7 @@ func (s *Service) RegisterAPIKey(ctx context.Context, raw, tenantID string, scop
 func (s *Service) Authenticate(ctx context.Context, rawToken string) (context.Context, error) {
 	token := strings.TrimSpace(strings.TrimPrefix(rawToken, "Bearer "))
 	parts := strings.Split(token, ".")
-	if len(parts) != 3 || parts[0] != "glm" {
+	if len(parts) != 3 || !isAllowedKeyPrefix(parts[0]) {
 		return nil, ErrUnauthorized
 	}
 	prefix := parts[1]
@@ -144,6 +149,16 @@ func TenantID(ctx context.Context) string {
 func KeyID(ctx context.Context) string {
 	v, _ := ctx.Value(ctxKeyID).(string)
 	return v
+}
+
+func Scopes(ctx context.Context) []string {
+	v, _ := ctx.Value(ctxScopes).([]string)
+	return append([]string(nil), v...)
+}
+
+func isAllowedKeyPrefix(prefix string) bool {
+	_, ok := allowedKeyPrefixes[prefix]
+	return ok
 }
 
 func hashSecret(secret string) (string, error) {

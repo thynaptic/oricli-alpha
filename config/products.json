@@ -48,6 +48,25 @@
       "notes": "Security product. Public-facing brand remains vuln.ai. Managed as its own nested Git repo."
     },
     {
+      "id": "mise",
+      "display_name": "Mise by ORI",
+      "domain": "misebyori.com",
+      "path": "../mise-by-ori",
+      "repo_mode": "nested_repo",
+      "app_type": "web",
+      "status": "active",
+      "notes": "Consumer culinary AI (Next.js, PocketBase, Stripe). Source lives in sibling repo mise-by-ori next to the platform clone; not inside the Mavaia tree. Deploy e.g. mise-ui.service on PORT 3004. See docs/PRODUCTS.md."
+    },
+    {
+      "id": "ori_code",
+      "display_name": "ORI-Code",
+      "path": "../ori-code",
+      "repo_mode": "nested_repo",
+      "app_type": "cli",
+      "status": "active",
+      "notes": "Bun + React + Ink TUI coding agent (ori-code). Sibling repo next to platform clone; uses glm.thynaptic.com backbone. Local default model is gpt-5-mini, with ORI_MODEL available for explicit override. Distinct from in-tree Go oricli CLI. Dev surface profile ori_code. See docs/PRODUCTS.md."
+    },
+    {
       "id": "cli",
       "display_name": "oricli",
       "path": "cmd/oricli-cli",
@@ -73,7 +92,7 @@
   ],
   "repo_policy": {
     "default_mode": "in_tree",
-    "nested_repo_rule": "ORI Dev, ORI Home, and ORI Red are currently maintained as nested repos inside the platform workspace. Edit and commit them within their own repos until an explicit flattening or submodule decision is made.",
+    "nested_repo_rule": "ORI Dev, ORI Home, and ORI Red are nested inside the platform workspace; Mise by ORI (mise-by-ori) and ORI-Code (ori-code) live as sibling repos next to the platform clone. Edit and commit product code in those repos until an explicit flattening or submodule decision is made.",
     "flattening_rule": "Do not flatten or absorb nested product repos into the platform repo implicitly. Make that a deliberate migration with history and deploy implications reviewed first."
   },
   "domain_policy": {
@@ -83,7 +102,8 @@
       "studio": "oristudio.thynaptic.com",
       "dev": "oridev.thynaptic.com",
       "home": "home.thynaptic.com",
-      "red": "red.thynaptic.com"
+      "red": "red.thynaptic.com",
+      "mise": "misebyori.com"
     },
     "generic_domains": {
       "docs": "docs.thynaptic.com",

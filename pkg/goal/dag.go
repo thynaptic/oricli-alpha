@@ -47,6 +47,7 @@ type SubGoal struct {
 // GoalDAG is the top-level goal record containing the sub-goal execution graph.
 type GoalDAG struct {
 	ID          string       `json:"id"`
+	Surface     string       `json:"surface,omitempty"`
 	Objective   string       `json:"objective"`
 	Context     string       `json:"context,omitempty"`
 	Nodes       []*SubGoal   `json:"nodes"`

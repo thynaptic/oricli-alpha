@@ -10,6 +10,7 @@ This repo is the shared ORI platform plus multiple product clients. Do not infer
 | ORI Dev | `dev` | `products/ori-dev-web/` | Web | `nested_repo` | Active |
 | ORI Home | `home` | `ORI-Home/` | Desktop (Electron) | `nested_repo` | Active |
 | ORI Red | `red` | `vuln.ai/` | Web + backend | `nested_repo` | Active |
+| ORI-Code | `ori_code` | `../ori-code/` | CLI (Bun + Ink TUI) | `nested_repo` | Active |
 | oricli | `cli` | `cmd/oricli-cli/` | CLI | `in_tree` | Active |
 
 ## Deployment Notes
@@ -18,6 +19,7 @@ This repo is the shared ORI platform plus multiple product clients. Do not infer
 - ORI Dev is intended to be served as a built SPA from `products/ori-dev-web/dist/` using [scripts/start_ori_dev.sh](/home/mike/Mavaia/scripts/start_ori_dev.sh) and [ori-dev-ui.service](/home/mike/Mavaia/ori-dev-ui.service).
 - The current live `oridev.thynaptic.com` route was patched into Caddy through its admin API and should be made persistent in `/etc/caddy/Caddyfile`. Permanent config is documented in [ORI_DEV_DEPLOY.md](/home/mike/Mavaia/docs/ORI_DEV_DEPLOY.md).
 - ORI Home and ORI Red manage their own product-specific runtime inside their nested repos.
+- ORI-Code lives in the sibling `../ori-code` repo and talks to `glm.thynaptic.com` as the coding-agent surface. Its local default model is `gpt-5-mini`, with `ORI_MODEL` available as an explicit override when testing alternate runtime models.
 
 ## Public brand aliases
 
@@ -37,7 +39,7 @@ Internally, treat `vuln.ai` as the public brand for `ORI Red`, not as a separate
 | ORI Red | `red.thynaptic.com` | Customer-facing Red product |
 | Shared API / auth / runtime | `glm.thynaptic.com` | Shared API surface already used for JIT auth and first-party clients |
 | Docs | `docs.thynaptic.com` | Documentation |
-| Generic dev / staging / scratch | `dev.thynaptic.com` | Non-product infra domain |
+| Developer portal | `dev.thynaptic.com` | Public developer portal for ORI integration |
 | Demo | `demo.thynaptic.com` | Demos |
 
 Current shared origin behind Cloudflare: `85.31.233.157`
@@ -45,7 +47,7 @@ Current shared origin behind Cloudflare: `85.31.233.157`
 ### Domain rules
 
 - Product domains should use explicit product names, not generic nouns.
-- `dev.thynaptic.com` is reserved for infra, staging, previews, or scratch services, not the ORI Dev product.
+- `dev.thynaptic.com` is the public developer portal for ORI integration. It is not the ORI Dev product.
 - `glm.thynaptic.com` stays stable as the neutral API/auth/runtime endpoint.
 - Public brand aliases like `vuln.ai` can coexist with canonical product domains.
 
@@ -61,10 +63,12 @@ Current shared origin behind Cloudflare: `85.31.233.157`
 - Prefer canonical product names in docs, config, and code comments.
 - Treat legacy folder names such as `ui_sovereignclaw` as transitional, not architectural.
 - `oricli` is a tool/runtime surface, not a peer end-user product to Studio, Dev, Home, and Red.
+- `ORI-Code` is the terminal coding-agent product surface and is distinct from the in-tree `oricli` Go CLI.
 
 ## Nested Repo Policy
 
 - `products/ori-dev-web/`, `ORI-Home/`, and `vuln.ai/` are currently nested Git repos inside the platform workspace.
+- `../ori-code` and `../mise-by-ori` are sibling repos next to the platform workspace.
 - Make code changes and commits inside those repos when the change belongs to the product client itself.
 - Do not flatten or absorb those repos into the platform repo by accident.
 - If we later choose submodules or a full flattening migration, that should be a deliberate history-preserving move, not incidental cleanup.

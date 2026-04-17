@@ -1,4 +1,11 @@
-# ORI Studio — Flask UI API Reference
+# ORI Studio — Proxy API Reference (STUDIO)
+
+Status: Implementation Reference
+
+This doc covers the Python/Flask proxy layer that handles Studio-specific features like workflows, pipelines, email commands, and notebook entries.
+
+For the core Go backbone API, see:
+- [API.md](/home/mike/Mavaia/docs/API.md)
 
 **Base URL (local):** `http://localhost:5001`  
 **Base URL (production):** `https://oristudio.thynaptic.com`  

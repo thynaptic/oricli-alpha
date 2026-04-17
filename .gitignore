@@ -119,6 +119,7 @@ checkpoints/
 *.csv
 *.json
 !.cursor/mcp.json
+!.mcp.json
 !**/config.json
 !**/*_config.json
 !**/package.json

@@ -1,255 +1,214 @@
-# Reasoning Systems — Oricli-Alpha / ORI Studio
+# Reasoning
 
-**Document Type:** Technical Reference  
-**Version:** v3.1.0  
-**Status:** Active  
+Status: active supporting doc
 
----
+This file describes ORI's current reasoning direction at a product and runtime level.
 
-## Overview
+It is not a promise that every historical reasoning subsystem listed in older docs is still the primary path for current user-visible chat.
 
-Oricli-Alpha's reasoning stack is a **Go-native orchestration layer** that treats LLMs as compute subsystems, not as the sole source of intelligence. Reasoning is composed from deterministic state machines, structured search, memory retrieval, and policy gates, then fused with generation for the final response. The system routes queries across a **dual-track architecture**: a fast-path for keyword-matched queries and an **Adaptive Reasoning Engine (ARE)** for high-complexity / ambiguous queries.
+Use this doc to answer:
 
-**Primary entrypoints and references:**
-- Mode classification & dispatch: `pkg/cognition/reasoning_modes.go` (`ClassifyReasoningMode()`), `pkg/cognition/reasoning_engines.go`
-- Adaptive Reasoning Engine: `pkg/cognition/adaptive_engine.go` (`runAdaptive()`, `arePolicy()`, `areValue()`)
-- Sovereign engine orchestration: `pkg/cognition/sovereign.go`, `pkg/cognition/instructions.go`
-- MCTS engine: `docs/MCTS_REASONING.md`, `pkg/cognition/mcts_*`, `pkg/core/reasoning/mcts.go`
-- ToT engine: `pkg/cognition/tot.go`, `pkg/service/reasoning_tot.go`
-- CoT / MCTS service wrappers: `pkg/service/reasoning_cot.go`, `pkg/service/reasoning_mcts.go`
-- Core reasoning pipeline: `pkg/core/reasoning/` (decompose, executor, multiagent, geometry_fusion)
-- Meta-reasoning evaluation: `pkg/core/metareasoning/chain.go`, `pkg/core/metareasoning/evaluator.go`
-- Reasoning strategies service: `pkg/service/reasoning_strategies.go`, `pkg/node/reasoning_strategies_module.go`
+- what ORI treats as the real intelligence layer
+- what Oracle vs local models are for
+- how reasoning relates to profiles, skills, routing, and surfaces
+- how to interpret older reasoning docs that still exist in the repo
 
----
+## Current Truth
 
-## Dual-Track Architecture (v3.1.0)
+Ori is not the model.
 
-### Track 1 — Fast Path
-All queries with a strong keyword signal route directly to a specific mode. Same latency as before; no change for these paths.
+Ori is the system that:
 
-### Track 2 — Adaptive Reasoning Engine (ARE)
-Fires when complexity ≥ 0.55 AND no strong keyword signal is present. Replaces the old static `ModeDiscover` catch-all.
+- holds identity
+- keeps memory
+- routes work
+- applies skills and profiles
+- chooses tools
+- enforces permissions
+- shapes the final user experience
 
-The ARE runs a **multi-step loop** (max 3 steps, hard cap):
+Reasoning backends sit underneath that system.
 
-```
-Query → [complexity ≥ 0.55, no keyword] → ARE loop:
-  Step 1: Consistency (3-vote plurality — fastest standalone answerer)
-  Step 2: Debate     (adversarial synthesis → finalized with 1 LLM call)  [if step 1 < 0.60]
-  Step 3: Discover   (structured plan → finalized with 1 LLM call)         [if step 2 < 0.60]
-```
+Right now, the practical direction is:
 
-**Exit criteria:** Confidence (Value score) ≥ 0.75 → stop early. Budget exhausted → return best answer seen. Always returns a non-empty answer.
+- Oracle is the default reasoning lane for user-visible quality
+- local small models are utility workers, not the main brain
+- surface overlays and profiles shape behavior before any model produces the final answer
 
-**Context design:** ARE uses `context.WithoutCancel` so HTTP client disconnection doesn't kill mid-step reasoning. Each step has its own 90s timeout.
+This matches:
 
-### Value Function (`areValue`)
-Pure heuristic, < 1ms. Scores answer quality on [0.0, 1.0]:
+- [ORI_CORE_ARCHITECTURE.md](/home/mike/Mavaia/docs/ORI_CORE_ARCHITECTURE.md)
+- [ORI_PROFILE_AND_SKILL_CURATION.md](/home/mike/Mavaia/docs/ORI_PROFILE_AND_SKILL_CURATION.md)
 
-| Condition | Score |
-|-----------|-------|
-| Empty | 0.0 |
-| < 50 chars | 0.20 |
-| 50–200 chars | 0.50 |
-| 200–500 chars | 0.62 |
-| > 500 chars | 0.70 |
-| + structured output (lists, code, headings) | +0.08 |
-| + reasoning markers (therefore, because, etc.) | +0.04 |
-| - hedging opener (I don't know, I cannot, etc.) | -0.30 |
+## Reasoning Stack Today
 
----
+### 1. ORI Core
 
-## Reasoning Mode Dispatcher (v3.1.0)
+This is the real top layer.
 
-All inference passes route through `ClassifyReasoningMode()` in `pkg/cognition/reasoning_modes.go`. It accepts a stimulus string + `AdaptiveBudget` and returns one of 13 `ReasoningMode` constants. The selected mode's runner executes in `pkg/cognition/reasoning_engines.go` or `pkg/cognition/adaptive_engine.go`.
+It owns:
 
-| Mode | Constant | Trigger Signal |
-|------|----------|----------------|
-| Standard | `ModeStandard` | Default / low complexity |
-| Case-Based Reasoning | `ModeCBR` | Familiar pattern, provenance match |
-| Program-Aided Language | `ModePAL` | Math, formulae, rate problems (`how long` + digit), code execution |
-| Active Prompting | `ModeActive` | Knowledge gaps detected |
-| Least-to-Most | `ModeLeastToMost` | Ordered decomposition needed |
-| Self-Refine | `ModeSelfRefine` | Draft critique → refinement |
-| ReAct | `ModeReAct` | Tool-use / observation loop |
-| Multi-Agent Debate | `ModeDebate` | High-stakes or contested claim |
-| Causal Chain | `ModeCausal` | WHY / WHAT-IF / HOW queries |
-| SELF-DISCOVER | `ModeDiscover` | Called from ARE Step 3 (internal) |
-| Self-Consistency | `ModeConsistency` | Logical argument eval; ARE Step 1 |
-| CrossDomain Bridge | `ModeCrossdomainBridge` | Cross-domain synthesis |
-| **Adaptive (ARE)** | `ModeAdaptive` | **complexity ≥ 0.55, no keyword hit** |
+- persona baseline
+- session context
+- memory and identity
+- routing policy
+- profile and skill loading
+- tool permissions
+- quality and safety defaults
 
-**Routing priority order** (first match wins in `ClassifyReasoningMode()`):
-1. **PAL** — `reMath` match (arithmetic, `how long.*\d`, formula, etc.)
-2. **LogicEval → Consistency** — `reLogicEval` match (`therefore`, `valid argument`, `it follows that`, `modus ponens`, etc.)
-3. **Adaptive (ARE)** — complexity ≥ 0.55 (replaces old ModeDiscover catch-all)
-4. **Causal / Debate / ReAct / LeastToMost / SelfRefine** — keyword + complexity gate
-5. **CBR** — complexity > 0.45
-6. **Consistency** — complexity ≥ 0.30
-7. **Active** — uncertainty detected
-8. **Standard** — fallback
+This is what keeps Ori feeling like Ori even when model choices change.
 
----
+### 2. Surface Overlays
 
-## Core Reasoning Methods (Live)
+Each product gets a thin reasoning context layer:
 
-### 1) Monte Carlo Tree Search (MCTS)*
-**Purpose:** Deep deliberative search for complex or high-uncertainty queries.  
-**Implementation:** Compiled Go MCTS engine with rollouts, branch expansion, and adversarial evaluation.  
-**References:** `docs/MCTS_REASONING.md`, `pkg/cognition/mcts_*`, `pkg/core/reasoning/mcts.go`, `pkg/service/reasoning_mcts.go`
+- Studio
+- Home
+- Dev
+- Red
 
-### 2) Tree of Thoughts (ToT)
-**Purpose:** Breadth-first search over multiple reasoning branches; best-path selection.  
-**Implementation:** Go-native ToT engine with layer expansion, diversity prompts, and path reconstruction.  
-**References:** `pkg/cognition/tot.go`, `pkg/service/reasoning_tot.go`, `pkg/node/tree_reasoning_module.go`
+The overlay decides:
 
-### 3) Chain-of-Thought (CoT)
-**Purpose:** Step-by-step reasoning trace for structured problem solving.  
-**Implementation:** CoT service wrapper with prompt construction and trace extraction.  
-**References:** `pkg/service/reasoning_cot.go`
+- what matters on this surface
+- what vocabulary is allowed
+- what skills are allowed
+- what should stay hidden
 
-### 4) Structured Reasoning Strategies
-**Purpose:** Specialized prompting patterns for targeted analysis.  
-**Methods:** Analogical, causal, comparative, temporal, step-by-step, verification, and more.  
-**References:** `pkg/service/reasoning_strategies.go`, `pkg/node/reasoning_strategies_module.go`
+### 3. Profiles And Skills
 
-### 5) Adaptive Reasoning Budgeting
-**Purpose:** Dynamically scale depth/iterations based on complexity signals.  
-**Implementation:** Complexity detector that tunes MCTS depth, rollout counts, and activation thresholds.  
-**References:** `pkg/cognition/adaptive.go`, `pkg/cognition/substrate.go`
+Profiles are the user-facing working styles.
 
----
+Skills are the narrower behavioral lanes attached underneath.
 
-## v3.0.0 Reasoning Modes
+Current rule:
 
-### 6) Program-Aided Language (PAL)
-**Purpose:** Offload math, logic, and deterministic computation to a Python3 subprocess — zero hallucinated arithmetic.  
-**Trigger:** `reMath` regex: arithmetic expressions, unit conversions, `how long.*\d` / `\d.*how long` (rate/machine problems), formulas, equations.  
-**Implementation:** PAL runner spawns a sandboxed Python3 process; result is injected back into response context.  
-**References:** `pkg/cognition/pal.go`, `pkg/cognition/reasoning_engines.go`
+- users should usually choose a working style, not a raw skill
+- strict profiles can suppress unrelated trigger-matched skills
+- surface overlays can block skills even if they exist globally
 
-### 7) Case-Based Reasoning (CBR)
-**Purpose:** Match current query against provenance-solved cases; return known-good answers with lineage trace.  
-**Implementation:** `ProvenanceSolved` tier seeded by every clean SelfAlign pass; `QuerySolved()` lookup before generation.  
-**References:** `pkg/cognition/reasoning_engines.go`, `pkg/cognition/reasoning_modes.go`
+### 4. Reasoning Backends
 
-### 8) Active Prompting
-**Purpose:** Identify knowledge gaps in the query, then fill them via targeted search/memory before generating.  
-**Implementation:** `IdentifyGaps()` → per-gap tool dispatch → enriched context passed to generation.  
-**References:** `pkg/cognition/reasoning_engines.go`
+Backends supply compute. They do not define Ori's identity.
 
-### 9) Least-to-Most Decomposition
-**Purpose:** Break complex queries into ordered sub-problems; solve each in dependency order (max 3 steps).  
-**Implementation:** Ordered chained decomposition; each sub-answer feeds the next.  
-**References:** `pkg/cognition/reasoning_engines.go`, `pkg/core/reasoning/decompose.go`
+Current direction:
 
-### 10) Self-Refine
-**Purpose:** Draft → critique → conditional re-generation (1 iteration max); improves quality without compounding errors.  
-**Implementation:** Critique pass checks for contradictions, omissions, and hallucination markers; re-generation only on failure.  
-**References:** `pkg/cognition/reasoning_engines.go`
+- Oracle handles substantive reasoning
+- local models handle wake, utility, extraction, and fallback
 
-### 11) ReAct (Reason + Act)
-**Purpose:** Think → Act → Observe loop for tool-augmented queries (max 3 hops).  
-**Implementation:** Each hop emits a thought trace, calls a tool, observes the result, and decides to continue or conclude.  
-**References:** `pkg/cognition/reasoning_engines.go`
+## Oracle vs Local
 
-### 12) Multi-Agent Debate
-**Purpose:** High-stakes or contested claims evaluated by a panel: Advocate + Skeptic + Contrarian → Judge synthesis.  
-**Implementation:** 4-role multi-agent debate with aggregated verdict.  
-**References:** `pkg/cognition/reasoning_engines.go`, `pkg/core/reasoning/multiagent.go`
+### Oracle
 
-### 13) Causal Chain Reasoning
-**Purpose:** Explicit causal extraction for WHY / WHAT-IF / HOW queries — produces structured cause→effect chains.  
-**Implementation:** Dedicated causal decomposition pass; integrates with Working Memory Graph for persistent causal links.  
-**References:** `pkg/cognition/causal.go`, `pkg/cognition/reasoning_engines.go`
+Use Oracle for:
 
-### 14) Self-Consistency
-**Purpose:** Generate N parallel candidate answers, then consensus-vote to select the most stable response.  
-**Trigger:** Two paths: (1) `reLogicEval` match — syllogisms, deductive argument validity, logical fallacy questions (fires before SELF-DISCOVER catch-all); (2) medium-complexity factual queries (0.30 ≤ complexity < 0.45, below CBR threshold).  
-**Logic rationale:** Small models (≤3B) fail on argument validity with single-path generation. 3 independent samples at varying temperature (0.5/0.6/0.7) + plurality vote provides error-correction that SELF-DISCOVER cannot — diversity of reasoning paths surfaces the correct answer even when any individual path fails.  
-**Implementation:** Parallel sampling with diversity injection; majority-vote or embedding-similarity consensus.  
-**References:** `pkg/cognition/reasoning_engines.go`, `pkg/cognition/verification.go`
+- substantive chat
+- planning
+- writing
+- analysis
+- business reasoning
+- workspace/system design
+- anything user-visible where quality matters
 
----
+### Local small models
 
-## Memory-Grounded Reasoning
+Use local only when they clearly win:
 
-### 15) Hybrid Retrieval + RAG
-**Purpose:** Ground reasoning with durable memory, knowledge graph context, and RAG fragments.  
-**Implementation:** Hybrid retrieval (keyword + embeddings), provenance weighting, volatility-aware decay, and memory anchoring.  
-**References:** `docs/MEMORY_ARCHITECTURE.md`, `docs/POCKETBASE_MEMORY.md`, `docs/EPISTEMIC_HYGIENE.md`
+- wake and warm paths
+- lightweight classification
+- extraction
+- simple transforms
+- offline fallback
+- low-value internal utility tasks
 
-### 16) Relational Context + Belief State*
-**Purpose:** Maintain structured entity relationships and session-local fog-of-war state during reasoning.  
-**Implementation:** RelationalContext derived from the Working Memory Graph; per-session BeliefState tracking.  
-**References:** `pkg/cognition/instructions.go`, `pkg/api/server_v2.go`
+Do not treat small local models as the main product intelligence unless the quality bar clearly holds.
 
----
+## How Routing Should Be Read
 
-## Meta-Reasoning & Verification
+Older docs describe a very detailed reasoning stack with many modes:
 
-### 17) Aletheia Loop / Balanced Prompting*
-**Purpose:** Counter confirmation bias and improve reliability via structured adversarial evaluation.  
-**Implementation:** Balanced prompting + verifier pass; optionally triggers corrective actions.  
-**References:** `pkg/cognition/instructions.go`, `pkg/cognition/epistemic_filter.go`, `pkg/api/server_v2.go`
+- MCTS*
+- ToT
+- CoT
+- PAL
+- Self-Consistency
+- ReAct
+- Debate
+- Causal reasoning
+- SELF-DISCOVER
+- and others
 
-### 18) ExploiterLeague Adversarial Auditing*
-**Purpose:** Post-stream adversarial auditing of responses via specialist "exploiter" checks.  
-**Implementation:** Multi-agent audit loop inspired by league-based training.  
-**References:** `pkg/cognition/exploiter_league.go`, `pkg/api/server_v2.go`
+Those are useful as implementation/reference concepts, but they are not the same thing as today's product-facing reasoning story.
 
-### 19) Meta-Reasoning Evaluation Chain
-**Purpose:** Evaluate and score intermediate reasoning chains; prune low-quality branches before synthesis.  
-**Implementation:** Chain evaluator with scoring heuristics; feeds back into adaptive budget controller.  
-**References:** `pkg/core/metareasoning/chain.go`, `pkg/core/metareasoning/evaluator.go`
+The current product-facing rule is simpler:
 
----
+1. Ori Core sets identity and policy
+2. surface overlay narrows behavior
+3. active profile selects the working lane
+4. allowed skills attach emphasis
+5. Oracle or local compute executes the turn
 
-## Planning & Decomposition
+That is the lens future work should follow.
 
-### 20) Response Planning*
-**Purpose:** Hierarchical decision-making over action space (plan → subplan → action).  
-**Implementation:** `ResponsePlanner` (`pkg/cognition/response_planner.go`) models ActionType, ResponseStructure, and ResponseLength. `pkg/cognition/planner.go` handles Roadmap/WorkOrder construction.  
-**References:** `pkg/cognition/response_planner.go`, `pkg/cognition/planner.go`, `pkg/cognition/instructions.go`
+## Historical / Deeper Reasoning Methods
 
-### 21) SELF-DISCOVER Plan Composition
-**Purpose:** LLM self-composes a reasoning plan for novel task structures; plan is persisted and reused.  
-**Implementation:** Plan discovery pass → structured plan JSON → execution via reasoning engines.  
-**References:** `pkg/cognition/self_discover.go`, `pkg/cognition/reasoning_engines.go`
+The repo still contains deeper reasoning systems and references, including:
 
-### 22) Task Decomposition
-**Purpose:** Break multi-step goals into executable sub-tasks with dependency ordering.  
-**References:** `pkg/core/reasoning/decompose.go`, `pkg/core/reasoning/executor.go`
+- adaptive reasoning logic
+- structured search
+- decomposition
+- debate
+- planning
+- retrieval and memory grounding
+- verification and audit layers
 
----
+Relevant implementation paths still include:
 
-## Symbolic & Hybrid Reasoning
+- `pkg/cognition/`
+- `pkg/core/reasoning/`
+- `pkg/core/metareasoning/`
+- `pkg/service/reasoning_*`
 
-### 23) Symbolic Overlay & Logical Filters
-**Purpose:** Constrain reasoning with deterministic symbolic scaffolding where required.  
-**Implementation:** Symbolic overlays, constraint filters, and policy-consistent reasoning prompts.  
-**References:** `pkg/cognition/symbolic.go`, `pkg/core/reasoning/`
+Useful supporting docs:
 
-### 24) ARC Induction/Transduction
-**Purpose:** Abstract reasoning via induction + transduction for ARC-style tasks.  
-**References:** `docs/arc_induction_transduction_implementation.md`, `pkg/` ARC modules
+- [MCTS_REASONING.md](/home/mike/Mavaia/docs/MCTS_REASONING.md)
+- [MEMORY_ARCHITECTURE.md](/home/mike/Mavaia/docs/MEMORY_ARCHITECTURE.md)
+- [EPISTEMIC_HYGIENE.md](/home/mike/Mavaia/docs/EPISTEMIC_HYGIENE.md)
 
----
+But these should be read as deeper implementation/reference material, not as the first explanation of how ORI thinks today.
 
-## Routing & Orchestration
+## About The `*` Mark
 
-### 25) Reasoning Router
-**Purpose:** Selects the optimal mode from the 11-mode dispatcher based on policy + query signals.  
-**Implementation:** `ClassifyReasoningMode()` in `pkg/cognition/reasoning_modes.go` with `AdaptiveBudget` gating.  
-**References:** `pkg/cognition/reasoning_modes.go`, `pkg/service/reasoning_orchestrator.go`, `pkg/cognition/sovereign.go`
+Some older reasoning docs and notes use an asterisk `*` to mark methods inspired by external research lines or system families rather than copied implementations.
 
-### 26) Multi-Agent Reasoning (Swarm)
-**Purpose:** Distribute reasoning across specialized agents and aggregate results via consensus.  
-**References:** `pkg/core/reasoning/multiagent.go`, `pkg/core/orchestrator/`, `pkg/service/agent.go`, `docs/ROSETTA.md`
+That meaning should stay intact.
 
----
+In this repo, `*` should be read as:
 
-## Notes on DeepMind-Inspired Methods
+- inspired by a known research/system lineage
+- implemented in ORI's own stack and adapted to ORI's needs
+- not a claim of one-to-one parity with the source system
 
-Methods marked with an asterisk (*) are inspired by DeepMind research lines or systems (e.g., AlphaGo/AlphaZero MCTS, AlphaStar league training, and Aletheia-style verification). These are inspirations only; implementations are sovereign, Go-native, and tailored to Oricli-Alpha's architecture.
+That distinction matters and should not be lost in rewrites.
+
+## Product Rule
+
+Do not let reasoning docs pull the product back into a model-centric story.
+
+The current thesis is:
+
+- Ori is the system
+- models are replaceable compute
+- overlays, profiles, skills, memory, and routing shape the result
+- product quality matters more than preserving an all-local ideal
+
+If a future doc still implies that the model alone is the brain, it needs review.
+
+## Current Direction
+
+Use this as the practical default:
+
+- Oracle-first for user-visible reasoning quality
+- local models for utility and fallback
+- surface overlays to keep products distinct
+- curated profiles and skills instead of raw inventory exposure
+- older deep-reasoning systems treated as supporting implementation reference unless actively re-promoted

@@ -3,7 +3,7 @@
   "description": "Environment-specific install guidance for ORI MCP v1.",
   "default_server": {
     "transport": "streamable_http",
-    "url": "https://dev.thynaptic.com/mcp",
+    "url": "https://glm.thynaptic.com/v1/mcp",
     "auth": "Authorization: Bearer ori.<prefix>.<secret>"
   },
   "environments": {
@@ -12,7 +12,7 @@
       "when_to_use": "Use when installing ORI MCP into Claude Desktop or another host that supports remote MCP over HTTP.",
       "steps": [
         "Set ORI_MCP_API_KEY to a valid ORI API key (one key for all integrations).",
-        "Use https://dev.thynaptic.com/mcp as the MCP server URL.",
+        "Use https://glm.thynaptic.com/v1/mcp as the MCP server URL.",
         "Send Authorization: Bearer ori.<prefix>.<secret>.",
         "Restart Claude Desktop."
       ],
@@ -25,7 +25,7 @@
       "when_to_use": "Use when the host accepts a remote MCP server URL and bearer auth.",
       "steps": [
         "Set ORI_MCP_API_KEY to a valid ORI API key (one key for all integrations).",
-        "Point the host at https://dev.thynaptic.com/mcp.",
+        "Point the host at https://glm.thynaptic.com/v1/mcp.",
         "Send Authorization: Bearer ori.<prefix>.<secret>.",
         "Start or reload the MCP host."
       ]
@@ -35,7 +35,7 @@
       "when_to_use": "Use when the editor supports remote MCP servers over HTTP.",
       "steps": [
         "Set ORI_MCP_API_KEY to a valid ORI API key (one key for all integrations).",
-        "Use https://dev.thynaptic.com/mcp as the MCP server URL.",
+        "Use https://glm.thynaptic.com/v1/mcp as the MCP server URL.",
         "Configure bearer auth with your GLM key.",
         "Reload the editor window or the MCP host."
       ],
@@ -57,13 +57,14 @@
       "title": "Generic remote MCP host",
       "when_to_use": "Use when the host can connect to a Streamable HTTP MCP endpoint but does not have a dedicated ORI example yet.",
       "steps": [
-        "Use https://dev.thynaptic.com/mcp as the MCP endpoint.",
+        "Use https://glm.thynaptic.com/v1/mcp as the MCP endpoint.",
         "Send Authorization: Bearer ori.<prefix>.<secret>.",
         "Initialize the connection and use tools/list and tools/call normally."
       ],
       "notes": [
         "ORI MCP v1 is a narrow safe toolkit.",
         "The hosted endpoint supports initialize, tools/list, and tools/call over Streamable HTTP.",
+        "The current public runtime tool pack includes get_key_info, check_health, get_capabilities, list_surfaces, list_working_styles, and get_request_template.",
         "Use the Python bridge fallback only if the host cannot connect to remote MCP."
       ]
     }

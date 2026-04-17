@@ -73,6 +73,7 @@ func (s *GoalStore) Save(ctx context.Context, goal *GoalDAG) error {
 	nodesJSON, _ := json.Marshal(goal.Nodes)
 	data := map[string]interface{}{
 		"goal_id":     goal.ID,
+		"surface":     goal.Surface,
 		"objective":   goal.Objective,
 		"context":     goal.Context,
 		"status":      string(goal.Status),
@@ -108,6 +109,7 @@ func (s *GoalStore) Update(ctx context.Context, goal *GoalDAG) error {
 	}
 	pbID := fmt.Sprintf("%v", resp.Items[0]["id"])
 	return s.pb.UpdateRecord(ctx, goalsCollection, pbID, map[string]interface{}{
+		"surface":      goal.Surface,
 		"status":       string(goal.Status),
 		"final_answer": goal.FinalAnswer,
 		"tick_count":   goal.TickCount,
@@ -183,6 +185,7 @@ func (s *GoalStore) createGoalsCollection(ctx context.Context) error {
 		Type: "base",
 		Schema: []pb.FieldSchema{
 			{Name: "goal_id", Type: "text", Required: true},
+			{Name: "surface", Type: "text"},
 			{Name: "objective", Type: "text", Options: map[string]any{"maxSize": 200000}},
 			{Name: "context", Type: "text", Options: map[string]any{"maxSize": 200000}},
 			{Name: "status", Type: "text"},
@@ -223,6 +226,9 @@ func recordToGoal(rec map[string]interface{}) (*GoalDAG, error) {
 	g := &GoalDAG{}
 	if v, ok := rec["goal_id"].(string); ok {
 		g.ID = v
+	}
+	if v, ok := rec["surface"].(string); ok {
+		g.Surface = v
 	}
 	if v, ok := rec["objective"].(string); ok {
 		g.Objective = v

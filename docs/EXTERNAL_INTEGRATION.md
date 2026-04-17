@@ -1,9 +1,22 @@
-# ORI Studio — External Integration Reference (v11.0.0)
+# ORI Studio — External Integration Reference (HISTORICAL)
 
-**Version:** v11.0.0  
-**Maintainer:** Thynaptic Research  
-**Production URL:** `https://oricli.thynaptic.com`  
-**Local dev:** `http://localhost:8089`  
+> [!CAUTION]
+> **Status: Historical / Deep Reference**
+> This document contains legacy "old-world" framing (e.g., `glm.*` keys) and sprawling endpoint lists from multiple eras of ORI.
+>
+> **Do not use this as your primary integration guide.**
+>
+> For current, canonical work, use:
+> - [API.md](/home/mike/Mavaia/docs/API.md) — Current platform API reference
+> - [AGENT_API.md](/home/mike/Mavaia/docs/AGENT_API.md) — External agent/builder handoff
+> - [SMB_CONSTITUTION.md](/home/mike/Mavaia/docs/SMB_CONSTITUTION.md) — Tenant `.ori` file reference
+>
+> This file is preserved only for its detailed [Cognition Module](#cognitive-intelligence--cognition-modules) telemetry index.
+
+**Version:** v11.0.0 (Legacy)
+**Maintainer:** Thynaptic Research
+**Production URL:** `https://glm.thynaptic.com` (Preferred) / `https://oricli.thynaptic.com` (Legacy)
+**Local dev:** `http://localhost:8089`
 **Source of truth:** `pkg/api/server_v2.go`
 
 ---

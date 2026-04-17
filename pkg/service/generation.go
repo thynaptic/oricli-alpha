@@ -1456,7 +1456,7 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		useCode = true
 	}
 
-	// Complexity escalation — route heavy requests to oracle CLI (Copilot/Gemini)
+	// Complexity escalation — route heavy requests to Oracle's heavy reasoning lane
 	// instead of RunPod. Zero GPU cost, uses existing subscriptions.
 	// Fires for both the legacy complexity router (_escalate_to_runpod) and
 	// the BidGovernor remote tier (_bid_tier == TierRemote).
@@ -1464,9 +1464,15 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 	escalateOracle, _ := options["_escalate_to_oracle"].(bool)
 	bidTier, _ := options["_bid_tier"].(string)
 	if (escalate || escalateOracle || bidTier == compute.TierRemote) && oracle.Available() {
-		log.Printf("[GenerationService] complexity escalation → oracle CLI (Copilot/Gemini)")
+		log.Printf("[GenerationService] complexity escalation → oracle heavy reasoning lane")
 		oracleMsgs := toOracleMessages(messages)
-		oracleCh := oracle.ChatStream(ctx, oracleMsgs)
+		oracleCh := oracle.ChatStreamWithDecision(ctx, oracleMsgs, oracle.Decision{
+			Route:   oracle.RouteHeavyReasoning,
+			Backend: "copilot",
+			Model:   oracle.Decide("", oracle.RouteHints{IsCodeAction: true}).Model,
+			Agent:   "ori-reasoner",
+			Reason:  "generation complexity escalation",
+		})
 		out := make(chan string, 64)
 		go func() {
 			defer close(out)

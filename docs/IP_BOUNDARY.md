@@ -27,9 +27,9 @@ If DeepMind would not publish it, neither do we.
 In practice:
 
 - product shells, deployment, transport, CLI, docs, and admin plumbing are usually publishable
-- cognition, reasoning, regulation, model-policy, and orchestration heuristics are not
+- cognition, reasoning, regulation, model-policy, orchestration heuristics, and safety-control logic are not
 
-If a file materially teaches someone how ORI thinks, adapts, judges, routes, self-regulates, or selects models, treat it as **private / IP**.
+If a file materially teaches someone how ORI thinks, adapts, judges, routes, self-regulates, selects models, or protects its internal boundaries, treat it as **private / IP**.
 
 ---
 
@@ -41,6 +41,20 @@ These two documents define systems that are **private / IP** by default:
 - [THERAPEUTIC_COGNITION.md](/home/mike/Mavaia/docs/THERAPEUTIC_COGNITION.md)
 
 If a file directly implements the architectures, heuristics, routing, or regulation logic described in those docs, treat it as **private-default** unless explicitly allowlisted.
+
+Other docs that strongly indicate private system behavior:
+
+- `docs/MCTS_REASONING.md`
+- `docs/MEMORY_ARCHITECTURE.md`
+- `docs/POCKETBASE_MEMORY.md`
+- `docs/EPISTEMIC_HYGIENE.md`
+- `docs/SELF_LAYER.md`
+- `docs/SOVEREIGN_STACK.md`
+- `docs/TR-2026-02-Go-Native-Reasoning-Architecture.md`
+- `docs/SMB_DEVELOPER_GUIDE.md`
+- `docs/AGLI_Phase_II.md`
+
+If a code path is the implementation target of one of those documents, assume `private-default` until proven otherwise.
 
 ---
 
@@ -92,6 +106,10 @@ Examples:
 
 - `pkg/therapy/`
 
+### Safety and disclosure defense internals
+
+- `pkg/safety/`
+
 Examples:
 
 - `pkg/therapy/distortion.go`
@@ -112,6 +130,8 @@ These files directly encode:
 - self-reflection and verification loops
 - therapeutic regulation mappings
 - schema detection and intervention logic
+- disclosure defense and anti-extraction logic
+- safety gating and internal policy enforcement
 
 That is the highest-value system behavior in the repo.
 
@@ -226,6 +246,7 @@ For current repo cleanup, use this default split:
 - all of `pkg/cognition/` unless explicitly allowlisted later
 - all of `pkg/core/reasoning/`
 - all of `pkg/core/metareasoning/`
+- all of `pkg/safety/`
 - any file outside those namespaces that changes reasoning flow, model defaults, cognition policy, or therapeutic regulation
 
 ### Public-default now
@@ -253,3 +274,49 @@ Follow-on work should:
 1. add explicit allowlists for public files inside `pkg/cognition/` if needed
 2. identify private code that should move into a private/internal repo or module
 3. mark review-required files more precisely as public or private over time
+
+---
+
+## Doc-Derived IP Signals
+
+The `/docs` tree is itself a useful classifier.
+
+### Usually private-signal docs
+
+These documents describe internal architecture, cognition, regulation, memory, or proprietary control loops:
+
+- `docs/REASONING.md`
+- `docs/THERAPEUTIC_COGNITION.md`
+- `docs/MCTS_REASONING.md`
+- `docs/MEMORY_ARCHITECTURE.md`
+- `docs/POCKETBASE_MEMORY.md`
+- `docs/EPISTEMIC_HYGIENE.md`
+- `docs/SELF_LAYER.md`
+- `docs/SOVEREIGN_STACK.md`
+- `docs/TR-2026-02-Go-Native-Reasoning-Architecture.md`
+- `docs/SMB_DEVELOPER_GUIDE.md`
+- `docs/AGLI_Phase_II.md`
+- `docs/EXTERNAL_INTEGRATION.md` when it reveals internal cognitive modules or therapeutic routes
+
+### Usually public-signal docs
+
+These are generally safe to publish:
+
+- `docs/API.md`
+- `docs/PRODUCTS.md`
+- `docs/ORI_DEV_DEPLOY.md`
+- `docs/ORI_HOME_SPEC.md`
+- `docs/CHANGELOG.md`
+- `docs/SECURITY.md`
+- `docs/public_overview.md`
+
+### Working rule
+
+If a doc explains:
+
+- how ORI reasons
+- how ORI self-regulates
+- how ORI stores or shapes internal cognition state
+- how ORI detects, scores, or routes behavior internally
+
+then code implementing it is presumptively private.

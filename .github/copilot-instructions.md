@@ -1,186 +1,42 @@
-# Copilot instructions for Oricli-Alpha (Oricli/Mavaia)
+# Copilot instructions for Mavaia / ORI
 
-This repo is a **modular cognitive framework** with an **OpenAI-compatible FastAPI server**, a **Flask UI proxy**, and a **large auto-discovered brain-module system**.
+This repository is a Go-based ORI runtime, not the older Python/FastAPI stack.
 
-## Build / run / test / lint
+## Core expectations
 
-### Setup (Python)
-Recommended runtime: **Python 3.11 or 3.12** (see `INSTALL.md`).
+- Treat `/home/mike/Mavaia` as the active workspace unless the task explicitly points elsewhere.
+- Keep responses and changes anchored to the current repo and current product surface.
+- Do not let broad VPS knowledge or sibling repos bleed into repo-local work unless the prompt explicitly asks for host-level context.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -U pip setuptools wheel
+## Architecture
 
-# Editable install (core deps from pyproject.toml)
-pip install -e .
+- Main API surface lives in `pkg/api/`.
+- Runtime orchestration and services live in `pkg/service/`.
+- Sovereign cognition and prompt shaping live in `pkg/cognition/`.
+- Oracle routing and premium CLI backends live in `pkg/oracle/`.
+- Product and architecture handoff docs start with:
+  - `docs/AGENT_KNOWLEDGE_LAYER.md`
+  - `docs/SESSION_HANDOFF.md`
 
-# Dev tooling (pytest/black/ruff/mypy)
-pip install -e ".[dev]"
+## Engineering rules
 
-# Heavier optional stacks
-pip install -e ".[ml,data,search,sandbox,memory]"
-```
+- Prefer small, surgical changes over broad refactors unless the task requires a larger migration.
+- Preserve existing product boundaries across Studio, Home, Dev, and Red.
+- Use `gofmt -w` on edited Go files.
+- Run focused `go test` or `go build` checks on touched packages before finishing when feasible.
+- Update stale docs when implementation truth changes, especially for Oracle, routing, or public API behavior.
+- Repo-level MCP configuration lives in `.mcp.json`.
+- The ORI MCP server expects `COPILOT_MCP_ORI_API_KEY` to be available in the Copilot environment.
 
-Alternative “batteries included” install script (installs ML stack + JAX/Flax workarounds):
-```bash
-./scripts/setup.sh
-```
+## Oracle guidance
 
-### Run servers
-One command (recommended):
-```bash
-./scripts/start_servers.sh
-```
+- `light_chat` should stay fast and low-overhead.
+- `heavy_reasoning` should prefer the stronger Copilot lane.
+- `research` should behave like a read-heavy investigative helper.
+- `image_reasoning` should route to Codex, not the standard Copilot lane.
 
-API only:
-```bash
-oricli-server --host 0.0.0.0 --port 8000
-# or
-python3 -m oricli_core.api.server --host 0.0.0.0 --port 8000
-```
+## What not to assume
 
-UI only (Flask proxy → API):
-```bash
-MAVAIA_API_BASE="http://localhost:8000" python3 ui_app.py
-```
-
-### Tests (project’s evaluation framework)
-The canonical runner is the custom evaluation CLI (JSON/YAML test cases under `oricli_core/evaluation/test_data/`).
-
-Run everything:
-```bash
-./run_tests.py
-# or (same engine)
-python3 -m oricli_core.evaluation.test_runner
-```
-
-Run a single module’s tests:
-```bash
-./run_tests.py --module chain_of_thought
-# or
-python3 -m oricli_core.evaluation.test_runner --module chain_of_thought
-```
-
-Run a single category:
-```bash
-python3 -m oricli_core.evaluation.test_runner --category reasoning
-```
-
-Fast “system-only” run (skips module discovery):
-```bash
-python3 -m oricli_core.evaluation.test_runner --category system --skip-modules
-```
-
-Filter by tags (e.g. quick/smoke/integration):
-```bash
-python3 -m oricli_core.evaluation.test_runner --tags quick smoke --tag-mode any
-```
-
-Generate an HTML report from an existing results file:
-```bash
-python3 -m oricli_core.evaluation.test_runner --report-only oricli_core/evaluation/results/<run>/detailed_results.json
-```
-
-Curriculum testing CLI (Typer-based; installed via `pyproject.toml` script `oricli-test`):
-```bash
-oricli-test --help
-oricli-test full --progressive
-```
-
-### Pytest (single file / single test)
-There are also `test_*.py` files at repo root and under `tests/`.
-
-```bash
-pytest -q tests/test_streaming_logic.py
-pytest -q test_mona_lisa_query.py -k "smoke" 
-pytest -q tests/test_streaming_logic.py::TestStreamingLogic::test_<name>
-```
-
-### Format / lint / typecheck
-```bash
-black oricli_core/ scripts/ ui_app.py
-ruff check oricli_core/ scripts/
-mypy oricli_core/
-```
-
-## High-level architecture (big picture)
-
-### 1) Brain modules (plugin system)
-- **Interface:** `oricli_core/brain/base_module.py` defines `BaseBrainModule` + `ModuleMetadata`.
-- **Location:** modules live in `oricli_core/brain/modules/`.
-- **Discovery:** `oricli_core/brain/registry.py::ModuleRegistry.discover_modules()` scans `modules/` (and subdirs except `models/`) and registers classes inheriting `BaseBrainModule`.
-- **Heavy-module gating:** discovery intentionally **skips modules** that appear to import heavy ML stacks / download HF models at import-time unless:
-  - `MAVAIA_ENABLE_HEAVY_MODULES=true`
-
-### 2) Client layer (direct in-process execution)
-- `oricli_core/client.py::OricliAlphaClient` exposes:
-  - `client.chat.completions.create(...)` and `client.embeddings.create(...)` (OpenAI-shaped)
-  - `client.brain.<module>.<operation>(**params)` via a dynamic proxy to `ModuleRegistry`
-
-### 3) HTTP API (OpenAI-compatible)
-- `oricli_core/api/server.py` hosts the FastAPI app.
-- Key endpoints:
-  - `POST /v1/chat/completions`
-  - `POST /v1/embeddings`
-  - `GET  /v1/models`, `GET /v1/modules`
-  - health/metrics/introspection: `/health`, `/v1/metrics`, `/v1/introspection*`, `/v1/health/modules*`
-  - tool endpoints: `/v1/tools/register`, `/v1/tools`, `/v1/tools/invoke`
-- Auth is controlled via env:
-  - `MAVAIA_REQUIRE_AUTH=true|false`
-  - `MAVAIA_API_KEY` (Bearer token)
-
-### 4) Tooling bridge
-- The API registers “built-in tools” via `oricli_core/services/tool_registry.py` and routes tool calls to brain modules (e.g. `web_fetch`, `web_search`, `tool_search`) when present.
-
-### 5) UI
-- `ui_app.py` is a **production-oriented Flask proxy**.
-- It forwards `/chat`, `/models`, `/modules`, `/embeddings` to the API and supports streaming pass-through.
-- UI → API target is `MAVAIA_API_BASE` (defaults to `http://localhost:8000`).
-
-### 6) Evaluation
-- `oricli_core/evaluation/test_runner.py` is the main engine.
-- Test cases are loaded from `oricli_core/evaluation/test_data/`.
-- Results are archived under `oricli_core/evaluation/results/` and can be rendered to HTML.
-- There is a `livebench` category which integrates the `LiveBench/` suite.
-
-### 7) Daemons / services
-- `scripts/oricli_api_daemon.py` and `scripts/oricli_trainer_daemon.py` are long-running orchestrators.
-- Systemd units at repo root (`oricli-api.service`, `oricli-trainer.service`) show expected env and log locations.
-
-## Key codebase conventions (repo-specific)
-
-### Brain module contract
-- Each module must:
-  - inherit `BaseBrainModule`
-  - implement `metadata: ModuleMetadata`
-  - implement `execute(operation: str, params: dict[str, Any]) -> dict[str, Any]`
-- `execute()` return payloads are expected to be dicts that include at least:
-  - `success: bool`
-  - `error: str | None`
-
-### “Heavy modules” are opt-in
-- Default behavior is to keep servers responsive by skipping modules that pull models / heavy ML deps at import-time.
-- If you’re debugging “module not found” for ML-heavy features, re-run with:
-  - `MAVAIA_ENABLE_HEAVY_MODULES=true`
-
-### Environment variable namespace
-- Config is consistently **`MAVAIA_...`** even though the package name is `oricli_*`.
-- Common ones:
-  - `MAVAIA_API_HOST`, `MAVAIA_API_PORT`
-  - `MAVAIA_UI_HOST`, `MAVAIA_UI_PORT`
-  - `MAVAIA_API_BASE` (UI → API)
-  - `MAVAIA_API_KEY`, `MAVAIA_REQUIRE_AUTH`
-
-### Repo assistant rules already exist
-- Cursor rules live under `.cursor/rules/` (engineering + governance). When changing core architecture (registry/client/server), read these first.
-- The “Sovereign Peer” persona rules are in `.cursor/rules/persona_sovereign_peer.mdc` (direct, minimal fluff).
-
-### Project workflow docs
-- `conductor/workflow.md` documents the repo’s workflow expectations (plan as source-of-truth, quality gates).
-- `conductor/tech-stack.md` is treated as a deliberate contract; update it before introducing new stack-level dependencies.
-
-### Cursor MCP (GitHub)
-- Project-level Cursor MCP config lives at `.cursor/mcp.json`.
-- Provide a GitHub PAT via `GITHUB_PERSONAL_ACCESS_TOKEN` in the environment Cursor launches with (do not commit tokens).
-
+- Do not assume old Python-era files or docs reflect current runtime behavior.
+- Do not assume one prompt overlay is equivalent to an agent, a skill, and a tool at the same time.
+- Do not silently widen tool permissions or product scope without making the change explicit in code or config.

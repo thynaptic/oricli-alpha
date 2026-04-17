@@ -520,6 +520,7 @@ func (s *ServerV2) setupRoutes() {
 		protected.GET("/tools", s.handleListTools)
 		protected.POST("/tools/plan", s.handleCreateToolPlan)
 		protected.POST("/tools/execute-plan", s.handleExecuteToolPlan)
+		protected.POST("/mcp", s.handleMCP)
 
 		// Sovereign Identity — active .ori profile editor
 		protected.GET("/sovereign/identity", s.handleGetSovereignIdentity)
@@ -1307,7 +1308,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Session/temporal queries ("what time is it", "recap what we discussed", etc.)
 	// already have their answer in the temporal block. Skip ProcessInference
 	// (which would fire oracle.Query for trap checks, adding unnecessary latency).
-	if oracle.Available() && cognition.IsSessionIntrospective(lastMsg) {
+	if oracle.AvailableForRoute(oracle.RouteLightChat) && cognition.IsSessionIntrospective(lastMsg) {
 		log.Printf("[Oracle] TierTemporal fast-path for: %.60s", lastMsg)
 		temporalBlock := s.Agent.SovEngine.Clock.FormatForPrompt(sessionID)
 		temporalMsgs := []oracle.Message{
@@ -1326,7 +1327,13 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 				}
 			}()
 		}
-		tokenCh := oracle.ChatStream(streamCtx, temporalMsgs)
+		tokenCh := oracle.ChatStreamWithDecision(streamCtx, temporalMsgs, oracle.Decision{
+			Route:   oracle.RouteLightChat,
+			Backend: "copilot",
+			Model:   oracle.Decide(lastMsg, oracle.RouteHints{}).Model,
+			Agent:   "ori-chat-fast",
+			Reason:  "temporal fast-path",
+		})
 		if useSSE {
 			close(heartbeatDone)
 		}
@@ -1628,33 +1635,17 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			}
 		}()
 	}
-	// ── Oracle routing — classify query and pick backend ─────────────────────
-	// TierOllamaFast    → local qwen3:1.7b (greetings, trivial social turns)
-	// TierOracleDefault → Oracle with full enriched context (unlimited gpt-5-mini, no weak spots)
-	// Note: TierOracleTemporal is handled above (early-exit before ProcessInference).
+	// ── Oracle routing — choose fast chat, heavy reasoning, research, or image lane ──
+	// Temporal introspection is handled above as an early fast-path.
 	var tokenCh <-chan string
 
-	oracleTier := oracle.Classify(lastMsg)
+	oracleDecision := oracle.Decide(lastMsg, oracle.RouteHints{
+		IsResearchAction: isResearchAction,
+		IsCodeAction:     isCodeAction,
+		RequestedModel:   modelName,
+	})
 
-	// MODEL-FORCE: If user explicitly requested an oracle-grade model (gpt-* or claude-*),
-	// or is using a research/code surface, upgrade to OracleDefault.
-	id := strings.ToLower(modelName)
-	if strings.HasPrefix(id, "gpt-") || strings.HasPrefix(id, "claude-") || isResearchAction || isCodeAction {
-		oracleTier = oracle.TierOracleDefault
-	}
-
-	if !oracle.Available() {
-		oracleTier = oracle.TierOllamaFast // graceful degrade if copilot CLI absent
-	}
-
-	switch oracleTier {
-	case oracle.TierOracleDefault:
-		// Full enriched context (RAG, web search, SCL already injected into msgs).
-		// Oracle reasons far better than qwen3:1.7b on the same rich context.
-		log.Printf("[Oracle] TierDefault → full context for: %.60s", lastMsg)
-		tokenCh = oracle.ChatStream(streamCtx, oracle.ConvertMsgs(msgs))
-
-	default: // TierOllamaFast
+	if !oracle.AvailableForRoute(oracleDecision.Route) {
 		// Short conversational turns — local model is fast enough.
 		var ollamaErr error
 		tokenCh, ollamaErr = s.Agent.GenService.ChatStream(streamCtx, msgs, streamOpts)
@@ -1665,6 +1656,10 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			sseError(ollamaErr.Error())
 			return
 		}
+	} else {
+		log.Printf("[Oracle] route=%s agent=%s model=%s reason=%s query=%.60s",
+			oracleDecision.Route, oracleDecision.Agent, oracleDecision.Model, oracleDecision.Reason, lastMsg)
+		tokenCh = oracle.ChatStreamWithDecision(streamCtx, oracle.ConvertMsgs(msgs), oracleDecision)
 	}
 
 	// Stop pipeline heartbeat — token-stream ticker takes over from here.

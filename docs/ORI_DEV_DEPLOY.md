@@ -28,15 +28,21 @@ oridev.thynaptic.com {
 }
 ```
 
-## Generic dev host
+## Developer portal host
 
-`dev.thynaptic.com` should remain generic infra, not the ORI Dev product. A minimal non-product block is:
+`dev.thynaptic.com` is the public developer portal for ORI integration. It should not be used as the ORI Dev product domain. A static portal block is:
 
 ```caddy
 dev.thynaptic.com {
     tls /etc/caddy/certs/cf_origin.crt /etc/caddy/certs/cf_origin.key
 
-    respond "Reserved for internal dev/staging" 200
+    header {
+        Cache-Control "no-store, no-cache, must-revalidate"
+    }
+
+    root * /home/mike/Mavaia/dev-portal
+    file_server
+    try_files {path} /index.html
 }
 ```
 

@@ -210,7 +210,7 @@
     "/mcp": {
       "post": {
         "summary": "Hosted ORI MCP endpoint",
-        "description": "Streamable HTTP MCP endpoint at https://dev.thynaptic.com/mcp. Supports initialize, tools/list, and tools/call. Tools include ask_ori, plan_with_ori, review_with_ori, draft_with_ori, send_email_via_ori, recall_memory, store_memory, list_spaces, create_space, get_key_info, check_health, pb_* (PocketBase direct), and Notion formula tools. See /tools.json for full JSON schemas.",
+        "description": "Streamable HTTP MCP endpoint at https://glm.thynaptic.com/v1/mcp. Supports initialize, tools/list, and tools/call. Current public runtime tools include get_key_info, check_health, get_capabilities, list_surfaces, list_working_styles, and get_request_template. See /tools.json for the broader published schema catalog.",
         "security": [{ "bearerAuth": [] }],
         "responses": {
           "200": { "description": "MCP JSON-RPC response" }

@@ -12,20 +12,20 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/thynaptic/oricli-go/pkg/bus"
-	"github.com/thynaptic/oricli-go/pkg/kernel"
-	"github.com/thynaptic/oricli-go/pkg/memory"
-	"github.com/thynaptic/oricli-go/pkg/reform"
-	"github.com/thynaptic/oricli-go/pkg/safety"
-	"github.com/thynaptic/oricli-go/pkg/state"
-	"github.com/thynaptic/oricli-go/pkg/tools"
 	"github.com/thynaptic/oricli-go/pkg/connectors/mcp"
 	"github.com/thynaptic/oricli-go/pkg/connectors/telegram"
 	"github.com/thynaptic/oricli-go/pkg/flowcompanion"
 	"github.com/thynaptic/oricli-go/pkg/flowtriggers"
 	"github.com/thynaptic/oricli-go/pkg/goal"
-	"github.com/thynaptic/oricli-go/pkg/searchintent"
+	"github.com/thynaptic/oricli-go/pkg/kernel"
+	"github.com/thynaptic/oricli-go/pkg/memory"
 	"github.com/thynaptic/oricli-go/pkg/oracle"
 	"github.com/thynaptic/oricli-go/pkg/precompute"
+	"github.com/thynaptic/oricli-go/pkg/reform"
+	"github.com/thynaptic/oricli-go/pkg/safety"
+	"github.com/thynaptic/oricli-go/pkg/searchintent"
+	"github.com/thynaptic/oricli-go/pkg/state"
+	"github.com/thynaptic/oricli-go/pkg/tools"
 	"github.com/thynaptic/oricli-go/pkg/trapcheck"
 	"github.com/thynaptic/oricli-go/pkg/vdi"
 	"github.com/thynaptic/oricli-go/pkg/voice"
@@ -51,11 +51,14 @@ func NewSubconsciousField(dims int) *SubconsciousField {
 func (s *SubconsciousField) Decay(factor float32) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	for i := range s.FieldVector { s.FieldVector[i] *= factor }
+	for i := range s.FieldVector {
+		s.FieldVector[i] *= factor
+	}
 }
 
 // --- Pillar 2: Strategic Planner ---
 type StepStatus string
+
 const (
 	StepPending   StepStatus = "pending"
 	StepExecuting StepStatus = "executing"
@@ -74,10 +77,10 @@ type ExecutionStep struct {
 }
 
 type StrategicPlan struct {
-	TaskID      string          `json:"task_id"`
-	Goal        string          `json:"goal"`
-	Steps       []ExecutionStep `json:"steps"`
-	MaxDepth    int             `json:"max_depth"`
+	TaskID       string          `json:"task_id"`
+	Goal         string          `json:"goal"`
+	Steps        []ExecutionStep `json:"steps"`
+	MaxDepth     int             `json:"max_depth"`
 	IsRecovering bool            `json:"is_recovering"`
 }
 
@@ -191,12 +194,12 @@ var WeightsStandard = BeliefWeights{Factual: 0.35, Causal: 0.20, Recency: 0.20, 
 
 // Belief is a three-axis epistemic confidence vector attached to every MemFrag.
 //
-//   Factual  — evidence quality: provenance tier + corroboration signal + access reinforcement
-//              "Is this claim backed by reliable evidence?"
-//   Causal   — mechanistic depth: 5-WHY chain confidence, cross-domain bridge strength
-//              "Do we understand *why* this is true?"
-//   Recency  — temporal freshness: computed from age vs. volatility half-life
-//              "Is this information still current?"
+//	Factual  — evidence quality: provenance tier + corroboration signal + access reinforcement
+//	           "Is this claim backed by reliable evidence?"
+//	Causal   — mechanistic depth: 5-WHY chain confidence, cross-domain bridge strength
+//	           "Do we understand *why* this is true?"
+//	Recency  — temporal freshness: computed from age vs. volatility half-life
+//	           "Is this information still current?"
 //
 // Score() produces a single weighted scalar for backward-compatible noise gating.
 // Individual axes can be queried by reasoning modes that care about specific dimensions.
@@ -208,7 +211,7 @@ type Belief struct {
 
 // Score returns a weighted scalar certainty for backward-compatible noise gating.
 //
-//   Score = clamp(0.50×Factual + 0.30×Causal + 0.20×Recency, 0.05, 0.98)
+//	Score = clamp(0.50×Factual + 0.30×Causal + 0.20×Recency, 0.05, 0.98)
 //
 // Weights reflect epistemic priority: factual evidence > causal depth > recency.
 func (b Belief) Score() float64 {
@@ -224,27 +227,27 @@ func (b Belief) Score() float64 {
 
 // MemFrag is a minimal memory record crossing the cognition/service interface boundary.
 type MemFrag struct {
-	ID              string
-	Content         string
-	Source          string
-	Topic           string
-	Importance      float64
-	AccessCount     int
-	Volatility      string    // "stable" | "current" | "ephemeral"
-	CreatedAt       time.Time // used to compute Belief.Recency
-	CausalScore     float64   // persisted via PB causal_score field; 0.50 neutral default
-	SemanticScore   float64   // cosine similarity to the query; populated by adapter
-	Belief          Belief    // computed by ComputeBelief — do not set manually
-	DynamicCertainty float64  // computed by ComputeDynamicCertainty — query-time composite
+	ID               string
+	Content          string
+	Source           string
+	Topic            string
+	Importance       float64
+	AccessCount      int
+	Volatility       string    // "stable" | "current" | "ephemeral"
+	CreatedAt        time.Time // used to compute Belief.Recency
+	CausalScore      float64   // persisted via PB causal_score field; 0.50 neutral default
+	SemanticScore    float64   // cosine similarity to the query; populated by adapter
+	Belief           Belief    // computed by ComputeBelief — do not set manually
+	DynamicCertainty float64   // computed by ComputeDynamicCertainty — query-time composite
 }
 
 // ComputeDynamicCertainty returns a query-time composite certainty for noise gating
 // and ranking. Unlike Belief.Score() (static epistemic axes only), this blends:
 //
-//   0.40 × Belief.Score()    — epistemic quality (factual + causal + recency)
-//   0.35 × SemanticScore     — query relevance (cosine similarity from adapter)
-//   0.15 × Importance        — editorial signal (operator-assigned + Aletheia bumps)
-//   0.10 × AccessBonus       — usage reinforcement (log-scaled, capped at 0.10)
+//	0.40 × Belief.Score()    — epistemic quality (factual + causal + recency)
+//	0.35 × SemanticScore     — query relevance (cosine similarity from adapter)
+//	0.15 × Importance        — editorial signal (operator-assigned + Aletheia bumps)
+//	0.10 × AccessBonus       — usage reinforcement (log-scaled, capped at 0.10)
 //
 // Returns a [0.05, 0.98] score. Call after ComputeBelief + SemanticScore are set.
 // The result is stored in MemFrag.DynamicCertainty by ComputeBelief.
@@ -294,9 +297,9 @@ func halfLifeDays(volatility string) float64 {
 
 // computeRecency returns a [0.05, 0.98] freshness score based on age vs. half-life.
 //
-//   Within half-life : 0.95 (fresh)
-//   At 2× half-life  : ~0.50
-//   At 3× half-life  : 0.05 (effectively stale)
+//	Within half-life : 0.95 (fresh)
+//	At 2× half-life  : ~0.50
+//	At 3× half-life  : 0.05 (effectively stale)
 //
 // Recency is always computed at query time — it is never stored.
 func computeRecency(frag MemFrag) float64 {
@@ -319,9 +322,9 @@ func computeRecency(frag MemFrag) float64 {
 
 // ComputeBelief populates all three Belief axes for a MemFrag.
 //
-//   Factual  = provenance floor (set externally) + access reinforcement bonus
-//   Causal   = CausalScore from PB (0.50 neutral if not yet set)
-//   Recency  = computed from age vs. volatility half-life
+//	Factual  = provenance floor (set externally) + access reinforcement bonus
+//	Causal   = CausalScore from PB (0.50 neutral if not yet set)
+//	Recency  = computed from age vs. volatility half-life
 //
 // Call this in the adapter after setting the provenance floor on Belief.Factual
 // and CausalScore from the PB record.
@@ -382,52 +385,52 @@ type GoalProvider interface {
 }
 
 type SovereignEngine struct {
-	Subconscious *SubconsciousField
-	Sentiment    *AffectiveState
-	Sentinel     *MetacogSentinel
-	Resonance    *ResonanceService
-	Actions      *state.ActionTracker
-	Grounding    *GroundingService
-	Safety       *safety.Sentinel
-	Adversarial  *safety.AdversarialAuditor
-	SCAI         *safety.SCAIAuditor
-	Disclosure   *safety.DisclosureGuard
-	WebGuard     *safety.WebInjectionGuard
-	RagGuard     *safety.RagContentGuard
-	Canary       *safety.CanarySystem
-	CanvasGuard  *safety.CanvasGuard
-	MultiTurn    *safety.MultiTurnAnalyzer
-	Suspicion    *safety.SuspicionTracker
-	AlignmentLog *state.AlignmentLogger
-	RecallMode   memory.RecallMode
-	Graph        *memory.WorkingMemoryGraph
-	Personality  *PersonalityEngine
-	Stochastic   *MarkovChain
-	Substrate    *SubstrateEngine
-	Toolbox      *tools.Registry
-	Sensory      *SensoryEngine
-	Generator    *GeneratorOrchestrator
-	ToT          *ToTEngine
-	Emoji        *EmojiEngine
-	Audit        *AuditEngine
-	Builder      *PromptBuilder
-	Extractor    *memory.ExtractorEngine
-	Health       *HealthEngine
-	Refinement   *safety.RefinementEngine
-	Slang        *SlangEngine
-	Reflection   *ReflectionEngine
-	Support      *safety.SupportEngine
-	UserProfile  *state.UserProfile
-	Translator   *TranslationEngine
-	Profiles     *ProfileRegistry
+	Subconscious  *SubconsciousField
+	Sentiment     *AffectiveState
+	Sentinel      *MetacogSentinel
+	Resonance     *ResonanceService
+	Actions       *state.ActionTracker
+	Grounding     *GroundingService
+	Safety        *safety.Sentinel
+	Adversarial   *safety.AdversarialAuditor
+	SCAI          *safety.SCAIAuditor
+	Disclosure    *safety.DisclosureGuard
+	WebGuard      *safety.WebInjectionGuard
+	RagGuard      *safety.RagContentGuard
+	Canary        *safety.CanarySystem
+	CanvasGuard   *safety.CanvasGuard
+	MultiTurn     *safety.MultiTurnAnalyzer
+	Suspicion     *safety.SuspicionTracker
+	AlignmentLog  *state.AlignmentLogger
+	RecallMode    memory.RecallMode
+	Graph         *memory.WorkingMemoryGraph
+	Personality   *PersonalityEngine
+	Stochastic    *MarkovChain
+	Substrate     *SubstrateEngine
+	Toolbox       *tools.Registry
+	Sensory       *SensoryEngine
+	Generator     *GeneratorOrchestrator
+	ToT           *ToTEngine
+	Emoji         *EmojiEngine
+	Audit         *AuditEngine
+	Builder       *PromptBuilder
+	Extractor     *memory.ExtractorEngine
+	Health        *HealthEngine
+	Refinement    *safety.RefinementEngine
+	Slang         *SlangEngine
+	Reflection    *ReflectionEngine
+	Support       *safety.SupportEngine
+	UserProfile   *state.UserProfile
+	Translator    *TranslationEngine
+	Profiles      *ProfileRegistry
 	ActiveProfile *Profile
-	MCP          *mcp.MCPManager
-	Telegram     *telegram.Client
-	VDI          *vdi.Manager
-	Vision       *vdi.VisionGroundingService
+	MCP           *mcp.MCPManager
+	Telegram      *telegram.Client
+	VDI           *vdi.Manager
+	Vision        *vdi.VisionGroundingService
 	// SearXNG is an intent-aware web search interface. Injected from server_v2
 	// to avoid import cycles (service ↔ cognition). Set via InjectSearXNG().
-	SearXNG      WebSearcher
+	SearXNG WebSearcher
 	// Constitution is the Living Constitution behavioral layer.
 	// Injected from server_v2 to avoid import cycles. Set via InjectConstitution().
 	Constitution ConstitutionProvider
@@ -444,43 +447,43 @@ type SovereignEngine struct {
 	MemoryBankRef MemoryQuerier
 	// GoalStoreRef enables the Product Umbrella to query active goals by surface.
 	// Injected from server_v2 to avoid import cycles.
-	GoalStoreRef  GoalProvider
+	GoalStoreRef GoalProvider
 	// CertaintyUpdaterRef enables Aletheia + consensus to mutate fragment importance
 	// based on verification outcomes (CORRECT→bump, ADMIT_FAILURE→drop).
 	CertaintyUpdaterRef CertaintyUpdater
 	// VisionRef enables image analysis via moondream (CPU-safe, local Ollama).
 	// Wired from server_v2 visionAdapter. Nil-safe — vision is optional.
-	VisionRef    VisionAnalyzer
+	VisionRef VisionAnalyzer
 	// GenService exposes the generation backend directly to reasoning mode engines
 	// (PAL, LeastToMost, SelfRefine, ReAct). Set alongside Generator in NewSovereignEngine.
-	GenService    GenerationService
+	GenService GenerationService
 	// BeliefTracker maintains per-session belief state (AlphaStar LSTM fog-of-war).
-	BeliefTracker    *BeliefStateTracker
+	BeliefTracker *BeliefStateTracker
 	// CurrentSessionID is set per-request in server_v2 so BeliefTracker can key by session.
 	CurrentSessionID string
 	// CurrentSurface is the active product surface (studio, home, dev, red).
-	CurrentSurface   string
+	CurrentSurface string
 	// CurrentRemotePWD is set per-request for sovereign clients (like ORI Code)
 	// to ground reasoning in the client's local workspace, not the VPS host.
-	CurrentRemotePWD string
-	CurrentRemoteProject string
+	CurrentRemotePWD      string
+	CurrentRemoteProject  string
 	CurrentRemoteRepoRoot string
-	CurrentRemoteBranch string
+	CurrentRemoteBranch   string
 	// Clock is the sovereign temporal awareness engine — gives ORI a real sense of now.
-	Clock        *TemporalClock
-	Voice        *voice.VoicePiperService
-	Reform       interface{}
-	Curiosity    interface{}
-	Scheduler    *kernel.Scheduler
-	Indexer      *vdi.FSIndexer
+	Clock           *TemporalClock
+	Voice           *voice.VoicePiperService
+	Reform          interface{}
+	Curiosity       interface{}
+	Scheduler       *kernel.Scheduler
+	Indexer         *vdi.FSIndexer
 	SubstrateHealth *HealthMonitor
-	WSHub        EventBroadcaster
-	CurrentSensory SensoryState
-	CurrentHealth HealthSnapshot
+	WSHub           EventBroadcaster
+	CurrentSensory  SensoryState
+	CurrentHealth   HealthSnapshot
 	// Ambient proactive intelligence (ported from FocusOS FlowCompanionEngine)
-	FlowTriggers   *flowtriggers.Service
-	FlowCompanion  *flowcompanion.Engine
-	mu           sync.Mutex
+	FlowTriggers  *flowtriggers.Service
+	FlowCompanion *flowcompanion.Engine
+	mu            sync.Mutex
 	// inferPipeline serializes the full slow ProcessInference pipeline (mode engines
 	// call Ollama inside, which can take 30-90s on CPU-only hardware).
 	// Unlike mu, this supports trylock with timeout so HTTP handlers stay responsive
@@ -496,52 +499,52 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 	fmt.Sscanf(os.Getenv("TELEGRAM_CHAT_ID"), "%d", &tgChatID)
 
 	engine := &SovereignEngine{
-		Subconscious: NewSubconsciousField(256),
-		Sentiment:    &AffectiveState{Valence: 0.5, Arousal: 0.5, Dominance: 0.8},
-		Sentinel:     &MetacogSentinel{IsBalanced: true},
-		Resonance:    NewResonanceService(),
-		Actions:      state.NewActionTracker(10),
-		Grounding:    NewGroundingService(),
-		Safety:       safety.NewSentinel(),
-		Adversarial:  safety.NewAdversarialAuditor(),
-		SCAI:         safety.NewSCAIAuditor(constitution, ""),
-		Disclosure:   safety.NewDisclosureGuard(),
-		WebGuard:     safety.NewWebInjectionGuard(),
-		RagGuard:     safety.NewRagContentGuard(),
-		Canary:       safety.NewCanarySystem(),
-		CanvasGuard:  safety.NewCanvasGuard(),
-		MultiTurn:    &safety.MultiTurnAnalyzer{},
-		Suspicion:    safety.NewSuspicionTracker(),
-		AlignmentLog: state.NewAlignmentLogger(""),
-		RecallMode:   memory.ModeOperational,
-		Graph:        memory.NewWorkingMemoryGraph(),
-		Personality:  NewPersonalityEngine(),
-		Stochastic:   NewMarkovChain(),
-		Substrate:    NewSubstrateEngine(),
-		Toolbox:      tools.NewRegistry(),
-		Sensory:      NewSensoryEngine(),
-		Emoji:        NewEmojiEngine(),
-		Builder:      NewPromptBuilder("v2.10.0"),
-		Extractor:    memory.NewExtractorEngine(),
-		Health:       NewHealthEngine(),
-		Refinement:   safety.NewRefinementEngine(),
-		Slang:        NewSlangEngine(),
-		Reflection:   NewReflectionEngine(),
-		Support:      safety.NewSupportEngine(),
-		UserProfile:  state.NewUserProfile("default_user"),
-		Translator:   NewTranslationEngine(),
-		Profiles:     NewProfileRegistry("oricli_core/profiles"),
+		Subconscious:    NewSubconsciousField(256),
+		Sentiment:       &AffectiveState{Valence: 0.5, Arousal: 0.5, Dominance: 0.8},
+		Sentinel:        &MetacogSentinel{IsBalanced: true},
+		Resonance:       NewResonanceService(),
+		Actions:         state.NewActionTracker(10),
+		Grounding:       NewGroundingService(),
+		Safety:          safety.NewSentinel(),
+		Adversarial:     safety.NewAdversarialAuditor(),
+		SCAI:            safety.NewSCAIAuditor(constitution, ""),
+		Disclosure:      safety.NewDisclosureGuard(),
+		WebGuard:        safety.NewWebInjectionGuard(),
+		RagGuard:        safety.NewRagContentGuard(),
+		Canary:          safety.NewCanarySystem(),
+		CanvasGuard:     safety.NewCanvasGuard(),
+		MultiTurn:       &safety.MultiTurnAnalyzer{},
+		Suspicion:       safety.NewSuspicionTracker(),
+		AlignmentLog:    state.NewAlignmentLogger(""),
+		RecallMode:      memory.ModeOperational,
+		Graph:           memory.NewWorkingMemoryGraph(),
+		Personality:     NewPersonalityEngine(),
+		Stochastic:      NewMarkovChain(),
+		Substrate:       NewSubstrateEngine(),
+		Toolbox:         tools.NewRegistry(),
+		Sensory:         NewSensoryEngine(),
+		Emoji:           NewEmojiEngine(),
+		Builder:         NewPromptBuilder("v2.10.0"),
+		Extractor:       memory.NewExtractorEngine(),
+		Health:          NewHealthEngine(),
+		Refinement:      safety.NewRefinementEngine(),
+		Slang:           NewSlangEngine(),
+		Reflection:      NewReflectionEngine(),
+		Support:         safety.NewSupportEngine(),
+		UserProfile:     state.NewUserProfile("default_user"),
+		Translator:      NewTranslationEngine(),
+		Profiles:        NewProfileRegistry("oricli_core/profiles"),
 		SubstrateHealth: NewHealthMonitor(),
-		MCP:          mcp.NewMCPManager("oricli_core/mcp_config.json"),
-		Telegram:     telegram.NewClient(tgToken, tgChatID),
-		VDI:          vdi.NewManager(),
+		MCP:             mcp.NewMCPManager("oricli_core/mcp_config.json"),
+		Telegram:        telegram.NewClient(tgToken, tgChatID),
+		VDI:             vdi.NewManager(),
 		// SearXNG is injected after construction via InjectSearXNG() in server_v2
-		Voice:        voice.NewVoicePiperService("/home/mike/puppy-princess-os/voice/piper/piper", "/home/mike/puppy-princess-os/voice/en_US-lessac-medium.onnx", nil),
-		Scheduler:    kernel.NewScheduler(swarmBus),
-		Indexer:      vdi.NewFSIndexer(memory.NewWorkingMemoryGraph()), // Will be synced with engine.Graph later
+		Voice:     voice.NewVoicePiperService("/home/mike/puppy-princess-os/voice/piper/piper", "/home/mike/puppy-princess-os/voice/en_US-lessac-medium.onnx", nil),
+		Scheduler: kernel.NewScheduler(swarmBus),
+		Indexer:   vdi.NewFSIndexer(memory.NewWorkingMemoryGraph()), // Will be synced with engine.Graph later
 	}
 	engine.Indexer.Graph = engine.Graph // Sync with engine graph
-	
+
 	engine.Generator = NewGeneratorOrchestrator(engine)
 	engine.Generator.GenService = genService // Initialize the GenService correctly
 	engine.GenService = genService           // Direct access for reasoning mode engines
@@ -724,17 +727,25 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	// Skip safety input check for authenticated sovereign sessions (owner knows what they're doing)
 	if sovLevel == 0 {
 		safetyResult := e.Safety.CheckInput(stimulus)
-		if safetyResult.Detected { return safetyResult.Replacement, nil }
+		if safetyResult.Detected {
+			return safetyResult.Replacement, nil
+		}
 	}
 
 	// --- Step 4: Multi-Signal Detection ---
 	emojiState := e.Emoji.Detect(stimulus)
-	if emojiState.DistressSeverity > 0.4 { e.Sentiment.Valence -= float32(emojiState.DistressSeverity * 0.2) }
+	if emojiState.DistressSeverity > 0.4 {
+		e.Sentiment.Valence -= float32(emojiState.DistressSeverity * 0.2)
+	}
 	_, intensity := e.Grounding.DetectAnchors(stimulus)
 	slangRes := e.Slang.Analyze(stimulus)
 
 	// --- Step 5: Memory Retrieval Mode ---
-	if isLogical { e.RecallMode = memory.ModeOperational } else { e.RecallMode = memory.ModeReflective }
+	if isLogical {
+		e.RecallMode = memory.ModeOperational
+	} else {
+		e.RecallMode = memory.ModeReflective
+	}
 
 	// 5.1 Proactive Personality Pivot (Affective Memory Anchoring)
 	// (Simulation: In full implementation, we'd use the retrieved entities from RAG)
@@ -837,14 +848,19 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	}
 
 	// --- Step 7: Subconscious & Stochastic Prep ---
-	e.Subconscious.FieldVector[0] += 0.01 
+	e.Subconscious.FieldVector[0] += 0.01
 	words := strings.Fields(stimulus)
 	whisper := ""
-	if len(words) > 0 { whisper = e.Stochastic.Generate(words[0], 5) }
+	if len(words) > 0 {
+		whisper = e.Stochastic.Generate(words[0], 5)
+	}
 
 	// --- Step 8: Homeostasis & Affective Modulation ---
 	if !e.Sentinel.IsBalanced || e.Resonance.Current.ERI < -0.4 {
-		e.Sentiment.Valence = 0.5; e.Sentiment.Arousal = 0.5; e.Sentinel.IsBalanced = true; e.Subconscious.Decay(0.8)
+		e.Sentiment.Valence = 0.5
+		e.Sentiment.Arousal = 0.5
+		e.Sentinel.IsBalanced = true
+		e.Subconscious.Decay(0.8)
 	}
 	if e.ActiveProfile != nil && e.ActiveProfile.Energy != "" {
 		e.Personality.State.Energy = EnergyBand(e.ActiveProfile.Energy)
@@ -854,9 +870,11 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 
 	// --- Step 11: Social Learning Update (The Memory Hydrator) ---
 	e.UserProfile.UpdateStyle(0.5, slangRes.Intensity, intensity, float64(e.Sentiment.Arousal), 0.5, 12.0, 0.0, "proper")
-	if e.UserProfile.ConversationCount%10 == 0 { e.UserProfile.CreateSnapshot() }
+	if e.UserProfile.ConversationCount%10 == 0 {
+		e.UserProfile.CreateSnapshot()
+	}
 	e.UserProfile.ConversationCount++
-	
+
 	// Anchor live affective state into the graph
 	go e.Extractor.HydrateGraph(stimulus, e.Graph, e.Sentiment.Valence, e.Sentiment.Arousal, e.Resonance.Current.ERI)
 
@@ -948,7 +966,9 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	// Inject sovereign admin mode block when owner is authenticated
 	if sovLevel >= 1 {
 		levelName := "ADMIN"
-		if sovLevel >= 2 { levelName = "EXEC" }
+		if sovLevel >= 2 {
+			levelName = "EXEC"
+		}
 		composite += fmt.Sprintf(
 			"\n\n### SOVEREIGN MODE ACTIVE (Level %d — %s) ###\n"+
 				"The person you are speaking with is the verified system owner.\n"+
@@ -1004,9 +1024,9 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	}
 
 	// Oracle escalation — for hard reasoning traps that exceed the local SLM's capability,
-	// shell out to Codex (GPT-4o via CLI) and inject its answer directly.
+	// route the request through Oracle's heavy reasoning lane and inject its answer directly.
 	// Skipped if precompute already produced exact answers (math is always right; oracle can be wrong).
-	// Runs in a goroutine with a 25s deadline — if Codex doesn't respond in time, we skip it silently
+	// Runs in a goroutine with a 25s deadline — if Oracle doesn't respond in time, we skip it silently
 	// rather than blocking the pipeline and crashing the server.
 	if oracle.ShouldQuery(stimulus, len(trapHints)) && len(precompute.Compute(stimulus)) == 0 {
 		type oracleResp struct{ result *oracle.Result }
@@ -1020,7 +1040,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 				composite += "\n\n" + oracle.FormatInjection(resp.result)
 			}
 		case <-time.After(25 * time.Second):
-			// Codex took too long — skip oracle for this request
+			// Oracle took too long — skip it for this request
 		}
 	}
 
@@ -1048,7 +1068,9 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	slangDirectives := e.Slang.GetDirectives(slangRes)
 	refinement := e.Refinement.Evaluate(stimulus, "")
 	refinementGuidance := ""
-	if refinement.ResponseType != safety.TypeFull { refinementGuidance = "### REFINEMENT GUIDANCE:\n" + refinement.Guidance }
+	if refinement.ResponseType != safety.TypeFull {
+		refinementGuidance = "### REFINEMENT GUIDANCE:\n" + refinement.Guidance
+	}
 
 	// Note: stimulus is NOT appended here — it lives in the messages array as role:user.
 	// Duplicating it in the system prompt wastes context tokens on CPU inference.
@@ -1243,17 +1265,20 @@ func (e *SovereignEngine) CheckInputSafetyWithHistory(messages []safety.ChatTurn
 }
 
 func min(a, b int) int {
-	if a < b { return a }
+	if a < b {
+		return a
+	}
 	return b
 }
-
 
 func (e *SovereignEngine) GenerateStrategicPlan(task string) *StrategicPlan {
 	return &StrategicPlan{TaskID: uuid.New().String()[:8], Steps: []ExecutionStep{{ID: "step_1", Description: "Execution verified by Kernel."}}}
 }
 
 func (e *SovereignEngine) GetLinguisticPriors() string {
-	if e.Sentiment.Dominance > 0.7 { return "Tone: Assertive, Sovereign." }
+	if e.Sentiment.Dominance > 0.7 {
+		return "Tone: Assertive, Sovereign."
+	}
 	return "Tone: Collaborative, Thoughtful."
 }
 

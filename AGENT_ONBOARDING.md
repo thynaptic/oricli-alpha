@@ -44,6 +44,8 @@ This repo is the shared platform plus multiple product clients:
 - `products/ori-dev-web/` — ORI Dev
 - `ORI-Home/` — ORI Home
 - `vuln.ai/` — ORI Red (`vuln.ai` public brand)
+- `../mise-by-ori/` — Mise by ORI (culinary consumer app; sibling repo; domain `misebyori.com`)
+- `../ori-code/` — ORI-Code (Bun + Ink **TUI** coding agent; `ori-code` / `ori` CLI; sibling repo; dev profile `ori_code`; uses `glm` backbone—not the same as in-tree Go `oricli`)
 - `cmd/oricli-cli/` — primary Go CLI
 
 Legacy surfaces still exist in-tree:
@@ -52,7 +54,7 @@ Legacy surfaces still exist in-tree:
 Use `config/products.json` and `docs/PRODUCTS.md` as the source of truth during the migration.
 
 Nested repo rule:
-- `products/ori-dev-web/`, `ORI-Home/`, and `vuln.ai/` are currently nested Git repos
+- `products/ori-dev-web/`, `ORI-Home/`, and `vuln.ai/` are nested Git repos inside the workspace; **mise-by-ori** and **ori-code** are sibling repos (next to `Mavaia/`, not inside it)
 - product-client changes belong in those repos unless we're doing an explicit flattening migration
 - do not assume root-repo `git status` reflects their internal changes
 

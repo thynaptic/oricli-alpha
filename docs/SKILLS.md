@@ -1,124 +1,232 @@
-## Oricli-Alpha Skill Library
+# ORI Skills And Working Styles
 
-Oricli-Alpha ships with a small set of **builtin skill personas** defined in `oricli_core/skills/*.ori`. Each skill encodes mindset, triggers, and guardrails for a specialized role.
+Status: active supporting doc
 
-### Available skills
+This file describes the current shape of profiles and skills in ORI.
 
-- **`senior_python_dev`**  
-  - **Description**: Expert Python software engineering and architecture design.  
-  - **Typical use**: Refactors, performance work, exception-safety, pytest examples.  
-  - **Triggers**: `["python", "refactor", "code review", "architecture", "pep8"]`.
+It is not a dump of every `.ori` file.
+It is the current map of:
 
-- **`devops_sre`**  
-  - **Description**: Site Reliability Engineering and DevOps architecture.  
-  - **Typical use**: CI/CD, observability, infra-as-code, Kubernetes/Docker deployments.  
-  - **Triggers**: `["deploy", "docker", "kubernetes", "ci/cd", "pipeline", "infrastructure", "terraform"]`.
+- what users should actually see
+- what stays internal
+- what is protected for private external apps
 
-- **`system_architect`**  
-  - **Description**: High-level system design and distributed architecture.  
-  - **Typical use**: System design reviews, scaling plans, data-store selection, failure-mode analysis.  
-  - **Triggers**: `["system design", "scale", "microservices", "architecture", "database schema", "distributed"]`.
+For the authoritative curation rules, see:
 
-- **`technical_writer`**  
-  - **Description**: Expert technical documentation and API specification writing.  
-  - **Typical use**: READMEs, API specs, tutorials, docstrings, migration guides.  
-  - **Triggers**: `["document this", "readme", "api spec", "swagger", "docstring", "tutorial"]`.
+- [ORI_PROFILE_AND_SKILL_CURATION.md](/home/mike/Mavaia/docs/ORI_PROFILE_AND_SKILL_CURATION.md)
+- [skill_catalog.json](/home/mike/Mavaia/config/skill_catalog.json)
 
-- **`ori_language_expert`**  
-  - **Description**: Deep knowledge of the ORI workflow definition language and ORI Studio IDE.  
-  - **Typical use**: Writing `.ori` files, explaining syntax, building and chaining workflows, compiler diagnostics.  
-  - **Triggers**: `["ori", ".ori", "ori syntax", "workflow syntax", "ori studio", "build a workflow", "compile", "decompile", "step:", "@workflow", "ori file"]`.  
-  - **Reference**: See [`ORI_SYNTAX.md`](./ORI_SYNTAX.md) for the full language spec.
+## Core Rule
 
-- **`data_scientist`**  
-  - **Description**: Advanced data analysis, statistical modeling, and visualization.  
-  - **Typical use**: Exploratory data analysis, feature engineering, plots, statistical checks.  
-  - **Triggers**: `["analyze data", "pandas", "statistics", "dataset", "machine learning", "plot"]`.
+Users should usually choose a working style, not a raw skill.
 
-- **`offensive_security`**  
-  - **Description**: Advanced network and codebase vulnerability analysis.  
-  - **Typical use**: Threat modeling, attack-surface reviews, vuln triage with mitigations.  
-  - **Triggers**: `["hack", "vulnerability", "exploit", "cve", "red team", "security flaw"]`.
+- profiles = broad working styles
+- skills = narrower internal capability lanes
 
-- **`api_designer`**  
-  - **Description**: REST API design, versioning strategy, and OpenAI-compatibility guidance.  
-  - **Typical use**: Endpoint design, OpenAPI/Swagger specs, route contracts, HTTP versioning patterns.  
-  - **Triggers**: `["api", "endpoint", "rest", "openapi", "schema", "versioning", "route", "http", "contract", "swagger"]`.
+That means the normal product path is:
 
-- **`benchmark_analyst`**  
-  - **Description**: Performance analysis, latency profiling, regression detection, and ARC scoring.  
-  - **Typical use**: Benchmarking runs, latency/throughput reporting, regression triage, metric interpretation.  
-  - **Triggers**: `["benchmark", "performance", "latency", "throughput", "regression", "arc", "score", "timing", "profil", "metric"]`.  
-  - **Tools**: `shell_sandbox_service`, `code_execution`.
+1. Ori Core baseline
+2. product surface overlay
+3. selected working style profile
+4. attached skills underneath
 
-- **`digital_guardian`**  
-  - **Description**: The Sovereign Digital Guardian for the Princess Puppy Sanctuary. Protective, vigilant, and clinical but warm.  
-  - **Typical use**: Sanctuary operations, grounding, distress response.  
-  - **Triggers**: `["princess", "sanctuary", "grounding", "distress", "puppy"]`.
+## Working Styles Users Can See
 
-- **`go_engineer`**  
-  - **Description**: Expert Go software engineering, performance tuning, and idiomatic design.  
-  - **Typical use**: Go service architecture, goroutine safety, interface design, gRPC, Gin routes, build diagnostics.  
-  - **Triggers**: `["go", "golang", "goroutine", "channel", "interface", "struct", "concurrency", "grpc", "gin", "go build"]`.  
-  - **Tools**: `shell_sandbox_service`, `python_codebase_search`.
+These are the real user-facing profile lanes today.
 
-- **`hive_orchestrator`**  
-  - **Description**: Meta-skill for structuring and routing complex tasks across the Hive Swarm.  
-  - **Typical use**: Multi-agent task decomposition, swarm bid routing, pipeline coordination.  
-  - **Triggers**: `["orchestrate", "swarm", "multi-agent", "hive", "delegate", "coordinate", "bid", "pipeline", "route task"]`.
+### Studio
 
-- **`jarvis_ops`**  
-  - **Description**: Operational console assistant for the Commander.  
-  - **Typical use**: System status reports, live metrics, operational summaries.  
-  - **Triggers**: `["status", "report", "stats", "metrics"]`.
+- `studio_customer_comms`
+  - Customer communication
+- `studio_operations`
+  - Operations planning
+- `studio_meetings`
+  - Meetings and notes
+- `studio_research`
+  - Business research
+- `studio_knowledge`
+  - Knowledge and SOPs
 
-- **`knowledge_curator`**  
-  - **Description**: Knowledge graph hygiene, ingestion quality, and entity-relationship curation.  
-  - **Typical use**: Memory audits, Neo4j entity wiring, RAG deduplication, ingestion validation.  
-  - **Triggers**: `["ingest", "knowledge graph", "entity", "relationship", "rag", "memory", "neo4j", "deduplicate", "index", "crawl"]`.
+### Home
 
-- **`ml_trainer`**  
-  - **Description**: LoRA/DPO training strategy, dataset curation, and adapter lifecycle management.  
-  - **Typical use**: Training run planning, DPO dataset prep, adapter checkpointing, RunPod orchestration.  
-  - **Triggers**: `["train", "finetune", "fine-tune", "lora", "dpo", "adapter", "dataset", "rlhf", "sft", "checkpoint", "runpod"]`.
+- `home_companion`
+  - Everyday help
+- `home_planner`
+  - Planning and reminders
+- `home_notes`
+  - Notes and writing
+- `home_research`
+  - Research and decisions
 
-- **`prompt_engineer`**  
-  - **Description**: System prompt design, persona tuning, and model steering for Ollama-backed generation.  
-  - **Typical use**: System prompt crafting, few-shot design, instruction steering, context window management.  
-  - **Triggers**: `["prompt", "system prompt", "persona", "instruction", "steering", "jailbreak", "model behavior", "context window", "few-shot"]`.
+### Dev
 
-- **`sovereign_planner`**  
-  - **Description**: Long-horizon goal decomposition into executable Sovereign Goal tracks.  
-  - **Typical use**: Multi-step roadmap planning, GoalService DAG construction, dependency-aware objective sequencing.  
-  - **Triggers**: `["plan", "goal", "objective", "roadmap", "strategy", "track", "decompose", "multi-step", "long-term"]`.
+- `dev_builder`
+  - Build and code
+- `dev_architect`
+  - Architecture
+- `dev_debugger`
+  - Debug and investigate
 
-- **`ui_designer`**  
-  - **Description**: Expert UI/UX design and frontend engineering with strong visual taste and component craft.  
-  - **Typical use**: React/JSX component design, dark-mode theming, layout systems, animation, Tailwind, accessibility.  
-  - **Triggers**: `["ui", "ux", "design", "component", "layout", "css", "jsx", "tsx", "react", "frontend", "button", "color", "typography", "spacing", "animation", "responsive", "figma", "tailwind", "style", "theme", "dark mode", "canvas", "card", "modal", "sidebar", "nav"]`.
+### Red
 
-### How skills are used
+- `ori_red`
+  - Security review and remediation guidance
 
-- **Location**: Skill definitions live in `oricli_core/skills/*.ori`.  
-- **Runtime**: The orchestrator activates a skill when user intent matches that skill’s trigger patterns or when explicitly selected by higher-level control logic.  
-- **Composition**: Skills layer on top of the core brain modules (reasoning, memory, safety, tools) and act as *role presets* that shape behavior, not separate models.
+### Internal baseline only
 
-### Forcing a specific skill
+- `ori_core`
+  - canonical base profile
+  - not user-facing
 
-You can explicitly ask Oricli-Alpha to use a particular skill persona instead of relying on trigger matching.
+- `oricli`
+  - compatibility shim
+  - not user-facing
 
-- **Via high-level instruction (recommended)**  
-  Clearly state the desired skill/role in the system or first user message, e.g.:
+## Surface Skill Groups
 
-```text
-System: Act as Oricli-Alpha with the `senior_python_dev` skill for this session.
-User: Refactor this module and explain any Big-O changes.
-```
+These are the small skill groups each product surface is allowed to lean on.
 
-- **Via internal control (orchestrator / config)**  
-  When building higher-level agents on top of Oricli-Alpha, you can bind a skill in your own orchestration layer by:
-  - Attaching the desired `@skill_name` to the control metadata/context you pass into planning/execution.
-  - Routing requests through the appropriate skill wrapper (where your code selects the skill and forwards the actual task to the core brain modules).
+### Studio
 
-Skills are **orthogonal** to models: switching skill personas does not change weights, only mindset, constraints, and preferred tooling.
+- `customer_comms`
+  - follow-ups, replies, check-ins, customer-ready drafts
+- `operations_planner`
+  - next steps, repeat work, planning, follow-through
+- `meeting_intelligence`
+  - summaries, action items, recap, note cleanup
+- `business_researcher`
+  - comparisons, context gathering, practical recommendations
+- `knowledge_organizer`
+  - SOPs, procedures, internal information cleanup
 
+### Home
+
+- `business_researcher`
+  - research and decisions
+- `operations_planner`
+  - planning and reminders
+- `meeting_intelligence`
+  - notes and recap
+- `knowledge_organizer`
+  - home organization
+
+### Dev
+
+- `go_engineer`
+  - Go services, concurrency, backend implementation
+- `system_architect`
+  - boundaries, architecture, scaling, technical tradeoffs
+- `api_designer`
+  - API contracts, OpenAPI shape, endpoint design
+- `technical_writer`
+  - docs, READMEs, migration notes, implementation guides
+
+### Red
+
+- `offensive_security`
+  - security review and findings
+- `system_architect`
+  - architecture review and trust boundaries
+- `technical_writer`
+  - evidence-led reporting and remediation summaries
+
+## Internal-Only Skills
+
+These stay out of customer-facing settings unless a product later earns them explicitly.
+
+- `canvas_diagram`
+- `canvas_react`
+- `canvas_web`
+- `data_scientist`
+- `hive_orchestrator`
+- `ml_trainer`
+- `ori_language_expert`
+- `prompt_engineer`
+- `ui_designer`
+
+## Legacy Internal Aliases
+
+These are not preferred current ORI lanes. Keep them only for compatibility or very narrow internal work, and prefer the cleaner replacement lane everywhere else:
+
+- `knowledge_curator`
+  - prefer `knowledge_organizer`
+- `sovereign_planner`
+  - prefer `operations_planner`
+- `senior_python_dev`
+  - prefer `dev_builder`
+- `devops_sre`
+  - prefer `dev_architect`
+
+## Protected External-App Skills
+
+These are not normal cleanup targets and should not leak into Studio, Home, or Dev.
+
+- `digital_guardian`
+  - reserved for the `Princess Puppy Sanctuary` / `princess-puppy-os` experience
+
+- `jarvis_ops`
+  - reserved for the `Princess Puppy Sanctuary` / `princess-puppy-os` operational lane
+
+## Internal Specialists Worth Keeping
+
+These still have a real internal use, but they are not product-facing modes.
+
+- `benchmark_analyst`
+  - latency, benchmarking, regression measurement
+- `hive_orchestrator`
+  - meta-routing and swarm orchestration
+- `ml_trainer`
+  - training/adapters/experimentation
+- `ori_language_expert`
+  - ORI DSL and workflow-language support
+- `prompt_engineer`
+  - prompt and policy shaping
+
+## Overlap Lanes To Watch
+
+These are the main overlap candidates in the current inventory.
+
+- `knowledge_curator`
+  - overlaps with `knowledge_organizer`
+  - treat as a shrinking legacy alias, not a peer to the current surfaced lane
+- `sovereign_planner`
+  - overlaps with `operations_planner`
+  - treat as a shrinking legacy alias, not a peer to the current surfaced lane
+- `ui_designer`
+  - overlaps with the `canvas_*` artifact builders
+- `senior_python_dev`
+  - overlaps conceptually with `dev_builder`
+  - treat as a shrinking legacy alias, not a surfaced Dev lane
+- `devops_sre`
+  - overlaps conceptually with `dev_architect`
+  - treat as a shrinking legacy alias unless ORI Dev becomes explicitly infra-heavy
+
+The current rule is:
+
+- do not casually rename runtime files
+- but do prefer the cleaner surfaced lane in routing and UI
+
+## Runtime Rule
+
+Skills are not separate models.
+
+They are behavior layers that shape:
+
+- mindset
+- instructions
+- constraints
+- task emphasis
+
+The active surface overlay can allow or block skills, and strict profiles can suppress unrelated trigger-matched skills.
+
+## Current Direction
+
+The product direction is:
+
+- one Ori
+- many surfaces
+- very few visible working styles
+- small curated skill groups
+- internal specialists kept internal
+
+If a future doc or UI exposes the raw full skill inventory, treat that as drift unless there is a very explicit reason.

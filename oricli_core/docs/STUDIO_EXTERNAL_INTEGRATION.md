@@ -1,6 +1,12 @@
-# ORI Studio — External Integration Guide
+# ORI Studio — External Integration Guide (STUDIO)
 
-This guide covers how external systems connect to ORI Studio: webhooks, the email command interface, OAuth connections, MCP tool servers, and direct API calls.
+Status: Implementation Reference
+
+This guide covers Studio-specific integration surfaces: webhooks, the email command interface, OAuth connections, and MCP tool servers.
+
+For the core Go backbone platform reference, see:
+- [API.md](/home/mike/Mavaia/docs/API.md)
+- [AGENT_API.md](/home/mike/Mavaia/docs/AGENT_API.md)
 
 ---
 

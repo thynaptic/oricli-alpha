@@ -1,6 +1,11 @@
-# ORI Studio — Agent API Reference
+# ORI Studio — Agent API Reference (STUDIO)
 
-The Agent API covers endpoints used by automated agents, CI pipelines, and background workers to interact with ORI Studio's workflow engine, skill system, memory layer, and AI backbone.
+Status: Implementation Reference
+
+This doc covers Studio-specific agent endpoints like workflows, pipelines, board, and notebook management.
+
+For the core Go backbone agent integration (surfaces, profiles, etc.), see:
+- [AGENT_API.md](/home/mike/Mavaia/docs/AGENT_API.md)
 
 Base URL (production): `https://oricli.thynaptic.com`  
 Base URL (local dev): `http://localhost:5001`
