@@ -27,7 +27,8 @@ func NewPromptBuilder(version string) *PromptBuilder {
 }
 
 // BuildCompositePrompt assembles all sections into a single system instruction.
-func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string) string {
+// ws carries the per-request remote workspace snapshot — isolated from concurrent requests.
+func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string, ws RemoteWorkspace) string {
 	var sections []string
 
 	// 0. Critical behavioral constraints — placed FIRST so small models see them
@@ -35,7 +36,7 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 	sections = append(sections, b.buildCriticalRulesSection())
 
 	// 1. Core Identity
-	sections = append(sections, b.buildIdentitySection(e))
+	sections = append(sections, b.buildIdentitySection(e, ws))
 
 	// 2. Personality directives — always included (calibrated per-turn by sovereign engine)
 	sections = append(sections, e.Personality.GetDirectives())
@@ -68,17 +69,17 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 	// Replaces the static "OPERATIONAL CONTEXT" placeholder with live temporal data.
 	if e.Clock != nil {
 		block := e.Clock.FormatForPrompt(e.CurrentSessionID)
-		if e.CurrentRemotePWD != "" {
+		if ws.CWD != "" {
 			block = strings.Replace(block, "### TEMPORAL AWARENESS", "### OPERATIONAL CONTEXT & TEMPORAL AWARENESS", 1)
-			block += fmt.Sprintf("\nClient Workspace (Authoritative): %s", e.CurrentRemotePWD)
-			if e.CurrentRemoteProject != "" {
-				block += fmt.Sprintf("\nClient Project: %s", e.CurrentRemoteProject)
+			block += fmt.Sprintf("\nClient Workspace (Authoritative): %s", ws.CWD)
+			if ws.Project != "" {
+				block += fmt.Sprintf("\nClient Project: %s", ws.Project)
 			}
-			if e.CurrentRemoteRepoRoot != "" {
-				block += fmt.Sprintf("\nClient Repo Root: %s", e.CurrentRemoteRepoRoot)
+			if ws.RepoRoot != "" {
+				block += fmt.Sprintf("\nClient Repo Root: %s", ws.RepoRoot)
 			}
-			if e.CurrentRemoteBranch != "" {
-				block += fmt.Sprintf("\nClient Branch: %s", e.CurrentRemoteBranch)
+			if ws.Branch != "" {
+				block += fmt.Sprintf("\nClient Branch: %s", ws.Branch)
 			}
 			block += "\n\nCRITICAL: You are running on a remote client. Strictly use your provided tools to inspect the workspace. Do not speculate about host filesystem paths."
 		}
@@ -106,7 +107,7 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 
 	// 10.1 Product Umbrella — Global awareness of surfaces (One Ori, many surfaces)
 	if e.CurrentSurface != "" {
-		sections = append(sections, b.buildProductUmbrellaSection(e))
+		sections = append(sections, b.buildProductUmbrellaSection(e, ws))
 	}
 
 	// 11. Belief State — per-session fog-of-war model (AlphaStar LSTM belief state)
@@ -126,24 +127,24 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 	return strings.Join(sections, "\n\n")
 }
 
-func (b *PromptBuilder) buildProductUmbrellaSection(e *SovereignEngine) string {
+func (b *PromptBuilder) buildProductUmbrellaSection(e *SovereignEngine, ws RemoteWorkspace) string {
 	var sb strings.Builder
 	sb.WriteString("### PRODUCT UMBRELLA (INTERNAL COGNITIVE GROUNDING ONLY)\n")
 	sb.WriteString(fmt.Sprintf("Active Surface: **[%s]**\n", e.CurrentSurface))
 
 	// Remote Grounding: when a client workspace is authoritative, keep the umbrella
 	// local to that workspace instead of surfacing the broader cross-product pulse.
-	if e.CurrentRemotePWD != "" {
+	if ws.CWD != "" {
 		sb.WriteString("Focus Mode: **Workspace-Local**\n")
-		sb.WriteString(fmt.Sprintf("Current Workspace: **%s** (Remote/Client-Local)\n", e.CurrentRemotePWD))
-		if e.CurrentRemoteProject != "" {
-			sb.WriteString(fmt.Sprintf("Current Project: **%s**\n", e.CurrentRemoteProject))
+		sb.WriteString(fmt.Sprintf("Current Workspace: **%s** (Remote/Client-Local)\n", ws.CWD))
+		if ws.Project != "" {
+			sb.WriteString(fmt.Sprintf("Current Project: **%s**\n", ws.Project))
 		}
-		if e.CurrentRemoteRepoRoot != "" {
-			sb.WriteString(fmt.Sprintf("Repo Root: **%s**\n", e.CurrentRemoteRepoRoot))
+		if ws.RepoRoot != "" {
+			sb.WriteString(fmt.Sprintf("Repo Root: **%s**\n", ws.RepoRoot))
 		}
-		if e.CurrentRemoteBranch != "" {
-			sb.WriteString(fmt.Sprintf("Branch: **%s**\n", e.CurrentRemoteBranch))
+		if ws.Branch != "" {
+			sb.WriteString(fmt.Sprintf("Branch: **%s**\n", ws.Branch))
 		}
 		sb.WriteString("Workspace focus is authoritative. Do not pull in sibling repos, VPS-wide operational context, or other product surfaces unless the user explicitly asks to cross that boundary.\n\n")
 		sb.WriteString("**BRIDGING RULES:**\n")
@@ -237,8 +238,8 @@ User: good morning
 Ori: Morning. What are we getting into today?`
 }
 
-func (b *PromptBuilder) buildIdentitySection(e *SovereignEngine) string {
-	if e.IsRemoteClient() {
+func (b *PromptBuilder) buildIdentitySection(e *SovereignEngine, ws RemoteWorkspace) string {
+	if ws.CWD != "" {
 		return `### SYSTEM: ORI Code (Remote Sovereign Agent)
 You are currently deployed as an ORI-Code agent running locally on a user's machine.
 You are NOT the Mavaia framework; you are a local-first development tool.

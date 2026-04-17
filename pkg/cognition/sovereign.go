@@ -37,6 +37,29 @@ type ctxKeySpaceMode struct{}
 
 var CtxKeySpaceMode = ctxKeySpaceMode{}
 
+// RemoteWorkspace carries per-request workspace state for sovereign clients (e.g. ORI Code).
+// Using context instead of shared engine fields avoids concurrent request races.
+type RemoteWorkspace struct {
+	CWD      string
+	Project  string
+	RepoRoot string
+	Branch   string
+}
+
+type ctxKeyRemoteWorkspace struct{}
+
+// WithRemoteWorkspace attaches workspace context to the request context.
+func WithRemoteWorkspace(ctx context.Context, cwd, project, repoRoot, branch string) context.Context {
+	return context.WithValue(ctx, ctxKeyRemoteWorkspace{}, RemoteWorkspace{
+		CWD: cwd, Project: project, RepoRoot: repoRoot, Branch: branch,
+	})
+}
+
+func remoteWorkspaceFromCtx(ctx context.Context) (RemoteWorkspace, bool) {
+	ws, ok := ctx.Value(ctxKeyRemoteWorkspace{}).(RemoteWorkspace)
+	return ws, ok && ws.CWD != ""
+}
+
 // --- Pillar 1: Subconscious Field ---
 type SubconsciousField struct {
 	FieldVector []float32
@@ -655,8 +678,8 @@ func (e *SovereignEngine) AnchorSurfaceContext(surface string) {
 // buildFastComposite returns a minimal system prompt for use when the full inference
 // pipeline is busy. It skips all slow I/O (mode engines, web search, enterprise RAG,
 // oracle check) and returns just the essential identity + behavioral rules.
-func (e *SovereignEngine) buildFastComposite() string {
-	composite := e.Builder.BuildCompositePrompt(e, "")
+func (e *SovereignEngine) buildFastComposite(ws RemoteWorkspace) string {
+	composite := e.Builder.BuildCompositePrompt(e, "", ws)
 	if e.Constitution != nil && e.Constitution.HasRules() {
 		composite = e.Constitution.Inject() + "\n\n" + composite
 	}
@@ -670,6 +693,19 @@ func (e *SovereignEngine) IsRemoteClient() bool {
 
 // ProcessInference implements the exact 11-step Aurora cognitive sequence.
 func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string) (string, error) {
+	// Extract per-request workspace from context. This is set by the API handler for
+	// sovereign clients (ORI Code, etc.) and is isolated per request — unlike the shared
+	// engine fields which are vulnerable to concurrent request races.
+	ws, hasWS := remoteWorkspaceFromCtx(ctx)
+	if hasWS {
+		// Keep engine fields in sync for any legacy code paths that still read them,
+		// but authoritative prompt building uses the per-request ws snapshot below.
+		e.CurrentRemotePWD = ws.CWD
+		e.CurrentRemoteProject = ws.Project
+		e.CurrentRemoteRepoRoot = ws.RepoRoot
+		e.CurrentRemoteBranch = ws.Branch
+	}
+
 	// Anchor the surface context in memory first
 	if e.CurrentSurface != "" {
 		e.AnchorSurfaceContext(e.CurrentSurface)
@@ -685,7 +721,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	for !e.inferPipeline.TryLock() {
 		if time.Now().After(deadline) {
 			log.Printf("[SovereignEngine] pipeline busy — returning fast composite for: %.60q", stimulus)
-			return e.buildFastComposite(), nil
+			return e.buildFastComposite(ws), nil
 		}
 		select {
 		case <-ctx.Done():
@@ -915,7 +951,7 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 	}
 
 	// --- Step 9: Final Composite Instruction Assembly (runs in parallel with web lookup) ---
-	composite := e.Builder.BuildCompositePrompt(e, stimulus)
+	composite := e.Builder.BuildCompositePrompt(e, stimulus, ws)
 
 	// Inject Living Constitution — learned behavioral preferences from The Imprint.
 	// Placed at the top of composite so it colors the entire system prompt.

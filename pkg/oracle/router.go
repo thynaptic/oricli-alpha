@@ -19,11 +19,12 @@ type RouteHints struct {
 }
 
 type Decision struct {
-	Route   Route
-	Backend string
-	Model   string
-	Agent   string
-	Reason  string
+	Route      Route
+	Backend    string
+	Model      string
+	Agent      string
+	Reason     string
+	WorkingDir string // if set, copilot runs from this dir instead of process CWD
 }
 
 // Decide determines the Oracle route for a request.

@@ -1122,7 +1122,8 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// explicitly want fresh inference through the requested engine.
 	forcedEngine := c.GetHeader("X-Reasoning-Mode") != "" || c.GetHeader("X-ORI-Manifest") != ""
 	// Space requests must bypass cache — the same query yields different answers per space.
-	if !forcedEngine && req.SpaceID == "" && s.ResponseCache != nil && lastMsg != "" {
+	// Remote workspace requests also bypass — same query yields different answers per workspace.
+	if !forcedEngine && req.SpaceID == "" && remotePWD == "" && s.ResponseCache != nil && lastMsg != "" {
 		if cached, hit := s.ResponseCache.Get(c.Request.Context(), lastMsg); hit {
 			chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
 			if !useSSE {
@@ -1378,6 +1379,11 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	inferCtx := ctx
 	if req.SpaceID != "" {
 		inferCtx = context.WithValue(ctx, cognition.CtxKeySpaceMode, true)
+	}
+	// Attach per-request workspace snapshot to context so ProcessInference gets an
+	// isolated copy that concurrent requests cannot clobber via shared engine fields.
+	if remotePWD != "" {
+		inferCtx = cognition.WithRemoteWorkspace(inferCtx, remotePWD, remoteProject, remoteRepoRoot, remoteBranch)
 	}
 	sovTrace, err := s.Agent.SovEngine.ProcessInference(inferCtx, lastMsg)
 	if err != nil {
@@ -1645,6 +1651,65 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		RequestedModel:   modelName,
 	})
 
+	// When a remote workspace is active, anchor it in both the system message tail
+	// AND the last user message. Copilot's buildPrompt flattens everything into one
+	// -p string, so workspace context buried mid-system gets outweighed by Mavaia
+	// operational context that dominates the early part of the prompt. Pinning it at
+	// the tail of system (closest to the conversation) and inline with the user query
+	// gives the model two strong recency signals.
+	if remotePWD != "" {
+		workspacePin := fmt.Sprintf("\n\n### WORKSPACE OVERRIDE (AUTHORITATIVE)\nYou are working in: %s", remotePWD)
+		if remoteProject != "" {
+			workspacePin += fmt.Sprintf(" (project: %s)", remoteProject)
+		}
+		if remoteBranch != "" {
+			workspacePin += fmt.Sprintf(" | branch: %s", remoteBranch)
+		}
+		workspacePin += "\nThis is a remote client workspace. Ignore all VPS/server paths. Answer all workspace questions using this path only."
+		msgs[0]["content"] += workspacePin
+	}
+
+	oracleMsgs := oracle.ConvertMsgs(msgs)
+	if remotePWD != "" {
+		// For remote workspace requests, replace the server-side sovereign composite
+		// (which is full of Mavaia operational context) with a compact, clean prompt.
+		// The sovereign engine output is designed for local Ollama; sending it to
+		// Copilot/GPT-5-mini causes the model to anchor on server VPS paths instead
+		// of the client's actual workspace.
+		project := remoteProject
+		if project == "" {
+			project = remotePWD
+		}
+		branch := remoteBranch
+		if branch == "" {
+			branch = "unknown"
+		}
+		compactSystem := fmt.Sprintf(
+			"You are ORI, a sharp and direct coding assistant.\n"+
+				"You are working inside the user's local workspace — not on any server.\n\n"+
+				"Workspace: %s\nProject: %s\nBranch: %s\n\n"+
+				"Rules:\n"+
+				"- Answer workspace questions using the paths above, not any server or VPS paths.\n"+
+				"- Use tools to inspect the repo when needed. Do not guess file contents.\n"+
+				"- Be direct. Lead with the answer.",
+			remotePWD, project, branch,
+		)
+		if len(oracleMsgs) > 0 && oracleMsgs[0].Role == "system" {
+			oracleMsgs[0].Content = compactSystem
+		}
+	}
+
+	// Remote workspace: run Copilot from /tmp (a neutral dir with no git repo) and
+	// strip --agent. Both prevent Copilot from picking up Mavaia's repo context
+	// (.github/copilot-instructions.md, agent profiles) from the server CWD and
+	// answering as if it's in Mavaia instead of the client's workspace.
+	if remotePWD != "" {
+		// "-" sentinel: isolated mode — no agent, no custom instructions, no built-in MCPs.
+		// See copilotArgs in oracle.go for what this strips.
+		oracleDecision.Agent = "-"
+		oracleDecision.WorkingDir = os.TempDir()
+	}
+
 	if !oracle.AvailableForRoute(oracleDecision.Route) {
 		// Short conversational turns — local model is fast enough.
 		var ollamaErr error
@@ -1659,7 +1724,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	} else {
 		log.Printf("[Oracle] route=%s agent=%s model=%s reason=%s query=%.60s",
 			oracleDecision.Route, oracleDecision.Agent, oracleDecision.Model, oracleDecision.Reason, lastMsg)
-		tokenCh = oracle.ChatStreamWithDecision(streamCtx, oracle.ConvertMsgs(msgs), oracleDecision)
+		tokenCh = oracle.ChatStreamWithDecision(streamCtx, oracleMsgs, oracleDecision)
 	}
 
 	// Stop pipeline heartbeat — token-stream ticker takes over from here.

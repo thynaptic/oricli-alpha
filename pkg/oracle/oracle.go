@@ -94,9 +94,23 @@ func copilotModelForRoute(route Route) string {
 	}
 }
 
-func copilotArgs(prompt string, route Route) []string {
+func copilotArgs(prompt string, route Route, agentOverride string) []string {
 	args := []string{"-p", prompt, "-s"}
-	args = append(args, "--agent", copilotAgentForRoute(route))
+	agent := agentOverride
+	// sentinel value "-" means: no agent, no custom instructions, no repo context
+	// (used when a remote client workspace is active)
+	isolatedMode := agentOverride == "-"
+	if !isolatedMode {
+		if agent == "" {
+			agent = copilotAgentForRoute(route)
+		}
+		if agent != "" {
+			args = append(args, "--agent", agent)
+		}
+	} else {
+		// Strip all repo-contextual layers so Copilot answers from prompt text only
+		args = append(args, "--no-custom-instructions", "--disable-builtin-mcps")
+	}
 	args = append(args, copilotPermissionArgs(route)...)
 
 	model := copilotModelForRoute(route)
@@ -138,7 +152,7 @@ func queryCopilot(prompt string, route Route) *Result {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "copilot", copilotArgs(prompt, route)...)
+	cmd := exec.CommandContext(ctx, "copilot", copilotArgs(prompt, route, "")...)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 
@@ -287,7 +301,7 @@ func ChatStreamWithDecision(ctx context.Context, messages []Message, decision De
 			}
 		default:
 			if _, err := exec.LookPath("copilot"); err == nil {
-				streamCopilot(ctx, prompt, decision.Route, out)
+				streamCopilot(ctx, prompt, decision, out)
 				return
 			}
 			if _, err := exec.LookPath("gemini"); err == nil {
@@ -326,8 +340,11 @@ func buildPrompt(messages []Message) string {
 	return strings.TrimSpace(sb.String())
 }
 
-func streamCopilot(ctx context.Context, prompt string, route Route, out chan<- string) {
-	cmd := exec.CommandContext(ctx, "copilot", copilotArgs(prompt, route)...)
+func streamCopilot(ctx context.Context, prompt string, decision Decision, out chan<- string) {
+	cmd := exec.CommandContext(ctx, "copilot", copilotArgs(prompt, decision.Route, decision.Agent)...)
+	if decision.WorkingDir != "" {
+		cmd.Dir = decision.WorkingDir
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		out <- fmt.Sprintf("[copilot error: %v]", err)
