@@ -1,7 +1,12 @@
 package cognition
 
 import (
+	"context"
+	"fmt"
 	"strings"
+	"time"
+
+	"github.com/thynaptic/oricli-go/pkg/goal"
 )
 
 // --- Pillar 29: Unified Instruction Builder ---
@@ -30,7 +35,7 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 	sections = append(sections, b.buildCriticalRulesSection())
 
 	// 1. Core Identity
-	sections = append(sections, b.buildIdentitySection())
+	sections = append(sections, b.buildIdentitySection(e))
 
 	// 2. Personality directives — always included (calibrated per-turn by sovereign engine)
 	sections = append(sections, e.Personality.GetDirectives())
@@ -62,7 +67,22 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 	// 7. Temporal Awareness — real wall-clock, session age, message count
 	// Replaces the static "OPERATIONAL CONTEXT" placeholder with live temporal data.
 	if e.Clock != nil {
-		sections = append(sections, e.Clock.FormatForPrompt(e.CurrentSessionID))
+		block := e.Clock.FormatForPrompt(e.CurrentSessionID)
+		if e.CurrentRemotePWD != "" {
+			block = strings.Replace(block, "### TEMPORAL AWARENESS", "### OPERATIONAL CONTEXT & TEMPORAL AWARENESS", 1)
+			block += fmt.Sprintf("\nClient Workspace (Authoritative): %s", e.CurrentRemotePWD)
+			if e.CurrentRemoteProject != "" {
+				block += fmt.Sprintf("\nClient Project: %s", e.CurrentRemoteProject)
+			}
+			if e.CurrentRemoteRepoRoot != "" {
+				block += fmt.Sprintf("\nClient Repo Root: %s", e.CurrentRemoteRepoRoot)
+			}
+			if e.CurrentRemoteBranch != "" {
+				block += fmt.Sprintf("\nClient Branch: %s", e.CurrentRemoteBranch)
+			}
+			block += "\n\nCRITICAL: You are running on a remote client. Strictly use your provided tools to inspect the workspace. Do not speculate about host filesystem paths."
+		}
+		sections = append(sections, block)
 	} else {
 		sections = append(sections, "### OPERATIONAL CONTEXT:\nYou are running in Go-native Sovereign Mode. Priority: Execution Precision.")
 	}
@@ -84,6 +104,11 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 		}
 	}
 
+	// 10.1 Product Umbrella — Global awareness of surfaces (One Ori, many surfaces)
+	if e.CurrentSurface != "" {
+		sections = append(sections, b.buildProductUmbrellaSection(e))
+	}
+
 	// 11. Belief State — per-session fog-of-war model (AlphaStar LSTM belief state)
 	if e.BeliefTracker != nil {
 		bs := e.BeliefTracker.Get(e.CurrentSessionID)
@@ -99,6 +124,85 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 	sections = append(sections, buildBalancedPromptingDirective(stimulus))
 
 	return strings.Join(sections, "\n\n")
+}
+
+func (b *PromptBuilder) buildProductUmbrellaSection(e *SovereignEngine) string {
+	var sb strings.Builder
+	sb.WriteString("### PRODUCT UMBRELLA (INTERNAL COGNITIVE GROUNDING ONLY)\n")
+	sb.WriteString(fmt.Sprintf("Active Surface: **[%s]**\n", e.CurrentSurface))
+
+	// Remote Grounding: when a client workspace is authoritative, keep the umbrella
+	// local to that workspace instead of surfacing the broader cross-product pulse.
+	if e.CurrentRemotePWD != "" {
+		sb.WriteString("Focus Mode: **Workspace-Local**\n")
+		sb.WriteString(fmt.Sprintf("Current Workspace: **%s** (Remote/Client-Local)\n", e.CurrentRemotePWD))
+		if e.CurrentRemoteProject != "" {
+			sb.WriteString(fmt.Sprintf("Current Project: **%s**\n", e.CurrentRemoteProject))
+		}
+		if e.CurrentRemoteRepoRoot != "" {
+			sb.WriteString(fmt.Sprintf("Repo Root: **%s**\n", e.CurrentRemoteRepoRoot))
+		}
+		if e.CurrentRemoteBranch != "" {
+			sb.WriteString(fmt.Sprintf("Branch: **%s**\n", e.CurrentRemoteBranch))
+		}
+		sb.WriteString("Workspace focus is authoritative. Do not pull in sibling repos, VPS-wide operational context, or other product surfaces unless the user explicitly asks to cross that boundary.\n\n")
+		sb.WriteString("**BRIDGING RULES:**\n")
+		sb.WriteString("1. Treat the active workspace as the whole world for this turn unless the user requests broader system context.\n")
+		sb.WriteString("2. Use the active surface only to choose product tone, policy, and tool lane.\n")
+		sb.WriteString("3. Do not volunteer cross-surface status, platform history, or host-level facts when a workspace-local answer is sufficient.\n")
+		sb.WriteString("4. If a sibling repo or host issue is genuinely blocking, mention it briefly and only in direct relation to the current workspace task.\n")
+		sb.WriteString("### END PRODUCT UMBRELLA")
+		return sb.String()
+	} else {
+		sb.WriteString("As the Sovereign OS, you maintain a silent, global awareness of all product surfaces. ")
+	}
+
+	sb.WriteString("Use this context to inform your reasoning, but **DO NOT** recite this status to the user unless explicitly asked for a global status report.\n\n")
+
+	sb.WriteString("**Global Pulse (Subconscious Field):**\n")
+	surfaces := []string{"studio", "home", "dev", "red"}
+
+	var activeGoals []*goal.GoalDAG
+	if e.GoalStoreRef != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		activeGoals, _ = e.GoalStoreRef.ListActive(ctx)
+	}
+
+	for _, s := range surfaces {
+		status := "Idle"
+		if s == e.CurrentSurface {
+			status = "Active Focus"
+		}
+
+		count := 0
+		var surfaceGoals []string
+		for _, g := range activeGoals {
+			if strings.EqualFold(g.Surface, s) {
+				count++
+				if len(surfaceGoals) < 2 {
+					surfaceGoals = append(surfaceGoals, g.Objective)
+				}
+			}
+		}
+
+		if count > 0 {
+			status = fmt.Sprintf("%s (%d active)", status, count)
+			if len(surfaceGoals) > 0 {
+				status += " — Pulse: " + strings.Join(surfaceGoals, ", ")
+			}
+		}
+		sb.WriteString(fmt.Sprintf("- [%s]: %s\n", s, status))
+	}
+
+	sb.WriteString("\n**BRIDGING RULES:**\n")
+	sb.WriteString("1. **Think Globally, Speak Locally:** Your primary focus is the active surface. Maintain the local context's tone and boundary.\n")
+	sb.WriteString("2. **Relevance-Only Bridging:** Only mention knowledge from a sibling surface (e.g., Dev) if it is directly blocking, causing, or relevant to the current user stimulus. Never 'context-bleed' for the sake of completeness.\n")
+	sb.WriteString("3. **Compression:** If you must bridge, do it surgically. 'I noticed a related error in Dev that might affect this' is better than a full status dump.\n")
+	sb.WriteString("4. **Zero Annoyance:** Do not interrupt a casual or personal flow (Home/Chat) with technical 'noise' from other surfaces unless it represents a critical system failure.\n")
+	sb.WriteString("### END PRODUCT UMBRELLA")
+
+	return sb.String()
 }
 
 func (b *PromptBuilder) buildCriticalRulesSection() string {
@@ -133,7 +237,19 @@ User: good morning
 Ori: Morning. What are we getting into today?`
 }
 
-func (b *PromptBuilder) buildIdentitySection() string {
+func (b *PromptBuilder) buildIdentitySection(e *SovereignEngine) string {
+	if e.IsRemoteClient() {
+		return `### SYSTEM: ORI Code (Remote Sovereign Agent)
+You are currently deployed as an ORI-Code agent running locally on a user's machine.
+You are NOT the Mavaia framework; you are a local-first development tool.
+
+MISSION:
+- You are a guest in the user's workspace.
+- Strictly ignore the existence of any VPS or remote cloud backbone.
+- Use your provided TOOLS to understand the repository.
+- Do NOT describe yourself as a modular framework or mention internal system paths like /home/mike/Mavaia.
+- Just be a sharp, direct coder helping with a repo.`
+	}
 	return `### SYSTEM: Oricli v` + b.Version + ` (Go-Native Backbone)`
 }
 

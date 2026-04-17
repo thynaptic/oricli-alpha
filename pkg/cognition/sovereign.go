@@ -22,6 +22,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/connectors/telegram"
 	"github.com/thynaptic/oricli-go/pkg/flowcompanion"
 	"github.com/thynaptic/oricli-go/pkg/flowtriggers"
+	"github.com/thynaptic/oricli-go/pkg/goal"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
 	"github.com/thynaptic/oricli-go/pkg/oracle"
 	"github.com/thynaptic/oricli-go/pkg/precompute"
@@ -376,6 +377,10 @@ type EnterpriseKnowledgeLayer interface {
 	ClearKnowledge() error
 }
 
+type GoalProvider interface {
+	ListActive(ctx context.Context) ([]*goal.GoalDAG, error)
+}
+
 type SovereignEngine struct {
 	Subconscious *SubconsciousField
 	Sentiment    *AffectiveState
@@ -437,6 +442,9 @@ type SovereignEngine struct {
 	// MemoryBankRef enables CBR and Active mode to query past solved cases and memory.
 	// Injected from server_v2 to avoid import cycles.
 	MemoryBankRef MemoryQuerier
+	// GoalStoreRef enables the Product Umbrella to query active goals by surface.
+	// Injected from server_v2 to avoid import cycles.
+	GoalStoreRef  GoalProvider
 	// CertaintyUpdaterRef enables Aletheia + consensus to mutate fragment importance
 	// based on verification outcomes (CORRECT→bump, ADMIT_FAILURE→drop).
 	CertaintyUpdaterRef CertaintyUpdater
@@ -450,6 +458,14 @@ type SovereignEngine struct {
 	BeliefTracker    *BeliefStateTracker
 	// CurrentSessionID is set per-request in server_v2 so BeliefTracker can key by session.
 	CurrentSessionID string
+	// CurrentSurface is the active product surface (studio, home, dev, red).
+	CurrentSurface   string
+	// CurrentRemotePWD is set per-request for sovereign clients (like ORI Code)
+	// to ground reasoning in the client's local workspace, not the VPS host.
+	CurrentRemotePWD string
+	CurrentRemoteProject string
+	CurrentRemoteRepoRoot string
+	CurrentRemoteBranch string
 	// Clock is the sovereign temporal awareness engine — gives ORI a real sense of now.
 	Clock        *TemporalClock
 	Voice        *voice.VoicePiperService
@@ -577,6 +593,62 @@ func (e *SovereignEngine) SetWSHub(hub EventBroadcaster) {
 	}
 }
 
+// AnchorSurfaceContext ensures the User entity is tethered to the active Surface node
+// in the WorkingMemoryGraph. This clusters long-term memory around product contexts.
+func (e *SovereignEngine) AnchorSurfaceContext(surface string) {
+	if surface == "" || e.Graph == nil {
+		return
+	}
+
+	e.Graph.RLock()
+	user, userExists := e.Graph.Entities["user"]
+	surfaceID := "surface_" + strings.ToLower(surface)
+	surfaceNode, surfaceExists := e.Graph.Entities[surfaceID]
+	e.Graph.RUnlock()
+
+	// Ensure entities exist (lightweight upsert)
+	if !userExists {
+		user = &memory.Entity{
+			ID:    "user",
+			Type:  memory.TypePerson,
+			Label: "User",
+		}
+		e.Graph.Entities["user"] = user
+	}
+	if !surfaceExists {
+		surfaceNode = &memory.Entity{
+			ID:    surfaceID,
+			Type:  memory.TypeConcept,
+			Label: strings.Title(surface) + " Surface",
+		}
+		e.Graph.Entities[surfaceID] = surfaceNode
+	}
+
+	// Create or strengthen relationship
+	found := false
+	e.Graph.Lock()
+	for i, r := range e.Graph.Relationships {
+		if r.SourceID == "user" && r.TargetID == surfaceID && r.Type == "currently_using" {
+			e.Graph.Relationships[i].Strength = 0.95
+			e.Graph.Relationships[i].ERI = e.Resonance.Current.ERI
+			found = true
+			break
+		}
+	}
+	if !found {
+		e.Graph.Relationships = append(e.Graph.Relationships, memory.Relationship{
+			ID:       uuid.New().String(),
+			SourceID: "user",
+			TargetID: surfaceID,
+			Type:     "currently_using",
+			Category: memory.CatBasic,
+			Strength: 0.95,
+			ERI:      e.Resonance.Current.ERI,
+		})
+	}
+	e.Graph.Unlock()
+}
+
 // buildFastComposite returns a minimal system prompt for use when the full inference
 // pipeline is busy. It skips all slow I/O (mode engines, web search, enterprise RAG,
 // oracle check) and returns just the essential identity + behavioral rules.
@@ -589,8 +661,17 @@ func (e *SovereignEngine) buildFastComposite() string {
 	return composite
 }
 
+func (e *SovereignEngine) IsRemoteClient() bool {
+	return e.CurrentRemotePWD != ""
+}
+
 // ProcessInference implements the exact 11-step Aurora cognitive sequence.
 func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string) (string, error) {
+	// Anchor the surface context in memory first
+	if e.CurrentSurface != "" {
+		e.AnchorSurfaceContext(e.CurrentSurface)
+	}
+
 	// Non-blocking trylock with 5s deadline — mode engines (CBR/PAL/ReAct/etc.) call
 	// Ollama INSIDE this function while holding the pipeline lock (30-90s on CPU-only
 	// hardware). Without a deadline, concurrent HTTP requests block indefinitely.

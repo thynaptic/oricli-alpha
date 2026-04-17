@@ -301,6 +301,18 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		}
 	}()
 
+	// Bootstrap GoalStore for active pulse
+	gs := goal.NewGoalStore(mb.GetAdminClient())
+	s.GoalStore = gs
+	agent.SovEngine.GoalStoreRef = gs
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := gs.Bootstrap(ctx); err != nil {
+			log.Printf("[ServerV2] GoalStore bootstrap error: %v", err)
+		}
+	}()
+
 	// Wire ActionRouter for trigger-word intent dispatch
 	research := service.NewResearchOrchestrator(agent)
 	curiosity := service.NewCuriosityDaemon(agent.SovEngine.Graph, agent.SovEngine.VDI, agent.GenService, hub)
@@ -357,6 +369,8 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	adapter := &memoryBankAdapter{mb: mb}
 	agent.SovEngine.MemoryBankRef = adapter
 	agent.SovEngine.CertaintyUpdaterRef = adapter
+	// Inject GoalStore for Product Umbrella (Active Pulse)
+	agent.SovEngine.GoalStoreRef = s.GoalStore
 	// VisionRef: route to RunPod GPU pod when enabled, fall back to local Ollama stub.
 	if os.Getenv("RUNPOD_VISION_ENABLED") == "true" {
 		apiKey := os.Getenv("RUNPOD_API_KEY")
@@ -925,10 +939,38 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 	// Studio requests (ORI Studio vibe chat) must NOT pollute general memory — DSL workflow
 	// responses written to MemoryBank would bleed into identity/capability RAG recalls.
-	isStudioContext := c.GetHeader("X-Ori-Context") == "studio"
+	surface := c.GetHeader("X-Ori-Context")
+	isStudioContext := surface == "studio"
+	s.Agent.SovEngine.CurrentSurface = surface
 
 	// Session ID used by BeliefStateTracker (fog-of-war) and downstream session scoping.
 	sessionID := c.GetHeader("X-Session-ID")
+
+	// Remote Workspace Overrides: provided by ORI Code and other sovereign clients.
+	// Workspace-specific headers are authoritative and should win over coarse
+	// surface awareness so reasoning stays anchored to the active repo instead
+	// of broad VPS or cross-surface context.
+	remotePWD := c.GetHeader("X-Ori-Workspace-Cwd")
+	if remotePWD == "" {
+		remotePWD = c.GetHeader("X-ORI-PWD")
+	}
+	remoteProject := c.GetHeader("X-Ori-Workspace-Project")
+	if remoteProject == "" {
+		remoteProject = c.GetHeader("X-ORI-Project")
+	}
+	remoteRepoRoot := c.GetHeader("X-Ori-Workspace-Root")
+	remoteBranch := c.GetHeader("X-Ori-Workspace-Branch")
+	if remotePWD != "" {
+		s.Agent.SovEngine.CurrentRemotePWD = remotePWD
+		s.Agent.SovEngine.CurrentRemoteProject = remoteProject
+		s.Agent.SovEngine.CurrentRemoteRepoRoot = remoteRepoRoot
+		s.Agent.SovEngine.CurrentRemoteBranch = remoteBranch
+	} else {
+		s.Agent.SovEngine.CurrentRemotePWD = ""
+		s.Agent.SovEngine.CurrentRemoteProject = ""
+		s.Agent.SovEngine.CurrentRemoteRepoRoot = ""
+		s.Agent.SovEngine.CurrentRemoteBranch = ""
+	}
 
 	modelName := req.Model
 	// oricli-bench: benchmark/direct mode — no sovereign pipeline, no mutex, just Ollama
@@ -1592,7 +1634,15 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Note: TierOracleTemporal is handled above (early-exit before ProcessInference).
 	var tokenCh <-chan string
 
-	oracleTier := oracle.TierOllamaFast // oracle.Classify(lastMsg) -- FORCED BY GEMINI
+	oracleTier := oracle.Classify(lastMsg)
+
+	// MODEL-FORCE: If user explicitly requested an oracle-grade model (gpt-* or claude-*),
+	// or is using a research/code surface, upgrade to OracleDefault.
+	id := strings.ToLower(modelName)
+	if strings.HasPrefix(id, "gpt-") || strings.HasPrefix(id, "claude-") || isResearchAction || isCodeAction {
+		oracleTier = oracle.TierOracleDefault
+	}
+
 	if !oracle.Available() {
 		oracleTier = oracle.TierOllamaFast // graceful degrade if copilot CLI absent
 	}
