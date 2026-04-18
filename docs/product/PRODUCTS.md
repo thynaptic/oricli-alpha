@@ -19,7 +19,10 @@ This repo is the shared ORI platform plus multiple product clients. Do not infer
 - ORI Dev is intended to be served as a built SPA from `products/ori-dev-web/dist/` using [scripts/start_ori_dev.sh](/home/mike/Mavaia/scripts/start_ori_dev.sh) and [ori-dev-ui.service](/home/mike/Mavaia/ori-dev-ui.service).
 - The current live `oridev.thynaptic.com` route was patched into Caddy through its admin API and should be made persistent in `/etc/caddy/Caddyfile`. Permanent config is documented in [ORI_DEV_DEPLOY.md](/home/mike/Mavaia/docs/ORI_DEV_DEPLOY.md).
 - ORI Home and ORI Red manage their own product-specific runtime inside their nested repos.
-- ORI-Code lives in the sibling `../ori-code` repo and talks to `glm.thynaptic.com` as the coding-agent surface. Its local default model is `gpt-5-mini`, with `ORI_MODEL` available as an explicit override when testing alternate runtime models.
+- ORI-Code lives in the sibling `../ori-code` repo and talks to `glm.thynaptic.com` as the coding-agent surface.
+- ORI-Code currently defaults locally to `surface=dev`, `profile=ori_code`, and `model=gpt-5-mini`.
+- Treat that as a client-side override for the coding UX, not the public ORI runtime default.
+- The shared runtime contract remains `model=oricli-oracle` with Oracle-first routing unless a client explicitly overrides it.
 
 ## Public brand aliases
 

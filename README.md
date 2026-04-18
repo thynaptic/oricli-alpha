@@ -124,7 +124,7 @@ Pass it as `Authorization: Bearer <key>` on all requests except `GET /v1/health`
 | `GET` | `/v1/cognition/coalition/stats` | Coalition Bias Detector stats (Robbers Cave) |
 | `GET` | `/v1/cognition/statusbias/stats` | Status Bias Detector stats (Blue Eyes / Brown Eyes) |
 
-**Full reference:** [`docs/API.md`](docs/API.md)
+**Full reference:** [`docs/api/API.md`](docs/api/API.md)
 
 ---
 
@@ -148,7 +148,12 @@ Mavaia/
 │   ├── arc/              # ARC-AGI solver (MCTS)
 │   └── core/             # Auth, config, storage interfaces
 ├── bin/                  # Compiled binaries (gitignored)
-├── docs/                 # API reference, vision, architecture docs
+├── docs/                 # API, architecture, and vision documentation hub
+│   ├── current/          # Source of Truth (PRD, onboarding, changelog)
+│   ├── api/              # REST & MCP integration reference
+│   ├── architecture/     # Core system design & HIVE OS internals
+│   ├── theory/           # Cognitive theory & research
+│   └── product/          # Roadmaps & product surfaces
 ├── scripts/              # Build, training, and test utilities
 ├── conductor/            # Workflow, tech stack, and track management
 ├── oricli_core/          # Python sidecar mesh (gRPC modules)
@@ -168,7 +173,7 @@ Mavaia/
 - **Neo4j** (optional) — persistent knowledge graph
 - **Caddy** — TLS reverse proxy for production
 
-See [`INSTALL.md`](INSTALL.md) for full setup instructions.
+See [`docs/current/INSTALL.md`](docs/current/INSTALL.md) for full setup instructions.
 
 ---
 
@@ -176,15 +181,15 @@ See [`INSTALL.md`](INSTALL.md) for full setup instructions.
 
 | Doc | Contents |
 |---|---|
-| [`docs/AGLI_Phase_II.md`](docs/AGLI_Phase_II.md) | AGLI roadmap — all 48 phases shipped (P17–P48), full 28-layer pipeline documented |
-| [`docs/API.md`](docs/API.md) | Full API reference — endpoints, auth, examples |
-| [`docs/PRODUCTS.md`](docs/PRODUCTS.md) | Canonical product map — Studio, Dev, Home, Red, Mise by ORI, ORI-Code (TUI), CLI, and legacy surfaces |
-| [`docs/public_overview.md`](docs/public_overview.md) | Architecture overview and capability summary |
-| [`docs/AGLI_VISION.md`](docs/AGLI_VISION.md) | Strategic trajectory toward AGLI |
-| [`docs/HIVE_OS_KERNEL_HANDBOOK.md`](docs/HIVE_OS_KERNEL_HANDBOOK.md) | Kernel Ring-0 internals |
+| [`docs/theory/AGLI_Phase_II.md`](docs/theory/AGLI_Phase_II.md) | AGLI roadmap — all 48 phases shipped (P17–P48), full 28-layer pipeline documented |
+| [`docs/api/API.md`](docs/api/API.md) | Full API reference — endpoints, auth, examples |
+| [`docs/product/PRODUCTS.md`](docs/product/PRODUCTS.md) | Canonical product map — Studio, Dev, Home, Red, Mise by ORI, ORI-Code (TUI), CLI, and legacy surfaces |
+| [`docs/product/public_overview.md`](docs/product/public_overview.md) | Architecture overview and capability summary |
+| [`docs/architecture/AGLI_VISION.md`](docs/architecture/AGLI_VISION.md) | Strategic trajectory toward AGLI |
+| [`docs/architecture/HIVE_OS_KERNEL_HANDBOOK.md`](docs/architecture/HIVE_OS_KERNEL_HANDBOOK.md) | Kernel Ring-0 internals |
 | [`conductor/tech-stack.md`](conductor/tech-stack.md) | Full tech stack with dependency roles |
-| [`INSTALL.md`](INSTALL.md) | Installation and systemd setup |
-| [`QUICKSTART.md`](QUICKSTART.md) | First run and first API call |
+| [`docs/current/INSTALL.md`](docs/current/INSTALL.md) | Installation and systemd setup |
+| [`docs/current/QUICKSTART.md`](docs/current/QUICKSTART.md) | First run and first API call |
 
 ## Product Surfaces
 

@@ -22,21 +22,69 @@ The goal is simple:
 
 ### Product-facing working styles
 
-- `smb_assistant`
+- `studio_customer_comms`
   - expose in `studio`
-  - use for business-facing operator work, customer follow-up, and planning
+  - business-facing customer communication lane
+
+- `studio_operations`
+  - expose in `studio`
+  - operator workflow and execution lane
+
+- `studio_meetings`
+  - expose in `studio`
+  - meeting recap and follow-through lane
+
+- `studio_research`
+  - expose in `studio`
+  - practical business research lane
+
+- `studio_knowledge`
+  - expose in `studio`
+  - SOP, docs, and knowledge organization lane
+
+- `ori_north`
+  - expose in `studio`
+  - higher-direction operator lane when a stronger point of view is useful
+
+- `big_sister`
+  - currently surfaced in `studio` and `home`
+  - direct, confident baseline lane
 
 - `home_companion`
   - expose in `home`
-  - use for reminders, planning, notes, and personal coordination
+  - gentle personal coordination lane
+
+- `home_planner`
+  - expose in `home`
+  - planning and scheduling lane
+
+- `home_notes`
+  - expose in `home`
+  - notes, recap, and memory support lane
+
+- `home_research`
+  - expose in `home`
+  - personal research lane
 
 - `dev_builder`
   - expose in `dev`
-  - use for implementation, architecture, and technical guidance
+  - implementation-first builder lane
+
+- `dev_architect`
+  - expose in `dev`
+  - systems and design tradeoff lane
+
+- `dev_debugger`
+  - expose in `dev`
+  - diagnosis and investigation lane
+
+- `ori_code`
+  - expose in `dev`
+  - coding-agent lane used by ORI-Code
 
 - `ori_red`
   - expose in `red`
-  - use for audits, findings, and remediation guidance
+  - audits, findings, and remediation guidance
 
 ## Public Skill Groups
 
@@ -165,3 +213,5 @@ These should not be renamed casually right now, but they are the right future cl
 - Keep the number of visible options small
 - Do not let internal lab names leak into product settings
 - Do not fold protected external-app skills into normal curation work
+- Use `dev-portal/agent.json` as the manifest-level source of truth for what is
+  actually surfaced today
