@@ -130,9 +130,9 @@ Ensure(ctx, tier)
 
 | Tier | Trigger | Model |
 |---|---|---|
-| `RouteLightChat` | Short, conversational | Oracle light model (default: `gpt-5-mini`) |
-| `RouteHeavyReasoning` | Code, debug, architecture | Oracle heavy model (default: `claude-sonnet-4.6`) |
-| `RouteResearch` | Research, analysis, synthesis | Oracle research model (default: `gpt-5.4`) |
+| `RouteLightChat` | Short, conversational | `claude-haiku-4.5` (SDK auto-selected) |
+| `RouteHeavyReasoning` | Code, debug, architecture | `auto` (Copilot selects best available) |
+| `RouteResearch` | Research, analysis, dev work | `claude-sonnet-4.6` (SDK auto-selected) |
 | `RouteImageReasoning` | Visual input | Oracle multimodal agent |
 
 **Signals scored:** ARC-style nested integer arrays, formal math keywords (prove/theorem/eigenvalue/etc.), multi-constraint logic chains, long message length, code generation scope, comparative analysis markers. Signals are weighted and summed; result above `COMPLEXITY_HEAVY_THRESHOLD` → `TierRemote`. Pattern matching is scoped to the **last user message only** to avoid false positives from conversation history.

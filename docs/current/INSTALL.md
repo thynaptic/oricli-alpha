@@ -31,12 +31,15 @@ go version
 
 ---
 
-## 2. Install Ollama & Pull Model
+## 2. Install Ollama (embeddings only)
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull ori:1.7b
+ollama pull all-minilm
+ollama pull nomic-embed-text
 ```
+
+Ollama is used for semantic embeddings only (memory recall, response cache dedup, SCL indexing, TCD drift). All reasoning goes through Oracle (Copilot SDK).
 
 ---
 
@@ -127,10 +130,7 @@ The backbone reads from `.env` in the project root. Key variables:
 | Variable | Default | Description |
 |---|---|---|
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama inference endpoint (VPS local) |
-| `OLLAMA_MODEL` | `ori:1.7b` | TierLocal model — default VPS inference |
-| `OLLAMA_REMOTE_URL` | `http://localhost:11435` | SSH tunnel to RunPod pod (TierMedium + TierRemote) |
-| `OLLAMA_MEDIUM_MODEL` | `ori:4b` | TierMedium model — code / multi-step reasoning |
-| `OLLAMA_RESEARCH_MODEL` | `ori:16b` | TierRemote model — heavy reasoning / long synthesis |
+| `OLLAMA_MODEL` | `all-minilm` | Embedding model (semantic memory, cache dedup) |
 | `ORICLI_ENCRYPTION_KEY` | (auto) | Base64 AES key for LMDB encryption |
 | `OricliAlpha_Key` | (auto) | Override API key (optional) |
 

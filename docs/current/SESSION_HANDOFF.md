@@ -222,11 +222,11 @@ Why:
 - Rewrote `docs/API.md` into a shorter current platform reference.
 - `docs/EXTERNAL_INTEGRATION.md` is now the main likely old-world API/integration drift doc to review next.
 
-### 2026-04-16 03:15 UTC
+### 2026-04-21 UTC
 
-- Replaced `gpt-4.1` with `gpt-5-mini` as the default Oracle Copilot reasoning model.
-- Updated `pkg/oracle/oracle.go` and its corresponding tests.
-- Verified that `gpt-5-mini` correctly omits the `--reasoning-effort` flag by default.
+- Oracle model selection now uses SDK `ListModels()` instead of hardcoded defaults.
+- Light → `claude-haiku-4.5`, Heavy → `auto` (Copilot picks best), Research/Dev → `claude-sonnet-4.6`.
+- Model cache refreshes every 24h from live SDK catalog.
 
 ## End-of-Session Update Template
 

@@ -64,9 +64,9 @@ Oracle handles all image reasoning. Two paths:
 ## 🛠️ Configuration & Development
 
 ### Environment Variables
-- `ORACLE_COPILOT_MODEL_LIGHT`: Model for standard chat (Default: `gpt-5-mini`).
-- `ORACLE_COPILOT_MODEL_HEAVY`: Model for deep reasoning (Default: `claude-sonnet-4.6`).
-- `ORACLE_COPILOT_MODEL_RESEARCH`: Model for analysis (Default: `gpt-5.4`).
+- `ORACLE_COPILOT_MODEL_LIGHT`: Model for light chat (Default: `claude-haiku-4.5` — auto-selected from SDK `ListModels`).
+- `ORACLE_COPILOT_MODEL_HEAVY`: Model for deep reasoning (Default: `auto` — Copilot selects best available).
+- `ORACLE_COPILOT_MODEL_RESEARCH`: Model for dev/research (Default: `claude-sonnet-4.6` — best available Sonnet from SDK `ListModels`).
 
 ### Extending Agents
 To add a new lane to the Oracle, create a Markdown file in `.github/agents/` following the YAML frontmatter pattern:

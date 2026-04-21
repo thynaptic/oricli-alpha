@@ -69,9 +69,9 @@ and enforced by the live API:
 The public API exposes ORI and `oricli-oracle` as the stable entrypoint. Internally,
 Oracle currently routes into Copilot/Codex tiers like this:
 
-- **Light chat** → Copilot `gpt-5-mini`
-- **Heavy reasoning / code work** → Copilot `gpt-5.3`
-- **Research** → Copilot `gpt-5.3`
+- **Light chat** → `claude-haiku-4.5` (auto-selected via SDK `ListModels`)
+- **Heavy reasoning / code work** → `auto` (Copilot selects best available in real-time)
+- **Research / dev** → `claude-sonnet-4.6` (best available Sonnet via SDK `ListModels`)
 - **Image reasoning** → Codex (`ori-multimodal`)
 
 These are internal router defaults from `pkg/oracle/oracle.go`, not separate public
@@ -205,7 +205,7 @@ glm.thynaptic.com {
 - **Runtime**: Bun (not Node.js)
 - **Current version**: `v0.9.15` (released via Homebrew tap)
 - **API base**: `https://glm.thynaptic.com/v1` (hardcoded in `src/config/defaults.ts`)
-- **Client defaults**: `surface=dev`, `profile=ori_code`, `model=gpt-5-mini`
+- **Client defaults**: `surface=dev`, `profile=ori_code`, `model=oricli-oracle`
 - **Important distinction**: those are `ori-code` client defaults, not the shared public
   runtime default. The runtime default remains `oricli-oracle` with Oracle-first routing.
 - **MCP client**: `src/runtime/ori-client.ts` → `invokeMCPTool()` posts to `${apiBase}/mcp`
