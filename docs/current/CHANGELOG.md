@@ -7,6 +7,22 @@ This changelog tracks the Go backbone/API layer under `pkg/`, `cmd/`, and `docs/
 
 ---
 
+## [11.9.0] — 2026-04-21 — SLM Retirement + Oracle Vision + SCAI Structural-Only
+
+### Changed
+
+- **Vision endpoint (`POST /v1/vision/analyze`)** — Replaced `moondream:latest` (local Ollama) with `oracleVisionAdapter` calling `https://glm.thynaptic.com/v1/chat/completions` via OpenAI vision message format. URL passthrough or base64 embed. Model: `oricli-oracle`. 30s timeout.
+- **VDI `NavigateAndSee`** — `browser.go` `askVisionModel` updated from Ollama `/api/chat` to Oracle API.
+- **SCAI `SelfAlign` retired** — Removed Critique/Revise Ollama SLM loop (`qwen3:1.7b`). `SovereignEngine.SelfAlign()` now calls `AuditOutput()` directly (structural DID/regex/credential scanning only). Frontier models carry their own constitution. Behavioral alignment happens via prompt; structural gates remain.
+- **Ollama reduced to embeddings-only** — Removed 9 dead models from Ollama (7 dead SLMs: `ori:1.7b`, `qwen2.5:3b`, `granite3.1-moe:3b`, `phi4-mini`, `qwen2.5-coder:1.5b`, `qwen2.5-coder:3b`, `gemma3:1b`; plus `moondream:latest` and `qwen3:1.7b`). Ollama now serves only: `all-minilm:latest` (45MB) and `nomic-embed-text:latest` (274MB) — both used by the semantic embedder (`pkg/service/embedder.go`) for memory recall, response cache dedup, SCL indexing, and TCD drift detection.
+
+### Removed
+
+- `ollamaBaseURL()` helper in `server_v2.go` — only used by old `visionAdapter`, gone with it
+- `visionAdapter` struct — replaced by `oracleVisionAdapter`
+
+---
+
 ## [11.8.0] — 2026-04-06 — Sovereign Browser Automation Planning Stack — `b3a8421`
 
 ### Added

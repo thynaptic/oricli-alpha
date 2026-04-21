@@ -1,15 +1,19 @@
-# Oricli-Alpha Quick Start
+# ORI Engine Quick Start
 
-**Version:** v11.0.0 — Go-native backbone  
-**Production URL:** `https://oricli.thynaptic.com`
+**Version:** v11.9.0 — Oracle-first, embeddings-only Ollama  
+**Production URL:** `https://glm.thynaptic.com/v1`
 
 ---
 
 ## Prerequisites
 
 - **Go 1.25+** — [install](https://go.dev/dl/)
-- **Ollama** — [install](https://ollama.com) with `ori:1.7b` pulled (`ollama pull ori:1.7b`). For RunPod tiers (ori:4b / ori:16b), start `ori-pod-tunnel.service` — see `INSTALL.md`.
-- **Python 3.11+** + pip — only needed for the UI proxy and training pipelines
+- **Ollama** — [install](https://ollama.com). Pull embeddings only:
+  ```bash
+  ollama pull all-minilm
+  ollama pull nomic-embed-text
+  ```
+  No reasoning models needed — all LLM calls route through Oracle (Copilot SDK).
 
 ---
 
@@ -38,7 +42,7 @@ sudo systemctl status oricli-backbone oricli-ui
 
 ```bash
 # Build the Go backbone
-go build -o bin/oricli-go-v2 ./cmd/backbone
+go build -o bin/oricli-go-v2 ./cmd/oricli-engine
 
 # Start it
 ./bin/oricli-go-v2
@@ -72,7 +76,7 @@ curl https://oricli.thynaptic.com/v1/health
 curl -X POST https://oricli.thynaptic.com/v1/chat/completions \
   -H "Authorization: Bearer $(cat /home/mike/Mavaia/.oricli/api_key)" \
   -H "Content-Type: application/json" \
-  -d '{"model":"oricli-cognitive","messages":[{"role":"user","content":"Hello"}]}'
+  -d '{"model":"oricli-oracle","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
 ---
@@ -87,7 +91,7 @@ client = OpenAI(
     api_key=open("/home/mike/Mavaia/.oricli/api_key").read().strip()
 )
 response = client.chat.completions.create(
-    model="oricli-cognitive",
+    model="oricli-oracle",
     messages=[{"role": "user", "content": "What can you do?"}]
 )
 print(response.choices[0].message.content)

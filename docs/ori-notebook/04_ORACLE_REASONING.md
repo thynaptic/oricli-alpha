@@ -1,6 +1,6 @@
 # Oracle Orchestration (GitHub Copilot SDK)
 
-The **Oracle** is Oricli-Alpha's high-compute reasoning lane. It handles complex multi-turn logic, architecture planning, and deep repo investigation that exceeds the capabilities of the local Ollama models.
+The **Oracle** is ORI's primary reasoning lane. All LLM reasoning — chat, code, architecture, research, and vision — routes through Oracle. Local Ollama is retained only for embeddings (`all-minilm`, `nomic-embed-text`).
 
 As of v11.1.0, the Oracle has migrated from a CLI-based wrapper to a **Native Go SDK Integration** with an embedded runtime.
 
@@ -55,9 +55,9 @@ The SDK allows users to course-correct an agent while it is processing a task.
 - **Immediate Mode (Steering)**: Triggered by keywords like "Stop," "Actually," or "Wait." This injects the message immediately into the active reasoning loop to pivot the agent's direction.
 
 ### Multi-Modal (Vision)
-The Oracle handles image-based reasoning natively.
-- **Detection**: The engine scans prompts for absolute filesystem paths ending in image extensions (`.png`, `.jpg`, etc.).
-- **Attachments**: Detected images are attached to the SDK `MessageOptions` as `file` blocks, allowing the Oracle to reason over diagrams or screenshots.
+Oracle handles all image reasoning. Two paths:
+- **Chat inline**: The engine detects filesystem paths ending in `.png`, `.jpg`, etc. in prompts and attaches them to the SDK `MessageOptions` as `file` blocks.
+- **`POST /v1/vision/analyze`**: Routes through `oracleVisionAdapter` in `server_v2.go` — calls `https://glm.thynaptic.com/v1/chat/completions` with OpenAI vision message format (base64 or URL passthrough). Replaced `moondream:latest` (local Ollama) as of v11.9.0.
 
 ---
 

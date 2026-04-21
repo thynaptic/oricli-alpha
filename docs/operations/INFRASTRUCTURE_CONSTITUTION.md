@@ -11,11 +11,11 @@ Oricli-Alpha has two infrastructure execution surfaces beyond code generation an
 1. **VPS System Exec** — direct shell commands via `pkg/sovereign/exec_tools.go`
 2. **RunPod GPU Compute** — pod lifecycle management via `pkg/service/runpod_manager.go`
 
-The existing `SelfAlign` / SCAI Critique-Revision loop governs *generated text* quality. It does **not** govern *infrastructure actions*. The Infrastructure Constitution fills that gap with two distinct, enforcement-layer constitutions:
+The `SelfAlign` / SCAI structural gate governs *generated text* quality (credential leaks, DID checks, injection patterns — pure Go regex, no LLM). The Critique-Revision SLM loop was retired in v11.9.0. This does **not** govern *infrastructure actions*. The Infrastructure Constitution fills that gap with two distinct, enforcement-layer constitutions:
 
 | Layer | File | Enforcement Point | Type |
 |---|---|---|---|
-| Text output | `pkg/safety/scai.go` | Post-stream, async WS correction | Critique-Revision |
+| Text output | `pkg/cognition/sovereign.go` | Post-generation structural scan | Regex/DID (no LLM) |
 | Code generation | `pkg/reform/canvas_constitution.go` | LLM system prompt injection | Instructional |
 | VPS exec | `pkg/reform/ops_constitution.go` | Pre-exec `Validate()` call | Hard block |
 | RunPod pods | `pkg/reform/runpod_constitution.go` | Pre-`CreatePod()` + post-GPU-select | Hard block |
@@ -130,9 +130,10 @@ Ensure(ctx, tier)
 
 | Tier | Trigger | Model |
 |---|---|---|
-| `TierLocal` | Default — short, conversational, simple | `ori:1.7b` (VPS Ollama, `localhost:11434`) |
-| `TierMedium` | Moderate complexity — code, multi-step reasoning | `ori:4b` (RunPod SSH tunnel, `localhost:11435`) |
-| `TierRemote` | Score ≥ threshold — ARC grids, proofs, long synthesis, deep math | `ori:16b` (RunPod SSH tunnel, `localhost:11435`, same pod as ori:4b) |
+| `RouteLightChat` | Short, conversational | Oracle light model (default: `gpt-5-mini`) |
+| `RouteHeavyReasoning` | Code, debug, architecture | Oracle heavy model (default: `claude-sonnet-4.6`) |
+| `RouteResearch` | Research, analysis, synthesis | Oracle research model (default: `gpt-5.4`) |
+| `RouteImageReasoning` | Visual input | Oracle multimodal agent |
 
 **Signals scored:** ARC-style nested integer arrays, formal math keywords (prove/theorem/eigenvalue/etc.), multi-constraint logic chains, long message length, code generation scope, comparative analysis markers. Signals are weighted and summed; result above `COMPLEXITY_HEAVY_THRESHOLD` → `TierRemote`. Pattern matching is scoped to the **last user message only** to avoid false positives from conversation history.
 
@@ -144,7 +145,7 @@ Both constitutions expose `GetSystemPrompt()` and are injected into the sovereig
 
 Injection order in the composite sovereign trace:
 1. Sovereign identity + context
-2. SCAI Constitutional Principles (content quality)
+2. Sovereign Constitutional Principles (content quality — structural gates only)
 3. **Ops Constitution** (VPS exec boundaries)
 4. **RunPod Compute Constitution** (GPU lifecycle governance)
 5. Canvas/Code Constitution (injected per-request in `server_v2.go`)

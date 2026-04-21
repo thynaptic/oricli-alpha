@@ -184,11 +184,12 @@
     },
     "agent_register_mobile": {
       "method": "POST",
-      "path": "/agent/register",
+      "path": "/app/register",
       "headers": {},
       "body": {
         "app_name": "ORI Mobile",
-        "device_id": "device-123"
+        "device_id": "device-123",
+        "registration_token": "<ORI_APP_REG_TOKEN>"
       }
     },
     "list_sessions": {
@@ -217,9 +218,9 @@
       "headers": {},
       "body": {
         "tasks": [
-          { "goal": "Summarise the latest news on LLM quantization.", "profile": "dev_assistant" },
-          { "goal": "Check the health of all ORI browser sessions.", "profile": "dev_assistant" },
-          { "goal": "Draft a Twitter thread on agentic memory patterns.", "profile": "studio_social_media" }
+          { "goal": "Summarise the latest news on LLM quantization.", "profile": "dev_builder" },
+          { "goal": "Check the health of all ORI browser sessions.", "profile": "dev_debugger" },
+          { "goal": "Draft a customer-facing summary of agentic memory patterns.", "profile": "studio_customer_comms" }
         ]
       }
     },

@@ -22,13 +22,11 @@ Fetch from **dev.thynaptic.com** (or your deployed dev-portal origin) for techni
 - **One key, anywhere:** the same `ori.<prefix>.<secret>` works for every integration — web, desktop, mobile, MCP, scripts, and first-party apps. No per-surface or per-product API key variants; pick surfaces with headers (`X-Ori-Context`, etc.), not different keys. Legacy `glm.*` keys still work until rotated.
 - Base URL: `https://glm.thynaptic.com/v1`
 - Auth: `Authorization: Bearer ori.<prefix>.<secret>`
-- Self-hosted (typical VPS): use the public gateway at `http://localhost:8089/v1` (same paths as production). The cognitive backbone listens on `:8088` internally — keep it localhost-only behind your reverse proxy
+- Self-hosted (typical VPS): use the public gateway at `http://localhost:8089/v1` (same paths as production). The cognitive backbone listens on `:8088` internally — keep it localhost-only behind your reverse proxy.
 - Main chat endpoint: `POST /chat/completions`
 - Skill discovery: `GET /modules` — lists builtin `.ori` skills and Go modules (for building UIs and toggles)
-- **External / Claude-style skills on chat:** optional JSON field `ori_skills` with `enabled` (builtin ids) and `custom` (inline user skill bodies). Builtin ids must be allowed for the active surface overlay. Headers: `X-Ori-Skill` (comma-separated ids, merged into enabled for this request); `X-Ori-Skills-Persisted: true` + `X-Ori-Skills-Scope: <key>` merges saved prefs from PocketBase for the tenant (requires PB on the runtime; `503` if unset).
-- **Persisted skill prefs (runtime, `runtime:chat`):** `GET|PUT /user/ori-skills/prefs?scope_id=…`, `GET|PUT|DELETE /user/ori-skills/custom…` — tenant-scoped toggles and custom skill rows for external apps.
-- Feedback endpoint: `POST /chat/feedback` (submit roasts/lessons to improve persona)
-- Email endpoint: `POST /email/send`
+- **External / Claude-style skills on chat:** optional JSON field `ori_skills` with `enabled` (builtin ids) and `custom` (inline user skill bodies). Builtin ids must be allowed for the active surface overlay. Headers: `X-Ori-Skill` (comma-separated ids, merged into enabled for this request).
+- Feedback endpoint: `POST /feedback` (submit roasts/lessons to improve persona)
 - Default strong reasoning lane: `model: "oricli-oracle"`
 - Response Metadata: Chat responses include a `meta` block with `provider` and `sass_factor`.
 - Surface header: `X-Ori-Context`
@@ -60,30 +58,42 @@ const res = await client.chat.completions.create({ model: "oricli-oracle", messa
 
 Streaming, tool use, and `GET /models` all work with the standard SDK. Use `extra_body` to pass ORI-specific fields (`profile`, `X-Ori-Context` surface, etc.).
 
-## Capabilities (Governed Reflexes)
-
-Specialized endpoints for high-capability task execution:
-
-- `POST /v1/capabilities/agent` — Spawns an autonomous Copilot agent.
-- `POST /v1/capabilities/research` — Triggers exhaustive research dives (/research).
-- `POST /v1/capabilities/web-search` — Intent-aware web lookup using SearXNG.
-- `POST /v1/capabilities/web-fetch` — RAG-ready URL parsing and cleaning.
-- `POST /v1/capabilities/repo-report` — High-signal project repository snapshot.
-
 ## Chat History (REST)
 
 Sessions are scoped per tenant + surface. **`X-Session-ID` must be set** on every chat request for history to record — if omitted, the message is processed but not stored and the session is not created. Generate a stable UUID per conversation and reuse it across turns.
 
 **Behavior summary:**
-- With `X-Session-ID`: message stored, session created/continued, retrievable via `/sessions`
+- With `X-Session-ID`: message stored, session created/continued, retrievable via the PAD sessions endpoint
 - Without `X-Session-ID`: stateless — no history written, no session entry created
 
-- `GET /v1/sessions?surface=studio&limit=50` — list sessions for a surface (newest first)
-- `GET /v1/sessions/:id/messages?limit=200` — full message thread for a session
-
-Requires: `runtime:chat`
-
 Surfaces: `studio` | `dev` | `home` | `android` | `mobile`
+
+## Resonance & Emotional Climate (Public, no auth)
+
+ORI surfaces real-time affective state. These are public endpoints — no auth required.
+
+- `GET /v1/eri` — Ecospheric Resonance Index: `eri`, `ers`, `pacing`, `volatility`, `coherence`, `musical_key`, `bpm`, ARTE cognitive state (`arte_state`, `arte_intensity`, `arte_palette`), drift detection. Used by UIs to drive accent color and surface tone.
+- `GET /v1/aeci` — Aurora Emotional Climate Index: weekly climate snapshot — `index`, `category`, `stability_score`, `sentiment_momentum`, `ui_hue_shift`, `tone_bias`.
+
+These feed the WebSocket `resonance_sync` and `sensory_sync` events. Poll if WebSocket is not available.
+
+## Flow Companion (Ambient Reflection, Public, no auth)
+
+- `GET /v1/flow/prompt` — next pending ambient reflection prompt, or `{"prompt": null, "pending": 0}` if none
+- `POST /v1/flow/trigger` — manually fire a reflection trigger
+- `POST /v1/flow/prompt/dismiss` — dismiss a prompt by ID (`{"id": "<prompt_id>"}`)
+
+## Spaces (auth required, scope: `runtime:spaces`)
+
+Spaces are tenant-scoped document collections for context injection.
+
+- `GET /v1/spaces` — list spaces for the authenticated tenant
+- `POST /v1/spaces` — create a space (`{"name": "...", "description": "..."}`)
+- `DELETE /v1/spaces/:id` — delete a space
+- `POST /v1/spaces/:id/documents` — upload a document to a space
+- `GET /v1/spaces/:id/documents` — list documents in a space
+
+ORI Home Spaces belong to the authenticated tenant key — one tenant cannot list or use another tenant's Spaces.
 
 ## Parallel Agent Dispatch (PAD, auth required)
 
@@ -110,6 +120,18 @@ Unlike regular Goals which run autonomously to completion, Sovereign Goals are *
 | Execution | Autonomous — runs to completion | Tick-controlled — each step requires `POST /:id/tick` |
 | Use case | Fire-and-forget long-horizon tasks | Supervised loops, step-debuggable workflows |
 
+## Swarm (auth required)
+
+- `POST /v1/swarm/run` — execute a named swarm operation (`{"operation": "<name>", "params": {...}}`)
+
+## MCP (auth required)
+
+ORI exposes a JSON-RPC 2.0 MCP endpoint for tool-calling agents:
+
+- `POST /v1/mcp` — JSON-RPC 2.0 envelope (`jsonrpc`, `id`, `method`, `params`)
+
+Supported methods: `tools/list`, `tools/call`. Use `tools/list` to discover the current tool set before calling.
+
 ## WebSocket Event Types (`GET /v1/ws`, no auth)
 
 Connect to `wss://glm.thynaptic.com/v1/ws`. Receive JSON frames with a `type` field:
@@ -131,20 +153,25 @@ Async job completion (goals, enterprise learn, finetune) does **not** currently 
 
 ## Browser Automation (browserd, auth required)
 
-- `GET /v1/browser/health` | `POST /v1/browser/sessions` | `POST /v1/browser/open` | `GET /v1/browser/snapshot`
-- `POST /v1/browser/action` | `POST /v1/browser/screenshot` | `POST/DELETE /v1/browser/state` | `DELETE /v1/browser/sessions`
+- `GET /v1/browser/health`
+- `POST /v1/browser/sessions` — create session
+- `DELETE /v1/browser/sessions` — close session
+- `POST /v1/browser/open` — navigate to URL
+- `GET /v1/browser/snapshot` — DOM snapshot
+- `POST /v1/browser/action` — interact (click, type, etc.)
+- `POST /v1/browser/screenshot` — capture screenshot
+- `POST /v1/browser/state/save` — persist browser state
+- `POST /v1/browser/state/load` — restore browser state
 
 ## Memory, Tools, and Identity (auth required)
 
 - `GET /v1/memories` / `GET /v1/memories/knowledge` — memory fragments
-- `GET /v1/user/ori-skills/prefs` / `PUT /v1/user/ori-skills/prefs` — saved builtin skill enable list per `scope_id` (PocketBase-backed)
-- `GET /v1/user/ori-skills/custom` / `PUT /v1/user/ori-skills/custom/:slug` / `DELETE /v1/user/ori-skills/custom/:slug` — custom skill bodies per scope
 - `GET /v1/sovereign/identity` / `PUT /v1/sovereign/identity` — active profile management
 - `GET /v1/daemons` — background daemon health
 - `GET /v1/tools` / `POST /v1/tools/plan` / `POST /v1/tools/execute-plan` — tool discovery and planning
 - `POST /v1/vision/analyze` — image analysis via Oracle
 - `POST /v1/images/generations` — image generation
-- `POST /v1/workspaces/run` — agentic workspace task execution (SSE, requires runtime:workspaces)
+- `POST /v1/workspaces/run` — agentic workspace task execution (SSE, requires `runtime:workspaces`)
 - `POST /v1/agents/vibe` — natural language agent creation
 - `POST /v1/ingest` / `POST /v1/ingest/web` — text and URL ingestion
 - `POST /v1/documents/upload` / `GET /v1/documents` — document management
@@ -157,8 +184,13 @@ Async job completion (goals, enterprise learn, finetune) does **not** currently 
 - `GET /v1/health` — readiness probe
 - `GET /v1/ws` — WebSocket event stream
 - `GET /v1/metrics` — Prometheus metrics
-- `POST /v1/app/register` — first-party app self-registration (requires internal registration_token, not a public flow)
+- `GET /v1/eri` — live resonance state
+- `GET /v1/aeci` — weekly emotional climate
+- `GET /v1/flow/prompt` — ambient reflection prompt
+- `POST /v1/flow/trigger` — manual reflection trigger
+- `POST /v1/flow/prompt/dismiss` — dismiss reflection prompt
 - `POST /v1/waitlist` — waitlist sign-up
+- `POST /v1/app/register` — first-party app self-registration (requires internal `registration_token`, not a public flow)
 - `GET /share/:id` — public share render (no /v1 prefix)
 
 ## Core Rule
@@ -201,7 +233,7 @@ Plain chat requests go Oracle-first by default. Local SLMs are fully deprecated.
 2. Point your HTTP client at the runtime base URL (`https://glm.thynaptic.com/v1`).
 3. Acquire an ORI API key (`ori.<prefix>.<secret>`).
 4. Select the surface and optional profile.
-5. Set X-Env-* headers for environment awareness.
+5. Set `X-Env-*` headers for environment awareness.
 6. Use `POST /chat/completions`.
 7. Add streaming only when needed.
 
@@ -221,16 +253,15 @@ Defaults:
 
 ## Failure Modes
 
-- Missing auth -> `401`
-- Missing required scope -> `403`
-- Invalid surface -> ignored
-- Invalid profile -> ignored
-- Internal-only lanes -> not accessible via the public API
+- Missing auth → `401`
+- Missing required scope → `403`
+- Invalid surface → ignored
+- Invalid profile → ignored
+- Internal-only lanes → not accessible via the public API
 
 ## Scopes
 
 - `runtime:chat`
-- `runtime:email:send`
 - `runtime:models`
 - `runtime:spaces`
 - `runtime:workspaces`
@@ -242,15 +273,9 @@ First-party app registration is product-scoped:
 - it requires an internal `registration_token`
 - it is not a public self-serve developer key flow
 
-Agent-safe bootstrap is available for trusted build agents:
-
-- `POST /agent/register` accepts `Authorization: Bearer agb.<prefix>.<secret>`
-- bootstrap keys can only mint approved first-party app keys
-- bootstrap keys do not grant chat, spaces, email, or admin access on their own
-
-- `ORI Home` -> `runtime:chat`, `runtime:email:send`, `runtime:models`, `runtime:spaces`, `runtime:workspaces`
-- `ORI Studio` / `ORI Mobile` -> `runtime:chat`, `runtime:email:send`, `runtime:models`
-- `ORI Dev` -> `runtime:chat`, `runtime:models`
+- `ORI Home` → `runtime:chat`, `runtime:models`, `runtime:spaces`, `runtime:workspaces`
+- `ORI Studio` / `ORI Mobile` → `runtime:chat`, `runtime:models`
+- `ORI Dev` → `runtime:chat`, `runtime:models`
 
 Spaces are tenant-scoped:
 

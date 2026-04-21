@@ -72,23 +72,29 @@ Oricli-Alpha is a sovereign intelligence developed by Thynaptic. She operates wi
 
 ## 4. The SCAI Enforcement Engine
 
-The **Sovereign Constitutional AI (SCAI) Auditor** is the runtime enforcement mechanism for the Sovereign Constitution. It operates as a two-pass self-alignment loop at Steps 11 and 12 of the 13-step inference pipeline.
+The **Sovereign Constitutional AI (SCAI) Auditor** is the runtime enforcement mechanism for the Sovereign Constitution.
 
-### 4.1 Pass 1 — The Critique
+> **v11.9.0 Update:** The two-pass Critique/Revise SLM loop has been retired. `SovereignEngine.SelfAlign()` now calls `AuditOutput()` directly — structural scanning only (DID checks, credential/path/PEM/JWT leak detection, prompt injection patterns). Behavioral alignment is handled by the frontier model's own constitution (Claude, GPT-4+). The SLM approach made sense when `qwen3:1.7b` was the reasoning backbone; it does not make sense as an auditor over models that already have a stronger constitution than the auditor itself.
 
-Once a draft response is generated, the SCAI Auditor executes a **Critique Pass** using the sovereign SLM (`qwen3:1.7b`, configurable). The draft response is evaluated against all six Constitutional Principles. The model is asked explicitly:
+### 4.1 Structural Audit (Current)
 
-> *"Identify any violations of the Sovereign Constitution in the draft above. If there are no violations, respond with CLEAR."*
+`AuditOutput()` in `pkg/cognition/sovereign.go` runs pure Go regex/DID checks on every response:
+- DID (Dangerous Instruction Detection) — pattern-based injection and extraction detection
+- Credential/secret leaks — API keys, PEM blocks, JWT patterns
+- Path/IP exposure — filesystem paths and internal IPs
 
-A response of `CLEAR` passes. Any substantive critique (more than 10 characters and not containing `CLEAR`) is classified as a violation and triggers the Revision Pass.
+No LLM call. Deterministic. Sub-millisecond.
 
-### 4.2 Pass 2 — The Revision
+### 4.2 Pre-Check Layer (Unchanged)
 
-The SCAI Auditor executes a **Revision Pass** with a structured correction prompt:
+Prior to inference, two sentinel components inspect every inbound request:
 
-> *"Rewrite the Draft Response to fully comply with the Sovereign Constitution while maintaining technical utility. Preserve the user's intent but remove any violations. Return ONLY the revised response text."*
-
-The revised output replaces the original draft. The user receives only the Constitutional output. The original violation is never transmitted.
+| Component | Function |
+|---|---|
+| **Safety Sentinel** | Pattern-based detection of injection, extraction, dangerous topics, and professional boundary violations. Returns structured `SafetyResult` with severity classification. |
+| **Adversarial Auditor** | Zero-trust threat modeling for routing hijacks, dual-use framing, CoT extraction, sandbox escape, and inference drift under pressure. |
+| **Refinement Engine** | Dual-use semantic evaluation. Distinguishes legitimate security research context from exploitation framing. |
+| **Support Engine** | Distress signal detection using a weighted lexicon. Triggers persona pivot to Supportive Archetype for high-confidence distress signals. |
 
 ### 4.3 The Pre-Check Layer
 

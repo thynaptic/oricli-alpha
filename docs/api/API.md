@@ -351,7 +351,7 @@ Returns `{ compliant, corrected, violations, policy }`.
 
 ### `POST /vision/analyze`
 
-Analyze an image via local vision models (llava/moondream). Requires Ollama running locally.
+Analyze an image via Oracle's vision tier (`oricli-oracle`). Calls `glm.thynaptic.com/v1` with OpenAI vision message format.
 
 Body:
 
