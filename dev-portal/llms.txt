@@ -31,6 +31,7 @@ Fetch from **dev.thynaptic.com** (or your deployed dev-portal origin) for techni
 - Response Metadata: Chat responses include a `meta` block with `provider` and `sass_factor`.
 - Surface header: `X-Ori-Context`
 - Session header: `X-Session-ID` (client-generated, used to track conversation history)
+- **Timezone header**: `X-Timezone` — IANA timezone name (e.g. `America/New_York`). When set, ORI injects the user's local time into temporal awareness and can reason about schedules relative to their clock.
 - **Environment headers**: `X-Env-OS`, `X-Env-PWD`, `X-Env-Project`, `X-Env-Shell` (Dynamic proprioception)
 
 ## OpenAI SDK Compatibility
@@ -162,6 +163,41 @@ Async job completion (goals, enterprise learn, finetune) does **not** currently 
 - `POST /v1/browser/screenshot` — capture screenshot
 - `POST /v1/browser/state/save` — persist browser state
 - `POST /v1/browser/state/load` — restore browser state
+
+## Task Platform (auth required)
+
+Persistent, cross-session task DAGs with relational entity history. Tenant-scoped. Available to any surface or external integration.
+
+**Step actions:** `research` | `fetch` | `summarize` | `compare` | `draft` | `generate` | `save` | `webhook`
+
+Steps form a DAG via `depends_on` — dependency-free steps run in parallel. The execute endpoint runs the DAG and streams SSE step updates.
+
+### Tasks
+- `POST /v1/tasks` — create task (optional inline steps)
+- `GET /v1/tasks` — list (`?status=&surface=&session_id=&limit=&offset=`)
+- `GET /v1/tasks/:id` — get task + steps
+- `PATCH /v1/tasks/:id` — update (`title`, `description`, `status`, `priority`, `surface`)
+- `DELETE /v1/tasks/:id` — delete (cascades steps)
+- `POST /v1/tasks/:id/steps` — append step
+- `PATCH /v1/tasks/:id/steps/:step_id` — update step status/result
+- `DELETE /v1/tasks/:id/steps/:step_id` — remove step
+- `POST /v1/tasks/:id/execute` — run step DAG. Set `Accept: text/event-stream` for SSE. Each event: `{step_id, status, snippet}`. Final event: `{done: true, task: {...}}`
+- `GET /v1/tasks/:id/execute` — poll execution status without triggering a run
+
+### Entities (relational history backbone)
+
+Entities are named real-world things (people, vendors, businesses) that recur across tasks. Recording events against them enables relational recall — "the plumber" resolves to a person with invoice history, past messages, and booking records.
+
+- `POST /v1/entities` — upsert entity (`name`, `kind`, `aliases[]`)
+- `GET /v1/entities` — list/search (`?search=&kind=&limit=`)
+- `GET /v1/entities/:id` — get entity + full event history (`?event_limit=50`)
+- `POST /v1/entities/:id/events` — record event (`kind`, `content`, `metadata`, `occurred_at`)
+
+**Event kinds:** `message` | `invoice` | `booking` | `call` | `note` | `event`
+
+**Entity kinds:** `person` | `business` | `vendor` | `account` | `unknown`
+
+---
 
 ## Memory, Tools, and Identity (auth required)
 

@@ -40,6 +40,7 @@ type sessionState struct {
 	LastActivity time.Time
 	MessageCount int
 	Events       []SessionEvent // ring buffer, newest appended
+	Timezone     string         // IANA timezone name, e.g. "America/New_York"
 }
 
 // TemporalClock is the singleton temporal awareness engine.
@@ -99,9 +100,29 @@ func (c *TemporalClock) RecordEvent(sessionID string, role EventRole, content st
 	}
 }
 
+// SetTimezone stores the user's IANA timezone for a session. Silently ignores
+// invalid zone names. Called when the client sends an X-Timezone header.
+func (c *TemporalClock) SetTimezone(sessionID, tz string) {
+	if sessionID == "" || tz == "" {
+		return
+	}
+	if _, err := time.LoadLocation(tz); err != nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s, ok := c.sessions[sessionID]
+	if !ok {
+		return
+	}
+	s.Timezone = tz
+}
+
 // FormatForPrompt returns the temporal awareness block for injection into the
-// system prompt. Compact and factual — no fluff.
-func (c *TemporalClock) FormatForPrompt(sessionID string) string {
+// system prompt. query is the current user message — used to score event
+// relevance so the most contextually useful events surface, not just the most
+// recent ones.
+func (c *TemporalClock) FormatForPrompt(sessionID, query string) string {
 	now := time.Now().UTC()
 	c.mu.RLock()
 	sess := c.sessions[sessionID]
@@ -110,10 +131,27 @@ func (c *TemporalClock) FormatForPrompt(sessionID string) string {
 	var sb strings.Builder
 	sb.WriteString("### TEMPORAL AWARENESS\n")
 	sb.WriteString(fmt.Sprintf("Current time: %s\n", now.Format("Monday, January 2 2006 — 15:04 UTC")))
+
+	// Local time when the client's timezone is known.
+	if sess != nil && sess.Timezone != "" {
+		if loc, err := time.LoadLocation(sess.Timezone); err == nil {
+			local := now.In(loc)
+			sb.WriteString(fmt.Sprintf("Your local time: %s (%s)\n", local.Format("15:04, Monday January 2"), sess.Timezone))
+		}
+	}
+
 	sb.WriteString(fmt.Sprintf("ORI online since: %s (%s ago)\n",
 		c.bootTime.Format("15:04 UTC"),
 		formatDuration(now.Sub(c.bootTime)),
 	))
+
+	// Gap-aware re-orientation — shown on first message of a new session when
+	// the previous session ended more than 4 hours ago.
+	if sess != nil && sess.MessageCount == 1 {
+		if orient := c.formatReorientation(now); orient != "" {
+			sb.WriteString(orient)
+		}
+	}
 
 	if sess != nil {
 		sb.WriteString(fmt.Sprintf("Session started: %s (%s ago)",
@@ -133,14 +171,11 @@ func (c *TemporalClock) FormatForPrompt(sessionID string) string {
 			sb.WriteString(fmt.Sprintf("Last activity: %s ago\n", formatDuration(idleFor)))
 		}
 
-		// Recent event timeline — last 5 events, most recent last
+		// Semantically relevant event timeline — up to 5 events scored against
+		// the current query, with recency as the tiebreaker.
 		if len(sess.Events) > 0 {
 			sb.WriteString("\nRecent activity:\n")
-			events := sess.Events
-			if len(events) > 5 {
-				events = events[len(events)-5:]
-			}
-			for _, ev := range events {
+			for _, ev := range selectRelevantEvents(sess.Events, query, 5) {
 				age := formatDuration(now.Sub(ev.At))
 				sb.WriteString(fmt.Sprintf("  %s (%s ago): %q\n", ev.Role, age, ev.Summary))
 			}
@@ -161,12 +196,10 @@ func (c *TemporalClock) FormatForPrompt(sessionID string) string {
 
 // summarise truncates content to maxChars, trimming whitespace and collapsing newlines.
 func summarise(content string, maxChars int) string {
-	// Collapse newlines into spaces for compact display
 	s := strings.Join(strings.Fields(content), " ")
 	if len(s) <= maxChars {
 		return s
 	}
-	// Trim at word boundary
 	s = s[:maxChars]
 	if idx := strings.LastIndex(s, " "); idx > maxChars/2 {
 		s = s[:idx]
@@ -175,7 +208,6 @@ func summarise(content string, maxChars int) string {
 }
 
 // formatDuration converts a duration into a human-readable relative string.
-// e.g. "just now", "45 seconds", "3 minutes", "2 hours 14 minutes", "1 day 3 hours"
 func formatDuration(d time.Duration) string {
 	if d < 0 {
 		d = 0
@@ -210,6 +242,75 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d days %d hours", days, hrs)
 }
 
+// selectRelevantEvents picks up to n events from the ring buffer most relevant
+// to query, using keyword overlap as the score and recency as the tiebreaker.
+// Falls back to pure recency when query is empty or produces no keywords.
+func selectRelevantEvents(events []SessionEvent, query string, n int) []SessionEvent {
+	if len(events) <= n {
+		return events
+	}
+	queryKWs := temporalKeywords(query)
+	if len(queryKWs) == 0 {
+		return events[len(events)-n:]
+	}
+
+	type scored struct {
+		ev    SessionEvent
+		score int
+		idx   int
+	}
+	candidates := make([]scored, len(events))
+	for i, ev := range events {
+		overlap := 0
+		for _, ek := range temporalKeywords(ev.Summary) {
+			for _, qk := range queryKWs {
+				if ek == qk {
+					overlap++
+				}
+			}
+		}
+		candidates[i] = scored{ev: ev, score: overlap, idx: i}
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].score != candidates[j].score {
+			return candidates[i].score > candidates[j].score
+		}
+		return candidates[i].idx > candidates[j].idx // recency tiebreaker
+	})
+
+	selected := make([]SessionEvent, 0, n)
+	for i := 0; i < n && i < len(candidates); i++ {
+		selected = append(selected, candidates[i].ev)
+	}
+	// Re-sort chronologically for readable display.
+	sort.Slice(selected, func(i, j int) bool {
+		return selected[i].At.Before(selected[j].At)
+	})
+	return selected
+}
+
+// temporalKeywords extracts lowercase non-trivial words for relevance scoring.
+func temporalKeywords(s string) []string {
+	stop := map[string]bool{
+		"the": true, "a": true, "an": true, "and": true, "or": true,
+		"of": true, "in": true, "on": true, "at": true, "to": true,
+		"is": true, "are": true, "was": true, "for": true, "with": true,
+		"what": true, "how": true, "when": true, "where": true, "why": true,
+		"can": true, "you": true, "i": true, "my": true, "me": true,
+		"that": true, "this": true, "it": true, "do": true, "did": true,
+	}
+	words := strings.Fields(strings.ToLower(s))
+	out := make([]string, 0, len(words))
+	for _, w := range words {
+		w = strings.Trim(w, ".,;:!?\"'()")
+		if len(w) > 2 && !stop[w] {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
 // ─── Cross-session Chronos Persistence ───────────────────────────────────────
 
 // ChronosSummary is the serialisable record of a completed session.
@@ -218,12 +319,12 @@ type ChronosSummary struct {
 	StartedAt    time.Time `json:"started_at"`
 	EndedAt      time.Time `json:"ended_at"`
 	MessageCount int       `json:"message_count"`
-	TopicLine    string    `json:"topic_line"` // first user message — proxy for session topic
+	TopicLine    string    `json:"topic_line"` // first user message — proxy for session intent
+	Synopsis     string    `json:"synopsis"`   // joined user-turn summaries — richer cross-session recall
 	Events       []string  `json:"events"`     // 80-char summaries, newest last
 }
 
 // ChronosStore is the persistence interface for session summaries.
-// Implemented by JSONChronosStore (flat-file) — injectable for testing or upgrade.
 type ChronosStore interface {
 	Save(summary ChronosSummary) error
 	LoadRecent(n int) ([]ChronosSummary, error)
@@ -250,19 +351,27 @@ func (c *TemporalClock) PersistSession(sessionID string) {
 	}
 	now := time.Now().UTC()
 
-	// Build event string list from ring buffer
 	evStrings := make([]string, len(sess.Events))
 	for i, ev := range sess.Events {
 		evStrings[i] = fmt.Sprintf("[%s] %s: %s", ev.At.Format("15:04"), ev.Role, ev.Summary)
 	}
 
-	// Topic line = first user message (if any)
 	topicLine := ""
+	var userTurns []string
 	for _, ev := range sess.Events {
 		if ev.Role == EventRoleUser {
-			topicLine = ev.Summary
-			break
+			if topicLine == "" {
+				topicLine = ev.Summary
+			}
+			userTurns = append(userTurns, ev.Summary)
 		}
+	}
+
+	// Synopsis joins all user-turn summaries so cross-session recall surfaces
+	// the full arc of what was discussed, not just the opening line.
+	synopsis := strings.Join(userTurns, " · ")
+	if len(synopsis) > 200 {
+		synopsis = synopsis[:200] + "…"
 	}
 
 	summary := ChronosSummary{
@@ -271,6 +380,7 @@ func (c *TemporalClock) PersistSession(sessionID string) {
 		EndedAt:      now,
 		MessageCount: sess.MessageCount,
 		TopicLine:    topicLine,
+		Synopsis:     synopsis,
 		Events:       evStrings,
 	}
 	delete(c.sessions, sessionID)
@@ -292,7 +402,32 @@ func (c *TemporalClock) PersistAllSessions() {
 	}
 }
 
-// ─── FormatForPrompt — updated to include previous sessions ──────────────────
+// formatReorientation returns a prompt line surfacing the most recent previous
+// session when resuming after a gap of 4+ hours. Empty string = no re-orientation needed.
+func (c *TemporalClock) formatReorientation(now time.Time) string {
+	if c.store == nil {
+		return ""
+	}
+	recent, err := c.store.LoadRecent(1)
+	if err != nil || len(recent) == 0 {
+		return ""
+	}
+	last := recent[0]
+	gap := now.Sub(last.EndedAt)
+	if gap < 4*time.Hour {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("\n↩ Returning after %s", formatDuration(gap)))
+	if last.Synopsis != "" {
+		sb.WriteString(fmt.Sprintf(" — last covered: %q", last.Synopsis))
+	} else if last.TopicLine != "" {
+		sb.WriteString(fmt.Sprintf(" — started with: %q", last.TopicLine))
+	}
+	sb.WriteString(fmt.Sprintf("\n   (%d msgs, ended %s)\n", last.MessageCount, last.EndedAt.Format("Jan 2 at 15:04 UTC")))
+	return sb.String()
+}
 
 // formatPreviousSessions appends the last N persisted sessions to the temporal block.
 func (c *TemporalClock) formatPreviousSessions(now time.Time) string {
@@ -308,9 +443,10 @@ func (c *TemporalClock) formatPreviousSessions(now time.Time) string {
 	for _, s := range summaries {
 		age := formatDuration(now.Sub(s.EndedAt))
 		dur := formatDuration(s.EndedAt.Sub(s.StartedAt))
-		line := fmt.Sprintf("  • %s ago (%s, %d msgs)",
-			age, dur, s.MessageCount)
-		if s.TopicLine != "" {
+		line := fmt.Sprintf("  • %s ago (%s, %d msgs)", age, dur, s.MessageCount)
+		if s.Synopsis != "" {
+			line += fmt.Sprintf(" — %s", s.Synopsis)
+		} else if s.TopicLine != "" {
 			line += fmt.Sprintf(" — %q", s.TopicLine)
 		}
 		sb.WriteString(line + "\n")
@@ -356,7 +492,6 @@ func (s *JSONChronosStore) LoadRecent(n int) ([]ChronosSummary, error) {
 		}
 		return nil, err
 	}
-	// Filter to .json files and sort descending (newest filename = highest unix ns)
 	var files []string
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {

@@ -131,7 +131,7 @@ func planWithRace(ctx context.Context, genSvc interface {
 				Model:   oracle.Decide(prompt, oracle.RouteHints{IsResearchAction: true}).Model,
 				Agent:   "ori-research",
 				Reason:  "workspace planning",
-			}))
+			}, "workspace-session"))
 			raw = stripJSONFences(raw)
 			var p planPayload
 			if err := json.Unmarshal([]byte(raw), &p); err != nil {
@@ -298,7 +298,7 @@ func (s *ServerV2) handleWorkspaceRun(c *gin.Context) {
 				Model:   oracle.Decide(sumPrompt, oracle.RouteHints{IsCodeAction: true}).Model,
 				Agent:   "ori-reasoner",
 				Reason:  "workspace summary",
-			})
+			}, "workspace-summary")
 		} else {
 			var sumErr error
 			sumCh, sumErr = genSvc.ChatStream(sumCtx, sumMsgs, map[string]interface{}{"temperature": 0.3})

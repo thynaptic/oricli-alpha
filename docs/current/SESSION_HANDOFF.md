@@ -24,7 +24,7 @@ If time is short, update only:
 
 ## Last Updated
 
-- `2026-04-08 01:45 UTC`
+- `2026-04-28 UTC`
 
 ## Current Focus
 
@@ -222,11 +222,21 @@ Why:
 - Rewrote `docs/API.md` into a shorter current platform reference.
 - `docs/EXTERNAL_INTEGRATION.md` is now the main likely old-world API/integration drift doc to review next.
 
+### 2026-04-28 UTC
+
+- **Oracle fully migrated off GitHub Copilot SDK** → direct Anthropic API (HTTP/SSE, no daemon, no port 8090).
+- `ANTHROPIC_API_KEY` added to systemd service envs. `GITHUB_MODELS_TOKEN` no longer needed for Oracle.
+- **Prompt caching** wired — system prompt sent as `cache_control: ephemeral` block on all routes.
+- **Extended thinking** live — heavy route 8K budget, research route 10K. Disable with `ORACLE_THINKING_*=0`.
+- **Native tool use** wired — `oracle.ChatWithTools()` + `server_v2` tool path with proper OpenAI↔Anthropic conversion. `reqMsgsToOracle()` preserves `tool_call_id` through the pipeline.
+- **Batch API** ready — `pkg/oracle/batch.go` with `SubmitBatch/GetBatch/FetchResults/PollUntilDone`. Studio Jobs integration pending.
+- **`.ori` skills restored** — `pkg/oracle/skills.go` loads `oricli_core/skills/*.ori`, trigger-matches against query, injects as system prompt overlay.
+- **ORI Code unblocked** — fixed missing `await` on `buildTurn()` in `index.tsx` + fixed `tool_call_id` pipeline bug. Full local tool loop working (read, write, shell, git).
+- All docs and personas updated — no remaining Copilot SDK references anywhere.
+
 ### 2026-04-21 UTC
 
-- Oracle model selection now uses SDK `ListModels()` instead of hardcoded defaults.
-- Light → `claude-haiku-4.5`, Heavy → `auto` (Copilot picks best), Research/Dev → `claude-sonnet-4.6`.
-- Model cache refreshes every 24h from live SDK catalog.
+- Oracle model selection now static (env/defaults). Cache file at `/tmp/oracle_model_cache.json` is observability only.
 
 ## End-of-Session Update Template
 

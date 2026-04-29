@@ -105,7 +105,7 @@ Main places:
 - `cmd/oricli-engine/` — primary production binary
 - `cmd/oricli-cli/` — TUI/CLI client
 - `oricli_core/skills/` — `.ori` skill files
-- `.github/agents/` — agent persona files (loaded into Copilot SDK sessions)
+- `.github/agents/` — agent persona files (loaded as system prompts via Anthropic API)
 - `dev-portal/` — machine-readable manifests for agent integrations
 - `docs/` — documentation
 
@@ -129,7 +129,7 @@ The live shared runtime is:
 - Go backbone on `:8089` (public API, auth enforced)
 - Go backbone on `:8088` (internal cognitive backbone, localhost only)
 - Public API at `https://glm.thynaptic.com/v1`
-- Oracle daemon on `:8090` (Copilot SDK ACP mode)
+- Oracle calls Anthropic API directly (no daemon, no port 8090)
 
 ### Reasoning path
 

@@ -230,16 +230,15 @@ func (m *Manager) NavigateAndSee(rawURL string) (string, error) {
 	return askVisionModel(rawURL, b64img)
 }
 
-// askVisionModel sends a base64 PNG to the configured Ollama vision model
+// askVisionModel sends a base64 PNG to the Oracle vision tier via the ORI API
 // and returns its natural-language description of the page.
 func askVisionModel(pageURL, b64img string) (string, error) {
-	ollamaURL := os.Getenv("OLLAMA_GEN_URL")
-	if ollamaURL == "" {
-		ollamaURL = "http://127.0.0.1:11434"
+	apiKey := os.Getenv("ORICLI_SEED_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("MAVAIA_API_KEY")
 	}
-	model := os.Getenv("OLLAMA_VISION_MODEL")
-	if model == "" {
-		model = "moondream"
+	if apiKey == "" {
+		return "", fmt.Errorf("vision: no API key configured (ORICLI_SEED_API_KEY)")
 	}
 
 	prompt := fmt.Sprintf(
@@ -250,27 +249,30 @@ func askVisionModel(pageURL, b64img string) (string, error) {
 	)
 
 	payload := map[string]interface{}{
-		"model":  model,
-		"stream": false,
+		"model": "oricli-oracle",
 		"messages": []map[string]interface{}{
 			{
-				"role":    "user",
-				"content": prompt,
-				"images":  []string{b64img},
+				"role": "user",
+				"content": []map[string]interface{}{
+					{"type": "text", "text": prompt},
+					{"type": "image_url", "image_url": map[string]string{
+						"url": "data:image/png;base64," + b64img,
+					}},
+				},
 			},
 		},
-		"options": map[string]interface{}{
-			"num_predict": 400,
-			"num_thread":  6,
-		},
+		"max_tokens": 512,
 	}
 
 	body, _ := json.Marshal(payload)
-	resp, err := (&http.Client{Timeout: 120 * time.Second}).Post(
-		ollamaURL+"/api/chat",
-		"application/json",
-		bytes.NewReader(body),
-	)
+	req, err := http.NewRequest(http.MethodPost, "https://glm.thynaptic.com/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("vision model request build failed: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return "", fmt.Errorf("vision model request failed: %v", err)
 	}
@@ -278,12 +280,14 @@ func askVisionModel(pageURL, b64img string) (string, error) {
 
 	raw, _ := io.ReadAll(resp.Body)
 	var result struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
 	}
-	if err := json.Unmarshal(raw, &result); err != nil || result.Message.Content == "" {
+	if err := json.Unmarshal(raw, &result); err != nil || len(result.Choices) == 0 || result.Choices[0].Message.Content == "" {
 		return "", fmt.Errorf("vision model returned empty response")
 	}
-	return result.Message.Content, nil
+	return result.Choices[0].Message.Content, nil
 }

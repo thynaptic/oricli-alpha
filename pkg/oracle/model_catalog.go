@@ -1,16 +1,13 @@
 package oracle
 
 import (
-	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
-	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	copilot "github.com/github/copilot-sdk/go"
 )
 
 const (
@@ -30,86 +27,97 @@ var (
 	cachedModelsMu sync.RWMutex
 )
 
-func isEnabled(m copilot.ModelInfo) bool {
-	return m.Policy == nil || m.Policy.State == "enabled" || m.Policy.State == ""
-}
-
-// bestFamily picks the highest-version enabled model whose ID contains the given family string.
-// "Highest version" = sort by ID descending (lexicographic works for semver suffixes like 4.5, 4.6).
-func bestFamily(models []copilot.ModelInfo, family string) string {
-	var matches []string
-	for _, m := range models {
-		if isEnabled(m) && strings.Contains(strings.ToLower(m.ID), family) {
-			matches = append(matches, m.ID)
-		}
-	}
-	if len(matches) == 0 {
-		return ""
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(matches)))
-	return matches[0]
-}
-
-// RefreshModelCatalog uses the Copilot SDK's own model list to pick:
-//   - Light  → best available claude-haiku
-//   - Heavy  → "auto" (Copilot picks the best model dynamically)
-//   - Research/Dev → best available claude-sonnet
-//
-// Falls back to disk cache, then hardcoded defaults.
-// Runs in a background goroutine during Init — never blocks startup.
+// RefreshModelCatalog resolves model selection from env overrides and defaults,
+// then persists to a 24h disk cache for observability.
 func RefreshModelCatalog() {
-	if c := loadCachedModels(); c != nil {
-		cachedModelsMu.Lock()
-		cachedModels = c
-		cachedModelsMu.Unlock()
-		log.Printf("[Oracle:Catalog] cache hit — light=%s heavy=%s research=%s", c.Light, c.Heavy, c.Research)
-		return
-	}
-
-	cl := GetClient()
-	if cl == nil {
-		log.Printf("[Oracle:Catalog] client not ready — using defaults")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	models, err := cl.ListModels(ctx)
-	if err != nil {
-		log.Printf("[Oracle:Catalog] ListModels failed (%v) — using defaults", err)
-		return
-	}
-
-	light := bestFamily(models, "haiku")
-	if light == "" {
-		light = defaultCopilotLightModel
-	}
-
-	research := bestFamily(models, "claude-sonnet")
-	if research == "" {
-		research = defaultCopilotResearchModel
-	}
+	light := modelForRoute(RouteLightChat)
+	heavy := modelForRoute(RouteHeavyReasoning)
+	research := modelForRoute(RouteResearch)
 
 	c := &modelCache{
 		FetchedAt: time.Now(),
 		Light:     light,
-		Heavy:     "auto", // Copilot auto-selects best available for heavy reasoning
+		Heavy:     heavy,
 		Research:  research,
 	}
-
 	saveCachedModels(c)
 
 	cachedModelsMu.Lock()
-	prev := cachedModels
 	cachedModels = c
 	cachedModelsMu.Unlock()
 
-	if prev != nil && (prev.Light != c.Light || prev.Heavy != c.Heavy || prev.Research != c.Research) {
-		log.Printf("[Oracle:Catalog] selection changed — light=%s heavy=auto research=%s", c.Light, c.Research)
-	} else {
-		log.Printf("[Oracle:Catalog] models selected — light=%s heavy=auto research=%s", c.Light, c.Research)
+	log.Printf("[Oracle:Catalog] models — light=%s heavy=%s research=%s", light, heavy, research)
+}
+
+// modelForRoute returns the model for a route: env override → global env → default.
+func modelForRoute(route Route) string {
+	switch route {
+	case RouteHeavyReasoning:
+		if m := envOr("ORACLE_COPILOT_MODEL_HEAVY", ""); m != "" {
+			return m
+		}
+	case RouteResearch:
+		if m := envOr("ORACLE_COPILOT_MODEL_RESEARCH", ""); m != "" {
+			return m
+		}
+		if m := envOr("ORACLE_COPILOT_MODEL_HEAVY", ""); m != "" {
+			return m
+		}
+	default:
+		if m := envOr("ORACLE_COPILOT_MODEL_LIGHT", ""); m != "" {
+			return m
+		}
 	}
+	if m := envOr("ORACLE_COPILOT_MODEL", ""); m != "" {
+		return m
+	}
+	switch route {
+	case RouteHeavyReasoning:
+		return defaultHeavyModel
+	case RouteResearch:
+		return defaultResearchModel
+	default:
+		return defaultLightModel
+	}
+}
+
+const (
+	defaultHeavyThinkingBudget    = 8000
+	defaultResearchThinkingBudget = 10000
+)
+
+// thinkingBudgetForRoute returns the extended thinking token budget for a route.
+// Returns 0 (disabled) for light/image routes. Override with ORACLE_THINKING_HEAVY
+// or ORACLE_THINKING_RESEARCH env vars; set to "0" to disable thinking entirely.
+func thinkingBudgetForRoute(route Route) int {
+	switch route {
+	case RouteHeavyReasoning:
+		return envInt("ORACLE_THINKING_HEAVY", defaultHeavyThinkingBudget)
+	case RouteResearch:
+		return envInt("ORACLE_THINKING_RESEARCH", defaultResearchThinkingBudget)
+
+	default:
+		return 0
+	}
+}
+
+func envInt(key string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	var n int
+	if _, err := fmt.Sscanf(v, "%d", &n); err != nil {
+		return fallback
+	}
+	return n
+}
+
+func envOr(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func loadCachedModels() *modelCache {
@@ -133,21 +141,4 @@ func saveCachedModels(c *modelCache) {
 		return
 	}
 	_ = os.WriteFile(modelCachePath, data, 0644)
-}
-
-func catalogModelForRoute(route Route) string {
-	cachedModelsMu.RLock()
-	c := cachedModels
-	cachedModelsMu.RUnlock()
-	if c == nil {
-		return ""
-	}
-	switch route {
-	case RouteHeavyReasoning:
-		return c.Heavy
-	case RouteResearch:
-		return c.Research
-	default:
-		return c.Light
-	}
 }

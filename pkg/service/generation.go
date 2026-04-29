@@ -1472,7 +1472,7 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 			Model:   oracle.Decide("", oracle.RouteHints{IsCodeAction: true}).Model,
 			Agent:   "ori-reasoner",
 			Reason:  "generation complexity escalation",
-		})
+		}, "internal-escalation")
 		out := make(chan string, 64)
 		go func() {
 			defer close(out)

@@ -27,6 +27,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -46,9 +47,11 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/core/store/memory"
 	"github.com/thynaptic/oricli-go/pkg/engine"
 	"github.com/thynaptic/oricli-go/pkg/node"
+	"github.com/thynaptic/oricli-go/pkg/oracle"
 	"github.com/thynaptic/oricli-go/pkg/scl"
 	"github.com/thynaptic/oricli-go/pkg/service"
 	"github.com/thynaptic/oricli-go/pkg/sovereign"
+	"github.com/thynaptic/oricli-go/pkg/tasks"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 )
 
@@ -101,6 +104,10 @@ func main() {
 	st := memory.New()
 	apiKey := bootstrapAPIKey(st, stateDir)
 	log.Printf("[Engine] API key active (first 20 chars): %s...", apiKey[:min(20, len(apiKey))])
+	loadTenantKeys(st, stateDir)
+	api.OnTenantKeyCreated = func(key, tenantID string, scopes []string) {
+		saveTenantKey(stateDir, key, tenantID, scopes)
+	}
 
 	// ── 5. Generation + Sovereign Engine ─────────────────────────────────────
 	log.Println("[Engine] Initializing Sovereign Engine...")
@@ -144,7 +151,16 @@ func main() {
 		log.Println("[Engine] MCP bridge starting (ORICLI_ENGINE_MCP=true).")
 	}
 
-	// ── 10. API Gateway ───────────────────────────────────────────────────────
+	// ── 10. Copilot Headless Daemon (Oracle SDK Runtime) ──────────────────────
+	oracleDaemon := oracle.NewDaemonManager(8090)
+	if err := oracleDaemon.Start(context.Background()); err != nil {
+		log.Printf("[Engine] Warning: failed to start Copilot daemon: %v", err)
+	}
+	// Init in background — client.Start() can block on protocol handshake.
+	// oracle.Available() returns false until ready; callers fall back to Ollama.
+	go oracle.Init(8090)
+
+	// ── 11. API Gateway ───────────────────────────────────────────────────────
 	personaPath := stateDir + "/agent_profiles.json"
 	personaService, _ := service.NewPersonaService(personaPath)
 	agentService := service.NewGoAgentService(orch, genService, personaService, sovEngine)
@@ -164,6 +180,14 @@ func main() {
 	apiServer.PlannerService = plannerService
 	apiServer.Traces = traceStore
 	apiServer.GoalService = goalService
+
+	// Task platform — persistent SQLite-backed task store
+	if taskStore, err := tasks.Open(".memory/tasks.db"); err != nil {
+		log.Printf("[Engine] Task store unavailable: %v", err)
+	} else {
+		apiServer.Tasks = taskStore
+		apiServer.RegisterTaskRoutes()
+	}
 
 	sovEngine.SetWSHub(apiServer.WSHub)
 
@@ -289,14 +313,74 @@ func main() {
 	<-stop
 
 	log.Println("[Engine] Shutting down gracefully...")
+	oracleDaemon.Stop()
 	sovEngine.MCP.StopAll()
 	mb.Close()
 	swarmBus.Stop()
+	sovEngine.Clock.PersistAllSessions()
+	_ = sovEngine.Resonance.Temporal.Flush()
+	if apiServer.Tasks != nil {
+		_ = apiServer.Tasks.Close()
+	}
 	log.Println("[Engine] Offline.")
 }
 
 // bootstrapAPIKey loads the owner API key from the state dir or generates a new one.
 // The key is written to <stateDir>/api_key on first run and reloaded on every restart.
+type tenantKeyRecord struct {
+	Key      string   `json:"key"`
+	TenantID string   `json:"tenant_id"`
+	Scopes   []string `json:"scopes"`
+}
+
+// loadTenantKeys re-registers persisted tenant keys into the in-memory store on restart.
+func loadTenantKeys(st *memory.MemoryStore, stateDir string) {
+	path := stateDir + "/tenant_keys.json"
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var records []tenantKeyRecord
+	if err := json.Unmarshal(data, &records); err != nil {
+		log.Printf("[Engine] Warning: could not parse tenant_keys.json: %v", err)
+		return
+	}
+	authSvc := auth.NewService(st)
+	for _, r := range records {
+		if _, err := authSvc.RegisterAPIKey(context.Background(), r.Key, r.TenantID, r.Scopes, nil); err != nil {
+			log.Printf("[Engine] Warning: could not restore tenant key for %q: %v", r.TenantID, err)
+		} else {
+			log.Printf("[Engine] Restored tenant key for %q", r.TenantID)
+		}
+	}
+}
+
+// saveTenantKey appends a newly issued tenant key to the persistent keys file.
+func saveTenantKey(stateDir, key, tenantID string, scopes []string) {
+	path := stateDir + "/tenant_keys.json"
+	var records []tenantKeyRecord
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &records)
+	}
+	// Deduplicate by key prefix (second segment).
+	parts := strings.Split(key, ".")
+	if len(parts) == 3 {
+		prefix := parts[1]
+		for i, r := range records {
+			if rParts := strings.Split(r.Key, "."); len(rParts) == 3 && rParts[1] == prefix {
+				records[i] = tenantKeyRecord{Key: key, TenantID: tenantID, Scopes: scopes}
+				goto write
+			}
+		}
+	}
+	records = append(records, tenantKeyRecord{Key: key, TenantID: tenantID, Scopes: scopes})
+write:
+	data, _ := json.MarshalIndent(records, "", "  ")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		log.Printf("[Engine] Warning: could not save tenant key for %q: %v", tenantID, err)
+	}
+}
+
 func bootstrapAPIKey(st *memory.MemoryStore, stateDir string) string {
 	os.MkdirAll(stateDir, 0700)
 	keyFile := stateDir + "/api_key"

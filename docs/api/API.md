@@ -267,7 +267,7 @@ Natural-language agent creation path.
 
 ## Cognitive Capability Endpoints
 
-These are Oracle-grade reasoning primitives exposed as first-class endpoints. All run through the `oracle.Complete()` provider chain (Copilot→Gemini→Codex fallback). They require auth.
+These are Oracle-grade reasoning primitives exposed as first-class endpoints. All route through the Anthropic API via Oracle. They require auth.
 
 ### `POST /audit/constitutional`
 

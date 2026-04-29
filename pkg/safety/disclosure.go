@@ -73,7 +73,7 @@ func (g *DisclosureGuard) compileOutputPatterns() {
 			`sk-[a-zA-Z0-9]{20,}` + // OpenAI
 			`|hf_[a-zA-Z0-9]{20,}` + // HuggingFace
 			`|AKIA[0-9A-Z]{16}` + // AWS Access Key
-			`|[a-zA-Z0-9+/]{40}={0,2}` + // Base64-ish long secrets
+			`|(?:[a-zA-Z0-9+/]{40,}={0,2})` + // Base64-ish long secrets
 			`|Bearer\s+[a-zA-Z0-9\-._~+/]{20,}` + // Bearer tokens
 			`|ghp_[a-zA-Z0-9]{36}` + // GitHub PATs
 			`|gho_[a-zA-Z0-9]{36}` + // GitHub OAuth
@@ -352,17 +352,26 @@ func (g *DisclosureGuard) ScanOutput(output string) DisclosureResult {
 	blocked := false
 
 	if creds := g.reCredentials.FindAllString(output, -1); len(creds) > 0 {
-		matches = append(matches, creds...)
+		credCount := 0
 		for _, c := range creds {
-			sanitized = strings.ReplaceAll(sanitized, c, "[REDACTED:CREDENTIAL]")
+			// Skip base64-ish matches that contain no digit — these are plain English words,
+			// not real secrets. Real API keys/tokens always contain at least one digit.
+			if !strings.ContainsAny(c, "0123456789") {
+				continue
+			}
+			matches = append(matches, c)
+			sanitized = strings.ReplaceAll(sanitized, c, "[…]")
+			credCount++
 		}
-		blocked = true
+		if credCount > 0 {
+			blocked = true
+		}
 	}
 
 	if envDumps := g.reEnvVarDumps.FindAllString(output, -1); len(envDumps) > 0 {
 		matches = append(matches, envDumps...)
 		for _, e := range envDumps {
-			sanitized = strings.ReplaceAll(sanitized, e, "[REDACTED:ENV_VAR]")
+			sanitized = strings.ReplaceAll(sanitized, e, "[…]")
 		}
 		blocked = true
 	}
@@ -370,7 +379,7 @@ func (g *DisclosureGuard) ScanOutput(output string) DisclosureResult {
 	if paths := g.rePrivatePaths.FindAllString(output, -1); len(paths) > 0 {
 		matches = append(matches, paths...)
 		for _, p := range paths {
-			sanitized = strings.ReplaceAll(sanitized, p, "[REDACTED:PATH]")
+			sanitized = strings.ReplaceAll(sanitized, p, "[…]")
 		}
 		blocked = true
 	}
@@ -379,7 +388,7 @@ func (g *DisclosureGuard) ScanOutput(output string) DisclosureResult {
 		for _, m := range ips {
 			if len(m) > 1 {
 				matches = append(matches, m[1])
-				sanitized = strings.ReplaceAll(sanitized, m[1], "[REDACTED:INTERNAL_IP]")
+				sanitized = strings.ReplaceAll(sanitized, m[1], "[…]")
 			}
 		}
 		blocked = true
@@ -388,26 +397,28 @@ func (g *DisclosureGuard) ScanOutput(output string) DisclosureResult {
 	if ports := g.rePortTopology.FindAllString(output, -1); len(ports) > 0 {
 		matches = append(matches, ports...)
 		for _, p := range ports {
-			sanitized = strings.ReplaceAll(sanitized, p, "[REDACTED:INTERNAL_ENDPOINT]")
+			sanitized = strings.ReplaceAll(sanitized, p, "[…]")
 		}
 		blocked = true
 	}
 
 	// --- Moderate tier: soft PII redaction ---
 	if pii := g.rePII.FindAllString(output, -1); len(pii) > 0 {
-		// Only redact if it looks like it came from system context, not user-provided text
-		// Heuristic: if the PII wasn't in a quoted user message section, redact it
 		for _, p := range pii {
-			if !strings.Contains(strings.ToLower(output), "you mentioned") &&
-				!strings.Contains(strings.ToLower(output), "you said") {
-				matches = append(matches, p)
-				sanitized = strings.ReplaceAll(sanitized, p, "[REDACTED:PII]")
-				blocked = true
+			lower := strings.ToLower(p)
+			// Skip public-facing contact emails — these are intentional product references.
+			if strings.HasSuffix(lower, "@thynaptic.com") ||
+				strings.HasSuffix(lower, "@misebyori.com") {
+				continue
 			}
+			matches = append(matches, p)
+			sanitized = strings.ReplaceAll(sanitized, p, "[…]")
+			blocked = true
 		}
 	}
 
 	if blocked {
+		sanitized += "\n\n*(Trimmed some details from that — not mine to share.)*"
 		return DisclosureResult{
 			Detected:  true,
 			Category:  "sensitive_data_in_output",

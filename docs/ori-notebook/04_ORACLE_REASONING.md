@@ -1,8 +1,8 @@
-# Oracle Orchestration (GitHub Copilot SDK)
+# Oracle Orchestration (Anthropic API)
 
 The **Oracle** is ORI's primary reasoning lane. All LLM reasoning — chat, code, architecture, research, and vision — routes through Oracle. Local Ollama is retained only for embeddings (`all-minilm`, `nomic-embed-text`).
 
-As of v11.1.0, the Oracle has migrated from a CLI-based wrapper to a **Native Go SDK Integration** with an embedded runtime.
+As of v11.12.0, Oracle migrated from the GitHub Copilot SDK to **Direct Anthropic API Integration** — HTTP/SSE streaming with no embedded daemon.
 
 ## 🏗️ Architecture
 
@@ -10,74 +10,71 @@ As of v11.1.0, the Oracle has migrated from a CLI-based wrapper to a **Native Go
 ┌───────────────────────────┐
 │      Oricli Engine        │
 │  ┌─────────────────────┐  │
-│  │   Oracle Manager    │  │── Start/Stop ──┐
-│  └─────────────────────┘  │                │
-│             │             │                ▼
-│  ┌─────────────────────┐  │      ┌───────────────────┐
-│  │  Copilot Go SDK     │──┼──────┤ copilot --acp :8090 │
-│  │     Client          │  │      │ (Headless Daemon)   │
-│  └─────────────────────┘  │      └───────────────────┘
-└─────────────┬─────────────┘
-              ▼
-    [Native Intent Matching]
-    [Session Persistence]
+│  │   Oracle Router     │  │
+│  │  (pkg/oracle/)      │  │
+│  └─────────────────────┘  │
+│             │             │
+│             ▼             │
+│  ┌─────────────────────┐  │
+│  │  Direct HTTP/SSE    │──┼──► https://api.anthropic.com/v1/messages
+│  │  (no daemon)        │  │
+│  └─────────────────────┘  │
+└───────────────────────────┘
+    [Route Classification]
+    [Agent System Prompts]
+    [Session Pool (TTL reaping)]
     [Multi-Modal Vision]
 ```
 
-### 1. Embedded Daemon Lifecycle
-The Oracle is powered by a headless Copilot server running in **Agent Client Protocol (ACP)** mode.
-- **Managed by**: `pkg/oracle/manager.go`
-- **Port**: `8090` (default)
-- **Lifecycle**: Spawns as a child process when the Oricli Engine boots; terminates gracefully on shutdown.
-
-### 2. Native SDK Integration
-Oricli uses the official `github.com/github/copilot-sdk/go` to communicate with the daemon via JSON-RPC.
+### 1. Direct API Communication
+Oracle sends HTTP POST to the Anthropic messages API with SSE streaming — no daemon, no port binding, no ACP protocol.
 - **Location**: `pkg/oracle/oracle.go`
-- **Advantage**: Eliminates process fork/exec overhead and maintains high-fidelity message structures (native system/user/assistant roles).
+- **Endpoint**: `https://api.anthropic.com/v1/messages`
+- **Auth**: `ANTHROPIC_API_KEY` environment variable
+- **Streaming**: SSE parsed line-by-line via `bufio.Scanner`; `content_block_delta` events yield token strings
+
+### 2. Route Classification
+`pkg/oracle/router.go` classifies each request into one of four tiers:
+- `RouteLightChat` — conversational, short turns → Haiku
+- `RouteHeavyReasoning` — code, debug, architecture → Sonnet
+- `RouteResearch` — deep investigation workflows → Sonnet
+- `RouteImageReasoning` — visual input → vision-capable model
 
 ---
 
 ## 🚀 Key Features
 
-### Custom Agents (Intent Matching)
-Oricli maps its specialized module personas to the SDK's **Custom Agents**. 
-- **Source**: `.github/agents/*.agent.md`
-- **Dynamic Selection**: The Copilot runtime natively analyzes the user's prompt against agent descriptions to pick the best tool-lane (e.g., automatically routing a concurrency question to the `go_engineer` agent).
+### Agent Personas (System Prompts)
+`.github/agents/*.agent.md` files are loaded and injected as system prompts per request.
+- Agent is selected by ORI's router, not the model
+- 5-minute disk-read cache via `cachedLoadCustomAgents()`
 
-### Session Persistence
-Oricli binds its internal `SessionID` to the Copilot SDK session.
-- **Storage**: State is persisted by the SDK in `~/.copilot/session-state/{sessionID}/`.
-- **Resume**: Reconnecting to a session restores the conversation history and the agent's current `plan.md` state, enabling consistent multi-day goal execution.
-
-### Real-Time Steering
-The SDK allows users to course-correct an agent while it is processing a task.
-- **Enqueue Mode**: Default behavior for new prompts.
-- **Immediate Mode (Steering)**: Triggered by keywords like "Stop," "Actually," or "Wait." This injects the message immediately into the active reasoning loop to pivot the agent's direction.
+### Session Pool
+Lightweight pool tracks `lastUsed` timestamps for TTL reaping (30 min idle).
+- Callers pass full conversation history in the `messages` array — Anthropic receives it natively
+- No `~/.copilot/session-state/` — state is ORI's responsibility
+- Stateless mode (empty `sessionID`) = one-shot, never pooled
 
 ### Multi-Modal (Vision)
-Oracle handles all image reasoning. Two paths:
-- **Chat inline**: The engine detects filesystem paths ending in `.png`, `.jpg`, etc. in prompts and attaches them to the SDK `MessageOptions` as `file` blocks.
-- **`POST /v1/vision/analyze`**: Routes through `oracleVisionAdapter` in `server_v2.go` — calls `https://glm.thynaptic.com/v1/chat/completions` with OpenAI vision message format (base64 or URL passthrough). Replaced `moondream:latest` (local Ollama) as of v11.9.0.
+`AnalyzeImage()` posts base64 image content blocks to `https://api.anthropic.com/v1/messages`.
+- Reachable via `POST /v1/vision/analyze`
+- Model: `claude-sonnet-4-6` by default; override with `ORACLE_VISION_MODEL`
 
 ---
 
-## 🛠️ Configuration & Development
+## 🛠️ Configuration
 
 ### Environment Variables
-- `ORACLE_COPILOT_MODEL_LIGHT`: Model for standard chat (Default: `gpt-5-mini`).
-- `ORACLE_COPILOT_MODEL_HEAVY`: Model for deep reasoning (Default: `claude-sonnet-4.6`).
-- `ORACLE_COPILOT_MODEL_RESEARCH`: Model for analysis (Default: `gpt-5.4`).
-
-### Extending Agents
-To add a new lane to the Oracle, create a Markdown file in `.github/agents/` following the YAML frontmatter pattern:
-```markdown
----
-name: my-new-agent
-description: Expert at X, Y, and Z.
-tools: [read, edit, execute]
----
-Instructions for the agent...
-```
+| Variable | Default | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | — | **Required.** Direct API auth |
+| `ORACLE_COPILOT_MODEL_LIGHT` | `claude-haiku-4-5-20251001` | Light chat model |
+| `ORACLE_COPILOT_MODEL_HEAVY` | `claude-sonnet-4-6` | Heavy reasoning model |
+| `ORACLE_COPILOT_MODEL_RESEARCH` | `claude-sonnet-4-6` | Research model |
+| `ORACLE_COPILOT_MODEL` | — | Global override (all routes) |
+| `ORACLE_VISION_MODEL` | `claude-sonnet-4-6` | Vision-specific override |
 
 ### Debugging
-Oracle logs are prefixed with `[Oracle]` or `[Oracle:Manager]` in the standard Oricli output. If the daemon fails to start, verify that the `copilot` CLI is available in the system `PATH`.
+- Logs prefixed `[Oracle]`, `[Oracle:Catalog]`, `[Oracle:Vision]`
+- Verify `ANTHROPIC_API_KEY` is set if requests return `[Oracle: ANTHROPIC_API_KEY not configured]`
+- Model selection cached to `/tmp/oracle_model_cache.json` (24h TTL)

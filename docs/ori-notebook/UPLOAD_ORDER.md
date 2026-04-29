@@ -10,7 +10,7 @@ To ensure NotebookLM builds a correct mental model of ORI, her architecture, and
 ### Phase 2: The Engine (Technical Architecture)
 4. **03_CORE_ARCHITECTURE.md** — The Go-native backbone and Swarm/Hive design.
 5. **10_KERNEL_INTERNALS.md** — Ring-0, safety, and scaling internals.
-6. **04_ORACLE_REASONING.md** — Details on the high-compute reasoning lane (Copilot SDK).
+6. **04_ORACLE_REASONING.md** — Details on the high-compute reasoning lane (Anthropic API).
 
 ### Phase 3: The Soul (Cognition & Product)
 7. **08_COGNITIVE_STACK.md** — The deep 48-phase therapeutic and philosophical pipeline.

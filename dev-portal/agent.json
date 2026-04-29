@@ -20,11 +20,13 @@
   "default_routing": "oracle_first",
   "surface_header": "X-Ori-Context",
   "env_headers": ["X-Env-OS", "X-Env-PWD", "X-Env-Project", "X-Env-Shell"],
+  "timezone_header": "X-Timezone",
+  "timezone_header_description": "IANA timezone name (e.g. America/New_York). When set, ORI injects the user's local time into temporal awareness for schedule-aware reasoning.",
   "default_behavior": {
     "profile": null,
     "description": "If no profile is supplied, ORI stays on her default baseline for that surface."
   },
-  "version": "v2.10.0",
+  "version": "v2.11.0",
   "stability": "stable",
   "breaking_changes": "none expected",
   "surfaces": {
@@ -118,6 +120,29 @@
       { "method": "GET", "path": "/v1/tools" },
       { "method": "POST", "path": "/v1/tools/plan" },
       { "method": "POST", "path": "/v1/tools/execute-plan" }
+    ]
+  },
+  "task_platform": {
+    "description": "Persistent cross-session task DAGs with relational entity history. Tenant-scoped. Available to any surface or external integration. Steps form a DAG via depends_on — dependency-free steps run in parallel. Execute endpoint streams SSE step updates.",
+    "scope": "runtime:chat",
+    "step_actions": ["research", "fetch", "summarize", "compare", "draft", "generate", "save", "webhook"],
+    "entity_kinds": ["person", "business", "vendor", "account", "unknown"],
+    "event_kinds": ["message", "invoice", "booking", "call", "note", "event"],
+    "endpoints": [
+      { "method": "POST", "path": "/v1/tasks", "description": "Create task with optional inline steps." },
+      { "method": "GET",  "path": "/v1/tasks", "description": "List tasks. Supports ?status=&surface=&session_id=&limit=&offset=" },
+      { "method": "GET",  "path": "/v1/tasks/:id", "description": "Get task with steps." },
+      { "method": "PATCH","path": "/v1/tasks/:id", "description": "Update title, description, status, priority, or surface." },
+      { "method": "DELETE","path": "/v1/tasks/:id", "description": "Delete task and all steps." },
+      { "method": "POST", "path": "/v1/tasks/:id/steps", "description": "Append a step to a task." },
+      { "method": "PATCH","path": "/v1/tasks/:id/steps/:step_id", "description": "Update step status/result." },
+      { "method": "DELETE","path": "/v1/tasks/:id/steps/:step_id", "description": "Remove a step." },
+      { "method": "POST", "path": "/v1/tasks/:id/execute", "description": "Run step DAG. SSE stream with Accept: text/event-stream." },
+      { "method": "GET",  "path": "/v1/tasks/:id/execute", "description": "Poll execution status." },
+      { "method": "POST", "path": "/v1/entities", "description": "Upsert entity (name, kind, aliases)." },
+      { "method": "GET",  "path": "/v1/entities", "description": "List/search entities. ?search=&kind=&limit=" },
+      { "method": "GET",  "path": "/v1/entities/:id", "description": "Get entity + event history. ?event_limit=50" },
+      { "method": "POST", "path": "/v1/entities/:id/events", "description": "Record event against entity." }
     ]
   },
   "memory": {

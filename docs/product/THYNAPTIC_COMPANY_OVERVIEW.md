@@ -43,7 +43,7 @@ We didn't design ORI for a whitepaper. We built it to power our own products. Ev
 
 **ORI Studio** — AI operator for small businesses. Automates invoices, client follow-ups, scheduling, and weekly recaps through a Jobs-based interface. The brief: *ORI knows my business and handles it when I need her to.*
 
-**ORI Home** — Desktop companion app. Chat-first, session-persistent, always connected to the backbone. Personal intelligence for the everyday.
+**ORI Home** — Resolution Engine for the mental load of modern life. Turns chaos into a single Active Pin — one thing, perfectly timed, with a resolution already staged. Ships as an Electron desktop app and a web SaaS. Built for the WFH parent who needs a partner that handles the logistics, not another tool to manage.
 
 **ORI Code** — Terminal UI for developers. Bun-powered, Ink-rendered, direct API connection. A coding agent for people who live in the console.
 
@@ -78,7 +78,7 @@ An SDK is on the roadmap. The API comes first.
 
 ## Technical Foundation
 
-ORI's backbone is a Go-native reasoning engine — 269+ cognitive modules, a swarm orchestration layer with Contract Net bidding and shared blackboard state, and a session management layer built on the GitHub Copilot SDK. Reasoning modes include Chain-of-Thought, Tree-of-Thought, and Monte Carlo Tree Search, routed dynamically by query complexity.
+ORI's backbone is a Go-native reasoning engine — 269+ cognitive modules, a swarm orchestration layer with Contract Net bidding and shared blackboard state, and a session management layer with 30-minute TTL pooling built directly on the Anthropic API. Reasoning modes include Chain-of-Thought, Tree-of-Thought, and Monte Carlo Tree Search, routed dynamically by query complexity.
 
 The architecture is designed for reliability under real usage: session pooling eliminates cold-start latency across turns, agent profiles enforce capability boundaries without duplicating module logic, and the swarm layer handles multi-agent coordination when a single-pass response isn't sufficient.
 

@@ -68,7 +68,7 @@ func (b *PromptBuilder) BuildCompositePrompt(e *SovereignEngine, stimulus string
 	// 7. Temporal Awareness — real wall-clock, session age, message count
 	// Replaces the static "OPERATIONAL CONTEXT" placeholder with live temporal data.
 	if e.Clock != nil {
-		block := e.Clock.FormatForPrompt(e.CurrentSessionID)
+		block := e.Clock.FormatForPrompt(e.CurrentSessionID, stimulus)
 		if ws.CWD != "" {
 			block = strings.Replace(block, "### TEMPORAL AWARENESS", "### OPERATIONAL CONTEXT & TEMPORAL AWARENESS", 1)
 			block += fmt.Sprintf("\nClient Workspace (Authoritative): %s", ws.CWD)

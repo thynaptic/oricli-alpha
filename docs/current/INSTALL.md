@@ -39,7 +39,7 @@ ollama pull all-minilm
 ollama pull nomic-embed-text
 ```
 
-Ollama is used for semantic embeddings only (memory recall, response cache dedup, SCL indexing, TCD drift). All reasoning goes through Oracle (Copilot SDK).
+Ollama is used for semantic embeddings only (memory recall, response cache dedup, SCL indexing, TCD drift). All reasoning goes through Oracle (Anthropic API).
 
 ---
 

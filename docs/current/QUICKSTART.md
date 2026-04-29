@@ -13,7 +13,7 @@
   ollama pull all-minilm
   ollama pull nomic-embed-text
   ```
-  No reasoning models needed — all LLM calls route through Oracle (Copilot SDK).
+  No reasoning models needed — all LLM calls route through Oracle (Anthropic API).
 
 ---
 

@@ -573,6 +573,12 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 	engine.GenService = genService           // Direct access for reasoning mode engines
 	engine.BeliefTracker = NewBeliefStateTracker()
 	engine.Clock = NewTemporalClock()
+	if store, err := NewJSONChronosStore(chronosDir); err == nil {
+		engine.Clock.SetStore(store)
+	} else {
+		log.Printf("[SovereignEngine] ChronosStore unavailable: %v", err)
+	}
+	engine.Resonance.WireERIStore(".memory/eri_baseline.json")
 	engine.Vision = vdi.NewVisionGroundingService(genService)
 	engine.ToT = NewToTEngine(engine.Generator)
 	engine.Audit = NewAuditEngine(engine)
@@ -1114,49 +1120,11 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		composite, e.CurrentHealth.GetDirectives(), slangDirectives, refinementGuidance, aside, whisper), nil
 }
 
-// SelfAlign implements the SCAI Critique-Revision loop with contextual severity scaling.
-// Greetings/casual → skipped. Technical → local gates only. Sensitive ops → full LLM audit.
+// SelfAlign runs structural output gates (DID, credential leaks, injection detection).
+// The Critique/Revise SLM loop has been retired — frontier models (Claude, GPT-4+) carry
+// their own constitution. We enforce structural rules here, behavioral alignment via prompt.
 func (e *SovereignEngine) SelfAlign(ctx context.Context, query, response string) (string, bool) {
-	level := safety.ClassifyAuditLevel(query)
-
-	switch level {
-	case safety.AuditLevelNone:
-		log.Printf("[SCAI] Skipping audit (greeting/casual)")
-		return response, false
-
-	case safety.AuditLevelLight:
-		log.Printf("[SCAI] Light audit (local gates only)")
-		// AuditOutput already runs DID + WebGuard + Canary + Adversarial — no LLM needed
-		audited, blocked := e.AuditOutput(response)
-		return audited, blocked
-
-	default: // AuditLevelFull
-		log.Printf("[SCAI] Full audit (sensitive op)")
-		critique, violated, err := e.SCAI.Critique(ctx, query, response)
-		if err != nil || !violated {
-			return response, false
-		}
-
-		log.Printf("[SCAI] VIOLATION detected: %s. Initiating autonomous revision...", critique)
-
-		revised, err := e.SCAI.Revise(ctx, query, response, critique)
-		if err != nil {
-			return response, false
-		}
-
-		e.AlignmentLog.LogLesson(state.AlignmentLesson{
-			Prompt:   query,
-			Rejected: response,
-			Chosen:   revised,
-			Score:    -1.0,
-			Metadata: map[string]interface{}{
-				"critique": critique,
-				"version":  "v2.10.0",
-			},
-		})
-
-		return revised, true
-	}
+	return e.AuditOutput(response)
 }
 
 func (e *SovereignEngine) AuditOutput(text string) (string, bool) {

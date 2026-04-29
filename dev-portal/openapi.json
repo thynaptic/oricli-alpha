@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ORI Runtime API",
-    "version": "2026-04-13",
+    "version": "2026-04-25",
     "description": "Complete public API surface for integrating ORI. Base URL: https://glm.thynaptic.com/v1"
   },
   "servers": [
@@ -23,6 +23,51 @@
       }
     },
     "schemas": {
+      "CreateTaskRequest": {
+        "type": "object",
+        "required": ["title"],
+        "properties": {
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "surface": { "type": "string", "example": "home", "description": "Originating surface: home, studio, api, etc." },
+          "session_id": { "type": "string" },
+          "priority": { "type": "integer", "default": 0 },
+          "metadata": { "type": "object", "additionalProperties": { "type": "string" } },
+          "steps": { "type": "array", "items": { "$ref": "#/components/schemas/CreateStepRequest" } }
+        }
+      },
+      "CreateStepRequest": {
+        "type": "object",
+        "required": ["title", "action"],
+        "properties": {
+          "title": { "type": "string" },
+          "action": { "type": "string", "enum": ["research","fetch","summarize","compare","draft","generate","save","webhook"] },
+          "args": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Action arguments. Common keys: topic, prompt, url, content." },
+          "depends_on": { "type": "array", "items": { "type": "string" }, "description": "Step IDs this step depends on. Dependency-free steps run in parallel." },
+          "order_num": { "type": "integer" }
+        }
+      },
+      "UpsertEntityRequest": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "id": { "type": "string", "description": "Provide to update an existing entity." },
+          "name": { "type": "string", "example": "Mike the Plumber" },
+          "kind": { "type": "string", "enum": ["person","business","vendor","account","unknown"] },
+          "aliases": { "type": "array", "items": { "type": "string" }, "example": ["the plumber", "plumber mike"] }
+        }
+      },
+      "CreateEntityEventRequest": {
+        "type": "object",
+        "required": ["kind"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["message","invoice","booking","call","note","event"] },
+          "content": { "type": "string", "example": "Invoice #2024-08 — pipe repair $340" },
+          "task_id": { "type": "string", "description": "Link this event to a task." },
+          "metadata": { "type": "object", "additionalProperties": { "type": "string" } },
+          "occurred_at": { "type": "string", "format": "date-time", "description": "Defaults to now if omitted." }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "properties": {
@@ -994,6 +1039,166 @@
           "200": { "description": "Step result and updated goal state." },
           "404": { "description": "Goal not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
         }
+      }
+    },
+
+    "/tasks": {
+      "post": {
+        "summary": "Create a task",
+        "description": "Create a persistent task with optional inline steps. Tasks are tenant-scoped and persist across sessions.",
+        "tags": ["Tasks"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTaskRequest" } } }
+        },
+        "responses": {
+          "201": { "description": "Created task with steps." },
+          "400": { "description": "Invalid request body." }
+        }
+      },
+      "get": {
+        "summary": "List tasks",
+        "description": "List tasks for the authenticated tenant. Supports filtering by status, surface, and session_id.",
+        "tags": ["Tasks"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending","running","done","failed","cancelled"] } },
+          { "name": "surface", "in": "query", "schema": { "type": "string" } },
+          { "name": "session_id", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": { "200": { "description": "tasks array and count." } }
+      }
+    },
+    "/tasks/{id}": {
+      "get": {
+        "summary": "Get a task",
+        "description": "Fetch a task by ID including all steps.",
+        "tags": ["Tasks"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Task with steps." }, "404": { "description": "Not found." } }
+      },
+      "patch": {
+        "summary": "Update a task",
+        "description": "Patch title, description, status, priority, or surface.",
+        "tags": ["Tasks"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Updated task." } }
+      },
+      "delete": {
+        "summary": "Delete a task",
+        "description": "Delete a task and all its steps (cascade).",
+        "tags": ["Tasks"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Deleted confirmation." } }
+      }
+    },
+    "/tasks/{id}/steps": {
+      "post": {
+        "summary": "Add a step to a task",
+        "description": "Append a new step to an existing task.",
+        "tags": ["Tasks"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateStepRequest" } } } },
+        "responses": { "201": { "description": "Created step." } }
+      }
+    },
+    "/tasks/{id}/steps/{step_id}": {
+      "patch": {
+        "summary": "Update a step",
+        "description": "Update a step's status and result.",
+        "tags": ["Tasks"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "step_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" }, "result": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Updated." } }
+      },
+      "delete": {
+        "summary": "Remove a step",
+        "tags": ["Tasks"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "step_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Deleted." } }
+      }
+    },
+    "/tasks/{id}/execute": {
+      "post": {
+        "summary": "Execute a task",
+        "description": "Run the task's step DAG. Set Accept: text/event-stream for SSE streaming of step updates. Each SSE event carries step_id, status, and an optional snippet. Final event carries done: true and the full task object.",
+        "tags": ["Tasks"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Task result (JSON) or SSE stream." }
+        }
+      },
+      "get": {
+        "summary": "Get execution status",
+        "description": "Returns the current task state without triggering execution.",
+        "tags": ["Tasks"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Task with current step statuses." } }
+      }
+    },
+
+    "/entities": {
+      "post": {
+        "summary": "Upsert an entity",
+        "description": "Create or update a named real-world entity (person, vendor, business, etc.). Used to build the relational context graph for Deep Context retrieval.",
+        "tags": ["Entities"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpsertEntityRequest" } } } },
+        "responses": { "200": { "description": "Entity." } }
+      },
+      "get": {
+        "summary": "List / search entities",
+        "description": "List entities for the tenant. Use search= for name/alias substring match, kind= to filter by type.",
+        "tags": ["Entities"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "kind", "in": "query", "schema": { "type": "string", "enum": ["person","business","vendor","account","unknown"] } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": { "200": { "description": "entities array and count." } }
+      }
+    },
+    "/entities/{id}": {
+      "get": {
+        "summary": "Get entity with event history",
+        "description": "Returns the entity and its full timestamped event history — the basis for Ghost-Logistics and Deep Context recall.",
+        "tags": ["Entities"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "event_limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": { "200": { "description": "entity object + events array." } }
+      }
+    },
+    "/entities/{id}/events": {
+      "post": {
+        "summary": "Record an entity event",
+        "description": "Append a timestamped event (message, invoice, booking, call, note) to an entity's history. These accumulate to power relational recall.",
+        "tags": ["Entities"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateEntityEventRequest" } } } },
+        "responses": { "201": { "description": "Created event." }, "404": { "description": "Entity not found." } }
       }
     }
   }

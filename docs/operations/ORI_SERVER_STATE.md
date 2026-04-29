@@ -64,19 +64,19 @@ and enforced by the live API:
 - **dev**: `dev_builder`, `dev_architect`, `dev_debugger`, `ori_code`
 - **red**: `ori_red`
 
-### Oracle / Copilot Routing (internal runtime reality)
+### Oracle / Anthropic Routing (internal runtime reality)
 
 The public API exposes ORI and `oricli-oracle` as the stable entrypoint. Internally,
-Oracle currently routes into Copilot/Codex tiers like this:
+Oracle routes directly to the Anthropic API via HTTP/SSE:
 
-- **Light chat** → `claude-haiku-4.5` (auto-selected via SDK `ListModels`)
-- **Heavy reasoning / code work** → `auto` (Copilot selects best available in real-time)
-- **Research / dev** → `claude-sonnet-4.6` (best available Sonnet via SDK `ListModels`)
-- **Image reasoning** → Codex (`ori-multimodal`)
+- **Light chat** → `claude-haiku-4-5-20251001`
+- **Heavy reasoning / code work** → `claude-sonnet-4-6`
+- **Research / dev** → `claude-sonnet-4-6`
+- **Image reasoning** → `claude-sonnet-4-6` (with vision via `AnalyzeImage()`)
 
-These are internal router defaults from `pkg/oracle/oracle.go`, not separate public
-models. They may be overridden via `ORACLE_COPILOT_MODEL*` env vars without changing
-the public API contract.
+These are internal router defaults from `pkg/oracle/`, not separate public models.
+Override via `ORACLE_COPILOT_MODEL_LIGHT/HEAVY/RESEARCH` env vars without changing
+the public API contract. Requires `ANTHROPIC_API_KEY` in environment.
 
 ---
 
@@ -126,7 +126,7 @@ X-Ori-Workspace-Branch:  main
 Without these fixes, ORI would answer "what dir are we in?" with `thynaptic/oricli-alpha` — the Mavaia server's own repo — instead of the client's workspace. Three root causes:
 
 1. **Race condition**: `SovereignEngine` fields (`CurrentRemotePWD` etc.) are shared mutable state on a singleton. Concurrent requests clobbered each other's workspace context.
-2. **Copilot repo injection**: The `copilot` CLI, run from `/home/mike/Mavaia`, picks up `.github/copilot-instructions.md` and the GitHub remote origin, overriding any workspace context in the prompt.
+2. **Context bleed**: Server-side workspace paths (`/home/mike/Mavaia`) and `.github/copilot-instructions.md` could leak into the system prompt if workspace isolation isn't applied.
 3. **Response cache bypass missing**: The `lastMsg`-keyed response cache didn't account for workspace headers — a cached Mavaia-context response could be returned for a workspace-aware query.
 
 ### The Fixes (all shipped in commit `c0c453c`)
@@ -141,12 +141,11 @@ func WithRemoteWorkspace(ctx context.Context, cwd, project, repoRoot, branch str
 **Compact system prompt** (`pkg/api/server_v2.go`):
 When `remotePWD != ""`, the full Mavaia sovereign composite prompt (full of VPS paths and operational context) is replaced with a minimal workspace-scoped system message before the oracle call.
 
-**Oracle isolation sentinel** (`pkg/oracle/oracle.go` + `pkg/oracle/router.go`):
+**Oracle isolation sentinel** (`pkg/oracle/router.go`):
 ```go
-oracleDecision.Agent = "-"          // strips --agent flag
-oracleDecision.WorkingDir = os.TempDir()  // copilot runs from /tmp, not /home/mike/Mavaia
+oracleDecision.Agent = "-"  // empty agent = no system prompt injection for workspace requests
 ```
-The `"-"` sentinel in `copilotArgs` passes `--no-custom-instructions --disable-builtin-mcps` to the copilot CLI, stripping all GitHub repo context injection.
+When `Agent` is `"-"`, `getAgentPrompt()` returns empty string — no persona system prompt is applied, preventing server-side context from bleeding into remote workspace responses.
 
 **Response cache bypass** (`pkg/api/server_v2.go:1123`):
 ```go

@@ -7,7 +7,10 @@
 package temporal
 
 import (
+	"encoding/json"
 	"math"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -23,9 +26,9 @@ const (
 
 // Snapshot is a single ERI sample recorded at a point in time.
 type Snapshot struct {
-	ERI       float32
-	ARTEScore float32
-	RecordedAt time.Time
+	ERI        float32   `json:"eri"`
+	ARTEScore  float32   `json:"arte_score"`
+	RecordedAt time.Time `json:"recorded_at"`
 }
 
 // Baseline is the computed temporal context from the ring buffer.
@@ -38,15 +41,24 @@ type Baseline struct {
 }
 
 const (
-	maxSnapshots = 500         // ~1 snapshot/min × 8h/day × 7 days comfortably
-	sevenDays    = 7 * 24 * time.Hour
-	thirtyDays   = 30 * 24 * time.Hour
+	maxSnapshots  = 500 // ~1 snapshot/min × 8h/day × 7 days comfortably
+	flushInterval = 50  // auto-flush to disk every N new snapshots
+	sevenDays     = 7 * 24 * time.Hour
+	thirtyDays    = 30 * 24 * time.Hour
 )
+
+// ERIStore is the persistence interface for ERI snapshots.
+type ERIStore interface {
+	Flush(snapshots []Snapshot) error
+	Load() ([]Snapshot, error)
+}
 
 // Memory is the thread-safe temporal ERI store.
 type Memory struct {
 	mu        sync.RWMutex
 	snapshots []Snapshot
+	store     ERIStore
+	dirty     int // unsaved snapshot count since last flush
 }
 
 // NewMemory returns an initialized Memory.
@@ -54,11 +66,47 @@ func NewMemory() *Memory {
 	return &Memory{}
 }
 
-// Record adds an ERI snapshot to the ring buffer.
-func (m *Memory) Record(eri, arteScore float32) {
+// SetStore injects a persistence backend. Call LoadFromStore after to restore prior snapshots.
+func (m *Memory) SetStore(store ERIStore) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.store = store
+}
 
+// LoadFromStore restores persisted snapshots into the ring buffer on startup.
+func (m *Memory) LoadFromStore() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.store == nil {
+		return nil
+	}
+	snaps, err := m.store.Load()
+	if err != nil {
+		return err
+	}
+	if len(snaps) > 0 {
+		m.snapshots = snaps
+		if len(m.snapshots) > maxSnapshots {
+			m.snapshots = m.snapshots[len(m.snapshots)-maxSnapshots:]
+		}
+	}
+	return nil
+}
+
+// Flush writes all current snapshots to the store. Call on shutdown.
+func (m *Memory) Flush() error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.store == nil {
+		return nil
+	}
+	return m.store.Flush(m.snapshots)
+}
+
+// Record adds an ERI snapshot to the ring buffer and auto-flushes every
+// flushInterval snapshots so data survives restarts.
+func (m *Memory) Record(eri, arteScore float32) {
+	m.mu.Lock()
 	m.snapshots = append(m.snapshots, Snapshot{
 		ERI:        eri,
 		ARTEScore:  arteScore,
@@ -66,6 +114,18 @@ func (m *Memory) Record(eri, arteScore float32) {
 	})
 	if len(m.snapshots) > maxSnapshots {
 		m.snapshots = m.snapshots[len(m.snapshots)-maxSnapshots:]
+	}
+	m.dirty++
+	var toFlush []Snapshot
+	if m.store != nil && m.dirty >= flushInterval {
+		toFlush = make([]Snapshot, len(m.snapshots))
+		copy(toFlush, m.snapshots)
+		m.dirty = 0
+	}
+	m.mu.Unlock()
+
+	if toFlush != nil {
+		go func() { _ = m.store.Flush(toFlush) }()
 	}
 }
 
@@ -119,7 +179,7 @@ func (m *Memory) Compute() Baseline {
 
 	volatility := rollingVariance(values7)
 	momentum := computeTrend(m.snapshots, sevenCutoff, thirtyCutoff)
-	confidence := math.Min(1.0, float64(len(values7))/50.0) // full confidence at 50+ samples
+	confidence := math.Min(1.0, float64(len(values7))/50.0)
 
 	return Baseline{
 		SevenDay:   seven,
@@ -146,12 +206,10 @@ func rollingVariance(vals []float64) float32 {
 		variance += d * d
 	}
 	variance /= float64(len(vals))
-	// Normalize: max realistic ERI variance is ~0.25 (±0.5 swing)
 	return float32(math.Min(1.0, variance/0.25))
 }
 
 // computeTrend compares the 7-day window mean to the 30-day mean.
-// Rising: recent avg is meaningfully above historical.
 func computeTrend(snaps []Snapshot, sevenCutoff, thirtyCutoff time.Time) Trend {
 	var recentVals, olderVals []float64
 	for _, s := range snaps {
@@ -185,4 +243,53 @@ func mean(vals []float64) float64 {
 		s += v
 	}
 	return s / float64(len(vals))
+}
+
+// ─── JSON flat-file ERIStore ──────────────────────────────────────────────────
+
+// JSONERIStore persists the full snapshot ring buffer as a single JSON file.
+type JSONERIStore struct {
+	path string
+	mu   sync.Mutex
+}
+
+// NewJSONERIStore creates (or opens) the store at path.
+func NewJSONERIStore(path string) (*JSONERIStore, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return nil, err
+	}
+	return &JSONERIStore{path: path}, nil
+}
+
+// Flush atomically overwrites the store file with the current snapshot slice.
+func (s *JSONERIStore) Flush(snapshots []Snapshot) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := json.MarshalIndent(snapshots, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.path)
+}
+
+// Load reads the snapshot file and returns all stored snapshots.
+func (s *JSONERIStore) Load() ([]Snapshot, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := os.ReadFile(s.path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var snaps []Snapshot
+	if err := json.Unmarshal(data, &snaps); err != nil {
+		return nil, err
+	}
+	return snaps, nil
 }

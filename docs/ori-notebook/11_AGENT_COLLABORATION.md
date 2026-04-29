@@ -249,9 +249,9 @@ PB_BASE_URL=https://pocketbase.thynaptic.com
 - **`go build` must pass clean** before any commit.
 
 ### Session state
-- Plan lives at: `/home/mike/.copilot/session-state/<session-id>/plan.md`
-- Checkpoints are indexed at: `.../checkpoints/index.md`
-- 55+ prior checkpoints exist — read relevant ones before major work
+- Session state is managed by ORI's own session pool (no `~/.copilot/` state)
+- Goal checkpoints and plan state live in ORI's memory and goal systems
+- Prior session context is restored via `X-Session-ID` header on reconnect
 
 ---
 
@@ -467,7 +467,7 @@ The live shared runtime is:
 Current reality:
 
 - `oricli-oracle` is the default public reasoning lane
-- Oracle uses Copilot-backed models by surface
+- Oracle routes to Anthropic API directly (light=Haiku, heavy/research=Sonnet 4.6)
 - local Ollama remains for utility/fallback work
 
 RunPod is not part of the main ORI plan now.

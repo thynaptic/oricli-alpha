@@ -3,7 +3,9 @@ package api
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -81,6 +83,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/stoic"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 	tcdpkg "github.com/thynaptic/oricli-go/pkg/tcd"
+	"github.com/thynaptic/oricli-go/pkg/tasks"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
 	"github.com/thynaptic/oricli-go/pkg/up"
@@ -116,6 +119,7 @@ type ServerV2 struct {
 	ToolService      *service.ToolService
 	PlannerService   *service.PlannerService
 	ExecutePlanFunc  func(*service.ToolCallingPlan) (service.PlanExecutionResult, error)
+	Tasks            *tasks.Store
 	entLayers        sync.Map // namespace -> *enterprise.Layer cache
 	entJobs          sync.Map // job_id -> *enterpriseLearnJob
 	spacesStore      *SpacesStore
@@ -379,7 +383,7 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		}
 		agent.SovEngine.VisionRef = service.NewRunPodVisionManager(runpod.NewClient(apiKey))
 	} else {
-		agent.SovEngine.VisionRef = &visionAdapter{ollamaURL: ollamaBaseURL()}
+		agent.SovEngine.VisionRef = &oracleVisionAdapter{}
 	}
 
 	s.setupRoutes()
@@ -502,7 +506,7 @@ func (s *ServerV2) setupRoutes() {
 		// Workspaces — agentic desktop task execution (SSE)
 		protected.POST("/workspaces/run", s.handleWorkspaceRun)
 
-		// Vision — image analysis via moondream (CPU-safe, local Ollama)
+		// Vision — image analysis via Oracle RouteImageReasoning
 		protected.POST("/vision/analyze", s.handleVisionAnalyze)
 
 		// Browser automation — sovereign browser runtime via browserd
@@ -521,6 +525,7 @@ func (s *ServerV2) setupRoutes() {
 		protected.POST("/tools/plan", s.handleCreateToolPlan)
 		protected.POST("/tools/execute-plan", s.handleExecuteToolPlan)
 		protected.POST("/mcp", s.handleMCP)
+
 
 		// Sovereign Identity — active .ori profile editor
 		protected.GET("/sovereign/identity", s.handleGetSovereignIdentity)
@@ -947,6 +952,16 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// Session ID used by BeliefStateTracker (fog-of-war) and downstream session scoping.
 	sessionID := c.GetHeader("X-Session-ID")
 
+	// Scope the Oracle session pool key to the authenticated tenant so sessions are
+	// never shared across accounts, even when clients reuse the same X-Session-ID
+	// value (e.g. same device, localStorage not cleared on logout).
+	// Empty sessionID stays empty — oracle.ChatStreamWithDecision treats it as stateless.
+	tenantID := tenantauth.TenantID(c.Request.Context())
+	scopedSessionID := sessionID
+	if sessionID != "" && tenantID != "" {
+		scopedSessionID = tenantID + ":" + sessionID
+	}
+
 	// Remote Workspace Overrides: provided by ORI Code and other sovereign clients.
 	// Workspace-specific headers are authoritative and should win over coarse
 	// surface awareness so reasoning stays anchored to the active repo instead
@@ -1300,6 +1315,10 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	s.Agent.SovEngine.CurrentSessionID = sessionID
 	// Record activity for temporal clock — marks session start on first message, updates last-seen.
 	s.Agent.SovEngine.Clock.RecordActivity(sessionID)
+	// Store client timezone if provided — enables local-time injection into the temporal block.
+	if tz := c.GetHeader("X-Timezone"); tz != "" {
+		s.Agent.SovEngine.Clock.SetTimezone(sessionID, tz)
+	}
 	// Log user message into session event timeline.
 	if lastMsg != "" {
 		s.Agent.SovEngine.Clock.RecordEvent(sessionID, cognition.EventRoleUser, lastMsg)
@@ -1311,7 +1330,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// (which would fire oracle.Query for trap checks, adding unnecessary latency).
 	if oracle.AvailableForRoute(oracle.RouteLightChat) && cognition.IsSessionIntrospective(lastMsg) {
 		log.Printf("[Oracle] TierTemporal fast-path for: %.60s", lastMsg)
-		temporalBlock := s.Agent.SovEngine.Clock.FormatForPrompt(sessionID)
+		temporalBlock := s.Agent.SovEngine.Clock.FormatForPrompt(sessionID, lastMsg)
 		temporalMsgs := []oracle.Message{
 			{Role: "system", Content: "You are ORI, a sovereign AI assistant. Answer the user's question using only the temporal context below.\n\n" + temporalBlock},
 			{Role: "user", Content: lastMsg},
@@ -1334,7 +1353,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			Model:   oracle.Decide(lastMsg, oracle.RouteHints{}).Model,
 			Agent:   "ori-chat-fast",
 			Reason:  "temporal fast-path",
-		})
+		}, scopedSessionID)
 		if useSSE {
 			close(heartbeatDone)
 		}
@@ -1647,8 +1666,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 
 	oracleDecision := oracle.Decide(lastMsg, oracle.RouteHints{
 		IsResearchAction: isResearchAction,
-		IsCodeAction:     isCodeAction,
+		IsCodeAction:     isCodeAction || remotePWD != "", // remote clients are always in coding mode
 		RequestedModel:   modelName,
+		Surface:          surface,
 	})
 
 	// When a remote workspace is active, anchor it in both the system message tail
@@ -1671,41 +1691,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 
 	oracleMsgs := oracle.ConvertMsgs(msgs)
 	if remotePWD != "" {
-		// For remote workspace requests, replace the server-side sovereign composite
-		// (which is full of Mavaia operational context) with a compact, clean prompt.
-		// The sovereign engine output is designed for local Ollama; sending it to
-		// Copilot/GPT-5-mini causes the model to anchor on server VPS paths instead
-		// of the client's actual workspace.
-		project := remoteProject
-		if project == "" {
-			project = remotePWD
-		}
-		branch := remoteBranch
-		if branch == "" {
-			branch = "unknown"
-		}
-		compactSystem := fmt.Sprintf(
-			"You are ORI, a sharp and direct coding assistant.\n"+
-				"You are working inside the user's local workspace — not on any server.\n\n"+
-				"Workspace: %s\nProject: %s\nBranch: %s\n\n"+
-				"Rules:\n"+
-				"- Answer workspace questions using the paths above, not any server or VPS paths.\n"+
-				"- Use tools to inspect the repo when needed. Do not guess file contents.\n"+
-				"- Be direct. Lead with the answer.",
-			remotePWD, project, branch,
-		)
-		if len(oracleMsgs) > 0 && oracleMsgs[0].Role == "system" {
-			oracleMsgs[0].Content = compactSystem
-		}
-	}
-
-	// Remote workspace: run Copilot from /tmp (a neutral dir with no git repo) and
-	// strip --agent. Both prevent Copilot from picking up Mavaia's repo context
-	// (.github/copilot-instructions.md, agent profiles) from the server CWD and
-	// answering as if it's in Mavaia instead of the client's workspace.
-	if remotePWD != "" {
-		// "-" sentinel: isolated mode — no agent, no custom instructions, no built-in MCPs.
-		// See copilotArgs in oracle.go for what this strips.
+		// Isolated mode: strip server-side agent config so copilot can't anchor on
+		// Mavaia VPS paths. The client's system prompt (with workspace snapshot) is
+		// kept intact — it already contains the correct workspace context.
 		oracleDecision.Agent = "-"
 		oracleDecision.WorkingDir = os.TempDir()
 	}
@@ -1724,7 +1712,54 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	} else {
 		log.Printf("[Oracle] route=%s agent=%s model=%s reason=%s query=%.60s",
 			oracleDecision.Route, oracleDecision.Agent, oracleDecision.Model, oracleDecision.Reason, lastMsg)
-		tokenCh = oracle.ChatStreamWithDecision(streamCtx, oracleMsgs, oracleDecision)
+
+		// Tool use path — when the caller supplies tool definitions, use ChatWithTools
+		// (non-streaming, one round) and return an OpenAI-compatible tool_calls response.
+		// The caller executes tools and sends results back as subsequent messages.
+		if len(req.Tools) > 0 {
+			if useSSE {
+				close(heartbeatDone)
+			}
+			toolDefs := make([]oracle.ToolDef, 0, len(req.Tools))
+			for _, t := range req.Tools {
+				schema, _ := toStringKeyMap(t.Function.Parameters)
+				toolDefs = append(toolDefs, oracle.ToolDef{
+					Name:        t.Function.Name,
+					Description: t.Function.Description,
+					InputSchema: schema,
+				})
+			}
+			// Build oracle messages directly from req.Messages to preserve
+			// tool_call_id and tool_calls fields lost by the map[string]string path.
+			toolMsgs := reqMsgsToOracle(req.Messages, msgs[0]["content"])
+			round, err := oracle.ChatWithTools(streamCtx, toolMsgs, toolDefs, oracleDecision)
+			if err != nil {
+				sseError(err.Error())
+				return
+			}
+			if len(round.Calls) > 0 {
+				// Model wants to call tools — return tool_calls in OpenAI format.
+				c.JSON(http.StatusOK, gin.H{
+					"id":      "chatcmpl-" + newID(),
+					"object":  "chat.completion",
+					"model":   oracleDecision.Model,
+					"choices": []gin.H{{
+						"index": 0,
+						"message": gin.H{
+							"role":       "assistant",
+							"content":    nil,
+							"tool_calls": oracle.ToolCallsToOAI(round.Calls),
+						},
+						"finish_reason": "tool_calls",
+					}},
+				})
+				return
+			}
+			// Model returned final text — fall through to normal SSE stream via synthetic channel.
+			tokenCh = chanFromString(round.Text)
+		} else {
+			tokenCh = oracle.ChatStreamWithDecision(streamCtx, oracleMsgs, oracleDecision, scopedSessionID)
+		}
 	}
 
 	// Stop pipeline heartbeat — token-stream ticker takes over from here.
@@ -1814,6 +1849,10 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	} else {
 		responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
 	}
+	if strings.TrimSpace(responseText) == "" {
+		responseText = synthesizeEmptyAssistantFallback(lastMsg, modelName)
+		log.Printf("[OpenAIBridge] empty assistant turn recovered with fallback (model=%s query=%.80q)", modelName, lastMsg)
+	}
 
 	// Log assistant response into session event timeline.
 	if responseText != "" {
@@ -1846,7 +1885,6 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	// so the UI can patch the last assistant message in-place with the revised text.
 	// This also generates an RFAL DPO pair for every violation (learning signal).
 	// Zero impact on the happy path (CLEAR critique → goroutine exits silently).
-	tenantID := tenantauth.TenantID(c.Request.Context())
 	go func(query, response, sid, tid string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -1946,6 +1984,24 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			sig := s.SignalProcessor.Detect(msg)
 			s.SignalProcessor.Process(sig)
 		}(lastMsg)
+	}
+}
+
+func synthesizeEmptyAssistantFallback(query, modelName string) string {
+	lower := strings.ToLower(strings.TrimSpace(query))
+
+	switch {
+	case lower == "ping" || lower == "ping?" || lower == "online" || lower == "online?":
+		return "Yes — online."
+	case strings.Contains(lower, "say hi") || strings.Contains(lower, "say hello"):
+		return "HI"
+	case strings.Contains(lower, "what llm") || strings.Contains(lower, "what model") || strings.Contains(lower, "what are you"):
+		if strings.TrimSpace(modelName) != "" {
+			return fmt.Sprintf("ORI here. This turn was routed as `%s`.", modelName)
+		}
+		return "ORI here."
+	default:
+		return "I’m here, but that turn came back empty. Ask again with a little more detail."
 	}
 }
 
@@ -2145,6 +2201,38 @@ func (s *ServerV2) Start() error {
 	return s.Router.Run(addr)
 }
 
+// RegisterTaskRoutes mounts the task and entity endpoints. Must be called after
+// s.Tasks is assigned — routes are registered lazily so the store is guaranteed
+// to be non-nil by the time any request arrives.
+func (s *ServerV2) RegisterTaskRoutes() {
+	if s.Tasks == nil {
+		return
+	}
+	v1 := s.Router.Group("/v1")
+	protected := v1.Group("/", s.authMiddleware(), tenantauth.TenantEnricher(s.store), s.RateLimiter.GinMiddleware())
+
+	// Tasks — persistent cross-session task DAGs
+	protected.POST("/tasks", s.handleCreateTask)
+	protected.GET("/tasks", s.handleListTasks)
+	protected.GET("/tasks/:id", s.handleGetTask)
+	protected.PATCH("/tasks/:id", s.handleUpdateTask)
+	protected.DELETE("/tasks/:id", s.handleDeleteTask)
+	protected.POST("/tasks/:id/steps", s.handleAddStep)
+	protected.PATCH("/tasks/:id/steps/:step_id", s.handleUpdateStep)
+	protected.DELETE("/tasks/:id/steps/:step_id", s.handleDeleteStep)
+	// Execute lives under /:id to avoid Gin routing conflict with /:id param
+	protected.POST("/tasks/:id/execute", s.handleExecuteTask)
+	protected.GET("/tasks/:id/execute", s.handleExecuteTask)
+
+	// Entities — relational history backbone (Deep Context)
+	protected.POST("/entities", s.handleUpsertEntity)
+	protected.GET("/entities", s.handleListEntities)
+	protected.GET("/entities/:id", s.handleGetEntity)
+	protected.POST("/entities/:id/events", s.handleCreateEntityEvent)
+
+	log.Println("[API] Task + Entity routes registered.")
+}
+
 // handleSovereignAuth handles /admin <key>, /exec <key>, and /auth off.
 // The raw key is scrubbed from all logs immediately.
 func (s *ServerV2) handleSovereignAuth(c *gin.Context, rawMsg, sessionKey string) {
@@ -2239,6 +2327,9 @@ func (s *ServerV2) handleAdminCreateAPIKey(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if OnTenantKeyCreated != nil {
+		OnTenantKeyCreated(raw, rec.TenantID, rec.Scopes)
 	}
 	// Return the raw key ONCE — it cannot be retrieved again.
 	c.JSON(http.StatusCreated, gin.H{
@@ -2720,6 +2811,10 @@ func (s *ServerV2) handlePutSovereignIdentity(c *gin.Context) {
 // UI output (e.g. <span class="ori-kw">workflow</span>) never poisons RAG.
 var reHTMLTag = regexp.MustCompile(`<[^>]+>`)
 
+// OnTenantKeyCreated is called after a tenant API key is issued via the admin endpoint.
+// Set this in main.go to persist keys across restarts.
+var OnTenantKeyCreated func(key, tenantID string, scopes []string)
+
 func stripHTML(s string) string {
 	s = reHTMLTag.ReplaceAllString(s, "")
 	s = strings.ReplaceAll(s, "&amp;", "&")
@@ -2961,34 +3056,42 @@ func truncateStr(s string, n int) string {
 
 // ─── Vision Adapter ───────────────────────────────────────────────────────────
 
-// ollamaBaseURL returns the Ollama API base URL from env or default.
-func ollamaBaseURL() string {
-	if u := os.Getenv("OLLAMA_URL"); u != "" {
-		return u
+// oracleVisionAdapter implements cognition.VisionAnalyzer using Oracle's
+// RouteImageReasoning tier via the ORI API (OpenAI vision message format).
+type oracleVisionAdapter struct{}
+
+func (o *oracleVisionAdapter) Analyze(input cognition.VisionInput) (cognition.VisionResult, error) {
+	prompt := input.Prompt
+	if prompt == "" {
+		prompt = cognition.DefaultVisionPrompt
 	}
-	return "http://127.0.0.1:11434"
-}
 
-// visionAdapter implements cognition.VisionAnalyzer using moondream via Ollama.
-// CPU-safe: moondream is 1.7GB and runs on EPYC in ~5-8s per image.
-type visionAdapter struct {
-	ollamaURL string
-}
-
-func (v *visionAdapter) Analyze(input cognition.VisionInput) (cognition.VisionResult, error) {
-	// Resolve image to base64
-	var b64 string
+	// Resolve image to raw base64 + MIME type.
+	var b64, mimeType string
 	switch {
 	case input.Base64 != "":
-		b64 = input.Base64
+		// Strip data URI prefix if the caller included it (e.g. "data:image/jpeg;base64,...")
+		if idx := strings.Index(input.Base64, ";base64,"); idx != -1 {
+			if comma := strings.Index(input.Base64, ","); comma != -1 {
+				// Extract MIME from the prefix
+				prefix := input.Base64[:idx]
+				if strings.HasPrefix(prefix, "data:") {
+					mimeType = prefix[5:]
+				}
+				b64 = input.Base64[comma+1:]
+			}
+		} else {
+			b64 = input.Base64
+		}
 	case input.FilePath != "":
 		data, err := os.ReadFile(input.FilePath)
 		if err != nil {
 			return cognition.VisionResult{}, fmt.Errorf("vision: read file: %w", err)
 		}
 		b64 = base64.StdEncoding.EncodeToString(data)
+		mimeType = mimeTypeFromPath(input.FilePath)
 	case input.URL != "":
-		resp, err := http.Get(input.URL) //nolint:gosec — URL provided by authenticated caller
+		resp, err := http.Get(input.URL) //nolint:gosec — URL from authenticated caller
 		if err != nil {
 			return cognition.VisionResult{}, fmt.Errorf("vision: fetch url: %w", err)
 		}
@@ -2998,58 +3101,47 @@ func (v *visionAdapter) Analyze(input cognition.VisionInput) (cognition.VisionRe
 			return cognition.VisionResult{}, fmt.Errorf("vision: read url body: %w", err)
 		}
 		b64 = base64.StdEncoding.EncodeToString(data)
+		mimeType = resp.Header.Get("Content-Type")
+		if mimeType == "" {
+			mimeType = mimeTypeFromPath(input.URL)
+		}
 	default:
 		return cognition.VisionResult{}, fmt.Errorf("vision: no image source provided")
 	}
 
-	prompt := input.Prompt
-	if prompt == "" {
-		prompt = cognition.DefaultVisionPrompt
+	if mimeType == "" {
+		mimeType = "image/png"
 	}
-
-	// Call Ollama /api/generate with images array
-	reqBody, _ := json.Marshal(map[string]any{
-		"model":       "moondream:latest",
-		"prompt":      prompt,
-		"images":      []string{b64},
-		"stream":      false,
-		"num_predict": 256,
-		"options": map[string]any{
-			"temperature": 0.1,
-			"num_ctx":     4096,
-		},
-	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
-		v.ollamaURL+"/api/generate", strings.NewReader(string(reqBody)))
-	req.Header.Set("Content-Type", "application/json")
-
-	httpResp, err := http.DefaultClient.Do(req)
+	description, err := oracle.AnalyzeImage(ctx, prompt, b64, mimeType)
 	if err != nil {
-		return cognition.VisionResult{}, fmt.Errorf("vision: ollama call: %w", err)
+		return cognition.VisionResult{}, err
 	}
-	defer httpResp.Body.Close()
-
-	var ollamaResp struct {
-		Response string `json:"response"`
-		Done     bool   `json:"done"`
-	}
-	if err := json.NewDecoder(httpResp.Body).Decode(&ollamaResp); err != nil {
-		return cognition.VisionResult{}, fmt.Errorf("vision: decode response: %w", err)
-	}
-
-	description := strings.TrimSpace(ollamaResp.Response)
-	tags := extractVisionTags(description)
 
 	return cognition.VisionResult{
 		Description: description,
-		Tags:        tags,
-		Model:       "moondream:latest",
-		RawResponse: ollamaResp.Response,
+		Tags:        extractVisionTags(description),
+		Model:       "oricli-oracle",
+		RawResponse: description,
 	}, nil
+}
+
+func mimeTypeFromPath(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	default:
+		return ""
+	}
 }
 
 // extractVisionTags derives a small set of concept tags from a description
@@ -5214,3 +5306,71 @@ func hasConversationContext(msgs []model.Message) bool {
 	}
 	return false
 }
+
+// newID returns a short random hex string for response IDs.
+func newID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// chanFromString wraps a string in a closed channel so tool-use final text
+// can flow through the same SSE streaming path as normal Oracle responses.
+func chanFromString(s string) <-chan string {
+	ch := make(chan string, 1)
+	ch <- s
+	close(ch)
+	return ch
+}
+
+// reqMsgsToOracle converts model.Messages to oracle.Messages preserving tool_call_id
+// and tool_calls fields that are lost by the map[string]string intermediary path.
+// The system message is prepended from the pre-built systemContent string.
+func reqMsgsToOracle(messages []model.Message, systemContent string) []oracle.Message {
+	out := make([]oracle.Message, 0, len(messages)+1)
+	if systemContent != "" {
+		out = append(out, oracle.Message{Role: "system", Content: systemContent})
+	}
+	for _, m := range messages {
+		if m.Role == "system" {
+			continue // already handled above
+		}
+		om := oracle.Message{
+			Role:       m.Role,
+			Content:    m.Content,
+			ToolCallID: m.ToolCallID,
+		}
+		for _, tc := range m.ToolCalls {
+			om.ToolCalls = append(om.ToolCalls, oracle.OAIToolCall{
+				ID:   tc.ID,
+				Type: tc.Type,
+				Function: struct {
+					Name      string `json:"name"`
+					Arguments string `json:"arguments"`
+				}{
+					Name:      tc.Function.Name,
+					Arguments: tc.Function.Arguments,
+				},
+			})
+		}
+		out = append(out, om)
+	}
+	return out
+}
+
+// toStringKeyMap round-trips an arbitrary value through JSON to get map[string]any.
+func toStringKeyMap(v any) (map[string]any, error) {
+	if v == nil {
+		return map[string]any{"type": "object"}, nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+

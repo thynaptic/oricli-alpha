@@ -1,86 +1,106 @@
 package oracle
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	copilot "github.com/github/copilot-sdk/go"
 	"gopkg.in/yaml.v3"
 )
 
-var (
-	client     *copilot.Client
-	clientMu   sync.RWMutex
-	clientOnce sync.Once
+const (
+	anthropicBase    = "https://api.anthropic.com/v1"
+	anthropicVersion = "2023-06-01"
+	sessionTTL       = 30 * time.Minute
+	maxTokens        = 8096
 )
 
 const (
-	defaultCopilotPort = 8090
-	sessionTTL         = 30 * time.Minute
+	defaultLightModel    = "claude-haiku-4-5-20251001"
+	defaultHeavyModel    = "claude-sonnet-4-6"
+	defaultResearchModel = "claude-sonnet-4-6"
 )
 
-// Route tier defaults — used when the SDK catalog hasn't loaded yet.
-// These are intentionally conservative: real selection happens via RefreshModelCatalog.
-
-// sessionEntry holds a live SDK session and its last-used timestamp.
 type sessionEntry struct {
-	session  *copilot.Session
 	lastUsed time.Time
 }
 
-// sessionPool maps sessionID → *sessionEntry. Sessions are reused across turns.
 var sessionPool sync.Map
 
-// agentCache avoids re-reading .github/agents/ on every session use.
 var (
-	agentCache    []copilot.CustomAgentConfig
+	agentCache    map[string]agentDef
 	agentCacheMu  sync.RWMutex
 	agentCacheAt  time.Time
 	agentCacheTTL = 5 * time.Minute
 )
 
-const (
-	defaultCopilotLightModel    = "claude-haiku-4.5"
-	defaultCopilotHeavyModel    = "auto"
-	defaultCopilotResearchModel = "claude-sonnet-4.6"
-)
-
-// Init initializes the Copilot SDK client.
-func Init(port int) {
-	clientOnce.Do(func() {
-		// Let the SDK manage its own copilot subprocess (stdio mode, dynamic port).
-		// DaemonManager still starts a daemon for legacy use, but the SDK process
-		// is independent to avoid port conflicts and ACP handshake hangs.
-		client = copilot.NewClient(nil)
-		startCtx, startCancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer startCancel()
-		if err := client.Start(startCtx); err != nil {
-			log.Printf("[Oracle] Failed to start Copilot SDK client: %v", err)
-			client = nil
-		} else {
-			log.Printf("[Oracle] Copilot SDK client ready (port %d daemon also running)", port)
-		}
-		go RefreshModelCatalog()
-		go sessionReaper()
-	})
+type agentDef struct {
+	Name        string
+	Description string
+	Prompt      string
 }
 
-// CloseSession explicitly disconnects and removes a session from the pool.
-// Call this when a conversation is definitively over (e.g. user logout, session expiry).
+type Message struct {
+	Role       string       `json:"role"`
+	Content    string       `json:"content"`
+	ToolCallID string       `json:"tool_call_id,omitempty"` // role="tool" result messages
+	ToolCalls  []OAIToolCall `json:"tool_calls,omitempty"`  // assistant messages with tool invocations
+}
+
+// OAIToolCall mirrors OpenAI's tool_call object in assistant messages.
+type OAIToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+}
+
+type Result struct {
+	Answer string
+	Source string
+}
+
+// Init warms the model catalog and starts the session reaper.
+// The port argument is ignored — retained for call-site compatibility.
+func Init(_ int) {
+	go RefreshModelCatalog()
+	go sessionReaper()
+	log.Printf("[Oracle] Anthropic API ready — light=%s heavy=%s research=%s",
+		modelForRoute(RouteLightChat),
+		modelForRoute(RouteHeavyReasoning),
+		modelForRoute(RouteResearch),
+	)
+}
+
+// Available reports whether the Anthropic API key is configured.
+func Available() bool {
+	return strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")) != ""
+}
+
+func AvailableForRoute(_ Route) bool { return Available() }
+
+// GetClient returns nil — retained for call-site compatibility.
+func GetClient() any { return nil }
+
+// CloseSession removes a session from the pool.
 func CloseSession(sessionID string) {
-	if v, ok := sessionPool.LoadAndDelete(sessionID); ok {
-		entry := v.(*sessionEntry)
-		entry.session.Disconnect()
-	}
+	sessionPool.Delete(sessionID)
 }
 
-// sessionReaper runs in the background and disconnects sessions idle for > sessionTTL.
 func sessionReaper() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
@@ -90,7 +110,6 @@ func sessionReaper() {
 			entry := value.(*sessionEntry)
 			if now.Sub(entry.lastUsed) > sessionTTL {
 				sessionPool.Delete(key)
-				entry.session.Disconnect()
 				log.Printf("[Oracle] session %s reaped after idle TTL", key)
 			}
 			return true
@@ -98,197 +117,289 @@ func sessionReaper() {
 	}
 }
 
-// GetClient returns the global SDK client instance.
-func GetClient() *copilot.Client {
-	clientMu.RLock()
-	defer clientMu.RUnlock()
-	return client
-}
-
-type Message struct {
-	Role    string
-	Content string
-}
-
-type Result struct {
-	Answer string
-	Source string
-}
-
 // Query performs a single-turn query using the Oracle.
 func Query(stimulus string) *Result {
 	return QueryWithDecision(stimulus, Decide(stimulus, RouteHints{IsCodeAction: true}), "default")
 }
 
-// QueryWithDecision performs a query with a pre-made decision.
+// QueryWithDecision performs a query with a pre-made routing decision.
 func QueryWithDecision(stimulus string, decision Decision, sessionID string) *Result {
-	if decision.Route == RouteImageReasoning {
-		// Image reasoning now handled via SDK session
-		log.Printf("[Oracle] Routing image-based query via SDK")
-	}
-
 	ch := ChatStreamWithDecision(context.Background(), []Message{{Role: "user", Content: stimulus}}, decision, sessionID)
 	answer := Collect(ch)
 	if answer == "" {
 		return nil
 	}
-	return &Result{Answer: answer, Source: "copilot-sdk"}
+	return &Result{Answer: answer, Source: "anthropic"}
 }
 
-// ChatStreamWithDecision streams a multi-turn conversation using the Oracle SDK.
-// Sessions are pooled by sessionID — cold-start cost is paid once per conversation,
-// not once per message.
+func randomSessionID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return "stateless-" + hex.EncodeToString(b)
+}
+
+// ChatStreamWithDecision streams a response from the Anthropic API.
+// Empty sessionID = stateless mode: one-shot, never pooled.
+// The caller is expected to pass the full message history in messages —
+// the Anthropic API receives it natively without the system-prompt injection
+// hack that the previous SDK layer required.
 func ChatStreamWithDecision(ctx context.Context, messages []Message, decision Decision, sessionID string) <-chan string {
 	out := make(chan string, 128)
-	c := GetClient()
-	if c == nil {
+
+	if !Available() {
 		go func() {
-			out <- "[Oracle SDK client not initialized]"
+			out <- "[Oracle: ANTHROPIC_API_KEY not configured]"
 			close(out)
 		}()
 		return out
 	}
 
+	stateless := sessionID == ""
+	if stateless {
+		sessionID = randomSessionID()
+	}
+
 	go func() {
 		defer close(out)
 
-		session, err := getOrCreateSession(ctx, c, messages, decision, sessionID)
-		if err != nil {
-			out <- fmt.Sprintf("[Oracle SDK Session Error: %v]", err)
-			return
+		if !stateless {
+			sessionPool.Store(sessionID, &sessionEntry{lastUsed: time.Now()})
 		}
 
-		// Update last-used so the reaper doesn't evict a live session.
-		if v, ok := sessionPool.Load(sessionID); ok {
-			v.(*sessionEntry).lastUsed = time.Now()
+		// Separate system prompt from conversation messages.
+		systemPrompt := ""
+		apiMessages := messages
+		if len(messages) > 0 && messages[0].Role == "system" {
+			systemPrompt = messages[0].Content
+			apiMessages = messages[1:]
+		}
+		if systemPrompt == "" {
+			systemPrompt = getAgentPrompt(decision.Agent)
 		}
 
-		// 1. Handle Streaming via Events
-		unsubscribe := session.On(func(event copilot.SessionEvent) {
-			if event.Type == copilot.SessionEventTypeAssistantMessageDelta {
-				if d, ok := event.Data.(*copilot.AssistantMessageDeltaData); ok {
-					out <- d.DeltaContent
-				}
+		// Inject the best-matching .ori skill overlay based on the last user message.
+		lastUser := ""
+		for i := len(apiMessages) - 1; i >= 0; i-- {
+			if apiMessages[i].Role == "user" {
+				lastUser = apiMessages[i].Content
+				break
 			}
-		})
-		defer unsubscribe()
-
-		// 2. Send with Mode handling (Steering)
-		lastMsg := ""
-		if len(messages) > 0 {
-			lastMsg = messages[len(messages)-1].Content
 		}
-		mode := "enqueue"
-		if isSteeringIntent(lastMsg) {
-			mode = "immediate"
-		}
-
-		opts := copilot.MessageOptions{
-			Prompt: lastMsg,
-			Mode:   mode,
-		}
-		if decision.Route == RouteImageReasoning {
-			opts.Attachments = extractImageAttachments(lastMsg)
-		}
-
-		_, err = session.Send(ctx, opts)
-		if err != nil {
-			// Session may be dead — evict so next request gets a fresh one.
-			sessionPool.Delete(sessionID)
-			session.Disconnect()
-			out <- fmt.Sprintf("[Oracle SDK Send Error: %v]", err)
-			return
-		}
-
-		// 3. Wait for turn completion
-		turnDone := make(chan struct{}, 1)
-		session.On(func(event copilot.SessionEvent) {
-			if event.Type == copilot.SessionEventTypeAssistantTurnEnd {
-				select {
-				case turnDone <- struct{}{}:
-				default:
-				}
+		if skill := matchSkill(lastUser); skill != "" {
+			if systemPrompt != "" {
+				systemPrompt += "\n\n---\n\n" + skill
+			} else {
+				systemPrompt = skill
 			}
-		})
+		}
 
-		select {
-		case <-turnDone:
-		case <-ctx.Done():
+		if err := streamAnthropicMessages(ctx, decision.Model, systemPrompt, apiMessages, decision.ThinkingBudget, out); err != nil {
+			out <- fmt.Sprintf("[Oracle Error: %v]", err)
 		}
 	}()
 
 	return out
 }
 
-// getOrCreateSession returns a pooled session for sessionID, creating one if needed.
-func getOrCreateSession(ctx context.Context, c *copilot.Client, messages []Message, decision Decision, sessionID string) (*copilot.Session, error) {
-	if v, ok := sessionPool.Load(sessionID); ok {
-		return v.(*sessionEntry).session, nil
+// streamAnthropicMessages calls the Anthropic messages API with SSE streaming.
+// System prompt is sent as a cached content block (prompt caching).
+// When thinkingBudget > 0, extended thinking is enabled for the request and
+// thinking blocks are consumed silently — only text deltas reach the caller.
+func streamAnthropicMessages(ctx context.Context, model, system string, messages []Message, thinkingBudget int, out chan<- string) error {
+	type apiMsg struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	apiMsgs := make([]apiMsg, 0, len(messages))
+	for _, m := range messages {
+		apiMsgs = append(apiMsgs, apiMsg{Role: m.Role, Content: m.Content})
 	}
 
-	// Cap session creation independently — CreateSession can hang if the daemon
-	// is unresponsive without the caller's context ever timing out.
-	createCtx, createCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer createCancel()
-
-	agents := cachedLoadCustomAgents(".github/agents")
-
-	config := &copilot.SessionConfig{
-		SessionID:           sessionID,
-		Agent:               decision.Agent,
-		Model:               decision.Model,
-		Streaming:           true,
-		CustomAgents:        agents,
-		SkillDirectories:    []string{".github/skills", "oricli_core/skills"},
-		OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
+	outputTokens := maxTokens
+	payload := map[string]any{
+		"model":    model,
+		"messages": apiMsgs,
+		"stream":   true,
 	}
 
-	// Only wire MCP for routes that actually invoke tools.
-	// Light/chat routes skip it — MCP OAuth discovery adds 30-80s to session init.
-	if decision.Route == RouteHeavyReasoning || decision.Route == RouteResearch {
-		config.MCPServers = map[string]copilot.MCPServerConfig{
-			"ori-runtime": copilot.MCPHTTPServerConfig{
-				URL: "https://glm.thynaptic.com/v1/mcp",
-				Headers: map[string]string{
-					"Authorization": "Bearer ori.8f9f406a.Mo5YFWO0Tx5IKE46fG1mXfA7kAyLzy",
-				},
-			},
+	// System prompt as cached content block — saves tokens on repeated turns.
+	// Anthropic only caches blocks >= 1024 tokens; smaller prompts pass through unchanged.
+	if system != "" {
+		payload["system"] = []map[string]any{{
+			"type":          "text",
+			"text":          system,
+			"cache_control": map[string]any{"type": "ephemeral"},
+		}}
+	}
+
+	// Extended thinking — heavy and research routes only.
+	// temperature must be 1 when thinking is enabled (Anthropic requirement).
+	// max_tokens covers both thinking budget + text output.
+	if thinkingBudget > 0 {
+		payload["thinking"] = map[string]any{
+			"type":         "enabled",
+			"budget_tokens": thinkingBudget,
 		}
+		payload["temperature"] = 1
+		outputTokens = thinkingBudget + maxTokens
 	}
-	if len(messages) > 0 && messages[0].Role == "system" {
-		config.SystemMessage = &copilot.SystemMessageConfig{
-			Mode:    "replace",
-			Content: messages[0].Content,
-		}
-	}
+	payload["max_tokens"] = outputTokens
 
-	session, err := c.CreateSession(createCtx, config)
+	body, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("[Oracle] CreateSession failed (id=%q): %v", sessionID, err)
-		resumeConfig := &copilot.ResumeSessionConfig{
-			Model:               config.Model,
-			CustomAgents:        config.CustomAgents,
-			MCPServers:          config.MCPServers,
-			SkillDirectories:    config.SkillDirectories,
-			SystemMessage:       config.SystemMessage,
-			Streaming:           true,
-			OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
-		}
-		session, err = c.ResumeSession(createCtx, sessionID, resumeConfig)
-		if err != nil {
-			return nil, err
-		}
+		return fmt.Errorf("marshal request: %w", err)
 	}
 
-	sessionPool.Store(sessionID, &sessionEntry{session: session, lastUsed: time.Now()})
-	log.Printf("[Oracle] session %s created (model=%s)", sessionID, decision.Model)
-	return session, nil
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		anthropicBase+"/messages", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_KEY"))
+	req.Header.Set("anthropic-version", anthropicVersion)
+	// Required header for prompt caching.
+	req.Header.Set("anthropic-beta", "prompt-caching-2024-07-31")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("anthropic request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("anthropic status %d: %s", resp.StatusCode, string(b))
+	}
+
+	// Track content block types by index so we can route thinking vs text deltas.
+	// thinking blocks are consumed silently; only text_delta events reach the caller.
+	blockTypes := make(map[int]string)
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			break
+		}
+
+		var event struct {
+			Type         string `json:"type"`
+			Index        int    `json:"index"`
+			ContentBlock struct {
+				Type string `json:"type"`
+			} `json:"content_block"`
+			Delta struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"delta"`
+		}
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			continue
+		}
+
+		switch event.Type {
+		case "content_block_start":
+			blockTypes[event.Index] = event.ContentBlock.Type
+		case "content_block_delta":
+			if blockTypes[event.Index] == "text" && event.Delta.Type == "text_delta" {
+				out <- event.Delta.Text
+			}
+		case "content_block_stop":
+			delete(blockTypes, event.Index)
+		}
+	}
+	return scanner.Err()
 }
 
-// cachedLoadCustomAgents returns LoadCustomAgents results, re-reading disk at most every 5 min.
-func cachedLoadCustomAgents(dir string) []copilot.CustomAgentConfig {
+// AnalyzeImage sends an image to Claude for vision analysis.
+func AnalyzeImage(ctx context.Context, prompt, imageB64, mimeType string) (string, error) {
+	if !Available() {
+		return "", fmt.Errorf("vision: ANTHROPIC_API_KEY not set")
+	}
+	if mimeType == "" {
+		mimeType = "image/png"
+	}
+	model := strings.TrimSpace(os.Getenv("ORACLE_VISION_MODEL"))
+	if model == "" {
+		model = defaultHeavyModel
+	}
+
+	payload := map[string]any{
+		"model":      model,
+		"max_tokens": 1024,
+		"messages": []map[string]any{{
+			"role": "user",
+			"content": []map[string]any{
+				{
+					"type": "image",
+					"source": map[string]any{
+						"type":       "base64",
+						"media_type": mimeType,
+						"data":       imageB64,
+					},
+				},
+				{"type": "text", "text": prompt},
+			},
+		}},
+	}
+
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		anthropicBase+"/messages", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("vision: build request: %w", err)
+	}
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_KEY"))
+	req.Header.Set("anthropic-version", anthropicVersion)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("vision: anthropic call: %w", err)
+	}
+	defer resp.Body.Close()
+
+	b, _ := io.ReadAll(resp.Body)
+	var result struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(b, &result); err != nil {
+		return "", fmt.Errorf("vision: decode response: %w", err)
+	}
+	if result.Error != nil {
+		return "", fmt.Errorf("vision: anthropic error: %s", result.Error.Message)
+	}
+	for _, block := range result.Content {
+		if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
+			log.Printf("[Oracle:Vision] analyzed image via %s (%d chars)", model, len(block.Text))
+			return strings.TrimSpace(block.Text), nil
+		}
+	}
+	return "", fmt.Errorf("vision: empty response from anthropic (status=%d)", resp.StatusCode)
+}
+
+func getAgentPrompt(name string) string {
+	agents := cachedLoadCustomAgents(".github/agents")
+	if def, ok := agents[name]; ok {
+		return def.Prompt
+	}
+	return ""
+}
+
+func cachedLoadCustomAgents(dir string) map[string]agentDef {
 	agentCacheMu.RLock()
-	if time.Since(agentCacheAt) < agentCacheTTL {
+	if time.Since(agentCacheAt) < agentCacheTTL && agentCache != nil {
 		cached := agentCache
 		agentCacheMu.RUnlock()
 		return cached
@@ -297,7 +408,7 @@ func cachedLoadCustomAgents(dir string) []copilot.CustomAgentConfig {
 
 	agents, err := LoadCustomAgents(dir)
 	if err != nil {
-		return nil
+		return map[string]agentDef{}
 	}
 
 	agentCacheMu.Lock()
@@ -307,42 +418,38 @@ func cachedLoadCustomAgents(dir string) []copilot.CustomAgentConfig {
 	return agents
 }
 
-// LoadCustomAgents parses .agent.md files into SDK CustomAgent structs.
-func LoadCustomAgents(dir string) ([]copilot.CustomAgentConfig, error) {
+// LoadCustomAgents parses .agent.md files from dir, keyed by agent name.
+func LoadCustomAgents(dir string) (map[string]agentDef, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	var agents []copilot.CustomAgentConfig
+	agents := make(map[string]agentDef)
 	for _, f := range files {
-		if !f.IsDir() && strings.HasSuffix(f.Name(), ".agent.md") {
-			path := filepath.Join(dir, f.Name())
-			data, err := os.ReadFile(path)
-			if err != nil {
-				continue
-			}
-
-			parts := strings.SplitN(string(data), "---", 3)
-			if len(parts) < 3 {
-				continue
-			}
-
-			var metadata struct {
-				Name        string   `yaml:"name"`
-				Description string   `yaml:"description"`
-				Tools       []string `yaml:"tools"`
-			}
-			if err := yaml.Unmarshal([]byte(parts[1]), &metadata); err != nil {
-				continue
-			}
-
-			agents = append(agents, copilot.CustomAgentConfig{
-				Name:        metadata.Name,
-				Description: metadata.Description,
-				Tools:       metadata.Tools,
-				Prompt:      strings.TrimSpace(parts[2]),
-			})
+		if f.IsDir() || !strings.HasSuffix(f.Name(), ".agent.md") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, f.Name()))
+		if err != nil {
+			continue
+		}
+		parts := strings.SplitN(string(data), "---", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		var meta struct {
+			Name        string   `yaml:"name"`
+			Description string   `yaml:"description"`
+			Tools       []string `yaml:"tools"`
+		}
+		if err := yaml.Unmarshal([]byte(parts[1]), &meta); err != nil {
+			continue
+		}
+		agents[meta.Name] = agentDef{
+			Name:        meta.Name,
+			Description: meta.Description,
+			Prompt:      strings.TrimSpace(parts[2]),
 		}
 	}
 	return agents, nil
@@ -350,8 +457,8 @@ func LoadCustomAgents(dir string) ([]copilot.CustomAgentConfig, error) {
 
 func isSteeringIntent(msg string) bool {
 	lower := strings.ToLower(msg)
-	return strings.HasPrefix(lower, "stop") || 
-		strings.HasPrefix(lower, "actually") || 
+	return strings.HasPrefix(lower, "stop") ||
+		strings.HasPrefix(lower, "actually") ||
 		strings.HasPrefix(lower, "no, ") ||
 		strings.HasPrefix(lower, "wait")
 }
@@ -367,67 +474,22 @@ func ShouldQuery(stimulus string, trapCount int) bool {
 		strings.HasPrefix(s, "does")
 }
 
-func extractImageAttachments(msg string) []copilot.Attachment {
-	var attachments []copilot.Attachment
-	// Simple heuristic: look for absolute paths ending in image extensions
-	words := strings.Fields(msg)
-	for _, w := range words {
+func extractImagePaths(msg string) []string {
+	var paths []string
+	for _, w := range strings.Fields(msg) {
 		ext := strings.ToLower(filepath.Ext(w))
 		if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp" {
 			if filepath.IsAbs(w) {
 				if _, err := os.Stat(w); err == nil {
-					p := w // capture local var
-					attachments = append(attachments, copilot.Attachment{
-						Type: "file",
-						Path: &p,
-					})
+					paths = append(paths, w)
 				}
 			}
 		}
 	}
-	return attachments
+	return paths
 }
 
-func copilotModelForRoute(route Route) string {
-	// 1. Explicit env overrides always win.
-	switch route {
-	case RouteHeavyReasoning:
-		if m := strings.TrimSpace(os.Getenv("ORACLE_COPILOT_MODEL_HEAVY")); m != "" {
-			return m
-		}
-	case RouteResearch:
-		if m := strings.TrimSpace(os.Getenv("ORACLE_COPILOT_MODEL_RESEARCH")); m != "" {
-			return m
-		}
-		if m := strings.TrimSpace(os.Getenv("ORACLE_COPILOT_MODEL_HEAVY")); m != "" {
-			return m
-		}
-	default:
-		if m := strings.TrimSpace(os.Getenv("ORACLE_COPILOT_MODEL_LIGHT")); m != "" {
-			return m
-		}
-	}
-	if m := strings.TrimSpace(os.Getenv("ORACLE_COPILOT_MODEL")); m != "" && !strings.HasPrefix(m, "gpt-4.1") {
-		return m
-	}
-
-	// 2. Catalog selection (auto-refreshed, 24h TTL).
-	if m := catalogModelForRoute(route); m != "" {
-		return m
-	}
-
-	// 3. Hardcoded defaults as last resort.
-	switch route {
-	case RouteHeavyReasoning:
-		return defaultCopilotHeavyModel
-	case RouteResearch:
-		return defaultCopilotResearchModel
-	default:
-		return defaultCopilotLightModel
-	}
-}
-
-// FormatInjection maintains backward compatibility for system prompt overrides.
+// FormatInjection wraps a pre-computed answer in a system override block.
 func FormatInjection(r *Result) string {
 	if r == nil {
 		return ""
@@ -452,15 +514,7 @@ func Collect(ch <-chan string) string {
 	return sb.String()
 }
 
-func Available() bool {
-	return GetClient() != nil
-}
-
-func AvailableForRoute(route Route) bool {
-	return Available()
-}
-
-// ConvertMsgs is kept for compatibility.
+// ConvertMsgs converts the generic map format used by server_v2 to Oracle Messages.
 func ConvertMsgs(msgs []map[string]string) []Message {
 	out := make([]Message, 0, len(msgs))
 	for _, m := range msgs {

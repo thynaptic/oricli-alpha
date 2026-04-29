@@ -1,5 +1,5 @@
 {
-  "schema_version": "2026-04-14",
+  "schema_version": "2026-04-25",
   "description": "Copy-paste request templates for common ORI public API patterns.",
   "developer_portal_base_url": "https://dev.thynaptic.com",
   "developer_portal_note": "Static manifests (llms.txt, agent.json, openapi.json, tools.json, requests.json) are published on the developer portal. Every runtime call below uses base_url on glm.thynaptic.com.",
@@ -254,6 +254,88 @@
     "pad_stats": {
       "method": "GET",
       "path": "/pad/stats",
+      "headers": {}
+    },
+
+    "task_create": {
+      "_comment": "Create a persistent task with inline steps. surface can be 'home', 'studio', 'api', etc.",
+      "method": "POST",
+      "path": "/tasks",
+      "headers": {},
+      "body": {
+        "title": "Follow up with the plumber",
+        "description": "He mentioned a callback about the pipe job from last summer.",
+        "surface": "home",
+        "priority": 2,
+        "steps": [
+          {
+            "title": "Draft follow-up message",
+            "action": "draft",
+            "args": { "topic": "plumber callback", "prompt": "Draft a friendly follow-up to schedule the pipe job callback." },
+            "order_num": 1
+          },
+          {
+            "title": "Save draft to memory",
+            "action": "save",
+            "args": { "topic": "plumber follow-up" },
+            "depends_on": [],
+            "order_num": 2
+          }
+        ]
+      }
+    },
+    "task_list": {
+      "_comment": "List active tasks for the home surface. Filter by status or session_id as needed.",
+      "method": "GET",
+      "path": "/tasks?status=pending&surface=home&limit=20",
+      "headers": {}
+    },
+    "task_execute_sse": {
+      "_comment": "Execute a task's step DAG with SSE streaming. Each event: {step_id, status, snippet}. Final: {done: true, task: {...}}",
+      "method": "POST",
+      "path": "/tasks/<task-id>/execute",
+      "headers": { "Accept": "text/event-stream" }
+    },
+    "task_execute_json": {
+      "_comment": "Execute a task and wait for full JSON result (no streaming).",
+      "method": "POST",
+      "path": "/tasks/<task-id>/execute",
+      "headers": {}
+    },
+
+    "entity_upsert": {
+      "_comment": "Create or update a named entity. Omit id to create. Provide id to update.",
+      "method": "POST",
+      "path": "/entities",
+      "headers": {},
+      "body": {
+        "name": "Mike the Plumber",
+        "kind": "vendor",
+        "aliases": ["the plumber", "plumber mike"]
+      }
+    },
+    "entity_event_record": {
+      "_comment": "Record a timestamped event against an entity. These accumulate to power relational recall ('the plumber' → invoice history + messages).",
+      "method": "POST",
+      "path": "/entities/<entity-id>/events",
+      "headers": {},
+      "body": {
+        "kind": "invoice",
+        "content": "Invoice #2024-08 — pipe repair $340. Paid via check.",
+        "metadata": { "amount": "340", "reference": "2024-08" },
+        "occurred_at": "2024-08-15T14:00:00Z"
+      }
+    },
+    "entity_search": {
+      "_comment": "Search entities by name/alias substring. Returns count + entities array.",
+      "method": "GET",
+      "path": "/entities?search=plumber&kind=vendor",
+      "headers": {}
+    },
+    "entity_get_with_history": {
+      "_comment": "Fetch entity + up to 50 events. Use event_limit= to override.",
+      "method": "GET",
+      "path": "/entities/<entity-id>?event_limit=50",
       "headers": {}
     }
   }

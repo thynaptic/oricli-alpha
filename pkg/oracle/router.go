@@ -16,25 +16,38 @@ type RouteHints struct {
 	IsCodeAction     bool
 	HasVisualInput   bool
 	RequestedModel   string
+	Surface          string // X-Ori-Context value (e.g. "mise", "studio")
 }
 
 type Decision struct {
-	Route      Route
-	Backend    string
-	Model      string
-	Agent      string
-	Reason     string
-	WorkingDir string // if set, copilot runs from this dir instead of process CWD
+	Route          Route
+	Backend        string
+	Model          string
+	Agent          string
+	Reason         string
+	WorkingDir     string
+	ThinkingBudget int // 0 = disabled; >0 enables extended thinking with this token budget
 }
 
 // Decide determines the Oracle route for a request.
 func Decide(query string, hints RouteHints) Decision {
 	lower := strings.ToLower(strings.TrimSpace(query))
 
+	// Surface-specific routing: bypass repo agents for known product surfaces.
+	if hints.Surface == "mise" {
+		return Decision{
+			Route:   RouteLightChat,
+			Backend: "anthropic",
+			Model:   modelForRoute(RouteLightChat),
+			Agent:   "mise-culinary",
+			Reason:  "Mise by ORI culinary surface",
+		}
+	}
+
 	if hints.HasVisualInput || looksLikeImageReasoning(lower) {
 		return Decision{
 			Route:   RouteImageReasoning,
-			Backend: "codex",
+			Backend: "anthropic",
 			Agent:   "ori-multimodal",
 			Reason:  "visual input or image-grounded reasoning request",
 		}
@@ -42,19 +55,20 @@ func Decide(query string, hints RouteHints) Decision {
 
 	if hints.IsResearchAction {
 		return Decision{
-			Route:   RouteResearch,
-			Backend: "copilot",
-			Model:   copilotModelForRoute(RouteResearch),
-			Agent:   "ori-research",
-			Reason:  "research or analysis workflow",
+			Route:          RouteResearch,
+			Backend:        "anthropic",
+			Model:          modelForRoute(RouteResearch),
+			Agent:          "ori-research",
+			Reason:         "research or analysis workflow",
+			ThinkingBudget: thinkingBudgetForRoute(RouteResearch),
 		}
 	}
 
 	if isConversationalShort(lower) || isSessionIntrospective(lower) {
 		return Decision{
 			Route:   RouteLightChat,
-			Backend: "copilot",
-			Model:   copilotModelForRoute(RouteLightChat),
+			Backend: "anthropic",
+			Model:   modelForRoute(RouteLightChat),
 			Agent:   "ori-chat-fast",
 			Reason:  "light conversational turn",
 		}
@@ -62,18 +76,19 @@ func Decide(query string, hints RouteHints) Decision {
 
 	if hints.IsCodeAction || requestsHeavyReasoning(lower) || requestsHighEndModel(hints.RequestedModel) {
 		return Decision{
-			Route:   RouteHeavyReasoning,
-			Backend: "copilot",
-			Model:   copilotModelForRoute(RouteHeavyReasoning),
-			Agent:   "ori-reasoner",
-			Reason:  "implementation or heavy reasoning request",
+			Route:          RouteHeavyReasoning,
+			Backend:        "anthropic",
+			Model:          modelForRoute(RouteHeavyReasoning),
+			Agent:          "ori-reasoner",
+			Reason:         "implementation or heavy reasoning request",
+			ThinkingBudget: thinkingBudgetForRoute(RouteHeavyReasoning),
 		}
 	}
 
 	return Decision{
 		Route:   RouteLightChat,
-		Backend: "copilot",
-		Model:   copilotModelForRoute(RouteLightChat),
+		Backend: "anthropic",
+		Model:   modelForRoute(RouteLightChat),
 		Agent:   "ori-chat-fast",
 		Reason:  "default conversational route",
 	}
@@ -86,25 +101,6 @@ func DecideFromMessages(messages []Message, hints RouteHints) Decision {
 		}
 	}
 	return Decide("", hints)
-}
-
-// ConvertMsgs converts the server's []map[string]string message format to
-// the oracle.Message slice expected by ChatStream.
-func ConvertMsgs(msgs []map[string]string) []Message {
-	out := make([]Message, 0, len(msgs))
-	for _, m := range msgs {
-		out = append(out, Message{Role: m["role"], Content: m["content"]})
-	}
-	return out
-}
-
-// Collect drains a ChatStream channel and returns the full response string.
-func Collect(ch <-chan string) string {
-	var sb strings.Builder
-	for tok := range ch {
-		sb.WriteString(tok)
-	}
-	return sb.String()
 }
 
 var conversationalPrefixes = []string{

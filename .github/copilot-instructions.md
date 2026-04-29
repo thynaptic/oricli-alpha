@@ -26,14 +26,14 @@ This repository is a Go-based ORI runtime, not the older Python/FastAPI stack.
 - Run focused `go test` or `go build` checks on touched packages before finishing when feasible.
 - Update stale docs when implementation truth changes, especially for Oracle, routing, or public API behavior.
 - Repo-level MCP configuration lives in `.mcp.json`.
-- The ORI MCP server expects `COPILOT_MCP_ORI_API_KEY` to be available in the Copilot environment.
+- The ORI MCP server expects `ORI_API_KEY` (bearer token) in the request headers. `ANTHROPIC_API_KEY` must be set in the engine environment for Oracle to function.
 
 ## Oracle guidance
 
-- `light_chat` should stay fast and low-overhead.
-- `heavy_reasoning` should prefer the stronger Copilot lane.
-- `research` should behave like a read-heavy investigative helper.
-- `image_reasoning` should route to Codex, not the standard Copilot lane.
+- `light_chat` should stay fast and low-overhead (`claude-haiku-4-5-20251001`).
+- `heavy_reasoning` uses `claude-sonnet-4-6` for strong code and architecture work.
+- `research` should behave like a read-heavy investigative helper (`claude-sonnet-4-6`).
+- `image_reasoning` uses Anthropic vision via `AnalyzeImage()` — not a separate model lane.
 
 ## What not to assume
 

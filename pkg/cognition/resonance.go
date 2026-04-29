@@ -1,6 +1,7 @@
 package cognition
 
 import (
+	"log"
 	"math"
 	"time"
 
@@ -80,6 +81,20 @@ func NewResonanceService() *ResonanceService {
 		Drift:      drift.NewDetector(),
 		ToneTrack:  tonetrack.NewTracker(),
 		AECI:       aeci.NewEngine(),
+	}
+}
+
+// WireERIStore creates a JSONERIStore at path, restores prior snapshots, and
+// injects the store into the Temporal memory so ERI baselines survive restarts.
+func (r *ResonanceService) WireERIStore(path string) {
+	store, err := temporal.NewJSONERIStore(path)
+	if err != nil {
+		log.Printf("[ResonanceService] ERI store unavailable: %v", err)
+		return
+	}
+	r.Temporal.SetStore(store)
+	if err := r.Temporal.LoadFromStore(); err != nil {
+		log.Printf("[ResonanceService] ERI load error: %v", err)
 	}
 }
 
