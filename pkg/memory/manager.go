@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/thynaptic/oricli-go/pkg/state"
+	"github.com/thynaptic/oricli-go/pkg/llm"
 	"github.com/ollama/ollama/api"
 	chromem "github.com/philippgille/chromem-go"
 )
@@ -25,17 +25,16 @@ const (
 	collectionNameBase       = "conversation_history"
 	knowledgeCollectionBase  = "knowledge_base"
 	ollamaAPIHostEnv         = "OLLAMA_HOST"
-	retrievalModeEnv         = "TALOS_MEMORY_RETRIEVAL_MODE"
-	candidateWeightsEnv      = "TALOS_RETRIEVAL_CANDIDATE_WEIGHTS"
-	dynamicWeightsEnv        = "TALOS_RETRIEVAL_DYNAMIC_WEIGHTS"
-	knowledgeWeightsEnv      = "TALOS_RETRIEVAL_KNOWLEDGE_WEIGHTS"
-	segmentWeightsEnv        = "TALOS_RETRIEVAL_SEGMENT_WEIGHTS"
+	retrievalModeEnv         = "ORI_MEMORY_RETRIEVAL_MODE"
+	candidateWeightsEnv      = "ORI_RETRIEVAL_CANDIDATE_WEIGHTS"
+	dynamicWeightsEnv        = "ORI_RETRIEVAL_DYNAMIC_WEIGHTS"
+	knowledgeWeightsEnv      = "ORI_RETRIEVAL_KNOWLEDGE_WEIGHTS"
+	segmentWeightsEnv        = "ORI_RETRIEVAL_SEGMENT_WEIGHTS"
 	defaultBaseImportance    = 0.5
 	defaultFreshnessHalfLife = 24 * time.Hour
 	importanceEvalTimeout    = 8 * time.Second
 )
 
-var importanceEvalModels = []string{"llama3.2:1b", "qwen2.5:3b-instruct"}
 
 const (
 	retrievalModeSemantic = "semantic"
@@ -219,7 +218,7 @@ func NewMemoryManager() (*MemoryManager, error) {
 }
 
 func resolveEmbeddingModel(client *api.Client) (string, error) {
-	if v := strings.TrimSpace(firstNonEmptyEnv("TALOS_EMBED_MODEL", "EMBEDDING_MODEL")); v != "" {
+	if v := strings.TrimSpace(firstNonEmptyEnv("ORI_EMBED_MODEL", "EMBEDDING_MODEL")); v != "" {
 		return v, nil
 	}
 
@@ -277,7 +276,7 @@ func resolveEmbeddingModel(client *api.Client) (string, error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("no embedding-capable model resolved from current Ollama tags; set TALOS_EMBED_MODEL explicitly")
+	return "", fmt.Errorf("no embedding-capable model resolved from current Ollama tags; set ORI_EMBED_MODEL explicitly")
 }
 
 func embeddingCandidateScore(model string) int {
@@ -307,7 +306,7 @@ func firstNonEmptyEnv(keys ...string) string {
 }
 
 func shouldAutoPullEmbeddingModel() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("TALOS_AUTO_PULL_EMBED_MODEL")))
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("ORI_AUTO_PULL_EMBED_MODEL")))
 	switch v {
 	case "", "1", "true", "yes", "on":
 		return true
@@ -1164,7 +1163,7 @@ func (mm *MemoryManager) KnowledgeCount() int {
 
 func (mm *MemoryManager) evaluateMessageImportance(role, content string) float64 {
 	base := heuristicImportance(role, content)
-	if mm.client == nil || strings.TrimSpace(content) == "" {
+	if strings.TrimSpace(content) == "" {
 		return base
 	}
 
@@ -1176,30 +1175,14 @@ importance must be in [0.0,1.0], where:
 
 	user := fmt.Sprintf(`{"role":%q,"content":%q}`, role, content)
 
-	for _, model := range importanceEvalModels {
-		opts, _ := state.ResolveEntropyOptions(user)
-		req := &api.ChatRequest{
-			Model:   model,
-			Options: opts,
-			Messages: []api.Message{
-				{Role: "system", Content: system},
-				{Role: "user", Content: user},
-			},
-		}
-
+	if llm.Available() {
 		ctx, cancel := context.WithTimeout(context.Background(), importanceEvalTimeout)
-		var out strings.Builder
-		err := mm.client.Chat(ctx, req, func(resp api.ChatResponse) error {
-			out.WriteString(resp.Message.Content)
-			return nil
-		})
+		raw, err := llm.Chat(ctx, system, user)
 		cancel()
-		if err != nil {
-			continue
-		}
-
-		if imp, ok := parseImportanceJSON(out.String()); ok {
-			return imp
+		if err == nil {
+			if imp, ok := parseImportanceJSON(raw); ok {
+				return imp
+			}
 		}
 	}
 	return base

@@ -10,8 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thynaptic/oricli-go/pkg/state"
-	"github.com/ollama/ollama/api"
+	"github.com/thynaptic/oricli-go/pkg/llm"
 )
 
 const defaultAlignmentLogPath = ".memory/alignment_audit.json"
@@ -114,37 +113,19 @@ func (aa *AlignmentAuditor) Correct(output string, modelCandidates []string) str
 		return output
 	}
 
-	// Optional lightweight LLM polish when available.
-	client, err := api.ClientFromEnvironment()
-	if err != nil || len(modelCandidates) == 0 {
+	// Optional LLM polish when available.
+	if !llm.Available() {
 		return corrected
 	}
-
 	system := `You are an alignment correction assistant.
 Preserve technical utility while enforcing policy constraints.
 Do not remove critical technical steps; redact only sensitive details.
 Return only the corrected answer text.`
 	user := "Policy profile: " + aa.PolicyProfile + "\n\nCandidate output:\n" + corrected
-	for _, model := range modelCandidates {
-		opts, _ := state.ResolveEntropyOptions(user)
-		req := &api.ChatRequest{
-			Model:   model,
-			Options: opts,
-			Messages: []api.Message{
-				{Role: "system", Content: system},
-				{Role: "user", Content: user},
-			},
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		var out strings.Builder
-		err := client.Chat(ctx, req, func(resp api.ChatResponse) error {
-			out.WriteString(resp.Message.Content)
-			return nil
-		})
-		cancel()
-		if err == nil && strings.TrimSpace(out.String()) != "" {
-			return strings.TrimSpace(stripMarkdownCodeFences(out.String()))
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	if refined, err := llm.Chat(ctx, system, user); err == nil && strings.TrimSpace(refined) != "" {
+		return strings.TrimSpace(stripMarkdownCodeFences(refined))
 	}
 	return corrected
 }

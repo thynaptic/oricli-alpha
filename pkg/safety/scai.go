@@ -3,10 +3,9 @@ package safety
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/ollama/ollama/api"
+	"github.com/thynaptic/oricli-go/pkg/llm"
 )
 
 // --- Pillar 40: Sovereign Constitutional AI (SCAI) Auditor ---
@@ -72,7 +71,7 @@ func ClassifyAuditLevel(query string) AuditLevel {
 
 type SCAIAuditor struct {
 	Constitution      *Constitution
-	Model             string  // The SLM used for critique/revision (e.g. "ministral-3:3b")
+	Model             string  // The model used for critique/revision (e.g. "oracle/haiku")
 	SeverityThreshold float64 // 0.0–1.0; lower = stricter (default 0.5)
 	// Jury is the optional swarm jury verifier. When non-nil and audit level is Full,
 	// Critique() dispatches to peer nodes for multi-node SCAI validation.
@@ -87,12 +86,6 @@ type JuryVerifier interface {
 }
 
 func NewSCAIAuditor(c *Constitution, model string) *SCAIAuditor {
-	if model == "" {
-		model = os.Getenv("OLLAMA_MODEL")
-		if model == "" {
-			model = "qwen3:1.7b"
-		}
-	}
 	return &SCAIAuditor{
 		Constitution:      c,
 		Model:             model,
@@ -114,11 +107,9 @@ func (a *SCAIAuditor) SetSeverityThreshold(t float64) {
 
 // Critique evaluates a draft response against the Sovereign Constitution.
 func (a *SCAIAuditor) Critique(ctx context.Context, query, response string) (string, bool, error) {
-	client, err := api.ClientFromEnvironment()
-	if err != nil {
-		return "", false, err
+	if !llm.Available() {
+		return "", false, fmt.Errorf("llm unavailable")
 	}
-
 	system := a.Constitution.GetSystemPrompt()
 	user := fmt.Sprintf(`Draft Response to audit:
 ---
@@ -129,26 +120,12 @@ Task: Identify any violations of the Sovereign Constitution in the draft above.
 If there are no violations, respond with "CLEAR".
 If there are violations, list them specifically and explain why they violate the principles.`, response)
 
-	req := &api.ChatRequest{
-		Model: a.Model,
-		Messages: []api.Message{
-			{Role: "system", Content: system},
-			{Role: "user", Content: user},
-		},
-	}
-
-	var critique strings.Builder
-	err = client.Chat(ctx, req, func(resp api.ChatResponse) error {
-		critique.WriteString(resp.Message.Content)
-		return nil
-	})
+	critiqueStr, err := llm.Chat(ctx, system, user)
 	if err != nil {
 		return "", false, err
 	}
-
-	critiqueStr := strings.TrimSpace(critique.String())
+	critiqueStr = strings.TrimSpace(critiqueStr)
 	isViolated := !strings.Contains(strings.ToUpper(critiqueStr), "CLEAR") && len(critiqueStr) > 10
-
 	return critiqueStr, isViolated, nil
 }
 
@@ -177,36 +154,21 @@ func (a *SCAIAuditor) CritiqueWithJury(ctx context.Context, query, response stri
 
 // Revise rewrites the response based on the critique to ensure Constitutional compliance.
 func (a *SCAIAuditor) Revise(ctx context.Context, query, response, critique string) (string, error) {
-	client, err := api.ClientFromEnvironment()
-	if err != nil {
-		return "", err
+	if !llm.Available() {
+		return "", fmt.Errorf("llm unavailable")
 	}
-
 	system := a.Constitution.GetSystemPrompt()
 	user := fmt.Sprintf(`Original User Query: %s
 Draft Response: %s
 Critique of Draft: %s
 
-Task: Rewrite the Draft Response to fully comply with the Sovereign Constitution while maintaining technical utility. 
-Preserve the user's intent but remove any violations. 
+Task: Rewrite the Draft Response to fully comply with the Sovereign Constitution while maintaining technical utility.
+Preserve the user's intent but remove any violations.
 Return ONLY the revised response text.`, query, response, critique)
 
-	req := &api.ChatRequest{
-		Model: a.Model,
-		Messages: []api.Message{
-			{Role: "system", Content: system},
-			{Role: "user", Content: user},
-		},
-	}
-
-	var revised strings.Builder
-	err = client.Chat(ctx, req, func(resp api.ChatResponse) error {
-		revised.WriteString(resp.Message.Content)
-		return nil
-	})
+	revised, err := llm.Chat(ctx, system, user)
 	if err != nil {
 		return "", err
 	}
-
-	return strings.TrimSpace(revised.String()), nil
+	return strings.TrimSpace(revised), nil
 }

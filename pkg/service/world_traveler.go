@@ -45,7 +45,6 @@ type FeedTopic struct {
 // WorldTravelerDaemon schedules periodic world-knowledge ingestion runs.
 type WorldTravelerDaemon struct {
 	Curiosity *CuriosityDaemon
-	Governor  *CostGovernor
 
 	enabled    bool
 	interval   time.Duration
@@ -58,7 +57,7 @@ type WorldTravelerDaemon struct {
 
 // NewWorldTravelerDaemon creates a WorldTravelerDaemon from env config.
 // Returns nil if WORLD_TRAVELER_ENABLED != "true".
-func NewWorldTravelerDaemon(curiosity *CuriosityDaemon, governor *CostGovernor) *WorldTravelerDaemon {
+func NewWorldTravelerDaemon(curiosity *CuriosityDaemon) *WorldTravelerDaemon {
 	if os.Getenv("WORLD_TRAVELER_ENABLED") != "true" {
 		log.Println("[WorldTraveler] Disabled (set WORLD_TRAVELER_ENABLED=true to enable)")
 		return nil
@@ -84,9 +83,8 @@ func NewWorldTravelerDaemon(curiosity *CuriosityDaemon, governor *CostGovernor) 
 	}
 
 	d := &WorldTravelerDaemon{
-		Curiosity:  curiosity,
-		Governor:   governor,
-		enabled:    true,
+		Curiosity: curiosity,
+		enabled:   true,
 		interval:   interval,
 		maxSeeds:   maxSeeds,
 		newsAPIKey: os.Getenv("WORLD_TRAVELER_NEWS_API_KEY"),

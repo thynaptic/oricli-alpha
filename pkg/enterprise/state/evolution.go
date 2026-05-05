@@ -224,7 +224,7 @@ func saveBaseline(path string, b PersonalityBaseline) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-// ResolveEntropyOptions returns Ollama chat options derived from current session state
+// ResolveEntropyOptions returns chat options derived from current session state
 // and personality baseline without requiring a live Manager reference.
 func ResolveEntropyOptions(prompt string) (map[string]any, EntropySettings) {
 	snapshot := defaultSessionState()

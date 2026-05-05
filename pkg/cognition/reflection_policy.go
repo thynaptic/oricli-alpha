@@ -8,17 +8,17 @@ import (
 )
 
 const (
-	reflectionV2EnabledEnv      = "TALOS_REFLECTION_V2_ENABLED"
-	reflectionModeEnv           = "TALOS_REFLECTION_ENFORCEMENT_MODE"
-	reflectionWarnThresholdEnv  = "TALOS_REFLECTION_WARN_THRESHOLD"
-	reflectionSteerThresholdEnv = "TALOS_REFLECTION_STEER_THRESHOLD"
-	reflectionVetoThresholdEnv  = "TALOS_REFLECTION_VETO_THRESHOLD"
-	reflectionTimeoutMSEnv      = "TALOS_REFLECTION_TIMEOUT_MS"
-	reflectionCitationGateEnv   = "TALOS_REFLECTION_CITATION_GATE"
-	reflectionStatusEnabledEnv  = "TALOS_REFLECTION_STATUS_ENABLED"
-	reflectionLogPathEnv        = "TALOS_REFLECTION_LOG_PATH"
-	reflectionCacheTTLEnv       = "TALOS_REFLECTION_CACHE_TTL_SEC"
-	reflectionCacheMaxEnv       = "TALOS_REFLECTION_CACHE_MAX"
+	reflectionV2EnabledEnv      = "ORI_REFLECTION_V2_ENABLED"
+	reflectionModeEnv           = "ORI_REFLECTION_ENFORCEMENT_MODE"
+	reflectionWarnThresholdEnv  = "ORI_REFLECTION_WARN_THRESHOLD"
+	reflectionSteerThresholdEnv = "ORI_REFLECTION_STEER_THRESHOLD"
+	reflectionVetoThresholdEnv  = "ORI_REFLECTION_VETO_THRESHOLD"
+	reflectionTimeoutMSEnv      = "ORI_REFLECTION_TIMEOUT_MS"
+	reflectionCitationGateEnv   = "ORI_REFLECTION_CITATION_GATE"
+	reflectionStatusEnabledEnv  = "ORI_REFLECTION_STATUS_ENABLED"
+	reflectionLogPathEnv        = "ORI_REFLECTION_LOG_PATH"
+	reflectionCacheTTLEnv       = "ORI_REFLECTION_CACHE_TTL_SEC"
+	reflectionCacheMaxEnv       = "ORI_REFLECTION_CACHE_MAX"
 )
 
 const defaultReflectionAuditPath = ".memory/reflection_audit.jsonl"
@@ -49,7 +49,7 @@ func DefaultReflectionPolicy(mode string) ReflectionPolicy {
 	if veto < steer {
 		veto = steer
 	}
-	timeoutMS := envIntWithFloor(reflectionTimeoutMSEnv, 250, 50)
+	timeoutMS := envIntWithFloor(reflectionTimeoutMSEnv, 3000, 1000)
 	cacheTTL := time.Duration(envIntWithFloor(reflectionCacheTTLEnv, 90, 10)) * time.Second
 	cacheMax := envIntWithFloor(reflectionCacheMaxEnv, 512, 64)
 	enf := normalizeReflectionEnforcement(firstNonEmptyEnv(reflectionModeEnv, strings.TrimSpace(mode)))

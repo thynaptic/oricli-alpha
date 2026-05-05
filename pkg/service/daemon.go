@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thynaptic/oricli-go/pkg/llm"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
 )
 
@@ -206,7 +207,6 @@ type DreamDaemon struct {
 	Graph         *GraphService
 	Memory        *MemoryBridge
 	Gosh          *GoshModule
-	Ghost         *GhostClusterService
 	Orchestrator  *GoOrchestrator
 	GenService    *GenerationService
 	MemoryBank    *MemoryBank
@@ -226,14 +226,13 @@ type SCLMaintainer interface {
 	PromoteHighConfidence(ctx context.Context, threshold float64) (int, error)
 }
 
-func NewDreamDaemon(idleThreshold, checkInterval int64, graph *GraphService, memory *MemoryBridge, gosh *GoshModule, ghost *GhostClusterService, orch *GoOrchestrator) *DreamDaemon {
+func NewDreamDaemon(idleThreshold, checkInterval int64, graph *GraphService, memory *MemoryBridge, gosh *GoshModule, orch *GoOrchestrator) *DreamDaemon {
 	return &DreamDaemon{
 		IdleThreshold: idleThreshold,
 		CheckInterval: checkInterval,
 		Graph:         graph,
 		Memory:        memory,
 		Gosh:          gosh,
-		Ghost:         ghost,
 		Orchestrator:  orch,
 		lastActivity:  time.Now().Unix(),
 	}
@@ -277,10 +276,9 @@ func (d *DreamDaemon) ConsolidateExperience() {
 
 	log.Printf("[DreamDaemon] Consolidating %d Imprint signals into behavioral lessons.", len(feedbackFrags))
 
-	// Build a compact signal digest for the SLM — keep it short to stay within 512 token budget.
 	var sigLines []string
 	for i, f := range feedbackFrags {
-		if i >= 15 { // cap at 15 signals to stay within num_predict budget
+		if i >= 15 {
 			break
 		}
 		preview := f.Content
@@ -291,8 +289,8 @@ func (d *DreamDaemon) ConsolidateExperience() {
 	}
 	digest := strings.Join(sigLines, "\n")
 
-	if d.GenService == nil {
-		log.Println("[DreamDaemon] No GenService — cannot distill lessons.")
+	if !llm.Available() {
+		log.Println("[DreamDaemon] Oracle unavailable — skipping lesson distillation.")
 		return
 	}
 
@@ -301,17 +299,13 @@ func (d *DreamDaemon) ConsolidateExperience() {
 			"Each rule must be ≤15 words and actionable (e.g., 'Prefer direct answers over long explanations'). "+
 			"Return only a numbered list.\n\nSignals:\n%s\n\nRules:", digest)
 
-	result, err := d.GenService.Generate(prompt, map[string]interface{}{
-		"num_ctx":     4096,
-		"num_predict": 256,
-		"temperature": 0.3,
-	})
+	llmCtx, llmCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	responseText, err := llm.Chat(llmCtx, "", prompt)
+	llmCancel()
 	if err != nil {
-		log.Printf("[DreamDaemon] SLM distillation failed: %v", err)
+		log.Printf("[DreamDaemon] Distillation failed: %v", err)
 		return
 	}
-
-	responseText, _ := result["response"].(string)
 	if responseText == "" {
 		log.Println("[DreamDaemon] Empty distillation response.")
 		return
@@ -469,7 +463,7 @@ func (d *DreamDaemon) consolidateLeagueFindings() {
 
 	log.Printf("[DreamDaemon] ExploiterLeague: %d findings (%d corroborated) to consolidate.", len(relevant), corroboratedCount)
 
-	if d.GenService == nil {
+	if !llm.Available() {
 		return
 	}
 
@@ -480,16 +474,12 @@ func (d *DreamDaemon) consolidateLeagueFindings() {
 		digest,
 	)
 
-	result, err := d.GenService.Generate(prompt, map[string]interface{}{
-		"num_ctx":     4096,
-		"num_predict": 128,
-		"temperature": 0.3,
-	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	responseText, err := llm.Chat(ctx, "", prompt)
+	cancel()
 	if err != nil {
 		return
 	}
-
-	responseText, _ := result["response"].(string)
 	lessons := parseLessonList(responseText)
 	if len(lessons) == 0 {
 		return

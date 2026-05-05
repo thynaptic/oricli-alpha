@@ -12,19 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thynaptic/oricli-go/pkg/enterprise/state"
-	"github.com/ollama/ollama/api"
+	"encoding/base64"
+	"net/http"
+
+	"github.com/thynaptic/oricli-go/pkg/oracle"
 )
 
-var (
-	visionModels = []string{
-		"llava:latest",
-		"moondream:latest",
-		"llava",
-		"moondream",
-	}
-	jsonObjectRE = regexp.MustCompile(`(?s)\{.*\}`)
-)
+var jsonObjectRE = regexp.MustCompile(`(?s)\{.*\}`)
 
 // VisualDescriptor stores rich vision analysis for memory indexing.
 type VisualDescriptor struct {
@@ -45,7 +39,7 @@ type VisualIngestResult struct {
 	LinkedTextDocID string           `json:"linked_text_doc_id,omitempty"`
 }
 
-// IngestImageKnowledge processes an image with a local vision model, stores rich descriptors
+// IngestImageKnowledge processes an image via Oracle vision, stores rich descriptors
 // in the knowledge vector store, and links it to related text memory via cross-modal ID.
 func (mm *MemoryManager) IngestImageKnowledge(imagePath string, anchorText string, metadata map[string]string) (*VisualIngestResult, error) {
 	imagePath = strings.TrimSpace(imagePath)
@@ -53,7 +47,7 @@ func (mm *MemoryManager) IngestImageKnowledge(imagePath string, anchorText strin
 		return nil, fmt.Errorf("image path is required")
 	}
 	if mm == nil || mm.client == nil {
-		return nil, fmt.Errorf("memory manager not initialized with ollama client")
+		return nil, fmt.Errorf("memory manager not initialized")
 	}
 
 	absPath := imagePath
@@ -103,7 +97,16 @@ func (mm *MemoryManager) IngestImageKnowledge(imagePath string, anchorText strin
 }
 
 func (mm *MemoryManager) describeImage(imageBytes []byte, imageName string, anchorText string) (VisualDescriptor, string, error) {
-	system := `You are a technical vision parser for long-term memory indexing.
+	if !oracle.Available() {
+		return VisualDescriptor{}, "", fmt.Errorf("oracle unavailable for vision analysis")
+	}
+
+	mimeType := http.DetectContentType(imageBytes)
+	if mimeType == "application/octet-stream" {
+		mimeType = "image/png"
+	}
+
+	prompt := `You are a technical vision parser for long-term memory indexing.
 Analyze the image and return JSON only:
 {
   "summary":"...",
@@ -115,41 +118,27 @@ Analyze the image and return JSON only:
 Requirements:
 - OCR should include exact key labels, IDs, port numbers, and settings when visible.
 - Layout should describe spatial structure (top/bottom/left panels, table regions, form sections).
-- technical_observations should include operational clues relevant to infrastructure/software diagnostics.`
+- technical_observations should include operational clues relevant to infrastructure/software diagnostics.
 
-	user := "Image name: " + imageName
+Image name: ` + imageName
 	if strings.TrimSpace(anchorText) != "" {
-		user += "\nAnchor text/context: " + strings.TrimSpace(anchorText)
+		prompt += "\nAnchor text/context: " + strings.TrimSpace(anchorText)
 	}
 
-	for _, model := range visionModels {
-		opts, _ := state.ResolveEntropyOptions(user)
-		req := &api.ChatRequest{
-			Model:   model,
-			Options: opts,
-			Messages: []api.Message{
-				{Role: "system", Content: system},
-				{Role: "user", Content: user, Images: []api.ImageData{imageBytes}},
-			},
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
-		var out strings.Builder
-		err := mm.client.Chat(ctx, req, func(resp api.ChatResponse) error {
-			out.WriteString(resp.Message.Content)
-			return nil
-		})
-		cancel()
-		if err != nil {
-			continue
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+	defer cancel()
 
-		desc, ok := parseVisualDescriptor(out.String())
-		if !ok {
-			continue
-		}
-		return desc, model, nil
+	imageB64 := base64.StdEncoding.EncodeToString(imageBytes)
+	raw, err := oracle.AnalyzeImage(ctx, prompt, imageB64, mimeType)
+	if err != nil {
+		return VisualDescriptor{}, "", err
 	}
-	return VisualDescriptor{}, "", fmt.Errorf("no vision model succeeded for image analysis")
+
+	desc, ok := parseVisualDescriptor(raw)
+	if !ok {
+		return VisualDescriptor{}, "", fmt.Errorf("failed to parse vision response")
+	}
+	return desc, "oracle/vision", nil
 }
 
 func parseVisualDescriptor(raw string) (VisualDescriptor, bool) {

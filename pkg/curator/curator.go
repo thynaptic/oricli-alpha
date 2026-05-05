@@ -165,9 +165,9 @@ func (mc *ModelCurator) Recommend() []Recommendation {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
-	currentChat := currentModel("OLLAMA_MODEL", "ministral-3:3b")
-	currentCode := currentModel("OLLAMA_CODE_MODEL", "qwen2.5-coder:3b")
-	currentResearch := currentModel("OLLAMA_RESEARCH_MODEL", "deepseek-coder-v2:16b")
+	currentChat := currentModel("OLLAMA_MODEL", "")
+	currentCode := currentModel("OLLAMA_CODE_MODEL", "")
+	currentResearch := currentModel("OLLAMA_RESEARCH_MODEL", "")
 
 	// Sort all results by score desc, latency asc
 	sorted := mc.sortedResults()

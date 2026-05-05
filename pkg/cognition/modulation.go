@@ -47,8 +47,8 @@ func BuildReasoningModulation(sm *state.Manager, query string, mode string) Reas
 	goalPersistence := clamp01Mod(snapshot.GoalPersistence)
 	basePressure := clamp01Mod((snapshot.Frustration * 0.55) + ((1.0 - snapshot.Confidence) * 0.25) + (maxFloatMod(0, -carry) * 0.20))
 	emotionTrend, emotionVolatility := sentimentTrendAndVolatility(snapshot.MoodHistory)
-	predictiveEnabled := envBoolMod("TALOS_PREDICTIVE_INTERVENTION_ENABLED", true)
-	predictiveGain := clampRangeMod(floatFromEnvMod("TALOS_PREDICTIVE_DENSITY_GAIN", 0.22), 0.0, 0.8)
+	predictiveEnabled := envBoolMod("ORI_PREDICTIVE_INTERVENTION_ENABLED", true)
+	predictiveGain := clampRangeMod(floatFromEnvMod("ORI_PREDICTIVE_DENSITY_GAIN", 0.22), 0.0, 0.8)
 	trendRisk := clamp01Mod(maxFloatMod(0, -emotionTrend))
 	volRisk := clamp01Mod(emotionVolatility)
 	predictivePressure := 0.0
@@ -57,8 +57,8 @@ func BuildReasoningModulation(sm *state.Manager, query string, mode string) Reas
 	}
 	emotionPressure := clamp01Mod(basePressure + (predictivePressure * predictiveGain))
 
-	minDensity := floatFromEnvMod("TALOS_EMOTION_DENSITY_MIN", 0.75)
-	maxDensity := floatFromEnvMod("TALOS_EMOTION_DENSITY_MAX", 1.50)
+	minDensity := floatFromEnvMod("ORI_EMOTION_DENSITY_MIN", 0.75)
+	maxDensity := floatFromEnvMod("ORI_EMOTION_DENSITY_MAX", 1.50)
 	if minDensity <= 0 {
 		minDensity = 0.75
 	}
@@ -68,7 +68,7 @@ func BuildReasoningModulation(sm *state.Manager, query string, mode string) Reas
 	rawDensity := 1.0 - (emotionPressure * 0.40) + (maxFloatMod(0, carry) * 0.20) - (predictivePressure * predictiveGain)
 	density := clampRangeMod(rawDensity, minDensity, maxDensity)
 	predictiveIntervention := ""
-	alertAt := clampRangeMod(floatFromEnvMod("TALOS_PREDICTIVE_DENSITY_ALERT_AT", 0.45), 0.1, 0.95)
+	alertAt := clampRangeMod(floatFromEnvMod("ORI_PREDICTIVE_DENSITY_ALERT_AT", 0.45), 0.1, 0.95)
 	if predictiveEnabled && predictivePressure >= alertAt {
 		predictiveIntervention = "emotion-aware-density-scaling"
 	}
@@ -88,15 +88,15 @@ func BuildReasoningModulation(sm *state.Manager, query string, mode string) Reas
 	branchBudget := clampIntMod(int(float64(branchBase)+float64(complexity)/3.0), 2, 5)
 	sectionBudget := clampIntMod(int(float64(sectionBase)*density), 4, 16)
 
-	gain := clampRangeMod(floatFromEnvMod("TALOS_GOAL_PERSISTENCE_GAIN", 0.35), 0.0, 1.0)
+	gain := clampRangeMod(floatFromEnvMod("ORI_GOAL_PERSISTENCE_GAIN", 0.35), 0.0, 1.0)
 	if goalPersistence >= 0.7 {
 		branchBudget = clampIntMod(int(float64(branchBudget)-(goalPersistence-0.7)*2.0*gain), 2, 5)
 	} else if goalPersistence <= 0.35 {
 		branchBudget = clampIntMod(int(float64(branchBudget)+(0.35-goalPersistence)*2.0*gain), 2, 5)
 	}
 
-	pruneMin := clampRangeMod(floatFromEnvMod("TALOS_DYNAMIC_PRUNE_MIN", 0.22), 0.05, 0.95)
-	pruneMax := clampRangeMod(floatFromEnvMod("TALOS_DYNAMIC_PRUNE_MAX", 0.40), pruneMin, 0.99)
+	pruneMin := clampRangeMod(floatFromEnvMod("ORI_DYNAMIC_PRUNE_MIN", 0.22), 0.05, 0.95)
+	pruneMax := clampRangeMod(floatFromEnvMod("ORI_DYNAMIC_PRUNE_MAX", 0.40), pruneMin, 0.99)
 	pruneThreshold := pruneMin + (((emotionPressure + (1.0 - goalPersistence)) / 2.0) * (pruneMax - pruneMin))
 
 	return ReasoningModulationProfile{
@@ -115,7 +115,7 @@ func BuildReasoningModulation(sm *state.Manager, query string, mode string) Reas
 }
 
 func parseSubThoughtWeights() SubThoughtWeights {
-	raw := strings.TrimSpace(os.Getenv("TALOS_SUBTHOUGHT_WEIGHTS"))
+	raw := strings.TrimSpace(os.Getenv("ORI_SUBTHOUGHT_WEIGHTS"))
 	out := []float64{0.45, 0.30, 0.15, 0.10}
 	if raw != "" {
 		parts := strings.Split(raw, ",")

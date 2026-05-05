@@ -28,11 +28,11 @@ type supervisionCache struct {
 var globalSupervisionCache = newSupervisionCache()
 
 func newSupervisionCache() *supervisionCache {
-	ttlSec := envIntSupervisionCache("TALOS_SYMBOLIC_CACHE_TTL_SEC", 600)
+	ttlSec := envIntSupervisionCache("ORI_SYMBOLIC_CACHE_TTL_SEC", 600)
 	if ttlSec < 30 {
 		ttlSec = 30
 	}
-	maxItems := envIntSupervisionCache("TALOS_SYMBOLIC_CACHE_MAX", 512)
+	maxItems := envIntSupervisionCache("ORI_SYMBOLIC_CACHE_MAX", 512)
 	if maxItems < 64 {
 		maxItems = 64
 	}

@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/thynaptic/oricli-go/pkg/memory"
+	"github.com/thynaptic/oricli-go/pkg/llm"
 	"github.com/thynaptic/oricli-go/pkg/state"
-	"github.com/ollama/ollama/api"
 )
 
 const (
@@ -301,8 +301,7 @@ func heuristicTheory(cluster weakCluster) string {
 }
 
 func llmRefineTheory(cluster weakCluster, current string) (string, bool) {
-	client, err := api.ClientFromEnvironment()
-	if err != nil {
+	if !llm.Available() {
 		return "", false
 	}
 	system := `You are an internal deliberation engine.
@@ -312,25 +311,13 @@ Return plain text only.`
 	user := "Cluster: " + cluster.Label +
 		fmt.Sprintf("\nWeak score: %.2f", cluster.WeakScore) +
 		"\nCurrent theory:\n" + current
-	opts, _ := state.ResolveEntropyOptions(user)
-	req := &api.ChatRequest{
-		Model:   "llama3.2:1b",
-		Options: opts,
-		Messages: []api.Message{
-			{Role: "system", Content: system},
-			{Role: "user", Content: user},
-		},
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
-	var out strings.Builder
-	if err := client.Chat(ctx, req, func(resp api.ChatResponse) error {
-		out.WriteString(resp.Message.Content)
-		return nil
-	}); err != nil {
+	res, err := llm.Chat(ctx, system, user)
+	if err != nil {
 		return "", false
 	}
-	res := strings.TrimSpace(out.String())
+	res = strings.TrimSpace(res)
 	return res, res != ""
 }
 

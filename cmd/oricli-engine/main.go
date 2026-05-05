@@ -113,10 +113,6 @@ func main() {
 	log.Println("[Engine] Initializing Sovereign Engine...")
 	genService := service.NewGenerationService()
 
-	// CostGovernor — gates RunPod complexity escalation on daily budget.
-	costGovernor := service.NewCostGovernor(nil)
-	genService.Governor = costGovernor
-
 	sovEngine := cognition.NewSovereignEngine(genService, swarmBus)
 
 	// ── 6. DAG Goal System ────────────────────────────────────────────────────
@@ -132,7 +128,6 @@ func main() {
 
 	// ── 8. Curiosity Daemon (Epistemic Foraging — lightweight, optional) ──────
 	curiosity := service.NewCuriosityDaemon(sovEngine.Graph, sovEngine.VDI, genService, nil)
-	curiosity.Governor = costGovernor
 	sovEngine.Curiosity = curiosity
 	if os.Getenv("ORICLI_ENGINE_CURIOSITY") == "true" {
 		go curiosity.Run(context.Background())

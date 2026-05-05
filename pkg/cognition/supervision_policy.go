@@ -52,10 +52,10 @@ func DefaultSupervisionPolicy(mode string) SupervisionPolicy {
 		mode = "balanced"
 	}
 	p := SupervisionPolicy{
-		Enabled:             envBoolSup("TALOS_SYMBOLIC_SUPERVISION_ENABLED", true),
-		EnforcementMode:     strings.ToLower(strings.TrimSpace(os.Getenv("TALOS_SYMBOLIC_ENFORCEMENT_MODE"))),
-		MaxCorrections:      envIntSup("TALOS_SYMBOLIC_MAX_CORRECTIONS", 2),
-		Timeout:             time.Duration(clampIntSup(envIntSup("TALOS_SYMBOLIC_TIMEOUT_MS", 120), 60, 2000)) * time.Millisecond,
+		Enabled:             envBoolSup("ORI_SYMBOLIC_SUPERVISION_ENABLED", true),
+		EnforcementMode:     strings.ToLower(strings.TrimSpace(os.Getenv("ORI_SYMBOLIC_ENFORCEMENT_MODE"))),
+		MaxCorrections:      envIntSup("ORI_SYMBOLIC_MAX_CORRECTIONS", 2),
+		Timeout:             time.Duration(clampIntSup(envIntSup("ORI_SYMBOLIC_TIMEOUT_MS", 3000), 1000, 15000)) * time.Millisecond,
 		ContradictionWarnAt: 0.55,
 		ContradictionVetoAt: 0.78,
 		RequireSourcesByStage: map[SupervisionStage]bool{

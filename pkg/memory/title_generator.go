@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ollama/ollama/api"
+	"github.com/thynaptic/oricli-go/pkg/llm"
 )
 
 const (
@@ -66,8 +66,8 @@ func (g *ChunkTitleGenerator) Generate(ctx context.Context, sourceType string, s
 }
 
 func (g *ChunkTitleGenerator) modelTitle(ctx context.Context, model string, sourceType string, sourceRef string, chunk string, index int, total int) (string, error) {
-	if g.mm == nil || g.mm.client == nil {
-		return "", fmt.Errorf("memory manager client unavailable")
+	if !llm.Available() {
+		return "", fmt.Errorf("llm unavailable")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -79,23 +79,13 @@ Rules:
 - No quotes, markdown, or trailing punctuation clutter.
 - Keep under 12 words.`
 	user := fmt.Sprintf("source_type=%s\nsource_ref=%s\nchunk_index=%d\nchunk_total=%d\nchunk:\n%s", strings.TrimSpace(sourceType), strings.TrimSpace(sourceRef), index, total, chunk)
-	req := &api.ChatRequest{
-		Model: model,
-		Messages: []api.Message{
-			{Role: "system", Content: system},
-			{Role: "user", Content: user},
-		},
-	}
 	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
-	var out strings.Builder
-	if err := g.mm.client.Chat(ctx, req, func(resp api.ChatResponse) error {
-		out.WriteString(resp.Message.Content)
-		return nil
-	}); err != nil {
+	raw, err := llm.Chat(ctx, system, user)
+	if err != nil {
 		return "", err
 	}
-	payload := strings.TrimSpace(stripCodeFence(out.String()))
+	payload := strings.TrimSpace(stripCodeFence(raw))
 	if payload == "" {
 		return "", fmt.Errorf("empty title response")
 	}

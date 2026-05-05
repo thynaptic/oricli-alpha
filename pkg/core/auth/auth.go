@@ -141,6 +141,11 @@ func RequireScope(ctx context.Context, required string) error {
 	return ErrForbidden
 }
 
+// HasScope returns true if the context carries the given scope (or a wildcard covering it).
+func HasScope(ctx context.Context, required string) bool {
+	return RequireScope(ctx, required) == nil
+}
+
 func TenantID(ctx context.Context) string {
 	v, _ := ctx.Value(ctxTenantID).(string)
 	return v

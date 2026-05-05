@@ -140,7 +140,7 @@ func AuditSkillInventory() (SelfModel, error) {
 	sm := SelfModel{
 		HardwareConstraints: detectHardwareConstraints(),
 		SupportedLanguages:  []string{"go", "bash", "python", "javascript"},
-		KnownAPIs:           []string{"ollama", "glm_toolserver", "chromem_vector_store"},
+		KnownAPIs:           []string{"oracle", "glm_toolserver", "chromem_vector_store"},
 		ConfidenceThresholds: map[string]float64{
 			"min_skill_reliability": 0.55,
 			"max_binary_ram_ratio":  0.40,

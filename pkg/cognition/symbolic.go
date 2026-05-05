@@ -14,15 +14,10 @@ import (
 
 	"github.com/thynaptic/oricli-go/pkg/memory"
 	"github.com/thynaptic/oricli-go/pkg/state"
-	"github.com/ollama/ollama/api"
+	"github.com/thynaptic/oricli-go/pkg/llm"
 )
 
 const symbolicTimeout = 8 * time.Second
-
-var symbolicModels = []string{
-	"llama3.2:1b",
-	"qwen2.5:3b-instruct",
-}
 
 var splitSentenceRE = regexp.MustCompile(`[.!?]\s+`)
 var fileClaimRE = regexp.MustCompile(`(?i)\b(?:file|path|directory)\s+([~/.\w-][\w./-]*)\s+(exists|is present|is available|is missing|does not exist)\b`)
@@ -143,8 +138,7 @@ func DetectContradiction(claimA, claimB string) float64 {
 		return 0
 	}
 
-	client, err := api.ClientFromEnvironment()
-	if err != nil {
+	if !llm.Available() {
 		return heuristicContradiction(claimA, claimB)
 	}
 
@@ -157,29 +151,11 @@ Rules:
 - 1.0 = direct factual contradiction`
 
 	user := `{"claim_a":` + quoteJSON(claimA) + `,"claim_b":` + quoteJSON(claimB) + `}`
-	messages := []api.Message{
-		{Role: "system", Content: system},
-		{Role: "user", Content: user},
-	}
-
-	for _, model := range symbolicModels {
-		opts, _ := state.ResolveEntropyOptions(user)
-		req := &api.ChatRequest{
-			Model:    model,
-			Options:  opts,
-			Messages: messages,
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), symbolicTimeout)
-		var out strings.Builder
-		err := client.Chat(ctx, req, func(resp api.ChatResponse) error {
-			out.WriteString(resp.Message.Content)
-			return nil
-		})
-		cancel()
-		if err != nil {
-			continue
-		}
-		if score, ok := parseContradictionScore(out.String()); ok {
+	ctx, cancel := context.WithTimeout(context.Background(), symbolicTimeout)
+	defer cancel()
+	raw, err := llm.Chat(ctx, system, user)
+	if err == nil {
+		if score, ok := parseContradictionScore(raw); ok {
 			return clampScore(score)
 		}
 	}
@@ -921,9 +897,7 @@ func ConductSelfPlay(candidate string, refs []string) SelfPlayResult {
 		FinalCandidate: current,
 	}
 
-	client, err := api.ClientFromEnvironment()
-	if err != nil {
-		// Fallback: no LLM available, only run symbolic contradiction checks.
+	if !llm.Available() {
 		score := EvaluateLogic(current, refs)
 		result.MaxFlawScore = score
 		if score >= 0.7 {
@@ -954,7 +928,7 @@ func ConductSelfPlay(candidate string, refs []string) SelfPlayResult {
 		branchCritique := ""
 
 		for cycle := 0; cycle < maxCycles; cycle++ {
-			flawScore, critique := runOpponentCritiqueWithVector(client, branchCandidate, refs, vector)
+			flawScore, critique := runOpponentCritiqueWithVector(branchCandidate, refs, vector)
 			if flawScore > branchMaxFlaw {
 				branchMaxFlaw = flawScore
 			}
@@ -968,7 +942,7 @@ func ConductSelfPlay(candidate string, refs []string) SelfPlayResult {
 				break
 			}
 
-			refined, ok := runAuthorRebuttalWithVector(client, branchCandidate, critique, refs, vector)
+			refined, ok := runAuthorRebuttalWithVector(branchCandidate, critique, refs, vector)
 			if !ok || strings.TrimSpace(refined) == "" {
 				break
 			}
@@ -1015,8 +989,8 @@ func ConductSelfPlay(candidate string, refs []string) SelfPlayResult {
 	return result
 }
 
-func runOpponentCritique(client *api.Client, candidate string, refs []string) (float64, string) {
-	return runOpponentCritiqueWithVector(client, candidate, refs, selfPlayVector{})
+func runOpponentCritique(candidate string, refs []string) (float64, string) {
+	return runOpponentCritiqueWithVector(candidate, refs, selfPlayVector{})
 }
 
 type selfPlayVector struct {
@@ -1073,7 +1047,7 @@ func maxSelfPlayInt(a, b int) int {
 	return b
 }
 
-func runOpponentCritiqueWithVector(client *api.Client, candidate string, refs []string, vector selfPlayVector) (float64, string) {
+func runOpponentCritiqueWithVector(candidate string, refs []string, vector selfPlayVector) (float64, string) {
 	system := `You are an adversarial evaluator.
 Find logical gaps, missing edge cases, or factual inconsistencies.
 Return JSON only:
@@ -1085,35 +1059,15 @@ Where flaw_score in [0,1] and >0.7 means significant flaw.`
 		system += "\nUse the declared attack vector to maximize pressure."
 		user += "\n\nAttack vector: " + vector.Name + "\nAttack objective: " + strings.TrimSpace(vector.Prompt)
 	}
-	messages := []api.Message{
-		{Role: "system", Content: system},
-		{Role: "user", Content: user},
-	}
 
-	for _, model := range symbolicModels {
-		opts, _ := state.ResolveEntropyOptions(user)
-		req := &api.ChatRequest{
-			Model:    model,
-			Options:  opts,
-			Messages: messages,
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), symbolicTimeout)
-		var out strings.Builder
-		err := client.Chat(ctx, req, func(resp api.ChatResponse) error {
-			out.WriteString(resp.Message.Content)
-			return nil
-		})
-		cancel()
-		if err != nil {
-			continue
-		}
-		score, critique, ok := parseCritiquePayload(out.String())
-		if ok {
+	ctx, cancel := context.WithTimeout(context.Background(), symbolicTimeout)
+	defer cancel()
+	if raw, err := llm.Chat(ctx, system, user); err == nil {
+		if score, critique, ok := parseCritiquePayload(raw); ok {
 			return clampScore(score), strings.TrimSpace(critique)
 		}
 	}
 
-	// Heuristic fallback
 	score := EvaluateLogic(candidate, refs)
 	critique := "Potential inconsistency found by symbolic heuristic."
 	if strings.TrimSpace(vector.Name) != "" {
@@ -1122,11 +1076,11 @@ Where flaw_score in [0,1] and >0.7 means significant flaw.`
 	return score, critique
 }
 
-func runAuthorRebuttal(client *api.Client, candidate string, critique string, refs []string) (string, bool) {
-	return runAuthorRebuttalWithVector(client, candidate, critique, refs, selfPlayVector{})
+func runAuthorRebuttal(candidate string, critique string, refs []string) (string, bool) {
+	return runAuthorRebuttalWithVector(candidate, critique, refs, selfPlayVector{})
 }
 
-func runAuthorRebuttalWithVector(client *api.Client, candidate string, critique string, refs []string, vector selfPlayVector) (string, bool) {
+func runAuthorRebuttalWithVector(candidate string, critique string, refs []string, vector selfPlayVector) (string, bool) {
 	system := `You are the original author improving an answer under critique.
 Address the criticism directly, correct factual issues, and keep the answer concise.
 Return only the revised answer text.`
@@ -1136,34 +1090,15 @@ Return only the revised answer text.`
 	if strings.TrimSpace(vector.Name) != "" {
 		user += "\n\nTarget attack vector to satisfy: " + vector.Name
 	}
-	messages := []api.Message{
-		{Role: "system", Content: system},
-		{Role: "user", Content: user},
-	}
 
-	for _, model := range symbolicModels {
-		opts, _ := state.ResolveEntropyOptions(user)
-		req := &api.ChatRequest{
-			Model:    model,
-			Options:  opts,
-			Messages: messages,
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), symbolicTimeout)
-		var out strings.Builder
-		err := client.Chat(ctx, req, func(resp api.ChatResponse) error {
-			out.WriteString(resp.Message.Content)
-			return nil
-		})
-		cancel()
-		if err != nil {
-			continue
-		}
-		refined := strings.TrimSpace(stripMarkdownCodeFences(out.String()))
-		if refined != "" {
-			return refined, true
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), symbolicTimeout)
+	defer cancel()
+	raw, err := llm.Chat(ctx, system, user)
+	if err != nil {
+		return "", false
 	}
-	return "", false
+	refined := strings.TrimSpace(stripMarkdownCodeFences(raw))
+	return refined, refined != ""
 }
 
 func parseCritiquePayload(raw string) (float64, string, bool) {

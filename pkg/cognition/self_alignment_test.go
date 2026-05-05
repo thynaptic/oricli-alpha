@@ -40,7 +40,7 @@ func TestRunRecursiveSelfAlignmentDetectsPhilosophyDrift(t *testing.T) {
 }
 
 func TestRunSymbolicSupervisionEscalatesOnSelfAlignmentDrift(t *testing.T) {
-	t.Setenv("TALOS_SELF_ALIGNMENT_ENABLED", "true")
+	t.Setenv("ORI_SELF_ALIGNMENT_ENABLED", "true")
 	in := SupervisionInput{
 		Stage:     StageSynthesis,
 		Query:     "proposal",

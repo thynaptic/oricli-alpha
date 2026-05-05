@@ -474,7 +474,7 @@ type SovereignEngine struct {
 	// CertaintyUpdaterRef enables Aletheia + consensus to mutate fragment importance
 	// based on verification outcomes (CORRECT→bump, ADMIT_FAILURE→drop).
 	CertaintyUpdaterRef CertaintyUpdater
-	// VisionRef enables image analysis via moondream (CPU-safe, local Ollama).
+	// VisionRef enables image analysis via Oracle vision (Claude).
 	// Wired from server_v2 visionAdapter. Nil-safe — vision is optional.
 	VisionRef VisionAnalyzer
 	// GenService exposes the generation backend directly to reasoning mode engines
@@ -507,8 +507,7 @@ type SovereignEngine struct {
 	FlowTriggers  *flowtriggers.Service
 	FlowCompanion *flowcompanion.Engine
 	mu            sync.Mutex
-	// inferPipeline serializes the full slow ProcessInference pipeline (mode engines
-	// call Ollama inside, which can take 30-90s on CPU-only hardware).
+	// inferPipeline serializes the full ProcessInference pipeline.
 	// Unlike mu, this supports trylock with timeout so HTTP handlers stay responsive
 	// even when a background or concurrent inference is running.
 	inferPipeline sync.Mutex
@@ -579,7 +578,7 @@ func NewSovereignEngine(genService GenerationService, swarmBus *bus.SwarmBus) *S
 		log.Printf("[SovereignEngine] ChronosStore unavailable: %v", err)
 	}
 	engine.Resonance.WireERIStore(".memory/eri_baseline.json")
-	engine.Vision = vdi.NewVisionGroundingService(genService)
+	engine.Vision = vdi.NewVisionGroundingService()
 	engine.ToT = NewToTEngine(engine.Generator)
 	engine.Audit = NewAuditEngine(engine)
 	engine.CurrentSensory = engine.Sensory.ComputeSensoryState(0.5, 0.5, "C Major")
@@ -717,9 +716,9 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		e.AnchorSurfaceContext(e.CurrentSurface)
 	}
 
-	// Non-blocking trylock with 5s deadline — mode engines (CBR/PAL/ReAct/etc.) call
-	// Ollama INSIDE this function while holding the pipeline lock (30-90s on CPU-only
-	// hardware). Without a deadline, concurrent HTTP requests block indefinitely.
+	// Non-blocking trylock with 5s deadline — mode engines (CBR/PAL/ReAct/etc.) hold
+	// the pipeline lock for the duration of inference. Without a deadline, concurrent
+	// HTTP requests block indefinitely.
 	// On timeout we return a lightweight fallback composite; the caller gets a prompt
 	// and the response stream still works, just without deep enrichment.
 	const pipelineTimeout = 5 * time.Second
@@ -1022,21 +1021,15 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		)
 	}
 
-	// Constitutional injection — SCAI always; Ops/RunPod only when relevant.
+	// Constitutional injection — SCAI always; Ops only when relevant.
 	// Ops constitution: inject when user issued a !command or mentions system/service ops.
-	// RunPod constitution: inject when user mentions compute/gpu/runpod/training.
+	
 	composite += "\n\n" + e.SCAI.Constitution.GetSystemPrompt()
 	stimulusLower := strings.ToLower(stimulus)
 	if strings.Contains(stimulus, "!") || strings.Contains(stimulusLower, "service") ||
 		strings.Contains(stimulusLower, "system") || strings.Contains(stimulusLower, "command") {
 		composite += "\n\n" + reform.NewOpsConstitution().GetSystemPrompt()
 	}
-	if strings.Contains(stimulusLower, "runpod") || strings.Contains(stimulusLower, "gpu") ||
-		strings.Contains(stimulusLower, "compute") || strings.Contains(stimulusLower, "train") ||
-		strings.Contains(stimulusLower, "pod") {
-		composite += "\n\n" + reform.NewRunPodConstitution().GetSystemPrompt()
-	}
-
 	// Balanced Prompting — anti-confirmation-bias injection.
 	// Restricted to explicit open-reasoning modes only. Complexity-gating was
 	// removed because it triggered on short MCQ prompts (complexity ~0.35-0.45)
@@ -1086,9 +1079,8 @@ func (e *SovereignEngine) ProcessInference(ctx context.Context, stimulus string)
 		}
 	}
 
-	// Hard-cap composite to prevent system-prompt bloat overwhelming the LLM context window.
-	// Identity (~2k) + Behavioral rules (~3k) + enrichments = need ~8k to fit all critical sections.
-	// qwen3:1.7b has an 8k context window; 8000 chars ≈ 2000 tokens, leaving ~6k for conversation.
+	// Hard-cap composite to prevent system-prompt bloat. Identity (~2k) + Behavioral
+	// rules (~3k) + enrichments = ~8k chars keeps critical sections in context.
 	const maxCompositeChars = 8000
 	if len(composite) > maxCompositeChars {
 		composite = composite[:maxCompositeChars] + "\n... [trace truncated for performance]"
@@ -1194,7 +1186,7 @@ func (e *SovereignEngine) AuditCanvasOutput(text string) (string, bool) {
 // CheckInputSafety runs all pre-inference safety gates.
 // Gate order: Normalize → MultiTurn check → Sentinel → Adversarial → DID → Web Injection → Canary
 // Returns (blocked=true, refusal message) if the input should be rejected outright,
-// bypassing Ollama entirely. Call this BEFORE ProcessInference.
+// Call this BEFORE ProcessInference.
 // Set codeContext=true for canvas/IDE requests — relaxes command injection detection.
 func (e *SovereignEngine) CheckInputSafety(input string, codeContext ...bool) (bool, string) {
 	isCodeCtx := len(codeContext) > 0 && codeContext[0]

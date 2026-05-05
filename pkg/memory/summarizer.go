@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ollama/ollama/api"
+	"github.com/thynaptic/oricli-go/pkg/llm"
 )
 
 const (
@@ -78,8 +78,8 @@ func (s *SourceSummarizer) Summarize(ctx context.Context, req SourceSummaryReque
 }
 
 func (s *SourceSummarizer) modelSummary(ctx context.Context, model string, content string) (string, error) {
-	if s.mm == nil || s.mm.client == nil {
-		return "", fmt.Errorf("memory manager client unavailable")
+	if !llm.Available() {
+		return "", fmt.Errorf("llm unavailable")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -92,24 +92,13 @@ Rules:
 - key_points must contain 3 to 6 bullets.
 - risk_uncertainty can be "none" when no risk.`
 
-	user := "Source content:\n" + content
-	req := &api.ChatRequest{
-		Model: model,
-		Messages: []api.Message{
-			{Role: "system", Content: system},
-			{Role: "user", Content: user},
-		},
-	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	var out strings.Builder
-	if err := s.mm.client.Chat(ctx, req, func(resp api.ChatResponse) error {
-		out.WriteString(resp.Message.Content)
-		return nil
-	}); err != nil {
+	raw, err := llm.Chat(ctx, system, "Source content:\n"+content)
+	if err != nil {
 		return "", err
 	}
-	payload := strings.TrimSpace(stripCodeFence(out.String()))
+	payload := strings.TrimSpace(stripCodeFence(raw))
 	if payload == "" {
 		return "", fmt.Errorf("empty summary response")
 	}

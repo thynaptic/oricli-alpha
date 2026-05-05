@@ -386,7 +386,7 @@ Whatever Phase II becomes, it must respect these constraints from Phase I:
 
 | Constraint | Why |
 |---|---|
-| **No rented intelligence** | All inference stays sovereign (Ollama + governed RunPod). No OpenAI/Anthropic API calls. |
+| **Sovereign architecture** | The cognitive stack — orchestration, memory, daemons, constitutional layers — stays sovereign. Oracle routes inference through the Anthropic API (Haiku for lightweight tasks, Sonnet for heavy reasoning), governed by the constitutional stack at every call site. Intelligence is external; control is not. |
 | **Constitutional non-negotiability** | The 4-layer stack cannot be weakened. New capabilities must pass constitutional pre-flight. |
 | **Feature-flag gating** | Every new Phase II system must be opt-in via `ORICLI_*_ENABLED=true` until proven stable. |
 | **Import-cycle discipline** | New packages use interface bridges at wire-time in `cmd/backbone/main.go`. No circular deps. |

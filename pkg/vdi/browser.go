@@ -199,13 +199,8 @@ func (m *Manager) ClickAt(x, y float64) (string, error) {
 	return fmt.Sprintf("Clicked at coordinates: (%.2f, %.2f)", x, y), nil
 }
 
-// NavigateAndSee is Oricli's visual comprehension path.
-// It navigates to a URL, captures a screenshot, and sends it to a vision model
-// for a natural-language description of what the page looks like visually.
-// Falls back to DOM text extraction if the vision model is unavailable.
-//
-// The vision model is controlled by OLLAMA_VISION_MODEL (default: moondream).
-// The Ollama base URL defaults to http://127.0.0.1:11434.
+// NavigateAndSee navigates to a URL, captures a screenshot, and sends it to
+// Oracle vision (Claude) for a natural-language description of the page.
 func (m *Manager) NavigateAndSee(rawURL string) (string, error) {
 	ctx, cancel := m.GetBrowserContext(20 * time.Second)
 	if ctx == nil {

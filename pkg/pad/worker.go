@@ -23,7 +23,6 @@ type WorkerResult struct {
 type Worker struct {
 	Distiller  PADDistiller
 	Blackboard Blackboard
-	Model      string // Ollama model name
 }
 
 // NewWorker creates a Worker with the given distiller and shared blackboard.
@@ -31,7 +30,6 @@ func NewWorker(distiller PADDistiller, blackboard Blackboard) *Worker {
 	return &Worker{
 		Distiller:  distiller,
 		Blackboard: blackboard,
-		Model:      "ministral-3:3b",
 	}
 }
 

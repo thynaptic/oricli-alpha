@@ -28,11 +28,11 @@ type StyleProfile struct {
 }
 
 func StyleV2Enabled() bool {
-	return envBoolStyle("TALOS_STYLE_V2_ENABLED", true)
+	return envBoolStyle("ORI_STYLE_V2_ENABLED", true)
 }
 
 func StyleModelEnabled() bool {
-	return envBoolStyle("TALOS_STYLE_MODEL_ENABLED", true)
+	return envBoolStyle("ORI_STYLE_MODEL_ENABLED", true)
 }
 
 // BuildStyleProfile builds a deterministic style baseline for the current turn.
@@ -209,7 +209,7 @@ func styleCacheKey(query, mode string, sm *state.Manager) string {
 
 func refreshStyleProfileAsync(key, query string, base StyleProfile) {
 	scorer := newDefaultStyleScorer()
-	ctxTimeout := clampIntStyle(envIntStyle("TALOS_STYLE_MODEL_TIMEOUT_MS", 120), 60, 600)
+	ctxTimeout := clampIntStyle(envIntStyle("ORI_STYLE_MODEL_TIMEOUT_MS", 3000), 1000, 15000)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(ctxTimeout)*time.Millisecond)
 	defer cancel()
 	refined, err := scorer.Score(ctx, query, base)

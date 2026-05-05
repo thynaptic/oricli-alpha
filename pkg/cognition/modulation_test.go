@@ -18,9 +18,9 @@ func TestSentimentTrendAndVolatility(t *testing.T) {
 }
 
 func TestBuildReasoningModulationPredictiveIntervention(t *testing.T) {
-	t.Setenv("TALOS_PREDICTIVE_INTERVENTION_ENABLED", "true")
-	t.Setenv("TALOS_PREDICTIVE_DENSITY_GAIN", "0.35")
-	t.Setenv("TALOS_PREDICTIVE_DENSITY_ALERT_AT", "0.20")
+	t.Setenv("ORI_PREDICTIVE_INTERVENTION_ENABLED", "true")
+	t.Setenv("ORI_PREDICTIVE_DENSITY_GAIN", "0.35")
+	t.Setenv("ORI_PREDICTIVE_DENSITY_ALERT_AT", "0.20")
 
 	sm, err := state.NewManagerWithPath(filepath.Join(t.TempDir(), "session_state.json"))
 	if err != nil {
@@ -43,7 +43,7 @@ func TestBuildReasoningModulationPredictiveIntervention(t *testing.T) {
 }
 
 func TestBuildReasoningModulationPredictiveDisable(t *testing.T) {
-	t.Setenv("TALOS_PREDICTIVE_INTERVENTION_ENABLED", "false")
+	t.Setenv("ORI_PREDICTIVE_INTERVENTION_ENABLED", "false")
 	sm, err := state.NewManagerWithPath(filepath.Join(t.TempDir(), "session_state.json"))
 	if err != nil {
 		t.Fatalf("new state manager: %v", err)

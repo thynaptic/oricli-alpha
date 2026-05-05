@@ -445,7 +445,7 @@ func main() {
 		var tcdWriter tcd.FactWriter
 		if apiServer.SCL != nil {
 			tcdWriter = scl.NewLedgerWriter(apiServer.SCL)
-			tcdIngestor = tcd.NewDomainIngestor(tcdManifest, nil, tcdWriter)
+			tcdIngestor = tcd.NewDomainIngestor(tcdManifest, tcdWriter)
 		}
 
 		tcdMaintainer := tcd.NewManifestMaintainer(tcdManifest, nil)
@@ -482,8 +482,8 @@ func main() {
 		// live here and are invocable via the forge endpoints).
 		forgeTool := service.NewToolService(orch)
 
-		gate := forge.NewPOCGate(nil, nil, constitution)
-		generator := forge.NewToolGenerator(nil, constitution)
+		gate := forge.NewPOCGate(nil, constitution)
+		generator := forge.NewToolGenerator(constitution)
 
 		forgeSvc := service.NewToolForgeService(gate, generator, constitution, verifier, forgeLib, forgeTool)
 		forgeBootCtx, forgeBootCancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -610,9 +610,8 @@ func main() {
 		snapDir := "/home/mike/Mavaia/data/chronos/snapshots"
 		chDaemon := chronos.NewTemporalGroundingDaemon(
 			chronosIdx, snapDir,
-			agentService.GenService, // LLMSummarizer interface
-			nil,                     // CuriositySeeder — wire below if curiosity daemon exposed
-			metacogEvtLog,           // nil-safe: phases 8+9 bridge
+			nil,           // CuriositySeeder — wire below if curiosity daemon exposed
+			metacogEvtLog, // nil-safe: phases 8+9 bridge
 		)
 		apiServer.ChronosIndex = chronosIdx
 		apiServer.ChronosDaemon = chDaemon

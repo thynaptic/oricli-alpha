@@ -19,7 +19,6 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/cbasp"
 	"github.com/thynaptic/oricli-go/pkg/coalition"
 	"github.com/thynaptic/oricli-go/pkg/cogload"
-	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/conformity"
 	"github.com/thynaptic/oricli-go/pkg/dmn"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
@@ -60,19 +59,12 @@ type GenerationService struct {
 	DefaultModel    string // fast model  — chat          (e.g. ori:1.7b)
 	CodeModel       string // mid model   — canvas / code  (e.g. ori:1.7b local fallback)
 	ResearchModel   string // heavy model — research / deep tasks (e.g. ori:16b)
-	RemoteURL       string // RunPod Ollama tunnel (e.g. http://localhost:11435)
-	MediumModel     string // mid-tier remote model (e.g. ori:4b on RunPod)
 	NumThreads      int
 	HTTPClient      *http.Client
 	StreamClient    *http.Client
-	RunPodMgr       *RunPodManager           // KoboldCpp-based (code/research tiers, legacy)
-	PrimaryMgr      *PrimaryInferenceManager // vLLM-based (all tiers, RUNPOD_PRIMARY=true)
-	Governor        *CostGovernor            // daily spend cap — blocks RunPod escalation when exhausted
 	CrystalCache    *scl.CrystalCache        // Skill Crystallization — LLM-bypass for proven patterns
 	MetacogDetector *metacog.Detector        // Phase 8: inline metacognitive anomaly detection
 	Therapy         *TherapyKit              // Phase 15: DBT/CBT/REBT therapeutic cognition stack
-	BidGovernor     *compute.BidGovernor     // Phase 12: Sovereign Compute Bidding
-	FeedbackLedger  *compute.FeedbackLedger  // Phase 12: outcome feedback → confidence EMA
 	DualProcess     *DualProcessKit          // Phase 17: System 1 / System 2 process classifier
 	CogLoad         *CogLoadKit              // Phase 18: Cognitive Load Manager
 	Rumination      *RuminationKit           // Phase 19: Rumination Detector
@@ -406,25 +398,14 @@ func NewGenerationService() *GenerationService {
 	if researchModel == "" {
 		researchModel = codeModel // fall back to code model if not set
 	}
-	remoteURL := os.Getenv("OLLAMA_REMOTE_URL") // e.g. http://localhost:11435
-	mediumModel := os.Getenv("OLLAMA_MEDIUM_MODEL")
-	if mediumModel == "" {
-		mediumModel = "ori:4b"
-	}
-
 	// Leave 2 cores for OS + backbone goroutines; never exceed physical count.
 	// Over-subscribing threads is catastrophic for CPU inference (400x slowdown observed).
 	numThreads := runtime.NumCPU() - 2
 	if numThreads < 2 {
 		numThreads = 2
 	}
-	log.Printf("[GenerationService] CPU threads: %d / Chat: %s / Code: %s / Research: %s / Medium(remote): %s @ %s",
-		numThreads, model, codeModel, researchModel, mediumModel, func() string {
-			if remoteURL != "" {
-				return remoteURL
-			}
-			return "not configured"
-		}())
+	log.Printf("[GenerationService] CPU threads: %d / Chat: %s / Code: %s / Research: %s",
+		numThreads, model, codeModel, researchModel)
 	// Shared transport with generous limits for the EPYC host
 	transport := &http.Transport{
 		MaxIdleConns:       10,
@@ -437,17 +418,9 @@ func NewGenerationService() *GenerationService {
 		DefaultModel:  model,
 		CodeModel:     codeModel,
 		ResearchModel: researchModel,
-		RemoteURL:     remoteURL,
-		MediumModel:   mediumModel,
 		NumThreads:    numThreads,
 		HTTPClient:    &http.Client{Timeout: 300 * time.Second, Transport: transport},
 		StreamClient:  &http.Client{Timeout: 0, Transport: transport},
-		RunPodMgr:     NewRunPodManager(),
-		PrimaryMgr:    NewPrimaryInferenceManager(),
-	}
-	if svc.PrimaryMgr != nil && os.Getenv("RUNPOD_PRIMARY") == "true" {
-		log.Printf("[GenerationService] RUNPOD_PRIMARY=true — all tiers will route through vLLM pod")
-		svc.PrimaryMgr.WarmOnStart()
 	}
 	return svc
 }
@@ -539,30 +512,6 @@ func (s *GenerationService) Generate(prompt string, options map[string]interface
 				"confidence": 0.99,
 			}, nil
 		}
-	}
-
-	// When RUNPOD_PRIMARY=true and the pod is warm, route Generate through the 32B
-	// vLLM pod. This ensures PAL code generation, SelfDiscover reasoning steps, and
-	// any other Generate callers benefit from the full model — not just ChatStream.
-	if s.PrimaryMgr != nil && s.PrimaryMgr.IsEnabled() &&
-		os.Getenv("RUNPOD_PRIMARY") == "true" && s.PrimaryMgr.PodState() == StateWarm {
-		msgs := []map[string]string{{"role": "user", "content": prompt}}
-		if sys, ok := options["system"].(string); ok && sys != "" {
-			msgs = append([]map[string]string{{"role": "system", "content": sys}}, msgs...)
-		}
-		genCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		defer cancel()
-		ch, err := s.PrimaryMgr.ChatStream(genCtx, msgs, options)
-		if err == nil {
-			var sb strings.Builder
-			for tok := range ch {
-				sb.WriteString(tok)
-			}
-			if text := strings.TrimSpace(sb.String()); text != "" {
-				return map[string]interface{}{"success": true, "response": text, "text": text, "model": model, "method": "runpod_primary", "confidence": 0.97}, nil
-			}
-		}
-		log.Printf("[GenerationService] Generate: RunPod fallback to Ollama (%v)", err)
 	}
 
 	// num_ctx MUST match ChatStream (4096) so Ollama never reallocates the KV cache.
@@ -1194,10 +1143,6 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 			}
 
 			s.recordMastery(promptForCheck, true)
-			// Phase 12: record bid outcome — no anomaly = success, anomalyScore=0
-			if _, isBidded := options["_bid_tier"].(string); isBidded {
-				s.recordBidOutcome(options["_bid_tier"].(string), inferBidTaskClass(messages), 0, 0.0, true)
-			}
 
 			// Phase 17: Dual Process audit — check if S1 fired on an S2 demand
 			if s.DualProcess != nil {
@@ -1345,12 +1290,9 @@ func (s *GenerationService) Chat(messages []map[string]string, options map[strin
 }
 
 // ChatStream sends a streaming chat request and returns a channel of token strings.
-// For code/research tiers, it attempts RunPod GPU inference first, falling back
-// to local Ollama if RunPod is unavailable, over budget, or returns an error.
+// Routes through Oracle heavy reasoning on DualProcess mismatch, falls back to Ollama.
 func (s *GenerationService) ChatStream(ctx context.Context, messages []map[string]string, options map[string]interface{}) (<-chan string, error) {
 	model := s.DefaultModel
-	useResearch := false
-	useCode := false
 
 	// Phase 18: Cognitive Load Manager — measure and trim before routing
 	if s.CogLoad != nil {
@@ -1370,100 +1312,18 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		}
 	}
 
-	// ── Sovereign Compute Bidding (Phase 12) — select best tier via market ──
-	// BidGovernor replaces the static complexity threshold when wired in.
-	// Falls back to the legacy heuristic when not configured.
-	if s.BidGovernor != nil {
-		taskClass := inferBidTaskClass(messages)
-		complexity := ClassifyComplexity(messages)
-		budgetUSD := 0.0
-		if s.Governor != nil {
-			budgetUSD = s.Governor.RemainingBudget()
-		}
-		cw, lw := compute.DefaultWeights()
-		if bg, ok := options["_background_task"].(bool); ok && bg {
-			cw, lw = compute.BackgroundWeights()
-		}
-		// Phase 17: incorporate S2 demand into bid if DualProcess is wired
-		s2Score := 0.0
-		if s.DualProcess != nil {
-			if prompt := lastUserMessage(messages); prompt != "" {
-				demand := s.DualProcess.Classifier.Classify(prompt, taskClass)
-				s2Score = demand.Score
-			}
-		}
-		bidReq := compute.BidRequest{
-			TaskClass:     taskClass,
-			Complexity:    complexity.Score,
-			EstTokens:     estimateTokens(messages),
-			BudgetUSD:     budgetUSD,
-			CostWeight:    cw,
-			LatencyWeight: lw,
-			S2DemandScore: s2Score,
-		}
-		result := s.BidGovernor.Adjudicate(bidReq)
-		log.Printf("[BidGovernor] %s", result.Rationale)
-		switch result.Winner.TierID {
-		case compute.TierMedium:
-			if s.RemoteURL != "" {
-				options["_remote_url"] = s.RemoteURL
-				options["_remote_model"] = s.MediumModel
-				log.Printf("[BidGovernor] TierMedium → remote %s @ %s", s.MediumModel, s.RemoteURL)
-			} else {
-				// No remote URL — escalate to oracle CLI if available, else fall back to local
-				options["_escalate_to_oracle"] = true
-				options["use_code_model"] = true
-				log.Printf("[BidGovernor] TierMedium → oracle escalation (no OLLAMA_REMOTE_URL)")
-			}
-			options["_bid_tier"] = compute.TierMedium
-		case compute.TierRemote:
-			if s.RemoteURL != "" {
-				options["_remote_url"] = s.RemoteURL
-				options["_remote_model"] = s.ResearchModel
-				log.Printf("[BidGovernor] TierRemote → remote %s @ %s", s.ResearchModel, s.RemoteURL)
-			} else {
-				// No remote URL — escalate to oracle CLI if available, else fall back to local
-				options["_escalate_to_oracle"] = true
-				log.Printf("[BidGovernor] TierRemote → oracle escalation (no OLLAMA_REMOTE_URL)")
-			}
-			options["_bid_tier"] = compute.TierRemote
-		default:
-			options["_bid_tier"] = compute.TierLocal
-		}
-	} else if IsComplexityRoutingEnabled() {
-		// Legacy heuristic fallback
-		complexity := ClassifyComplexity(messages)
-		if complexity.Tier > TierLocal {
-			estimatedCost := EstimateRunPodCost(1)
-			if s.Governor != nil && !s.Governor.CanSpend(estimatedCost) {
-				log.Printf("[GenerationService] CostGovernor: daily cap hit — forcing TierLocal (was %s)", complexity.Tier)
-			} else {
-				ApplyComplexityRouting(complexity, options)
-				log.Printf("[GenerationService] complexity=%s score=%.2f reasons=%v",
-					complexity.Tier, complexity.Score, complexity.Reasons)
-			}
-		}
-	}
-
 	// Explicit model override takes highest priority
 	if m, ok := options["model"].(string); ok && m != "" {
 		model = m
 	} else if r, ok := options["use_research_model"].(bool); ok && r {
 		model = s.ResearchModel
-		useResearch = true
 	} else if c, ok := options["use_code_model"].(bool); ok && c {
 		model = s.CodeModel
-		useCode = true
 	}
 
-	// Complexity escalation — route heavy requests to Oracle's heavy reasoning lane
-	// instead of RunPod. Zero GPU cost, uses existing subscriptions.
-	// Fires for both the legacy complexity router (_escalate_to_runpod) and
-	// the BidGovernor remote tier (_bid_tier == TierRemote).
+	// Complexity escalation — DualProcess S1/S2 mismatch routes to Oracle heavy reasoning.
 	escalate, _ := options["_escalate_to_runpod"].(bool)
-	escalateOracle, _ := options["_escalate_to_oracle"].(bool)
-	bidTier, _ := options["_bid_tier"].(string)
-	if (escalate || escalateOracle || bidTier == compute.TierRemote) && oracle.Available() {
+	if escalate && oracle.Available() {
 		log.Printf("[GenerationService] complexity escalation → oracle heavy reasoning lane")
 		oracleMsgs := toOracleMessages(messages)
 		oracleCh := oracle.ChatStreamWithDecision(ctx, oracleMsgs, oracle.Decision{
@@ -1483,87 +1343,12 @@ func (s *GenerationService) ChatStream(ctx context.Context, messages []map[strin
 		return out, nil
 	}
 
-	// RUNPOD_PRIMARY mode: route ALL tiers through the vLLM pod.
-	// Emits a personality callout if the pod is cold, then blocks on Ensure.
-	// If the pod never comes up, falls back to Ollama in the same channel.
-	if s.PrimaryMgr != nil && s.PrimaryMgr.IsEnabled() && os.Getenv("RUNPOD_PRIMARY") == "true" {
-		podState := s.PrimaryMgr.PodState()
-		podModel := s.PrimaryMgr.PodModelName()
-		wasWaiting := podState == StateOff || podState == StateWarming
-
-		out := make(chan string, 64)
-		go func() {
-			defer close(out)
-
-			// Escalation callout if the pod is cold or still warming up.
-			if podState == StateOff {
-				if podModel != "" {
-					out <- podCalloutWithModel(podModel)
-				} else {
-					out <- podCallout("escalation")
-				}
-			} else if podState == StateWarming {
-				out <- podCallout("warming")
-			}
-
-			ch, err := s.PrimaryMgr.ChatStream(ctx, messages, options)
-			if err != nil {
-				log.Printf("[GenerationService] PrimaryMgr unavailable (%v) — falling back to Ollama", err)
-				out <- podCallout("fallback")
-				// Pipe Ollama into the same channel so the user gets a real response.
-				ollamaCh, oErr := s.ollamaChatStream(ctx, messages, model, options)
-				if oErr == nil {
-					for tok := range ollamaCh {
-						out <- tok
-					}
-				}
-				return
-			}
-
-			// Success handoff — only when the user actually waited for the pod.
-			if wasWaiting {
-				out <- podHandoff(s.PrimaryMgr.PodModelName())
-			}
-
-			for tok := range ch {
-				out <- tok
-			}
-		}()
-		return out, nil
-	}
-
-	// Route code/research tiers to KoboldCpp RunPod when enabled (legacy path).
-	if (useResearch || useCode) && s.RunPodMgr != nil && s.RunPodMgr.IsEnabled() {
-		tier := "code"
-		if useResearch {
-			tier = "research"
-		}
-		ch, err := s.RunPodMgr.ChatStream(ctx, messages, options, tier)
-		if err != nil {
-			log.Printf("[GenerationService] RunPod unavailable (%v) — falling back to Ollama", err)
-		} else {
-			return ch, nil
-		}
-	}
-
-	// ── Remote Ollama path (TierMedium → RunPod tunnel) ──────────────────────
-	if remoteURL, ok := options["_remote_url"].(string); ok && remoteURL != "" {
-		remoteModel, _ := options["_remote_model"].(string)
-		if remoteModel == "" {
-			remoteModel = s.MediumModel
-		}
-		log.Printf("[GenerationService] routing to remote Ollama: %s @ %s", remoteModel, remoteURL)
-		return s.remoteOllamaChatStream(ctx, messages, remoteModel, remoteURL, options)
-	}
-
 	// ── Ollama path ──────────────────────────────────────────────────────────
-
 	return s.ollamaChatStream(ctx, messages, model, options)
 }
 
-// DirectOllama bypasses all routing logic (RunPod, complexity escalation, vLLM)
-// and calls Ollama synchronously. Use for bench/studio paths where latency matters
-// more than capability and adding a 15s vLLM timeout is unacceptable.
+// DirectOllama bypasses all routing logic and calls Ollama synchronously.
+// Use for bench/studio paths where latency matters more than capability.
 func (s *GenerationService) DirectOllama(ctx context.Context, messages []map[string]string, options map[string]interface{}) (<-chan string, error) {
 	model := s.DefaultModel
 	if m, ok := options["model"].(string); ok && m != "" {
@@ -1572,24 +1357,7 @@ func (s *GenerationService) DirectOllama(ctx context.Context, messages []map[str
 	return s.ollamaChatStream(ctx, messages, model, options)
 }
 
-// remoteOllamaChatStream routes to a remote Ollama instance (e.g. RunPod pod
-// via SSH tunnel). Identical to ollamaChatStream but overrides the base URL.
-func (s *GenerationService) remoteOllamaChatStream(ctx context.Context, messages []map[string]string, model, remoteURL string, options map[string]interface{}) (<-chan string, error) {
-	// Temporarily swap BaseURL, call ollamaChatStream, restore.
-	// Safe: GenerationService is not mutated concurrently at the URL level.
-	orig := s.BaseURL
-	s.BaseURL = remoteURL
-	ch, err := s.ollamaChatStream(ctx, messages, model, options)
-	s.BaseURL = orig
-	if err != nil {
-		log.Printf("[GenerationService] remote Ollama failed (%v) — falling back to local %s", err, s.DefaultModel)
-		return s.ollamaChatStream(ctx, messages, s.DefaultModel, options)
-	}
-	return ch, nil
-}
-
-// ollamaChatStream is the raw Ollama streaming path, extracted so it can be
-// called directly as a fallback from the RunPod routing block.
+// ollamaChatStream is the raw Ollama streaming path.
 func (s *GenerationService) ollamaChatStream(ctx context.Context, messages []map[string]string, model string, options map[string]interface{}) (<-chan string, error) {
 	ollamaMessages := make([]map[string]interface{}, len(messages))
 	for i, msg := range messages {
@@ -1832,26 +1600,7 @@ func (s *GenerationService) recordMastery(query string, success bool) {
 	s.Therapy.Mastery.Record(topicClass, query, success)
 }
 
-// ── Phase 12: Bid Feedback helpers ───────────────────────────────────────────
-
-// recordBidOutcome records the result of a generation to the FeedbackLedger.
-// anomalyScore: 0.0 = clean, 1.0 = HIGH anomaly. success = !error && no high anomaly.
-func (s *GenerationService) recordBidOutcome(tierID, taskClass string, latencyMs int, anomalyScore float64, success bool) {
-	if s.FeedbackLedger == nil {
-		return
-	}
-	s.FeedbackLedger.Record(compute.TierOutcome{
-		TierID:          tierID,
-		TaskClass:       taskClass,
-		ActualLatencyMs: latencyMs,
-		AnomalyScore:    anomalyScore,
-		Success:         success,
-		Timestamp:       time.Now(),
-	})
-}
-
-// inferBidTaskClass maps a message list to a compute bid task class.
-// Uses the last user message content via therapy.InferTopicClass.
+// inferBidTaskClass maps a message list to a task class via therapy topic inference.
 func inferBidTaskClass(messages []map[string]string) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i]["role"] == "user" {
@@ -1859,16 +1608,6 @@ func inferBidTaskClass(messages []map[string]string) string {
 		}
 	}
 	return "general"
-}
-
-// estimateTokens provides a rough token count estimate from message content length.
-// Assumes ~4 chars per token on average.
-func estimateTokens(messages []map[string]string) int {
-	total := 0
-	for _, m := range messages {
-		total += len(m["content"])
-	}
-	return total / 4
 }
 
 // lastUserMessage returns the content of the last user-role message.

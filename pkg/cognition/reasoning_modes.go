@@ -35,8 +35,7 @@ var (
 	reMath = regexp.MustCompile(`(?i)(calculat|comput|solv|convert|how many|how long.*\d|\d.*how long|=\?|\d+[\+\-\*\/\^]\d+|integral|derivative|percent|formula|equation|proof)`)
 
 	// LogicEval: logical argument evaluation — syllogisms, deduction validity, logical fallacies.
-	// Small models (gemma3:1b) fail on these with single-shot SELF-DISCOVER; ModeConsistency
-	// (3 independent samples + plurality vote) provides error-correction via diverse reasoning paths.
+	// ModeConsistency (3 independent samples + plurality vote) provides error-correction via diverse reasoning paths.
 	reLogicEval = regexp.MustCompile(`(?i)\b(therefore\b|it follows (that|from)|necessarily (true|false)|valid (argument|conclusion|syllogism)|logically? (follows|valid|invalid|fallac)|does (it|the conclusion) follow|conclude (that|from)|syllogis[m]|non.?sequitur|modus (ponens|tollens)|all .{1,40} are .{1,40}\. (some|all|no) )`)
 
 	// ReAct: multi-tool research queries

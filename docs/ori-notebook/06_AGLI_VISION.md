@@ -4,7 +4,7 @@
 **Report Number:** TR-2026-03  
 **Date:** 2026-03-31  
 **Version:** v10.0.0  
-**Status:** Phase I Complete ✅ — Phase II Complete ✅ (P11–P16) — Phase III Complete ✅ (P17–P26) — See `AGLI_Phase_II.md`  
+**Status:** Phase I ✅ — Phase II ✅ (P11–P16) — Phase III ✅ (P17–P26) — Phase IV ✅ (P27–P36) — Phase V ✅ (P37–P41) — All 48 phases shipped as of v10.0.0  
 **Style Mode:** Hard Technical Doctrine  
 
 ---
@@ -20,10 +20,10 @@ This document defines the architectural and philosophical mandate for **Autonomo
 Sovereignty is not merely "offline" usage — it is the absolute ownership of the cognitive lifecycle, including the rules that govern it.
 
 ### 2.1 Perimeter Sovereignty
-Traditional AI relies on external APIs, creating a "leaky" cognitive perimeter. AGLI mandates that no data, metadata, or reasoning traces leave the sovereign boundary. All inference runs on the local backbone (AMD EPYC VPS) via Ollama by default, with an optional governed RunPod vLLM primary path for GPU-tier workloads. The sovereign key system ensures the owner can always identify themselves and bypass safety softening — without exposing credentials to any third-party layer.
+Traditional AI hands cognitive control to a cloud system — your memory, your context, your governing principles all live in someone else's infrastructure. AGLI draws a harder line: the cognitive architecture, memory, orchestration layer, and constitutional stack are sovereign — owned and operated within the Thynaptic boundary. The raw intelligence tier (Oracle) calls the Anthropic API directly, governed by the constitutional stack before and after every call. Data flows through it; it does not reside there. No external system controls the daemons, the memory graph, the swarm, or the governing principles. The sovereign key system ensures the owner can always identify themselves and bypass safety softening — without exposing credentials to any third-party layer.
 
 ### 2.2 Compile-Time Compute Economy
-We reject brute-force neural scaling. AGLI uses compiled Go orchestration to manage sparse, high-intensity neural compute. Symbolic logic, Markov inference, MCTS search, and ARC induction/transduction replace expensive LLM reasoning steps wherever possible. Auto-thread detection (`runtime.NumCPU()-2`) prevents scheduler contention and sustains 39+ tok/s on 8 vCPUs. When a task genuinely requires GPU-class compute, the system spins a governed remote compute session — budget-capped, constitutionally pre-cleared, and torn down on completion.
+We reject brute-force neural scaling. AGLI uses compiled Go orchestration to manage sparse, high-intensity neural compute. Symbolic logic, Markov inference, MCTS search, and ARC induction/transduction replace expensive LLM reasoning steps wherever possible. When a task genuinely requires LLM inference, Oracle routes it to the appropriate tier: Claude Haiku for lightweight structured tasks (daemons, classification, distillation), Claude Sonnet for heavy reasoning and research. All routing decisions, constitutional checks, and memory operations execute in the sovereign Go backbone — the intelligence call is external, the cognitive architecture is not.
 
 ### 2.3 The Hybrid Hive (Distributed Agency)
 Intelligence is a swarm. Oricli-Alpha operates as a decentralized network of 269+ micro-agents (modules) registered on the Hive OS Kernel. Using the Contract Net Protocol and the Swarm Bus, modules bid on tasks in a high-speed parallel marketplace, ensuring the optimal tool is applied at the speed of the Go runtime. Blackboard state, peer review, and consensus policies are operational.

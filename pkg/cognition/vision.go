@@ -2,13 +2,11 @@ package cognition
 
 // ─── Vision Module ────────────────────────────────────────────────────────────
 //
-// Provides image understanding via moondream (local Ollama, CPU-safe).
+// Provides image understanding via Oracle vision (Claude / Anthropic API).
 // Used by:
 //   - ReAct tool loop: VISION: <url_or_path> prefix
 //   - POST /v1/vision/analyze API endpoint
 //   - Optional memory write-back with ProvenanceSeen tier
-//
-// Model: moondream:latest (1.7GB, CLIP + phi2, ~5-8s on EPYC CPU)
 
 // VisionInput describes the image source for analysis.
 // Exactly one of URL, FilePath, or Base64 should be set.
@@ -23,7 +21,7 @@ type VisionInput struct {
 type VisionResult struct {
 	Description string   // primary natural language description
 	Tags        []string // extracted concept tags (auto-derived from description)
-	Model       string   // model used (e.g. "moondream:latest")
+	Model       string   // model used (e.g. "oracle/vision")
 	RawResponse string   // full model output before post-processing
 }
 

@@ -1,6 +1,6 @@
 # Thynaptic — Company Overview
 
-> Last updated: 2026-04-20
+> Last updated: 2026-05-02
 > Audience: investors, partners, press, developer community
 
 ---
@@ -82,7 +82,7 @@ ORI's backbone is a Go-native reasoning engine — 269+ cognitive modules, a swa
 
 The architecture is designed for reliability under real usage: session pooling eliminates cold-start latency across turns, agent profiles enforce capability boundaries without duplicating module logic, and the swarm layer handles multi-agent coordination when a single-pass response isn't sufficient.
 
-Oracle, the high-capability reasoning tier, routes through GitHub Copilot's model catalog with automatic model selection keyed to query tier and model availability.
+Oracle, the high-capability reasoning tier, calls the Anthropic API directly — Claude Haiku for lightweight structured inference, Claude Sonnet for heavy reasoning and research — with automatic tier selection keyed to query complexity. Prompt caching is enabled on all routes; extended thinking activates on heavy and research tiers.
 
 ---
 

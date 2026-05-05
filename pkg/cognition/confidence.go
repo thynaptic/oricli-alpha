@@ -133,7 +133,7 @@ func IsSessionIntrospective(s string) bool {
 }
 
 // IsConversationalShort returns true for brief social/greeting messages that
-// don't need Oracle-quality reasoning — local Ollama fast path is fine.
+// don't need Oracle-quality reasoning — routed to the light Haiku path.
 func IsConversationalShort(lower string) bool {
 	return isConversational(lower)
 }

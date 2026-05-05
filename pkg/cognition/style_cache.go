@@ -26,11 +26,11 @@ type styleProfileCache struct {
 var globalStyleProfileCache = newStyleProfileCache()
 
 func newStyleProfileCache() *styleProfileCache {
-	ttlSec := envIntCache("TALOS_STYLE_CACHE_TTL_SEC", 600)
+	ttlSec := envIntCache("ORI_STYLE_CACHE_TTL_SEC", 600)
 	if ttlSec < 30 {
 		ttlSec = 30
 	}
-	maxItems := envIntCache("TALOS_STYLE_CACHE_MAX", 256)
+	maxItems := envIntCache("ORI_STYLE_CACHE_MAX", 256)
 	if maxItems < 32 {
 		maxItems = 32
 	}

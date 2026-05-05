@@ -8,21 +8,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ollama/ollama/api"
+	"github.com/thynaptic/oricli-go/pkg/llm"
 )
 
 type StyleModelScorer interface {
 	Score(ctx context.Context, query string, baseline StyleProfile) (StyleProfile, error)
 }
 
-type defaultStyleScorer struct {
-	models []string
-}
+type defaultStyleScorer struct{}
 
 func newDefaultStyleScorer() StyleModelScorer {
-	return &defaultStyleScorer{
-		models: []string{"llama3.2:1b", "qwen2.5:3b-instruct"},
-	}
+	return &defaultStyleScorer{}
 }
 
 type styleModelResponse struct {
@@ -32,9 +28,8 @@ type styleModelResponse struct {
 }
 
 func (s *defaultStyleScorer) Score(ctx context.Context, query string, baseline StyleProfile) (StyleProfile, error) {
-	client, err := api.ClientFromEnvironment()
-	if err != nil {
-		return StyleProfile{}, err
+	if !llm.Available() {
+		return StyleProfile{}, fmt.Errorf("llm unavailable")
 	}
 	system := `Return JSON only.
 Adjust style profile with minimal drift from baseline:
@@ -51,59 +46,34 @@ Rules:
 		baseline.Density,
 		baseline.VerbosityTarget,
 	)
-	msgs := []api.Message{
-		{Role: "system", Content: system},
-		{Role: "user", Content: user},
+	callCtx := ctx
+	if callCtx == nil {
+		t := clampIntStyle(envIntStyle("ORI_STYLE_MODEL_TIMEOUT_MS", 3000), 1000, 15000)
+		var cancel context.CancelFunc
+		callCtx, cancel = context.WithTimeout(context.Background(), time.Duration(t)*time.Millisecond)
+		defer cancel()
 	}
-	var lastErr error
-	for _, model := range s.models {
-		req := &api.ChatRequest{
-			Model:    model,
-			Messages: msgs,
-			Options: map[string]any{
-				"temperature": 0.1,
-				"top_p":       0.8,
-			},
-		}
-		callCtx := ctx
-		if callCtx == nil {
-			t := clampIntStyle(envIntStyle("TALOS_STYLE_MODEL_TIMEOUT_MS", 120), 60, 600)
-			var cancel context.CancelFunc
-			callCtx, cancel = context.WithTimeout(context.Background(), time.Duration(t)*time.Millisecond)
-			defer cancel()
-		}
-		var out strings.Builder
-		err := client.Chat(callCtx, req, func(resp api.ChatResponse) error {
-			out.WriteString(resp.Message.Content)
-			return nil
-		})
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		parsed, ok := parseStyleModelResponse(out.String())
-		if !ok {
-			lastErr = fmt.Errorf("invalid style model output")
-			continue
-		}
-		refined := baseline
-		if parsed.Tone != "" {
-			refined.Tone = parsed.Tone
-		}
-		if parsed.Structure != "" {
-			refined.Structure = parsed.Structure
-		}
-		if parsed.Density > 0 {
-			refined.Density = parsed.Density
-		}
-		refined.Density = clampRangeStyle(refined.Density, 0.60, 1.40)
-		refined.FromModel = true
-		return refined, nil
+	raw, err := llm.Chat(callCtx, system, user)
+	if err != nil {
+		return StyleProfile{}, err
 	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("no style models available")
+	parsed, ok := parseStyleModelResponse(raw)
+	if !ok {
+		return StyleProfile{}, fmt.Errorf("invalid style model output")
 	}
-	return StyleProfile{}, lastErr
+	refined := baseline
+	if parsed.Tone != "" {
+		refined.Tone = parsed.Tone
+	}
+	if parsed.Structure != "" {
+		refined.Structure = parsed.Structure
+	}
+	if parsed.Density > 0 {
+		refined.Density = parsed.Density
+	}
+	refined.Density = clampRangeStyle(refined.Density, 0.60, 1.40)
+	refined.FromModel = true
+	return refined, nil
 }
 
 var styleJSONRE = regexp.MustCompile(`(?s)\{.*\}`)

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ollama/ollama/api"
+	"github.com/thynaptic/oricli-go/pkg/llm"
 )
 
 const (
@@ -15,10 +15,6 @@ const (
 )
 
 var (
-	intentFastModels = []string{
-		"llama3.2:1b",
-		"qwen2.5:3b-instruct",
-	}
 	vaguePattern = regexp.MustCompile(`(?i)\b(that thing|do it|fix (the )?server|handle it|sort it|make it work|this issue|that issue|same as before|as usual)\b`)
 	jsonBlockRE  = regexp.MustCompile(`(?s)\{.*\}`)
 )
@@ -72,11 +68,9 @@ func NormalizeIntent(rawInput string, currentMission MissionPlan) IntentNormaliz
 }
 
 func normalizeWithFastModel(raw string, mission MissionPlan) (intentModelResponse, bool) {
-	client, err := api.ClientFromEnvironment()
-	if err != nil {
+	if !llm.Available() {
 		return intentModelResponse{}, false
 	}
-
 	system := `You normalize user intent for a technical mission executor.
 Return JSON only:
 {
@@ -97,27 +91,14 @@ Rules:
 		"raw_input": raw,
 		"mission":   mission,
 	})
-	msgs := []api.Message{
-		{Role: "system", Content: system},
-		{Role: "user", Content: string(payload)},
+	ctx, cancel := context.WithTimeout(context.Background(), intentModelTimeout)
+	defer cancel()
+	out, err := llm.Chat(ctx, system, string(payload))
+	if err != nil {
+		return intentModelResponse{}, false
 	}
-
-	for _, model := range intentFastModels {
-		opts, _ := ResolveEntropyOptions(raw)
-		req := &api.ChatRequest{Model: model, Messages: msgs, Options: opts}
-		ctx, cancel := context.WithTimeout(context.Background(), intentModelTimeout)
-		var out strings.Builder
-		err := client.Chat(ctx, req, func(resp api.ChatResponse) error {
-			out.WriteString(resp.Message.Content)
-			return nil
-		})
-		cancel()
-		if err != nil {
-			continue
-		}
-		if parsed, ok := parseIntentModelResponse(out.String()); ok {
-			return parsed, true
-		}
+	if parsed, ok := parseIntentModelResponse(out); ok {
+		return parsed, true
 	}
 	return intentModelResponse{}, false
 }

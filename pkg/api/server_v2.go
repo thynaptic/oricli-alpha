@@ -32,10 +32,8 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/coalition"
 	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/cognition"
-	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/conformity"
-	"github.com/thynaptic/oricli-go/pkg/connectors/runpod"
-	"github.com/thynaptic/oricli-go/pkg/core/auth"
+	coreauth "github.com/thynaptic/oricli-go/pkg/core/auth"
 	"github.com/thynaptic/oricli-go/pkg/core/config"
 	"github.com/thynaptic/oricli-go/pkg/core/model"
 	"github.com/thynaptic/oricli-go/pkg/core/store"
@@ -48,7 +46,6 @@ import (
 	githubconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/github"
 	notionconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/notion"
 	"github.com/thynaptic/oricli-go/pkg/enterprise/rag"
-	"github.com/thynaptic/oricli-go/pkg/finetune"
 	"github.com/thynaptic/oricli-go/pkg/goal"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/ideocapture"
@@ -93,7 +90,7 @@ import (
 type ServerV2 struct {
 	cfg              config.Config
 	store            store.Store
-	auth             *auth.Service
+	auth             *coreauth.Service
 	Orchestrator     *service.GoOrchestrator
 	Agent            *service.GoAgentService
 	Monitor          *service.ModuleMonitorService
@@ -108,7 +105,6 @@ type ServerV2 struct {
 	RateLimiter      *safety.RateLimiter
 	SovAuth          *sovereign.SovereignAuth
 	ExecHandler      *sovereign.SovereignExecHandler
-	ImageGen         *service.ImageGenManager
 	MemoryBank       *service.MemoryBank
 	DocumentIngestor *service.DocumentIngestor
 	Skills           *service.SkillManager
@@ -154,8 +150,6 @@ type ServerV2 struct {
 	GoalDaemon  *service.GoalDaemon
 	GoalStore   *goal.GoalStore
 	GoalPlanner *goal.GoalPlanner
-	// FineTune: Automated LoRA training orchestrator
-	FineTune *service.FineTuneService
 	// Sentinel: Adversarial Sentinel — red-team pre-flight
 	Sentinel *sentinel.AdversarialSentinel
 	// CrystalCache: Skill Crystallization — LLM-bypass for high-reputation patterns
@@ -183,10 +177,6 @@ type ServerV2 struct {
 	TherapyHelpless  therapy.HelplessnessRuntime
 	TherapyMastery   therapy.MasteryRuntime
 	TherapyRetrainer *therapy.AttributionalRetrainer
-
-	// Phase 12: Sovereign Compute Bidding
-	BidGovernor    *compute.BidGovernor
-	FeedbackLedger *compute.FeedbackLedger
 
 	// Phase 17: Dual Process Engine
 	DualProcessClassifier *dualprocess.ProcessClassifier
@@ -275,7 +265,7 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	s := &ServerV2{
 		cfg:          cfg,
 		store:        st,
-		auth:         auth.NewService(st),
+		auth:         coreauth.NewService(st),
 		Orchestrator: orch,
 		Agent:        agent,
 		Monitor:      mon,
@@ -287,7 +277,6 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 		RateLimiter:  safety.NewRateLimiter(),
 		SovAuth:      sovereign.NewSovereignAuth(),
 		ExecHandler:  sovereign.NewSovereignExecHandler(),
-		ImageGen:     service.NewImageGenManager(),
 		Browser:      service.NewBrowserService(cfg),
 	}
 
@@ -326,16 +315,7 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	// Wire MemoryBank to ExecHandler for PB audit trail on every !command
 	s.ExecHandler.MemoryBank = mb
 
-	// Restore this month's RunPod spend from PocketBase
-	if rp := agent.GenService.RunPodMgr; rp != nil {
-		rp.MemoryBank = mb
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			rp.LoadSpendFromBank(ctx)
-		}()
-	}
-
+	// Inject SearXNG searcher into SovereignEngine (avoids import cycle)
 	// Inject SearXNG searcher into SovereignEngine (avoids import cycle)
 	agent.SovEngine.SearXNG = service.NewSearXNGSearcher()
 
@@ -375,16 +355,7 @@ func NewServerV2(cfg config.Config, st store.Store, orch *service.GoOrchestrator
 	agent.SovEngine.CertaintyUpdaterRef = adapter
 	// Inject GoalStore for Product Umbrella (Active Pulse)
 	agent.SovEngine.GoalStoreRef = s.GoalStore
-	// VisionRef: route to RunPod GPU pod when enabled, fall back to local Ollama stub.
-	if os.Getenv("RUNPOD_VISION_ENABLED") == "true" {
-		apiKey := os.Getenv("RUNPOD_API_KEY")
-		if apiKey == "" {
-			apiKey = os.Getenv("OricliAlpha_Key")
-		}
-		agent.SovEngine.VisionRef = service.NewRunPodVisionManager(runpod.NewClient(apiKey))
-	} else {
-		agent.SovEngine.VisionRef = &oracleVisionAdapter{}
-	}
+	agent.SovEngine.VisionRef = &oracleVisionAdapter{}
 
 	s.setupRoutes()
 
@@ -611,14 +582,6 @@ func (s *ServerV2) setupRoutes() {
 			sovereignGoals.DELETE("/:id", s.handleGoalCancel)
 		}
 
-		// FineTune: Automated LoRA training
-		ftRoutes := protected.Group("/finetune")
-		{
-			ftRoutes.POST("/run", s.handleFineTuneRun)
-			ftRoutes.GET("/status/:job_id", s.handleFineTuneStatus)
-			ftRoutes.GET("/jobs", s.handleFineTuneJobs)
-		}
-
 		// Sentinel: Adversarial challenge endpoint
 		sentinelRoutes := protected.Group("/sentinel")
 		{
@@ -689,12 +652,6 @@ func (s *ServerV2) setupRoutes() {
 			therapyRoutes.GET("/mastery", s.handleTherapyMastery)
 			therapyRoutes.POST("/helplessness/check", s.handleTherapyHelplessnessCheck)
 			therapyRoutes.GET("/helplessness/stats", s.handleTherapyHelplessnessStats)
-		}
-		// Phase 12: Sovereign Compute Bidding
-		computeRoutes := v1.Group("/compute")
-		{
-			computeRoutes.GET("/bids/stats", s.handleComputeBidStats)
-			computeRoutes.GET("/governor", s.handleComputeGovernor)
 		}
 		// Phase 17: Dual Process Engine
 		cognitionRoutes := v1.Group("/cognition")
@@ -1044,32 +1001,37 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		c.GetHeader("X-Canvas-Mode") == "true" ||
 		c.GetHeader("X-Code-Context") == "true"
 
-	if blocked, refusal := s.Agent.SovEngine.CheckInputSafetyWithHistory(history, sessionKey, isCodeCtx); blocked {
-		// Record the block with the rate limiter for probe trip-wire
-		s.RateLimiter.RecordBlock(sessionKey, "injection")
-		chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
-		c.JSON(http.StatusOK, gin.H{
-			"id":     chatID,
-			"object": "chat.completion",
-			"choices": []gin.H{{
-				"index": 0,
-				"message": gin.H{
-					"role":    "assistant",
-					"content": refusal,
-				},
-				"finish_reason": "stop",
-			}},
-		})
-		return
-	}
-	if s.Agent.SovEngine.Suspicion.IsHardBlocked(sessionKey) {
-		remaining := s.Agent.SovEngine.Suspicion.BlockTimeRemaining(sessionKey)
-		c.Header("Retry-After", remaining.String())
-		c.JSON(http.StatusTooManyRequests, gin.H{
-			"error":       "session suspended due to repeated policy violations",
-			"retry_after": remaining.Seconds(),
-		})
-		return
+	// runtime:internal keys (trusted internal surfaces, harness, enterprise partners)
+	// bypass SCAI input screening and the suspicion hard-block entirely.
+	isInternal := coreauth.HasScope(c.Request.Context(), "runtime:internal")
+
+	if !isInternal {
+		if blocked, refusal := s.Agent.SovEngine.CheckInputSafetyWithHistory(history, sessionKey, isCodeCtx); blocked {
+			s.RateLimiter.RecordBlock(sessionKey, "injection")
+			chatID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
+			c.JSON(http.StatusOK, gin.H{
+				"id":     chatID,
+				"object": "chat.completion",
+				"choices": []gin.H{{
+					"index": 0,
+					"message": gin.H{
+						"role":    "assistant",
+						"content": refusal,
+					},
+					"finish_reason": "stop",
+				}},
+			})
+			return
+		}
+		if s.Agent.SovEngine.Suspicion.IsHardBlocked(sessionKey) {
+			remaining := s.Agent.SovEngine.Suspicion.BlockTimeRemaining(sessionKey)
+			c.Header("Retry-After", remaining.String())
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":       "session suspended due to repeated policy violations",
+				"retry_after": remaining.Seconds(),
+			})
+			return
+		}
 	}
 
 	// Attach sovereign level to context for ProcessInference
@@ -2053,49 +2015,9 @@ func (s *ServerV2) handleTelegramWebhook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
-// handleImageGenerations is an OpenAI-compatible POST /v1/images/generations endpoint.
-// It routes to the RunPod A1111 image gen pod (lazy spin-up on first request).
+// handleImageGenerations returns 503 — image generation via RunPod is retired.
 func (s *ServerV2) handleImageGenerations(c *gin.Context) {
-	var req service.ImageGenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if req.Prompt == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt is required"})
-		return
-	}
-
-	if s.ImageGen == nil || !s.ImageGen.IsEnabled() {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error":   "image generation is not enabled",
-			"hint":    "Set RUNPOD_IMAGEGEN_ENABLED=true in .env and restart",
-			"warming": false,
-		})
-		return
-	}
-
-	if s.ImageGen.WarmingUp() {
-		c.JSON(http.StatusAccepted, gin.H{
-			"error":   "image engine is warming up, retry in ~60s",
-			"warming": true,
-			"status":  s.ImageGen.Status(),
-		})
-		return
-	}
-
-	b64, err := s.ImageGen.GenerateImage(c.Request.Context(), req)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "warming": s.ImageGen.WarmingUp()})
-		return
-	}
-
-	c.JSON(http.StatusOK, service.ImageGenResponse{
-		Created: time.Now().Unix(),
-		Data: []struct {
-			B64JSON string `json:"b64_json"`
-		}{{B64JSON: b64}},
-	})
+	c.JSON(http.StatusServiceUnavailable, gin.H{"error": "image generation is not available"})
 }
 
 func (s *ServerV2) handleSwarmRun(c *gin.Context) {
@@ -4089,66 +4011,6 @@ func (s *ServerV2) handleGoalCancel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "cancelled", "id": id})
 }
 
-// ─── FineTune: Automated LoRA Training ───────────────────────────────────────
-
-// POST /v1/finetune/run — start a fine-tuning job
-func (s *ServerV2) handleFineTuneRun(c *gin.Context) {
-	if s.FineTune == nil || !s.FineTune.Enabled {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning disabled — set ORICLI_FINETUNE_ENABLED=true"})
-		return
-	}
-	var req struct {
-		ModelBase    string `json:"model_base"`
-		DatasetCount int    `json:"dataset_count"`
-		GPUType      string `json:"gpu_type"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	cfg := finetune.RunConfig{
-		ModelBase:    req.ModelBase,
-		DatasetCount: req.DatasetCount,
-		GPUType:      req.GPUType,
-	}
-
-	jobID, err := s.FineTune.RunAsync(cfg)
-	if err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusAccepted, gin.H{
-		"job_id":  jobID,
-		"message": "fine-tuning job queued — poll GET /v1/finetune/status/" + jobID,
-	})
-}
-
-// GET /v1/finetune/status/:job_id — get job status
-func (s *ServerV2) handleFineTuneStatus(c *gin.Context) {
-	if s.FineTune == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning not enabled"})
-		return
-	}
-	jobID := c.Param("job_id")
-	status, ok := s.FineTune.GetStatus(jobID)
-	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
-		return
-	}
-	c.JSON(http.StatusOK, status)
-}
-
-// GET /v1/finetune/jobs — list all jobs
-func (s *ServerV2) handleFineTuneJobs(c *gin.Context) {
-	if s.FineTune == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fine-tuning not enabled"})
-		return
-	}
-	jobs := s.FineTune.ListJobs()
-	c.JSON(http.StatusOK, gin.H{"jobs": jobs, "count": len(jobs)})
-}
-
 // ─── Waitlist: SMB API sign-up capture ───────────────────────────────────────
 
 // POST /v1/waitlist — public endpoint, no auth required
@@ -4809,32 +4671,6 @@ func (s *ServerV2) handleTherapyHelplessnessStats(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"helplessness_count": f.HelplessnessCount,
 		"schema_active":      schemaActive,
-	})
-}
-
-// ── Phase 12: Sovereign Compute Bidding handlers ─────────────────────────────
-
-func (s *ServerV2) handleComputeBidStats(c *gin.Context) {
-	if s.FeedbackLedger == nil {
-		c.JSON(503, gin.H{"error": "compute bidding not enabled"})
-		return
-	}
-	c.JSON(200, s.FeedbackLedger.Stats())
-}
-
-func (s *ServerV2) handleComputeGovernor(c *gin.Context) {
-	if s.BidGovernor == nil {
-		c.JSON(503, gin.H{"error": "compute bidding not enabled"})
-		return
-	}
-	n := 20
-	if nStr := c.Query("n"); nStr != "" {
-		if parsed, err := strconv.Atoi(nStr); err == nil && parsed > 0 {
-			n = parsed
-		}
-	}
-	c.JSON(200, gin.H{
-		"recent_decisions": s.BidGovernor.RecentDecisions(n),
 	})
 }
 

@@ -8,7 +8,7 @@ package cognition
 // matching only — no LLM calls, no network I/O.
 //
 // Task types map to deterministic actions; LLM is only invoked in the final
-// Generate step (if any), keeping Ollama free for the actual response.
+// Generate step (if any).
 // ---------------------------------------------------------------------------
 
 import (

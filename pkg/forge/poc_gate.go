@@ -7,16 +7,13 @@ import (
 	"log"
 	"strings"
 	"time"
+
+	"github.com/thynaptic/oricli-go/pkg/llm"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Interfaces
 // ─────────────────────────────────────────────────────────────────────────────
-
-// GateDistiller generates text via Ollama. Satisfied by *service.GenerationService.
-type GateDistiller interface {
-	Generate(prompt string, options map[string]interface{}) (map[string]interface{}, error)
-}
 
 // GateAuditor pre-screens justifications for adversarial patterns.
 // Satisfied by *safety.AdversarialAuditor.
@@ -82,17 +79,15 @@ const gateThreshold = 0.70
 // POCGate is the "Why do you need this? Show me." gate.
 // A JustificationRequest must score ≥ 0.70 to proceed to tool generation.
 type POCGate struct {
-	Distiller    GateDistiller
 	PreScreener  GateAuditor      // optional adversarial pre-screen
 	Constitution *CodeConstitution
 	Threshold    float64
 }
 
 // NewPOCGate creates a gate with the given components.
-// distiller and preScreener may be nil (gate will use heuristics only).
-func NewPOCGate(distiller GateDistiller, preScreener GateAuditor, constitution *CodeConstitution) *POCGate {
+// preScreener may be nil (gate will use heuristics only).
+func NewPOCGate(preScreener GateAuditor, constitution *CodeConstitution) *POCGate {
 	return &POCGate{
-		Distiller:    distiller,
 		PreScreener:  preScreener,
 		Constitution: constitution,
 		Threshold:    gateThreshold,
@@ -108,8 +103,7 @@ func (g *POCGate) BuildJustification(ctx context.Context, task string, triedTool
 		RequestedAt: time.Now().UTC(),
 	}
 
-	if g.Distiller == nil {
-		// No LLM — build minimal justification from inputs.
+	if !llm.Available() {
 		req.GapAnalysis = fmt.Sprintf("No LLM available. Tried: %s", strings.Join(triedTools, ", "))
 		req.ProposedName = sanitizeName(task)
 		return req, nil
@@ -134,16 +128,11 @@ Generate a JSON object with these exact fields:
 
 JSON only, no explanation:`, task, triedStr)
 
-	result, err := g.Distiller.Generate(prompt, map[string]interface{}{
-		"model":       "ministral-3:3b",
-		"temperature": 0.1,
-		"num_predict": 300,
-	})
+	raw, err := llm.Chat(ctx, "", prompt)
 	if err != nil {
 		return req, fmt.Errorf("justification generate: %w", err)
 	}
 
-	raw, _ := result["response"].(string)
 	start := strings.Index(raw, "{")
 	end := strings.LastIndex(raw, "}")
 	if start >= 0 && end > start {

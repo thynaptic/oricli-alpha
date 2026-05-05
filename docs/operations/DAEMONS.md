@@ -1,10 +1,11 @@
 # Oricli-Alpha Autonomous Daemons
 
 **Document Type:** Technical Reference  
-**Version:** v2.5.0  
+**Version:** v3.0.0  
+**Last Updated:** 2026-05-02  
 **Status:** Active  
 
-Oricli-Alpha maintains seven background daemons that run as goroutines within the Go-native backbone (`pkg/service/daemon.go`, `curiosity_daemon.go`, `reform_daemon.go`, `pkg/kernel/scaling.go`). They are started at boot and communicate with the system exclusively through the Swarm Bus — zero polling overhead on the main inference path.
+Oricli-Alpha maintains background daemons that run as goroutines within the Go-native backbone. All LLM inference in daemons routes through Oracle (Anthropic API) — Claude Haiku for lightweight structured tasks, Claude Sonnet for heavy reasoning. RunPod GPU compute is currently disabled (`RUNPOD_ENABLED=false`). Daemons are started at boot and communicate with the system through the Swarm Bus — zero polling overhead on the main inference path.
 
 > **Note:** Section 5.1 (ConfidenceDetector / Inline Search) is not a daemon — it fires synchronously inside `ProcessInference()` and is documented here for colocation with the CuriosityDaemon's search architecture.
 
@@ -17,24 +18,28 @@ Oricli-Alpha maintains seven background daemons that run as goroutines within th
 - **Trigger**: ≥ 5 new lessons in `oricli_core/data/jit_absorption.jsonl` AND cooldown elapsed (or nighttime window, 23:00–05:00).
 - **Cycle**: Checks every 5 minutes.
 - **Action**:
-  1. Invokes `scripts/runpod_bridge.py --train-jit` on a remote RunPod cluster (2 pods, min 40GB VRAM, max $2.50/hr).
-  2. On success, writes a `MetaEvent` node to the Neo4j knowledge graph recording the sync.
+  1. Invokes the LoRA fine-tuning pipeline via RunPod (gated behind `RUNPOD_ENABLED=true` — currently disabled).
+  2. On success, writes a `MetaEvent` node to the knowledge graph recording the sync.
   3. Saves state (`LastSyncTime`, `LastSyncCount`) for cooldown tracking.
+- **Current status**: Training path dormant (RunPod disabled). Lesson accumulation still runs.
 
 ---
 
 ## 2. Dream Daemon
 **"The Subconscious Consolidator"** | `pkg/service/daemon.go` → `DreamDaemon`
 
-- **Role**: Runs offline consolidation during idle periods — compresses recent Gosh execution traces into model evolution, or forages for knowledge gaps.
-- **Trigger**: System idle for ≥ 3600 seconds (1 hour), checked every 60 seconds.
-- **Action (if traces available)**:
-  1. Queries the Memory Bridge (LMDB) for Gosh execution traces from the last 24 hours.
-  2. Provisions a Ghost Cluster session (`GhostClusterService.Provision`) — NVIDIA RTX 5090 × 1.
-  3. Runs consolidation training, then calls `Vanish()` to destroy the cluster immediately.
-- **Action (if no new traces)**:
-  1. Falls back to Knowledge Graph foraging: queries Neo4j for low-context nodes (< 2 edges).
-  2. Dispatches a Swarm research task for the orphaned entity via `GoOrchestrator`.
+- **Role**: Runs offline consolidation during idle periods — distills behavioral lessons from recent interaction signals and compresses adversarial audit findings into improvement rules via Oracle (Haiku).
+- **Trigger**: System idle for ≥ configured threshold, checked every 60 seconds.
+- **LLM tier**: Claude Haiku via `llm.Chat()` — lightweight structured inference, 30s timeout.
+- **Action (behavioral lesson distillation)**:
+  1. Pulls recent feedback fragments from the Memory Bridge.
+  2. Sends a compact signal digest to Haiku: *"extract 3-5 behavioral rules ≤15 words each."*
+  3. Parses the numbered list → writes each lesson to MemoryBank as `ProvenanceUserStated`, importance 0.85.
+- **Action (adversarial finding consolidation)**:
+  1. Pulls recent ExploiterLeague findings above relevance threshold.
+  2. Sends to Haiku: *"extract 2-3 improvement rules from adversarial audit findings."*
+  3. Corroborated findings (certainty-verified) get importance 0.90. Written to MemoryBank.
+- **Why it matters**: Runs while nobody's talking to ORI. Every idle period, ORI gets slightly better at her own behavioral patterns for ~$0.001 in Haiku calls.
 
 ---
 
@@ -60,7 +65,8 @@ Oricli-Alpha maintains seven background daemons that run as goroutines within th
 - **Role**: Monitors tool usage correction events and triggers targeted tool-calling fine-tuning.
 - **Trigger**: ≥ 10 new correction events in the corrections buffer AND cooldown elapsed.
 - **Cycle**: Checks every 10 minutes.
-- **Action**: Invokes `scripts/runpod_bridge.py --train-tool-bench` on a remote RunPod cluster (same hardware spec as JIT Daemon).
+- **Action**: LoRA fine-tuning pipeline via RunPod (gated behind `RUNPOD_ENABLED=true` — currently disabled). Correction event accumulation still runs.
+- **Current status**: Training path dormant (RunPod disabled).
 
 ---
 
@@ -118,7 +124,7 @@ Each topic goes through the same search-extract-commit pipeline:
 2. `SearXNG SearchWithURLs()` → structured results with real URLs
 3. `VDI.NavigateAndExtract()` on top-2 URLs (parallel, 5s timeout) → rich article text
 4. Fallback: `SearXNG SearchWithIntent()` → snippets; then Colly DDG as last resort. **CollySearcher domain blacklist**: after 3 consecutive 403/429 failures from a hostname, that domain is auto-blacklisted for 1 hour (`domainBlacklist map[string]time.Time`). `isBlacklisted()` is checked before each `c.Visit()` call; `recordFailure()` is called in the `OnError` handler and on visit errors. This prevents CuriosityDaemon from hammering blocked domains (e.g. StackExchange returns 403 to crawlers) and saturating the Ollama inference queue.
-5. Intent-tailored extraction prompt → `GenerationService.Generate()` (90s deadline, `ministral-3:3b`)
+5. Intent-tailored extraction prompt → `llm.Chat()` (Oracle/Haiku, 20s deadline)
 6. Commit 3–5 extracted facts to `WorkingMemoryGraph.UpdateEntity()`
 7. **`MemoryBank.WriteKnowledgeFragment(topic, intent, factSummary, 0.7)`** — persists finding to PocketBase under Oricli's analyst account (author=oricli)
 
@@ -174,7 +180,7 @@ forageTopic("quantum computing")
 ## 5.1 Inline Search — ConfidenceDetector
 **"The Reflexive Lookup"** | `pkg/cognition/confidence.go` → `DetectUncertainty()`
 
-Unlike the CuriosityDaemon (which forages during idle periods), the ConfidenceDetector fires **synchronously during live chat inference** — before Ollama is ever called.
+Unlike the CuriosityDaemon (which forages during idle periods), the ConfidenceDetector fires **synchronously during live chat inference** — before Oracle is ever called.
 
 - **Trigger**: A user prompt that contains knowledge-seeking signals ("what is", "what does", "who is", "when did", "how to", "explain", "define", etc.) with an extractable topic.
 - **Speed**: Pure regex/keyword — zero LLM calls, <1ms. Never slows inference.
@@ -198,7 +204,7 @@ USER MESSAGE
 [ProcessInference composite] ← context injected as ### WEB CONTEXT [...] block
      │
      ▼
-[Ollama generation]          ← LLM now has real facts to draw from
+[Oracle generation]          ← LLM now has real facts to draw from
 ```
 
 ### Intent classification
@@ -328,11 +334,20 @@ WORLD_TRAVELER_DAILY_BUDGET_USD=2.00     (CostGovernor cap, default: $2.00)
 
 - **Role**: Monitors Swarm Bus latency in real-time and autonomously provisions additional GPU compute when the system is under pressure.
 - **Trigger**: Swarm Bus average latency exceeds **500ms**, checked every 10 seconds.
-- **Action**:
-  1. Issues a `SysAllocGPU` syscall directly to Kernel Ring-0 (bypasses normal swarm routing).
-  2. Requests NVIDIA RTX 5090 × 1 from the GhostCluster via RunPod.
-  3. New worker node joins the swarm automatically.
-- **Shutdown**: Responds to `stopCh` signal for clean shutdown with the rest of the backbone.
+- **Action**: Issues a `SysAllocGPU` syscall to Kernel Ring-0 and requests a GhostCluster GPU session via RunPod. Gated behind `RUNPOD_ENABLED=true` — currently disabled. Latency monitoring still active.
+- **Current status**: Provisioning path dormant (RunPod disabled).
+- **Shutdown**: Responds to `stopCh` signal for clean shutdown.
+
+---
+
+## 8.1 Temporal Grounding Daemon
+**"The Memory Clock"** | `pkg/chronos/daemon.go` → `TemporalGroundingDaemon`
+
+- **Role**: Applies temporal decay to memory, generates knowledge-state change summaries, and seeds CuriosityDaemon when topics go stale.
+- **LLM tier**: Claude Haiku via `llm.Chat()` — only fires when ≥3 changes detected in a snapshot diff.
+- **Decay scan**: Every **30 minutes** — applies configured half-lives per memory category (contextual 72h, factual 168h, procedural 2160h, constitutional ∞). No LLM call.
+- **Snapshot pass**: Every **6 hours** — diffs current knowledge state against prior snapshot. If ≥3 changes: sends diff to Haiku for a 2-3 sentence change summary. Topics stale for ≥3 consecutive scans emit `EpistemicStagnation` events to the MetacogLog and are seeded into CuriosityDaemon.
+- **Cost**: ~4 Haiku calls/day at ~$0.001 each. Effectively free.
 
 ---
 
@@ -386,4 +401,6 @@ main.go boot
 
 - All daemons communicate via **Swarm Bus pub/sub** — no direct function calls into the inference pipeline.
 - Daemons with WebSocket hubs (`CuriosityDaemon`, `ReformDaemon`) receive the hub reference via `InjectWSHub()` after the API server starts.
-- `GhostClusterService` (used by Dream Daemon and ScalingService) requires `RUNPOD_API_KEY` in the environment. If the key is absent, provisioning calls fail gracefully and are logged without crashing the daemon.
+- **LLM inference**: All daemon LLM calls route through `pkg/llm` (Haiku, `llm.Chat()`) or Oracle directly. No Ollama dependency for inference. Ollama is retained only for embeddings (`nomic-embed-text`).
+- **RunPod**: Currently disabled (`RUNPOD_ENABLED=false`). JIT Daemon, Tool Daemon, and Autonomic Scaling provisioning paths are dormant. All other daemon functionality is unaffected.
+- **Cost**: Active daemon LLM usage (Dream, Curiosity, Chronos) runs approximately $1-3/month on Haiku at typical idle cadence.

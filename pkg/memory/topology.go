@@ -86,17 +86,17 @@ type CrossSectionalLink struct {
 }
 
 func defaultTopologyConfig() TopologyConfig {
-	weights := parseWeightListEnv("TALOS_TOPOLOGY_WEIGHTS", []float64{0.45, 0.20, 0.15, 0.20})
+	weights := parseWeightListEnv("ORI_TOPOLOGY_WEIGHTS", []float64{0.45, 0.20, 0.15, 0.20})
 	return TopologyConfig{
-		Enabled:         boolFromEnvMemory("TALOS_TOPOLOGY_ENABLED", true),
-		EdgeThreshold:   clamp01(floatFromEnvMemory("TALOS_TOPOLOGY_EDGE_THRESHOLD", 0.45)),
-		MaxNeighbors:    maxInt(1, intFromEnvMemory("TALOS_TOPOLOGY_MAX_NEIGHBORS", 8)),
-		ExpansionLimit:  maxInt(0, intFromEnvMemory("TALOS_TOPOLOGY_EXPANSION_LIMIT", 6)),
+		Enabled:         boolFromEnvMemory("ORI_TOPOLOGY_ENABLED", true),
+		EdgeThreshold:   clamp01(floatFromEnvMemory("ORI_TOPOLOGY_EDGE_THRESHOLD", 0.45)),
+		MaxNeighbors:    maxInt(1, intFromEnvMemory("ORI_TOPOLOGY_MAX_NEIGHBORS", 8)),
+		ExpansionLimit:  maxInt(0, intFromEnvMemory("ORI_TOPOLOGY_EXPANSION_LIMIT", 6)),
 		RefWeight:       weights[0],
 		URLHostWeight:   weights[1],
 		PathWeight:      weights[2],
 		LexicalWeight:   weights[3],
-		LexicalMinScore: clamp01(floatFromEnvMemory("TALOS_TOPOLOGY_LEXICAL_MIN_SCORE", 0.12)),
+		LexicalMinScore: clamp01(floatFromEnvMemory("ORI_TOPOLOGY_LEXICAL_MIN_SCORE", 0.12)),
 	}
 }
 

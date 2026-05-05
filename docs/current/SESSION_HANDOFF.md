@@ -24,7 +24,7 @@ If time is short, update only:
 
 ## Last Updated
 
-- `2026-04-28 UTC`
+- `2026-05-02 UTC`
 
 ## Current Focus
 
@@ -83,6 +83,24 @@ This is the preferred pattern going forward.
 
 ## What Changed This Session
 
+### 2026-05-02 — SLM Eviction + Oracle Migration
+
+- **Full SLM purge** — every hardcoded llama/qwen/ministral/gemma/phi/deepseek model name evicted from active code paths outside `pkg/core/` (dead zone) and the `GenerationService` itself (embedding-layer internals)
+- **`pkg/llm/` confirmed** — Mike built this today (thin Haiku wrapper, Anthropic direct, prompt caching). It's the lightweight inference path for all cognition-tier work.
+- **Dead model vars killed** — `intentModels`, `symbolicModels`, `intentFastModels`, `importanceEvalModels`, `visionModels`, `models []string` across cognition + memory packages
+- **Timeout gremlins fixed** — `supervision_policy.go`, `reflection_policy.go`, `style_model.go`, `style_profile.go`: 60-250ms SLM-era timeouts bumped to 3s default / 1-15s range
+- **Vision fully migrated to Oracle** — `vision_grounding.go` (live), `node/vision_module.go` (dead→migrated), both `multimodal.go` files cleaned
+- **Enterprise memory importance eval** — migrated from Ollama loop to `llm.Chat()`, stale `mm.client == nil` guard fixed
+- **forge, tcd, pad** — `GateDistiller`/`Distiller` interfaces removed, `ministral-3:3b`/`qwen2.5-coder:3b` evicted, all wired to `llm.Chat()`
+- **reform_daemon.go** — `qwen2.5-coder:3b` evicted, now `llm.Chat()` with constitution as system prompt
+- **DreamDaemon, CuriosityDaemon, ChronosDaemon** — all three migrated from GenService (Ollama) to `llm.Chat()`. ORI now grows idly for ~$1-3/month on Haiku.
+- **ChronosDaemon** — `LLMSummarizer` interface removed entirely, wires direct to `llm.Chat()`
+- **Stale comments swept** — sovereign.go, confidence.go, task_executor.go, task_decomposer.go, reasoning_engines.go, reasoning_modes.go, browser.go, both evolution.go files, self_model.go, scai.go
+- **`pkg/core/` identified as dead zone** — 21 of 24 packages have zero external callers outside pkg/core itself. Full G-LM server stack (http, orchestrator, reasoning, upstream, ratelimit, policy...) is orphaned. Cleanup deferred — Mike's call.
+- **AGLI + Thynaptic docs updated** — Perimeter Sovereignty reframed (architecture sovereign, intelligence tier is Anthropic), Phase II design constraints updated, company overview GitHub Copilot reference killed
+
+## What Changed This Session (Previous)
+
 - Added a stronger handoff format to this file so future agents can resume quickly.
 - Preserved the current Studio product direction, live status, and next build target.
 - Added a first-pass agent knowledge layer under `docs/` with playbooks, runbooks, and recipes for future agent execution.
@@ -136,7 +154,9 @@ These can remain for advanced or internal use, but should not define the SMB pro
 
 ## Next Best Move
 
-Continue the docs authority cleanup:
+Clean up `pkg/core/` dead zone — 21 orphaned packages with zero external callers. Large deletion, worth a dedicated pass. Start with `pkg/core/http/`, `pkg/core/orchestrator/`, `pkg/core/reasoning/`, `pkg/core/upstream/`, `pkg/core/ratelimit/` — confirm no hidden callers via grep, then delete. Keep `auth`, `config`, `model`, `store` (live). Also: `TALOS_` env var rename sweep across ~40 occurrences in cognition + memory — deferred last session, still pending.
+
+## Previous Next Best Move
 
 - rewrite or relabel the docs most likely to mislead current work:
 - review `docs/API.md`, `docs/AGENT_API.md`, and `docs/public_overview.md`

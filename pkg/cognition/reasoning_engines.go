@@ -810,8 +810,7 @@ return s[:n] + "…"
 //   - Tie → longest / most complete candidate wins
 //   - Falls back to runStandard on GenService failure
 //
-// Extra LLM calls: 3 parallel (same cost as 3 sequential but ~3x faster on CPU)
-// The model is small (gemma3:1b), so parallel goroutines don't compete badly.
+// Extra LLM calls: 3 parallel (same cost as 3 sequential but ~3x faster).
 
 const consistencyN = 3
 

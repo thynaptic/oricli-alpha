@@ -7,18 +7,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thynaptic/oricli-go/pkg/llm"
 	"github.com/thynaptic/oricli-go/pkg/state"
-	"github.com/ollama/ollama/api"
 )
 
 const (
 	intentTimeout = 25 * time.Second
 )
-
-var intentModels = []string{
-	"llama3.2:1b",
-	"qwen2.5:3b-instruct",
-}
 
 type normalizationResponse struct {
 	NormalizedIntent string             `json:"normalized_intent"`
@@ -34,9 +29,7 @@ func NormalizeIntent(raw string, currentState state.SessionState) (string, map[s
 	if raw == "" {
 		return raw, nil, nil, 0
 	}
-
-	client, err := api.ClientFromEnvironment()
-	if err != nil {
+	if !llm.Available() {
 		return raw, nil, nil, 0
 	}
 
@@ -66,47 +59,24 @@ Rules:
 		},
 	})
 
-	messages := []api.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: string(userPayload)},
-	}
-
-	for _, model := range intentModels {
-		normalized, delta, subtext, moodScore, ok := runNormalizationModel(client, model, messages, raw)
-		if ok {
-			return normalized, delta, subtext, moodScore
-		}
+	normalized, delta, subtext, moodScore, ok := runNormalizationModel(systemPrompt, string(userPayload), raw)
+	if ok {
+		return normalized, delta, subtext, moodScore
 	}
 	return raw, nil, nil, 0
 }
 
-func runNormalizationModel(client *api.Client, model string, messages []api.Message, fallback string) (string, map[string]float64, []string, float64, bool) {
-	prompt := ""
-	if len(messages) > 0 {
-		prompt = messages[len(messages)-1].Content
-	}
-	opts, _ := state.ResolveEntropyOptions(prompt)
-	req := &api.ChatRequest{
-		Model:    model,
-		Options:  opts,
-		Messages: messages,
-	}
+func runNormalizationModel(system, user, fallback string) (string, map[string]float64, []string, float64, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), intentTimeout)
 	defer cancel()
-
-	var out strings.Builder
-	if err := client.Chat(ctx, req, func(resp api.ChatResponse) error {
-		out.WriteString(resp.Message.Content)
-		return nil
-	}); err != nil {
+	raw, err := llm.Chat(ctx, system, user)
+	if err != nil {
 		return fallback, nil, nil, 0, false
 	}
-
-	resp, ok := parseNormalizationResponse(out.String())
+	resp, ok := parseNormalizationResponse(raw)
 	if !ok {
 		return fallback, nil, nil, 0, false
 	}
-
 	normalized := strings.TrimSpace(resp.NormalizedIntent)
 	if normalized == "" {
 		normalized = fallback

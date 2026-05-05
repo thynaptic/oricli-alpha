@@ -12,16 +12,13 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/thynaptic/oricli-go/pkg/llm"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Interfaces (avoid import cycles with pkg/service and pkg/scl)
 // ─────────────────────────────────────────────────────────────────────────────
-
-// Distiller generates text via Ollama. Satisfied by *service.GenerationService.
-type Distiller interface {
-	Generate(prompt string, options map[string]interface{}) (map[string]interface{}, error)
-}
 
 // FactWriter writes a verified fact to the SCL. Satisfied by *scl.LedgerWriter.
 type FactWriter interface {
@@ -44,16 +41,15 @@ type SourceArticle struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // DomainIngestor fetches live sources for a domain, distills them into atomic
-// SCL facts via Ollama, and writes them via FactWriter.
+// SCL facts via Oracle (Haiku), and writes them via FactWriter.
 //
 // Per-ingest flow:
 //  1. Fetch articles from configured sources (arXiv / HN / Wikipedia / RSS)
-//  2. For each article: Ollama distill → []AtomicFact (structured JSON)
+//  2. For each article: distill → []AtomicFact (structured JSON)
 //  3. WriteFact() each fact into SCL with domain tag
 //  4. SpotVerify(): web_fetch 3 random new fact URLs → LLM verify → set web_verified
 type DomainIngestor struct {
 	Manifest   *DomainManifest
-	Distiller  Distiller
 	FactWriter FactWriter
 
 	httpClient *http.Client
@@ -67,10 +63,9 @@ type DomainIngestor struct {
 }
 
 // NewDomainIngestor creates an ingestor with sensible defaults.
-func NewDomainIngestor(manifest *DomainManifest, distiller Distiller, writer FactWriter) *DomainIngestor {
+func NewDomainIngestor(manifest *DomainManifest, writer FactWriter) *DomainIngestor {
 	return &DomainIngestor{
 		Manifest:           manifest,
-		Distiller:          distiller,
 		FactWriter:         writer,
 		httpClient:         &http.Client{Timeout: 20 * time.Second},
 		MaxArticlesRefresh: 5,
@@ -365,11 +360,10 @@ type atomicFact struct {
 	Content string `json:"content"`
 }
 
-// distillFacts sends the article to Ollama and asks it to extract atomic facts.
+// distillFacts sends the article to Oracle (Haiku) and asks it to extract atomic facts.
 // Returns structured facts suitable for SCL.WriteFact().
 func (in *DomainIngestor) distillFacts(ctx context.Context, d *Domain, article SourceArticle) ([]atomicFact, error) {
-	if in.Distiller == nil {
-		// No LLM available — create a single fact from the title + summary.
+	if !llm.Available() {
 		return []atomicFact{{Subject: d.Name, Content: article.Title + ". " + article.Summary}}, nil
 	}
 
@@ -394,16 +388,10 @@ Text:
 
 JSON:`, d.Name, strings.Join(d.Keywords[:min(len(d.Keywords), 4)], ", "), text)
 
-	result, err := in.Distiller.Generate(prompt, map[string]interface{}{
-		"model":       "qwen2.5-coder:3b",
-		"temperature": 0.1,
-		"num_predict": 512,
-	})
+	raw, err := llm.Chat(ctx, "", prompt)
 	if err != nil {
 		return nil, fmt.Errorf("distill generate: %w", err)
 	}
-
-	raw, _ := result["response"].(string)
 	if raw == "" {
 		return nil, fmt.Errorf("empty distill response")
 	}
@@ -442,7 +430,7 @@ type writtenFact struct {
 // verify them against the source URL text. Bumps confidence on pass.
 // This is a best-effort check — failures are logged but not fatal.
 func (in *DomainIngestor) spotVerify(ctx context.Context, d *Domain, facts []writtenFact) {
-	if in.Distiller == nil || len(facts) == 0 {
+	if !llm.Available() || len(facts) == 0 {
 		return
 	}
 
@@ -484,15 +472,11 @@ Claim: "%s"
 
 Reply with exactly one word: YES or NO.`, f.content)
 
-	result, err := in.Distiller.Generate(prompt, map[string]interface{}{
-		"model":       "ministral-3:3b",
-		"temperature": 0.0,
-		"num_predict": 5,
-	})
+	raw, err := llm.Chat(ctx, "", prompt)
 	if err != nil {
 		return false
 	}
-	resp := strings.TrimSpace(strings.ToUpper(fmt.Sprintf("%v", result["response"])))
+	resp := strings.TrimSpace(strings.ToUpper(raw))
 	return strings.HasPrefix(resp, "YES")
 }
 

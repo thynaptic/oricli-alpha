@@ -4,18 +4,30 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/thynaptic/oricli-go/pkg/cognition"
+	"github.com/thynaptic/oricli-go/pkg/llm"
 	"github.com/thynaptic/oricli-go/pkg/memory"
 	"github.com/thynaptic/oricli-go/pkg/searchintent"
 	"github.com/thynaptic/oricli-go/pkg/vdi"
 )
+
+func parseFloatEnv(key string, def float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return def
+}
 
 // ─── Curiosity Daemon — Idle-Burst Epistemic Forager ─────────────────────────
 //
@@ -57,15 +69,9 @@ type CuriosityDaemon struct {
 	Searcher    *CollySearcher
 	SearXNG     *SearXNGSearcher
 	MemoryBank  *MemoryBank // PocketBase long-term memory (optional)
-	Governor    *CostGovernor // optional spend guard for RunPod synthesis
 	// SCL: when non-nil, curiosity findings are written to the Sovereign Cognitive Ledger
 	// instead of directly to MemoryBank's WriteKnowledgeFragment. No weight mutation.
 	SCL         CuriositySCLWriter
-
-	// RunPod synthesis: when true, forageTopic uses an LLM synthesis pass
-	// instead of pure TF-IDF extraction — produces richer knowledge fragments.
-	// Respects Governor budget. Env: WORLD_TRAVELER_USE_RUNPOD=true
-	UseRunPodSynthesis bool
 
 	// Seed queue — populated by conversation traffic, consumed during idle bursts
 	seedMu   sync.Mutex
@@ -417,42 +423,24 @@ func (d *CuriosityDaemon) forageTopic(ctx context.Context, topic string, depth i
 	// topic query, preserving document order. Deterministic, <5ms.
 	factSummary := cognition.ExtractFacts(topic, rawText, intent)
 
-	// ── RunPod synthesis upgrade (optional) ──────────────────────────────
-	// When WORLD_TRAVELER_USE_RUNPOD=true and budget allows, replace the
-	// TF-IDF summary with a richer LLM-synthesized knowledge fragment.
-	// Falls back to TF-IDF output if synthesis fails or budget is exceeded.
-	if d.UseRunPodSynthesis && d.Gen != nil {
-		estimatedCost := EstimateRunPodCost(1)
-		canSynth := d.Governor == nil || d.Governor.CanSpend(estimatedCost)
-		if canSynth {
-			synthPrompt := fmt.Sprintf(
-				"You are a knowledge synthesis engine. Given raw search results about \"%s\", "+
-					"produce a precise, factual 3-5 sentence summary that captures the most important "+
-					"concepts, mechanisms, and relationships. Do not hallucinate. Stay grounded in the text.\n\n"+
-					"Source text:\n%s\n\nSynthesis:",
-				topic, rawText,
-			)
-			synthCtxTimeout, synthCancel := context.WithTimeout(ctx, 20*time.Second)
-			_ = synthCtxTimeout
-			res, err := d.Gen.Generate(synthPrompt, map[string]interface{}{
-				"options": map[string]interface{}{
-					"num_predict": 250,
-					"num_ctx":     3072,
-					"temperature": 0.2,
-				},
-			})
-			synthCancel()
-			if err == nil {
-				if synthText, ok := res["text"].(string); ok && len(strings.TrimSpace(synthText)) > 30 {
-					factSummary = strings.TrimSpace(synthText)
-					if d.Governor != nil {
-						d.Governor.RecordSpend(estimatedCost, "synthesis:"+topic)
-					}
-					log.Printf("[CuriosityDaemon] RunPod synthesis applied for %q", topic)
-				}
-			} else {
-				log.Printf("[CuriosityDaemon] RunPod synthesis fallback (TF-IDF) for %q: %v", topic, err)
-			}
+	// Oracle synthesis upgrade — replace TF-IDF summary with a richer Haiku-synthesized fragment.
+	// Falls back to TF-IDF if Oracle is unavailable.
+	if llm.Available() {
+		synthPrompt := fmt.Sprintf(
+			"You are a knowledge synthesis engine. Given raw search results about \"%s\", "+
+				"produce a precise, factual 3-5 sentence summary that captures the most important "+
+				"concepts, mechanisms, and relationships. Do not hallucinate. Stay grounded in the text.\n\n"+
+				"Source text:\n%s\n\nSynthesis:",
+			topic, rawText,
+		)
+		synthCtx, synthCancel := context.WithTimeout(ctx, 20*time.Second)
+		synthText, err := llm.Chat(synthCtx, "", synthPrompt)
+		synthCancel()
+		if err == nil && len(strings.TrimSpace(synthText)) > 30 {
+			factSummary = strings.TrimSpace(synthText)
+			log.Printf("[CuriosityDaemon] Oracle synthesis applied for %q", topic)
+		} else if err != nil {
+			log.Printf("[CuriosityDaemon] Oracle synthesis fallback (TF-IDF) for %q: %v", topic, err)
 		}
 	}
 
@@ -505,7 +493,7 @@ func (d *CuriosityDaemon) generateHypotheses(ctx context.Context, topic, factSum
 	if depth >= 2 {
 		return
 	}
-	if d.Gen == nil {
+	if !llm.Available() {
 		return
 	}
 
@@ -519,20 +507,10 @@ func (d *CuriosityDaemon) generateHypotheses(ctx context.Context, topic, factSum
 	genCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	res, err := d.Gen.Generate(prompt, map[string]interface{}{
-		"model": d.Gen.DefaultModel, // use chat model to avoid Ollama eviction
-		"options": map[string]interface{}{
-			"num_predict": 150,
-			"num_ctx":     2048,
-			"temperature": 0.4,
-		},
-	})
+	text, err := llm.Chat(genCtx, "", prompt)
 	if err != nil {
 		return
 	}
-	_ = genCtx
-
-	text, _ := res["text"].(string)
 	var hypotheses []string
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)

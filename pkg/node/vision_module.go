@@ -1,29 +1,28 @@
 package node
 
 import (
+	"context"
 	"fmt"
 	"log"
 
 	"github.com/thynaptic/oricli-go/pkg/bus"
-	"github.com/thynaptic/oricli-go/pkg/service"
+	"github.com/thynaptic/oricli-go/pkg/oracle"
 )
 
-// VisionModule handles image-to-text and visual reasoning tasks
+// VisionModule handles image-to-text and visual reasoning tasks via Oracle vision.
 type VisionModule struct {
 	ID         string
 	ModuleName string
 	Operations []string
 	Bus        *bus.SwarmBus
-	GenService *service.GenerationService
 }
 
-func NewVisionModule(swarmBus *bus.SwarmBus, gs *service.GenerationService) *VisionModule {
+func NewVisionModule(swarmBus *bus.SwarmBus) *VisionModule {
 	return &VisionModule{
 		ID:         "go_native_vision",
 		ModuleName: "vision_agent",
 		Operations: []string{"describe_image", "analyze_visuals"},
 		Bus:        swarmBus,
-		GenService: gs,
 	}
 }
 
@@ -46,24 +45,22 @@ func (m *VisionModule) onCFP(msg bus.Message) {
 			break
 		}
 	}
-
 	if !supported {
 		return
 	}
 
 	taskID, _ := msg.Payload["task_id"].(string)
-
 	m.Bus.Publish(bus.Message{
-		Protocol:    bus.BID,
-		Topic:       fmt.Sprintf("tasks.bid.%s", taskID),
-		SenderID:    m.ID,
+		Protocol: bus.BID,
+		Topic:    fmt.Sprintf("tasks.bid.%s", taskID),
+		SenderID: m.ID,
 		Payload: map[string]interface{}{
 			"task_id":      taskID,
-			"operation":     operation,
-			"confidence":    1.0,
-			"compute_cost":  0.5, // Vision is medium-high cost
-			"node_id":       m.ID,
-			"module_name":   m.ModuleName,
+			"operation":    operation,
+			"confidence":   1.0,
+			"compute_cost": 0.5,
+			"node_id":      m.ID,
+			"module_name":  m.ModuleName,
 		},
 	})
 }
@@ -72,21 +69,13 @@ func (m *VisionModule) onAccept(msg bus.Message) {
 	taskID, _ := msg.Payload["task_id"].(string)
 	params, _ := msg.Payload["params"].(map[string]interface{})
 
-	log.Printf("[VisionModule] Executing native visual task: %s", taskID)
+	log.Printf("[VisionModule] Executing visual task: %s", taskID)
 
-	var result interface{}
-	var err error
-
-	// Extract image data (expected as base64 strings)
-	var images []string
+	var imageB64 string
 	if img, ok := params["image"].(string); ok {
-		images = append(images, img)
-	} else if imgs, ok := params["images"].([]interface{}); ok {
-		for _, v := range imgs {
-			if s, ok := v.(string); ok {
-				images = append(images, s)
-			}
-		}
+		imageB64 = img
+	} else if imgs, ok := params["images"].([]interface{}); ok && len(imgs) > 0 {
+		imageB64, _ = imgs[0].(string)
 	}
 
 	prompt, _ := params["prompt"].(string)
@@ -94,15 +83,7 @@ func (m *VisionModule) onAccept(msg bus.Message) {
 		prompt = "Describe this image in detail for a knowledge graph."
 	}
 
-	// Use Qwen2-VL for vision tasks
-	res, genErr := m.GenService.Generate(prompt, map[string]interface{}{
-		"model":  "qwen2-vl:2b",
-		"images": images,
-	})
-
-	result = res
-	err = genErr
-
+	result, err := oracle.AnalyzeImage(context.Background(), prompt, imageB64, "image/png")
 	if err != nil {
 		m.Bus.Publish(bus.Message{
 			Protocol: bus.ERROR,

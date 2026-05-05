@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/thynaptic/oricli-go/pkg/gosh"
+	"github.com/thynaptic/oricli-go/pkg/llm"
 	"github.com/thynaptic/oricli-go/pkg/reform"
 )
 
@@ -149,14 +150,10 @@ func (d *ReformDaemon) GenerateReform(ctx context.Context, trace TraceRecord, pa
 		path, trace.TraceGraph, oldCode,
 	)
 
-	res, err := d.Gen.Generate(prompt, map[string]interface{}{
-		"system": constitutionPrompt,
-		"model":  "qwen2.5-coder:3b",
-	})
+	newCode, err := llm.Chat(ctx, constitutionPrompt, prompt)
 	if err != nil {
 		return nil, err
 	}
-	newCode, _ := res["text"].(string)
 	newCode = stripMarkdownFences(newCode)
 
 	proposal := &ReformProposal{

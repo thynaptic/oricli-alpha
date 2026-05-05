@@ -7,15 +7,15 @@ import (
 )
 
 const (
-	marEnabledEnv             = "TALOS_MAR_ENABLED"
-	marCandidateLimitEnv      = "TALOS_MAR_CANDIDATE_LIMIT"
-	marMaxAnchorsEnv          = "TALOS_MAR_MAX_ANCHORS"
-	marWeightsEnv             = "TALOS_MAR_WEIGHTS"
-	marMinAnchorScoreEnv      = "TALOS_MAR_MIN_SCORE"
-	marTopologyBoostEnv       = "TALOS_MAR_TOPOLOGY_BOOST"
-	marCacheTTLEnv            = "TALOS_MAR_CACHE_TTL_SEC"
-	marCacheMaxEnv            = "TALOS_MAR_CACHE_MAX"
-	marStatusReportEnabledEnv = "TALOS_MAR_STATUS_ENABLED"
+	marEnabledEnv             = "ORI_MAR_ENABLED"
+	marCandidateLimitEnv      = "ORI_MAR_CANDIDATE_LIMIT"
+	marMaxAnchorsEnv          = "ORI_MAR_MAX_ANCHORS"
+	marWeightsEnv             = "ORI_MAR_WEIGHTS"
+	marMinAnchorScoreEnv      = "ORI_MAR_MIN_SCORE"
+	marTopologyBoostEnv       = "ORI_MAR_TOPOLOGY_BOOST"
+	marCacheTTLEnv            = "ORI_MAR_CACHE_TTL_SEC"
+	marCacheMaxEnv            = "ORI_MAR_CACHE_MAX"
+	marStatusReportEnabledEnv = "ORI_MAR_STATUS_ENABLED"
 )
 
 // MARPolicy configures Memory-Anchored Reasoning retrieval and ranking.

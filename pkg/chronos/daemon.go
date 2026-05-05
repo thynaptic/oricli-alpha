@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/thynaptic/oricli-go/pkg/llm"
 	"github.com/thynaptic/oricli-go/pkg/metacog"
 )
 
@@ -14,11 +15,6 @@ import (
 // Interfaces
 // ---------------------------------------------------------------------------
 
-// LLMSummarizer is the minimal interface for generating a change-summary.
-// *service.GenerationService satisfies this.
-type LLMSummarizer interface {
-Generate(prompt string, options map[string]interface{}) (map[string]interface{}, error)
-}
 
 // CuriositySeeder receives high-churn topics so CuriosityDaemon can forage
 // for updated facts. This interface prevents an import cycle with pkg/service.
@@ -40,7 +36,6 @@ const EpistemicStagnationThreshold = 3
 type TemporalGroundingDaemon struct {
 index      *ChronosIndex
 snapshotter *Snapshotter
-llm        LLMSummarizer // optional — nil → skip LLM summaries
 seeder     CuriositySeeder // optional — nil → skip curiosity seeding
 metacogLog *metacog.EventLog // optional — nil → skip epistemic stagnation events
 
@@ -53,18 +48,16 @@ lastScan    ScanResult
 totalScans  int
 }
 
-// NewTemporalGroundingDaemon creates a daemon. llm, seeder, metacogLog may all be nil.
+// NewTemporalGroundingDaemon creates a daemon. seeder and metacogLog may be nil.
 func NewTemporalGroundingDaemon(
 idx *ChronosIndex,
 snapDir string,
-llm LLMSummarizer,
 seeder CuriositySeeder,
 metacogLog *metacog.EventLog,
 ) *TemporalGroundingDaemon {
 return &TemporalGroundingDaemon{
 index:            idx,
 snapshotter:      NewSnapshotter(snapDir),
-llm:              llm,
 seeder:           seeder,
 metacogLog:       metacogLog,
 decayInterval:    30 * time.Minute,
@@ -219,7 +212,7 @@ HighChurnTopics: diff.HighChurnTopics,
 }
 
 // LLM summary — only worthwhile when there are real changes
-if diff.TotalChanges() >= 3 && d.llm != nil {
+if diff.TotalChanges() >= 3 && llm.Available() {
 summary := d.generateSummary(diff)
 record.Summary = summary
 }
@@ -243,18 +236,14 @@ return diff
 }
 
 func (d *TemporalGroundingDaemon) generateSummary(diff SnapshotDiff) string {
-if d.llm == nil {
-return ""
-}
 prompt := buildSummaryPrompt(diff)
-result, err := d.llm.Generate(prompt, map[string]interface{}{"num_predict": 200})
+ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+defer cancel()
+text, err := llm.Chat(ctx, "", prompt)
 if err != nil {
 return ""
 }
-if text, ok := result["text"].(string); ok {
 return text
-}
-return ""
 }
 
 func buildSummaryPrompt(diff SnapshotDiff) string {

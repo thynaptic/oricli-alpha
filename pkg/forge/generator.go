@@ -1,10 +1,13 @@
 package forge
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/thynaptic/oricli-go/pkg/llm"
 )
 
 // GeneratedTool is the raw output of the ToolGenerator before verification.
@@ -18,17 +21,15 @@ type GeneratedTool struct {
 }
 
 // ToolGenerator takes an approved JustificationRequest and generates a bash
-// tool script via Ollama. The Code Constitution rules are embedded in the
+// tool script via Oracle (Haiku). The Code Constitution rules are embedded in the
 // system prompt so the model knows the constraints up-front.
 type ToolGenerator struct {
-	Distiller    GateDistiller    // reuse same interface as POCGate
 	Constitution *CodeConstitution
 }
 
 // NewToolGenerator creates a generator.
-func NewToolGenerator(distiller GateDistiller, constitution *CodeConstitution) *ToolGenerator {
+func NewToolGenerator(constitution *CodeConstitution) *ToolGenerator {
 	return &ToolGenerator{
-		Distiller:    distiller,
 		Constitution: constitution,
 	}
 }
@@ -39,11 +40,11 @@ func (g *ToolGenerator) Generate(req JustificationRequest) (GeneratedTool, error
 	tool := GeneratedTool{
 		Name:        req.ProposedName,
 		GeneratedAt: time.Now().UTC(),
-		ModelUsed:   "qwen2.5-coder:3b",
+		ModelUsed:   "oracle/haiku",
 	}
 
-	if g.Distiller == nil {
-		return tool, fmt.Errorf("no distiller configured")
+	if !llm.Available() {
+		return tool, fmt.Errorf("oracle unavailable for tool generation")
 	}
 
 	constitutionRules := g.buildConstitutionSummary()
@@ -87,16 +88,10 @@ JSON only, no markdown, no explanation:`,
 		constitutionRules,
 	)
 
-	result, err := g.Distiller.Generate(prompt, map[string]interface{}{
-		"model":       "qwen2.5-coder:3b",
-		"temperature": 0.15,
-		"num_predict": 1024,
-	})
+	raw, err := llm.Chat(context.Background(), "", prompt)
 	if err != nil {
 		return tool, fmt.Errorf("generator LLM: %w", err)
 	}
-
-	raw, _ := result["response"].(string)
 	if raw == "" {
 		return tool, fmt.Errorf("empty generator response")
 	}

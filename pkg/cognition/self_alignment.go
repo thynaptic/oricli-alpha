@@ -53,13 +53,13 @@ func DefaultSelfAlignmentPolicy(mode string) SelfAlignmentPolicy {
 		veto = 0.72
 	}
 	return SelfAlignmentPolicy{
-		Enabled:       envBoolSup("TALOS_SELF_ALIGNMENT_ENABLED", true),
-		MaxDepth:      clampIntSup(envIntSup("TALOS_SELF_ALIGNMENT_MAX_DEPTH", 2), 1, 4),
+		Enabled:       envBoolSup("ORI_SELF_ALIGNMENT_ENABLED", true),
+		MaxDepth:      clampIntSup(envIntSup("ORI_SELF_ALIGNMENT_MAX_DEPTH", 2), 1, 4),
 		WarnAt:        warn,
 		VetoAt:        veto,
-		MaxSignals:    clampIntSup(envIntSup("TALOS_SELF_ALIGNMENT_MAX_SIGNALS", 8), 2, 20),
-		HistoryWindow: clampIntSup(envIntSup("TALOS_SELF_ALIGNMENT_HISTORY_WINDOW", 10), 2, 40),
-		LogPath:       firstNonEmptySelfAlign(strings.TrimSpace(os.Getenv("TALOS_SELF_ALIGNMENT_LOG_PATH")), defaultSelfAlignmentLogPath),
+		MaxSignals:    clampIntSup(envIntSup("ORI_SELF_ALIGNMENT_MAX_SIGNALS", 8), 2, 20),
+		HistoryWindow: clampIntSup(envIntSup("ORI_SELF_ALIGNMENT_HISTORY_WINDOW", 10), 2, 40),
+		LogPath:       firstNonEmptySelfAlign(strings.TrimSpace(os.Getenv("ORI_SELF_ALIGNMENT_LOG_PATH")), defaultSelfAlignmentLogPath),
 	}
 }
 
