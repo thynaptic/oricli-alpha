@@ -22,7 +22,6 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/coalition"
 	"github.com/thynaptic/oricli-go/pkg/cogload"
 	"github.com/thynaptic/oricli-go/pkg/cognition"
-	"github.com/thynaptic/oricli-go/pkg/compute"
 	"github.com/thynaptic/oricli-go/pkg/conformity"
 	pb "github.com/thynaptic/oricli-go/pkg/connectors/pocketbase"
 	"github.com/thynaptic/oricli-go/pkg/core/auth"
@@ -32,7 +31,6 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/curator"
 	"github.com/thynaptic/oricli-go/pkg/dmn"
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
-	"github.com/thynaptic/oricli-go/pkg/finetune"
 	"github.com/thynaptic/oricli-go/pkg/forge"
 	"github.com/thynaptic/oricli-go/pkg/goal"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
@@ -541,7 +539,7 @@ func main() {
 	if os.Getenv("ORICLI_FINETUNE_ENABLED") == "true" {
 		repoRoot, _ := filepath.Abs(".")
 		apiServer.FineTune = service.NewFineTuneService(repoRoot)
-		log.Printf("[FineTune] Orchestrator active — default GPU: %s", finetune.DefaultGPUType)
+		log.Printf("[FineTune] Orchestrator active")
 	}
 
 	// ── Sentinel: Adversarial pre-flight (opt-in via ORICLI_SENTINEL_ENABLED=true) ──
@@ -700,21 +698,7 @@ func main() {
 		log.Printf("[Therapy] Phase 15+16 Therapeutic Cognition Stack online — distortion detector, DBT skills, REBT auditor, chain analysis, session supervisor, learned helplessness prevention")
 	}
 
-	// ── Phase 12: Sovereign Compute Bidding (always on — market routing) ──
-	{
-		os.MkdirAll("data/compute", 0755)
-		feedbackLedger := compute.NewFeedbackLedger("data/compute/feedback.json")
-		localBidder := compute.NewLocalBidder("mistral:3b", feedbackLedger)
-		mediumBidder := compute.NewMediumBidder("qwen2.5-coder:3b", feedbackLedger)
-		// RemoteBidder: available=true only when RUNPOD_API_KEY is set
-		remoteBidder := compute.NewRemoteBidder("runpod-vllm", feedbackLedger, os.Getenv("RUNPOD_API_KEY") != "", 2.50)
-		bidGovernor := compute.NewBidGovernor(localBidder, mediumBidder, remoteBidder)
-		genService.BidGovernor = bidGovernor
-		genService.FeedbackLedger = feedbackLedger
-		apiServer.BidGovernor = bidGovernor
-		apiServer.FeedbackLedger = feedbackLedger
-		log.Printf("[Compute] Phase 12 Sovereign Compute Bidding online — local/medium/remote tiers, EMA feedback ledger")
-	}
+	// Phase 12 (Sovereign Compute Bidding) removed — RunPod/SLM tier evicted.
 
 	// ── Phase 17: Dual Process Engine (opt-in via ORICLI_DUALPROCESS_ENABLED=true) ──
 	if os.Getenv("ORICLI_DUALPROCESS_ENABLED") == "true" {

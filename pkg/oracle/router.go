@@ -1,6 +1,10 @@
 package oracle
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/thynaptic/oricli-go/pkg/epistemics"
+)
 
 type Route string
 
@@ -83,7 +87,7 @@ func Decide(query string, hints RouteHints) Decision {
 			Agent:          "ori-reasoner",
 			Reason:         "implementation or heavy reasoning request",
 			ThinkingBudget: thinkingBudgetForRoute(RouteHeavyReasoning),
-			IsExplanatory:  looksLikeExplanatoryQuery(lower),
+			IsExplanatory:  epistemics.IsExplanatoryQuery(lower),
 		}
 	}
 
@@ -172,25 +176,6 @@ var heavyReasoningTerms = []string{
 
 func requestsHeavyReasoning(lower string) bool {
 	for _, term := range heavyReasoningTerms {
-		if strings.Contains(lower, term) {
-			return true
-		}
-	}
-	return false
-}
-
-var explanatoryTerms = []string{
-	"why does", "why do", "why is", "why are", "why can't", "why won't", "why would",
-	"how does", "how do", "how is", "how are", "how can",
-	"what causes", "what makes", "what drives", "what explains",
-	"explain why", "explain how", "explain what causes",
-	"what is the reason", "what's the reason",
-	"what's behind", "what is behind",
-	"what leads to", "what results in",
-}
-
-func looksLikeExplanatoryQuery(lower string) bool {
-	for _, term := range explanatoryTerms {
 		if strings.Contains(lower, term) {
 			return true
 		}

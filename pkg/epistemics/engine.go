@@ -9,6 +9,27 @@ import (
 // Enabled reports whether the epistemics engine is active.
 func Enabled() bool { return cfg.Enabled }
 
+var explanatoryTerms = []string{
+	"why does", "why do", "why is", "why are", "why can't", "why won't", "why would",
+	"how does", "how do", "how is", "how are", "how can",
+	"what causes", "what makes", "what drives", "what explains",
+	"explain why", "explain how", "explain what causes",
+	"what is the reason", "what's the reason",
+	"what's behind", "what is behind",
+	"what leads to", "what results in",
+}
+
+// IsExplanatoryQuery returns true if the query is asking for a causal explanation
+// rather than a prediction, summary, or task execution.
+func IsExplanatoryQuery(lower string) bool {
+	for _, term := range explanatoryTerms {
+		if strings.Contains(lower, term) {
+			return true
+		}
+	}
+	return false
+}
+
 // Run executes the conjecture-criticism-synthesis loop and returns an
 // explanation that has been dialectically tested against itself.
 func Run(ctx context.Context, cycle ConjectionCycle) (ExplanatoryResult, error) {
