@@ -14,8 +14,15 @@ import (
 
 const (
 	haikusModel   = "claude-haiku-4-5-20251001"
+	sonnetModel   = "claude-sonnet-4-6"
 	haikusBaseURL = "https://api.anthropic.com/v1/messages"
 	haikusTimeout = 20 * time.Second
+)
+
+// Exported model name constants for callers that need to specify a model.
+const (
+	HaikuModel  = haikusModel
+	SonnetModel = sonnetModel
 )
 
 var haikusClient = &http.Client{Timeout: haikusTimeout}
@@ -60,14 +67,20 @@ type haikusResponse struct {
 // Chat sends a prompt to Haiku with prompt caching on the system block.
 // system may be empty. Falls back gracefully on any error — callers have heuristic fallbacks.
 func Chat(ctx context.Context, system, prompt string) (string, error) {
+	return ChatModel(ctx, haikusModel, system, prompt, 512)
+}
+
+// ChatModel is Chat with a configurable model and max_tokens.
+// Use llm.HaikuModel or llm.SonnetModel as the model argument.
+func ChatModel(ctx context.Context, model, system, prompt string, maxTokens int) (string, error) {
 	key := strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY"))
 	if key == "" {
 		return "", fmt.Errorf("ANTHROPIC_API_KEY not set")
 	}
 
 	req := haikusRequest{
-		Model:     haikusModel,
-		MaxTokens: 512,
+		Model:     model,
+		MaxTokens: maxTokens,
 		Messages:  []haikusMessage{{Role: "user", Content: prompt}},
 	}
 
@@ -106,7 +119,7 @@ func Chat(ctx context.Context, system, prompt string) (string, error) {
 		return "", err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("haiku %d: %s", resp.StatusCode, truncate(string(raw), 200))
+		return "", fmt.Errorf("llm %s %d: %s", model, resp.StatusCode, truncate(string(raw), 200))
 	}
 
 	var hr haikusResponse
@@ -114,14 +127,14 @@ func Chat(ctx context.Context, system, prompt string) (string, error) {
 		return "", err
 	}
 	if hr.Error != nil {
-		return "", fmt.Errorf("haiku error: %s", hr.Error.Message)
+		return "", fmt.Errorf("llm %s error: %s", model, hr.Error.Message)
 	}
 	for _, block := range hr.Content {
 		if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
 			return strings.TrimSpace(block.Text), nil
 		}
 	}
-	return "", fmt.Errorf("haiku: empty response")
+	return "", fmt.Errorf("llm %s: empty response", model)
 }
 
 // ChatWithTimeout is Chat with an explicit deadline instead of the default 20s.

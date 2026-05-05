@@ -26,7 +26,8 @@ type Decision struct {
 	Agent          string
 	Reason         string
 	WorkingDir     string
-	ThinkingBudget int // 0 = disabled; >0 enables extended thinking with this token budget
+	ThinkingBudget int  // 0 = disabled; >0 enables extended thinking with this token budget
+	IsExplanatory  bool // query is asking WHY/HOW — epistemics engine pre-pass
 }
 
 // Decide determines the Oracle route for a request.
@@ -82,6 +83,7 @@ func Decide(query string, hints RouteHints) Decision {
 			Agent:          "ori-reasoner",
 			Reason:         "implementation or heavy reasoning request",
 			ThinkingBudget: thinkingBudgetForRoute(RouteHeavyReasoning),
+			IsExplanatory:  looksLikeExplanatoryQuery(lower),
 		}
 	}
 
@@ -170,6 +172,25 @@ var heavyReasoningTerms = []string{
 
 func requestsHeavyReasoning(lower string) bool {
 	for _, term := range heavyReasoningTerms {
+		if strings.Contains(lower, term) {
+			return true
+		}
+	}
+	return false
+}
+
+var explanatoryTerms = []string{
+	"why does", "why do", "why is", "why are", "why can't", "why won't", "why would",
+	"how does", "how do", "how is", "how are", "how can",
+	"what causes", "what makes", "what drives", "what explains",
+	"explain why", "explain how", "explain what causes",
+	"what is the reason", "what's the reason",
+	"what's behind", "what is behind",
+	"what leads to", "what results in",
+}
+
+func looksLikeExplanatoryQuery(lower string) bool {
+	for _, term := range explanatoryTerms {
 		if strings.Contains(lower, term) {
 			return true
 		}

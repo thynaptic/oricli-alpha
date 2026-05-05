@@ -42,6 +42,7 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
 	"github.com/thynaptic/oricli-go/pkg/engine"
 	"github.com/thynaptic/oricli-go/pkg/enterprise"
+	"github.com/thynaptic/oricli-go/pkg/epistemics"
 	enterpriseconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors"
 	githubconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/github"
 	notionconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/notion"
@@ -1719,6 +1720,18 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			}
 			// Model returned final text — fall through to normal SSE stream via synthetic channel.
 			tokenCh = chanFromString(round.Text)
+		} else if oracleDecision.IsExplanatory && epistemics.Enabled() {
+			ep, epErr := epistemics.Run(streamCtx, epistemics.ConjectionCycle{
+				Query:   lastMsg,
+				Context: epistemics.FlattenContext(msgs),
+			})
+			if epErr != nil {
+				log.Printf("[Epistemics] failed, falling back to oracle: %v", epErr)
+				tokenCh = oracle.ChatStreamWithDecision(streamCtx, oracleMsgs, oracleDecision, scopedSessionID)
+			} else {
+				log.Printf("[Epistemics] iter=%d escalated=%v survived=%v", ep.Trace.Iterations, ep.Trace.Escalated, ep.Trace.Survived)
+				tokenCh = chanFromString(ep.Explanation)
+			}
 		} else {
 			tokenCh = oracle.ChatStreamWithDecision(streamCtx, oracleMsgs, oracleDecision, scopedSessionID)
 		}
