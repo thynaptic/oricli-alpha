@@ -24,7 +24,7 @@ If time is short, update only:
 
 ## Last Updated
 
-- `2026-05-02 UTC`
+- `2026-05-05 UTC (session 2)`
 
 ## Current Focus
 
@@ -82,6 +82,33 @@ Not:
 This is the preferred pattern going forward.
 
 ## What Changed This Session
+
+### 2026-05-05 (session 2) — Epistemics Engine
+
+- **`pkg/epistemics/` built and shipped** — conjecture-criticism-synthesis loop. Closes Deutsch's gaps 1–3 (mimicry vs creativity, prediction vs explanation, philosophical bottleneck).
+- **3-pass loop:** Conjecture (Haiku) → Criticism (Haiku, adversarial, severity-scored 0–1) → Synthesis (Haiku or Sonnet if severity ≥ 0.65)
+- **Early-exit** on convergence (word overlap > 75%) or weak criticism (severity < 0.2)
+- **Oracle router** updated — `IsExplanatory` flag on `Decision`, auto-detects why/how/what-causes queries
+- **server_v2** hooked — epistemics pre-pass fires on heavy-route explanatory queries, fallback to oracle on error
+- **`pkg/llm/`** — `ChatModel()` added (configurable model + max_tokens), `HaikuModel`/`SonnetModel` exported
+- **`IsExplanatoryQuery()`** lives in `pkg/epistemics/` — oracle calls through, no cycle
+- **Two agent personas** — `ori-conjecturer.agent.md`, `ori-critic.agent.md`
+- **Test suite** — `TestDeutschGaps` (live, 4 queries, full trace), offline routing/parsing/convergence tests. All passed. 119s for 4 live cycles.
+- **`scripts/proof_epistemics.sh`** — bash API-level smoke test
+- **Deployed** — binary swapped, 8088/8089 live
+- **`docs/current/CLAUDE_PROJECTS_README.md`** — platform README for Claude Projects context
+
+Cost: ~$0.014–$0.034/cycle. Daemon idle ~$6–17/month.
+
+### 2026-05-05 (session 1) — Repo Cleanup
+
+- **20 dead `pkg/core/` packages deleted** — adversarial, audit, contextindex, document, http, idempotency, intent, memorydynamics, metareasoning, observability, orchestrator, policy, ratelimit, reasoning, skillcompiler, state, stylecontract, symbolicoverlay, toolcalling, upstream. Kept: auth, config, model, store.
+- **`TALOS_` → `ORI_` rename complete** — 426 occurrences across 14 files in pkg/cognition/, pkg/memory/, pkg/enterprise/memory/
+- **vuln.ai/ archived** — moved to `~/vuln.ai-archived/`, out of repo
+- **All SLM eviction changes from 2026-05-02 committed** — were unstaged, now in history
+- Build clean, zero broken imports
+
+## What Changed Last Session
 
 ### 2026-05-02 — SLM Eviction + Oracle Migration
 
@@ -154,7 +181,9 @@ These can remain for advanced or internal use, but should not define the SMB pro
 
 ## Next Best Move
 
-Clean up `pkg/core/` dead zone — 21 orphaned packages with zero external callers. Large deletion, worth a dedicated pass. Start with `pkg/core/http/`, `pkg/core/orchestrator/`, `pkg/core/reasoning/`, `pkg/core/upstream/`, `pkg/core/ratelimit/` — confirm no hidden callers via grep, then delete. Keep `auth`, `config`, `model`, `store` (live). Also: `TALOS_` env var rename sweep across ~40 occurrences in cognition + memory — deferred last session, still pending.
+**CuriosityDaemon → epistemics integration** — daemon accumulates observations overnight, fires epistemics cycles on high-salience ones, stores results as `MemorySegment` tagged `source: epistemics`. That's where the Deutschian autonomous knowledge creation kicks in — she's not just answering explanatory queries, she's generating them herself.
+
+After that: `POST /v1/epistemics/run` direct endpoint so surfaces can invoke it explicitly.
 
 ## Previous Next Best Move
 
@@ -188,6 +217,21 @@ Why:
 - [ui_sovereignclaw/README.md](/home/mike/Mavaia/ui_sovereignclaw/README.md)
 
 ## Session Log
+
+### 2026-05-05 UTC (session 2)
+
+- Built and shipped pkg/epistemics/ — conjecture-criticism-synthesis loop
+- Live test passed: 4 Deutsch-relevant queries, full dialectical trace, escalated to Sonnet where warranted
+- Deployed to 8088/8089
+- Wrote CLAUDE_PROJECTS_README.md
+- Next: CuriosityDaemon → epistemics integration
+
+### 2026-05-05 UTC (session 1)
+
+- Deleted 20 dead pkg/core packages, build clean
+- Renamed TALOS_ → ORI_ across all pkg/ Go files
+- Archived vuln.ai/ to ~/vuln.ai-archived/
+- Committed all SLM eviction changes from last session
 
 ### 2026-04-07 05:39 UTC
 
