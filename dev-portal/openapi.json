@@ -747,6 +747,1310 @@
         "responses": { "200": { "description": "Execution result" } }
       }
     },
+    "/learning/mastery/compile": {
+      "post": {
+        "summary": "Compile material into mastery artifacts",
+        "description": "App-neutral MaterialToMasteryCompiler. Supply extracted user-owned material; ORI returns summary, concept graph, flashcards, drills, quizzes, mock assessments, misconception map, review cadence, mastery score, guided assistance mode, learning DAG, and cross-surface reinforcement hints. Use X-Ori-Context: learn for the reusable learning substrate.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "learn" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "objective": { "type": "string" },
+                  "surface": { "type": "string" },
+                  "deadline": { "type": "string", "format": "date-time" },
+                  "sources": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "kind": { "type": "string", "example": "docs" },
+                        "title": { "type": "string" },
+                        "content": { "type": "string" }
+                      }
+                    }
+                  },
+                  "preferences": { "type": "object" },
+                  "existing_ledger": { "type": "object" },
+                  "misconceptions": { "type": "array", "items": { "type": "object" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Compiled mastery system" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/quest/scaffold": {
+      "post": {
+        "summary": "Generate a Quest Scaffold for an improvement goal",
+        "description": "App-neutral goal-to-operating-system transformer. Supply a vague improvement goal; ORI returns a named quest, adult role identity, first action, milestones, daily rhythm, workspace sections, progress model, review schedule, memory seeds, and Memory/Chronos/GoalDaemon/PAD integration hints. Product clients still own persistence, reminders, social accountability, and confirmed goal registration.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "home" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "goal": { "type": "string", "example": "I need to study better for my board exam" },
+                  "notes": { "type": "string" },
+                  "surface": { "type": "string", "example": "home" },
+                  "constraints": { "type": "array", "items": { "type": "string" } },
+                  "preferences": {
+                    "type": "object",
+                    "properties": {
+                      "maxVisibleSteps": { "type": "integer", "example": 4 },
+                      "preferredStepMins": { "type": "integer", "example": 20 },
+                      "energy": { "type": "string", "example": "medium" },
+                      "overwhelmSensitive": { "type": "boolean", "example": true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Generated quest scaffold" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/behavior/create": {
+      "post": {
+        "summary": "Create a behavioral reinforcement object",
+        "description": "App-neutral Behavioral Reinforcement Substrate. Supply a routine, habit, todo, goal, or shared goal; ORI returns a temporal contract, surface-specific feedback model, initial state, recovery policy, and Memory/Chronos/GoalDaemon/PAD/CALI integration hints. Product clients own durable storage, reminders, widgets, sync, shared rooms, permissions, and reinforcement intensity.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "home" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string", "enum": ["daily", "habit", "todo", "goal", "shared_goal"], "example": "daily" },
+                  "title": { "type": "string", "example": "Walk for 20 minutes" },
+                  "cadence": { "type": "string", "example": "weekday_morning" },
+                  "surface": { "type": "string", "example": "home" },
+                  "reinforcement_mode": { "type": "string", "example": "calm_progress" },
+                  "stakes": { "type": "string", "example": "private" },
+                  "recovery_policy": { "type": "string", "example": "adaptive_reschedule" },
+                  "privacy": { "type": "string", "example": "private" },
+                  "notes": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Behavior object" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/context/momentum": {
+      "post": {
+        "summary": "Turn messy context into momentum packets",
+        "description": "App-neutral Context-to-Momentum Engine. Supply notes, tasks, links, project fragments, user energy, and available time; ORI returns actionability buckets, future-self packets, next 5-minute and 30-minute moves, one preserved stepping stone, memory seeds, and Memory/Chronos/GoalDaemon integration hints. Product clients still own capture, storage, file movement, task creation, reminders, and confirmed archive/write actions.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "current_project": { "type": "string", "example": "homepage rewrite" },
+                  "available_minutes": { "type": "integer", "example": 30 },
+                  "user_state": {
+                    "type": "object",
+                    "properties": {
+                      "energy": { "type": "string", "example": "low" },
+                      "mood": { "type": "string", "example": "scattered" },
+                      "mode": { "type": "string", "example": "review" }
+                    }
+                  },
+                  "preferences": {
+                    "type": "object",
+                    "properties": {
+                      "max_packets": { "type": "integer", "example": 4 },
+                      "overwhelm_sensitive": { "type": "boolean", "example": true },
+                      "preserve_novelty": { "type": "boolean", "example": true }
+                    }
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "title": { "type": "string", "example": "Client quote for homepage rewrite" },
+                        "content": { "type": "string" },
+                        "kind": { "type": "string", "example": "note" },
+                        "source": { "type": "string" },
+                        "project_hint": { "type": "string" },
+                        "status": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Context momentum system" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/procedure/compile": {
+      "post": {
+        "summary": "Compile observed workflow into an SOP and skill candidate",
+        "description": "App-neutral Procedure Compiler. Supply observations, transcript, tools, inputs, outputs, constraints, and outcome signal; ORI returns SOP, checklist, skill candidate, automation readiness, SCL TierSkills seed, and GoalDAG/Chronos/Forge integration hints. Product clients still own durable writes, skill registration, automation execution, permissions, approval gates, and external system changes.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "title": { "type": "string", "example": "support refund triage" },
+                  "description": { "type": "string" },
+                  "transcript": { "type": "string" },
+                  "actor": { "type": "string", "example": "support operator" },
+                  "tools": { "type": "array", "items": { "type": "string" } },
+                  "inputs": { "type": "array", "items": { "type": "string" } },
+                  "outputs": { "type": "array", "items": { "type": "string" } },
+                  "constraints": { "type": "array", "items": { "type": "string" } },
+                  "frequency": { "type": "string", "example": "weekly" },
+                  "outcome_signal": { "type": "string", "example": "customer receives a correct next step" },
+                  "observations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": { "type": "string", "example": "Review customer message" },
+                        "detail": { "type": "string" },
+                        "actor": { "type": "string" },
+                        "tool": { "type": "string", "example": "crm" },
+                        "evidence": { "type": "string" },
+                        "outcome": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Compiled procedure" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/workflow/grammar/compile": {
+      "post": {
+        "summary": "Compile natural-language workflow intent into trigger/action grammar",
+        "description": "App-neutral Workflow Grammar Compiler. Supply workflow intent, natural-language specification, trigger, conditions, action hints, available tools, approvals, constraints, and exceptions; ORI returns a trigger/action graph, variables, approval gates, failure modes, dry-run plan, readiness score, compiled expression, and Procedure/WorkGraph/Temporal/Forge/Memory integration hints. Product clients still own durable workflow registration, external writes, schedules, notifications, execution, credentials, permissions, and approval UX.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "title": { "type": "string", "example": "quote request follow-up workflow" },
+                  "intent": { "type": "string", "example": "turn inbound quote requests into reviewed follow-up drafts" },
+                  "specification": { "type": "string", "example": "When a new quote email arrives then review the request then create a CRM task and draft a follow-up unless budget or date is missing." },
+                  "trigger": { "type": "string", "example": "new quote email arrives" },
+                  "conditions": { "type": "array", "items": { "type": "string" } },
+                  "constraints": { "type": "array", "items": { "type": "string" } },
+                  "exceptions": { "type": "array", "items": { "type": "string" } },
+                  "outputs": { "type": "array", "items": { "type": "string" } },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": { "type": "string", "example": "Draft a follow-up email" },
+                        "tool": { "type": "string", "example": "email" },
+                        "owner": { "type": "string", "example": "operator" },
+                        "when": { "type": "string" },
+                        "unless": { "type": "string" },
+                        "needs": { "type": "array", "items": { "type": "string" } },
+                        "done_signal": { "type": "string" },
+                        "destructive": { "type": "boolean" }
+                      }
+                    }
+                  },
+                  "available_tools": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string", "example": "email" },
+                        "kind": { "type": "string", "example": "inbox" },
+                        "actions": { "type": "array", "items": { "type": "string" } },
+                        "read_only": { "type": "boolean" },
+                        "requires_approval": { "type": "boolean" }
+                      }
+                    }
+                  },
+                  "approvals": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "when": { "type": "string", "example": "before sending customer email" },
+                        "owner": { "type": "string", "example": "operator" },
+                        "reason": { "type": "string" }
+                      }
+                    }
+                  },
+                  "preferences": {
+                    "type": "object",
+                    "properties": {
+                      "max_nodes": { "type": "integer", "example": 8 },
+                      "require_human_approvals": { "type": "boolean", "example": true },
+                      "dry_run_first": { "type": "boolean", "example": true },
+                      "prefer_read_only": { "type": "boolean", "example": false }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Compiled workflow grammar" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/actions/plan": {
+      "post": {
+        "summary": "Plan a governed external action route",
+        "description": "App-neutral Sovereign Action Gateway planner. Supply intent, action hints, available providers, scopes, approval policy, risk tolerance, and memory policy; ORI returns ranked action candidates, recommended provider route, approval gate, policy labels, audit plan, dry-run instructions, memory plan, and WorkflowGrammar/WorkGraph/CALI/SCL/Chronos/Red integration hints. This endpoint does not execute external actions; product clients still own credentials, real execution, approval UX, durable action logs, notifications, schedules, and external mutations.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "intent": { "type": "string", "example": "send a follow-up email to a new quote lead" },
+                  "context": { "type": "string" },
+                  "risk_tolerance": { "type": "string", "example": "medium" },
+                  "constraints": { "type": "array", "items": { "type": "string" } },
+                  "action_hints": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": { "type": "string", "example": "Send quote follow-up email" },
+                        "provider": { "type": "string", "example": "native email" },
+                        "tool": { "type": "string", "example": "email" },
+                        "inputs": { "type": "array", "items": { "type": "string" } },
+                        "effects": { "type": "array", "items": { "type": "string" } },
+                        "destructive": { "type": "boolean" },
+                        "external": { "type": "boolean" }
+                      }
+                    }
+                  },
+                  "available_providers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string", "example": "native_email" },
+                        "name": { "type": "string", "example": "Native Email" },
+                        "kind": { "type": "string", "example": "native" },
+                        "capabilities": { "type": "array", "items": { "type": "string" } },
+                        "scopes": { "type": "array", "items": { "type": "string" } },
+                        "reliability": { "type": "string", "example": "high" },
+                        "cost": { "type": "string", "example": "low" },
+                        "requires_approval": { "type": "boolean" },
+                        "read_only": { "type": "boolean" },
+                        "available": { "type": "boolean" }
+                      }
+                    }
+                  },
+                  "approval_policy": {
+                    "type": "object",
+                    "properties": {
+                      "require_for_external_writes": { "type": "boolean", "example": true },
+                      "require_for_customer_touch": { "type": "boolean", "example": true },
+                      "require_for_money": { "type": "boolean", "example": true },
+                      "require_for_destructive": { "type": "boolean", "example": true },
+                      "allowed_autonomous_effects": { "type": "array", "items": { "type": "string" } },
+                      "approval_owner": { "type": "string", "example": "operator" }
+                    }
+                  },
+                  "memory_policy": {
+                    "type": "object",
+                    "properties": {
+                      "minimize_context": { "type": "boolean", "example": true },
+                      "allowed_memory_kinds": { "type": "array", "items": { "type": "string" } },
+                      "prohibited_memory_kinds": { "type": "array", "items": { "type": "string" } },
+                      "record_outcome": { "type": "boolean", "example": true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Governed action route plan" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/conversation/harvest": {
+      "post": {
+        "summary": "Harvest useful context from a conversation",
+        "description": "App-neutral Conversational Context Harvester. Supply meeting/chat transcripts, participant turns, intent, and context links; ORI returns decisions, commitments, unresolved threads, follow-up packets, memory seeds, and Memory/Chronos/GoalDAG/Procedure integration hints. Product clients still own note storage, memory writes, task creation, reminders, CRM/calendar updates, and confirmed persistence.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "title": { "type": "string", "example": "client launch sync" },
+                  "intent": { "type": "string", "example": "coordinate launch work" },
+                  "transcript": { "type": "string" },
+                  "participants": { "type": "array", "items": { "type": "string" } },
+                  "context_links": { "type": "array", "items": { "type": "string" } },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "speaker": { "type": "string", "example": "Mike" },
+                        "text": { "type": "string", "example": "We decided the landing page ships Friday." },
+                        "time": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Conversation context harvest" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/temporal/coordinate": {
+      "post": {
+        "summary": "Coordinate tasks against attention windows",
+        "description": "App-neutral Temporal Coordination Engine. Supply tasks, available attention windows, fixed events, energy, dependencies, and preferences; ORI returns now/next/later buckets, schedule proposals, conflicts, memory seeds, and Chronos/GoalDAG/Memory automation hints. Product clients still own calendar writes, task mutations, reminders, notifications, conflict resolution, and confirmed commitment moves.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "horizon": { "type": "string", "example": "today" },
+                  "energy": { "type": "string", "example": "low" },
+                  "available": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": { "type": "string", "example": "morning focus" },
+                        "start": { "type": "string" },
+                        "end": { "type": "string" },
+                        "minutes": { "type": "integer", "example": 45 },
+                        "energy": { "type": "string", "example": "medium" }
+                      }
+                    }
+                  },
+                  "fixed_events": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": { "type": "string" },
+                        "start": { "type": "string" },
+                        "end": { "type": "string" },
+                        "minutes": { "type": "integer" }
+                      }
+                    }
+                  },
+                  "tasks": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "title": { "type": "string", "example": "Send client launch update" },
+                        "project": { "type": "string" },
+                        "minutes": { "type": "integer", "example": 15 },
+                        "due_hint": { "type": "string", "example": "today" },
+                        "energy": { "type": "string", "example": "medium" },
+                        "importance": { "type": "string", "example": "high" },
+                        "status": { "type": "string" },
+                        "dependencies": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  },
+                  "preferences": {
+                    "type": "object",
+                    "properties": {
+                      "max_blocks": { "type": "integer", "example": 5 },
+                      "protect_focus": { "type": "boolean", "example": true },
+                      "prefer_short_starts": { "type": "boolean", "example": true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Temporal coordination plan" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/anticipation/prepare": {
+      "post": {
+        "summary": "Prepare bounded context for an upcoming situation",
+        "description": "App-neutral Ambient Anticipation layer. Supply upcoming situations, intent, participants, context signals, preferences, and recent outcomes; ORI returns readiness scoring, prep packets, missing context, suggested tone, safe next moves, memory seeds, and Memory/Chronos/Conversation/Temporal integration hints. Product clients still own email, calendar, CRM, memory, notification, task writes, and confirmed durable or external actions.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "situation": { "type": "string", "example": "client renewal call" },
+                  "intent": { "type": "string", "example": "advance customer work" },
+                  "time_horizon": { "type": "string", "example": "tomorrow" },
+                  "participants": { "type": "array", "items": { "type": "string" } },
+                  "known_context": { "type": "array", "items": { "type": "string" } },
+                  "recent_outcomes": { "type": "array", "items": { "type": "string" } },
+                  "signals": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "source": { "type": "string", "example": "crm" },
+                        "title": { "type": "string", "example": "Customer asked about pricing" },
+                        "content": { "type": "string", "example": "They want the annual plan before renewal." },
+                        "urgency": { "type": "string", "example": "medium" },
+                        "confidence": { "type": "number", "example": 0.72 },
+                        "tags": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  },
+                  "preferences": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": { "type": "string", "example": "Dana" },
+                        "preference": { "type": "string", "example": "prefers concise options" },
+                        "evidence": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Ambient anticipation plan" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/codebase/task/plan": {
+      "post": {
+        "summary": "Plan scoped codebase work from repo context",
+        "description": "App-neutral Codebase-Resident Task Agent planner. Supply developer intent, repo area, file/symbol signals, constraints, known risks, and test commands; ORI returns scoped work packets, file ownership proposals, risk flags, verification steps, delegation hints, memory seeds, and Procedure/Temporal/Memory/Forge integration hints. Agent runtimes still own actual reads, edits, tests, commits, deployment, permissions, and protection of unrelated user changes.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "dev" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "dev" },
+                  "intent": { "type": "string", "example": "add a cognition endpoint" },
+                  "repo": { "type": "string", "example": "/home/mike/Mavaia" },
+                  "current_area": { "type": "string", "example": "pkg/api" },
+                  "constraints": { "type": "array", "items": { "type": "string" } },
+                  "known_risks": { "type": "array", "items": { "type": "string" } },
+                  "test_commands": { "type": "array", "items": { "type": "string" } },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": { "type": "string", "example": "pkg/api/server_v2.go" },
+                        "role": { "type": "string", "example": "api" },
+                        "reason": { "type": "string" },
+                        "status": { "type": "string" },
+                        "owners": { "type": "array", "items": { "type": "string" } },
+                        "can_modify": { "type": "boolean", "example": true }
+                      }
+                    }
+                  },
+                  "symbols": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "kind": { "type": "string" },
+                        "file": { "type": "string" },
+                        "role": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Codebase resident task plan" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/continuity/recover": {
+      "post": {
+        "summary": "Recover compact project continuity",
+        "description": "App-neutral Continuity Recovery Engine. Supply previous sessions, artifacts, decisions, commitments, open loops, intent, and project context; ORI returns a recovered thread, context packets, decision/commitment logs, open-loop state, suggested continuation, memory seeds, and Memory/Chronos/Conversation/Temporal/Procedure hints. Product clients still own durable memory writes, project snapshots, document/task updates, timelines, notifications, and source-of-truth storage.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "dev" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "dev" },
+                  "intent": { "type": "string", "example": "resume cognition primitive work" },
+                  "current_query": { "type": "string" },
+                  "project": { "type": "string", "example": "ORI primitives" },
+                  "decisions": { "type": "array", "items": { "type": "string" } },
+                  "commitments": { "type": "array", "items": { "type": "string" } },
+                  "open_loops": { "type": "array", "items": { "type": "string" } },
+                  "previous_sessions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "title": { "type": "string" },
+                        "summary": { "type": "string" },
+                        "outcome": { "type": "string" },
+                        "updated_at": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  },
+                  "artifacts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "title": { "type": "string" },
+                        "kind": { "type": "string" },
+                        "source": { "type": "string" },
+                        "summary": { "type": "string" },
+                        "status": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Continuity recovery plan" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/execution/orchestrate": {
+      "post": {
+        "summary": "Choose the next best execution move",
+        "description": "App-neutral Intent-First Execution Orchestrator. Supply goal/intent, task state, blockers, dependencies, energy, available time, and recent signals; ORI returns a momentum score, next-best move, next options, blocked-because reasoning, dependency edges, memory seeds, and Continuity/Temporal/Procedure/Memory hints. Product clients still own issue/task mutations, project board writes, scheduling, assignment, notifications, and external execution.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "intent": { "type": "string", "example": "continue launch work" },
+                  "goal": { "type": "string" },
+                  "energy": { "type": "string", "example": "medium" },
+                  "available_minutes": { "type": "integer", "example": 20 },
+                  "recent_signals": { "type": "array", "items": { "type": "string" } },
+                  "tasks": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "title": { "type": "string" },
+                        "project": { "type": "string" },
+                        "status": { "type": "string" },
+                        "importance": { "type": "string" },
+                        "minutes": { "type": "integer" },
+                        "dependencies": { "type": "array", "items": { "type": "string" } },
+                        "evidence": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  },
+                  "blockers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "title": { "type": "string" },
+                        "owner": { "type": "string" },
+                        "severity": { "type": "string" }
+                      }
+                    }
+                  },
+                  "preferences": {
+                    "type": "object",
+                    "properties": {
+                      "max_next_options": { "type": "integer", "example": 4 },
+                      "prefer_small_starts": { "type": "boolean", "example": true },
+                      "overwhelm_sensitive": { "type": "boolean", "example": true },
+                      "require_visible_proof": { "type": "boolean", "example": true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Execution orchestration plan" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/workgraph/compile": {
+      "post": {
+        "summary": "Compile messy work context into typed WorkGraph state",
+        "description": "WorkGraph v0. Supply messy operator context, notes, conversations, and work items; ORI returns typed work-state objects including jobs, tasks, decisions, owners, deadlines, blockers, approvals, notes, follow-ups, and metrics, plus graph edges, operator pulse, memory seeds, and Continuity/Execution/Conversation/Temporal/Procedure hints. Product clients still own durable graph storage, workspace UI, dashboards, permissions, notifications, task/document writes, and external mutations.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "workspace": { "type": "string", "example": "Acme launch" },
+                  "intent": { "type": "string", "example": "structure my current work mess" },
+                  "notes": { "type": "string" },
+                  "conversations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "speaker": { "type": "string" },
+                        "text": { "type": "string" },
+                        "time": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "kind": { "type": "string", "example": "job" },
+                        "title": { "type": "string", "example": "Acme launch project" },
+                        "content": { "type": "string" },
+                        "owner": { "type": "string", "example": "Mike" },
+                        "due_hint": { "type": "string", "example": "Friday" },
+                        "status": { "type": "string", "example": "active" },
+                        "source": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Compiled WorkGraph" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/workgraph/answer": {
+      "post": {
+        "summary": "Answer operator questions over supplied WorkGraph state",
+        "description": "Ambient Answers over supplied WorkGraph state. Ask questions like what is stuck, what was promised, what needs approval, who owns this, or what should be handled first; ORI returns findings, recommended moves, confidence, and Execution/Continuity/Memory hints. Answers use supplied graph state only and do not mutate workspaces.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "question": { "type": "string", "example": "What needs approval?" },
+                  "graph": { "type": "object" },
+                  "objects": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "WorkGraph answer" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/contextual-action/plan": {
+      "post": {
+        "summary": "Plan governed contextual action for an entity",
+        "description": "Contextual Action Fabric. Supply an entity, objective, surface context, available tools, evidence, signals, and constraints; ORI returns an entity profile, evidence acquisition plan, fit/confidence score, governed action recommendations, reusable Skill Function candidate, memory seeds, and WorkGraph/Execution/Procedure/Memory/Temporal hints. Product clients still own provider calls, paid enrichment, CRM updates, outreach, budgets, audit logs, and approvals.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "objective": { "type": "string", "example": "decide best follow-up" },
+                  "business_context": { "type": "string" },
+                  "available_tools": { "type": "array", "items": { "type": "string" } },
+                  "constraints": { "type": "array", "items": { "type": "string" } },
+                  "entity": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "name": { "type": "string", "example": "Acme Co" },
+                      "kind": { "type": "string", "example": "account" },
+                      "fields": { "type": "object", "additionalProperties": { "type": "string" } }
+                    }
+                  },
+                  "evidence": { "type": "array", "items": { "type": "object" } },
+                  "signals": { "type": "array", "items": { "type": "object" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Contextual action plan" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/signals/opportunities": {
+      "post": {
+        "summary": "Detect timely opportunities from entity signals",
+        "description": "Signal Opportunity layer. Supply entity-bound signals, context, objective, and optional timing windows; ORI returns ranked opportunities, a handle-first recommendation, watchlist candidates, memory seeds, and Contextual Action/Temporal/WorkGraph hints. Product clients still own durable watches, alerts, notifications, external monitoring, and execution approval.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "objective": { "type": "string", "example": "decide follow-up timing" },
+                  "entity": { "type": "object" },
+                  "signals": { "type": "array", "items": { "type": "object" } },
+                  "context": { "type": "array", "items": { "type": "object" } },
+                  "windows": { "type": "array", "items": { "type": "object" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Signal opportunity plan" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/intent/timeline": {
+      "post": {
+        "summary": "Preserve intent and rationale across work changes",
+        "description": "Intent Timeline. Supply work events, artifacts, decisions, constraints, outcomes, and open loops; ORI returns preserved intent moments, detected intent shifts, rationale trails, current-intent state, continuity packets, memory seeds, and Continuity/WorkGraph/Procedure/Memory/Temporal hints. Product clients still own durable memory, task/document updates, artifact writes, timelines, and source-of-truth storage.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "dev" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "dev" },
+                  "project": { "type": "string", "example": "ORI primitives" },
+                  "objective": { "type": "string", "example": "preserve rationale across code changes" },
+                  "current_goal": { "type": "string" },
+                  "decisions": { "type": "array", "items": { "type": "string" } },
+                  "open_loops": { "type": "array", "items": { "type": "string" } },
+                  "constraints": { "type": "array", "items": { "type": "string" } },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "time": { "type": "string" },
+                        "actor": { "type": "string" },
+                        "artifact": { "type": "string" },
+                        "action": { "type": "string" },
+                        "intent": { "type": "string" },
+                        "rationale": { "type": "string" },
+                        "constraint": { "type": "string" },
+                        "outcome": { "type": "string" },
+                        "evidence": { "type": "array", "items": { "type": "string" } },
+                        "tags": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Intent timeline" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/procedural/crystallize": {
+      "post": {
+        "summary": "Crystallize repeated workflows into procedure and skill candidates",
+        "description": "Procedural Crystallizer. Supply repeated workflow runs, triggers, steps, tools, pain points, inputs, outputs, and outcome signals; ORI returns pattern readiness, a candidate procedure, skill candidate, automation readiness, next-observation plan, memory seeds, and Procedure/Skills/WorkGraph/Memory/Temporal/Forge hints. Product clients still own durable writes, skill registration, automation execution, schedules, notifications, approvals, and external mutations.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "studio" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "studio" },
+                  "workflow": { "type": "string", "example": "weekly client status prep" },
+                  "objective": { "type": "string", "example": "reduce repeated prep work" },
+                  "trigger": { "type": "string", "example": "before Friday client updates" },
+                  "observed_steps": { "type": "array", "items": { "type": "string" } },
+                  "tools": { "type": "array", "items": { "type": "string" } },
+                  "inputs": { "type": "array", "items": { "type": "string" } },
+                  "outputs": { "type": "array", "items": { "type": "string" } },
+                  "pain_points": { "type": "array", "items": { "type": "string" } },
+                  "constraints": { "type": "array", "items": { "type": "string" } },
+                  "outcome_signal": { "type": "string" },
+                  "runs": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "time": { "type": "string" },
+                        "trigger": { "type": "string" },
+                        "steps": { "type": "array", "items": { "type": "string" } },
+                        "tools": { "type": "array", "items": { "type": "string" } },
+                        "outcome": { "type": "string" },
+                        "friction": { "type": "string" },
+                        "evidence": { "type": "array", "items": { "type": "string" } },
+                        "completed": { "type": "boolean" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Procedural crystallization plan" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/memory/semantic/graph": {
+      "post": {
+        "summary": "Build an ontology-free semantic memory graph",
+        "description": "Semantic Memory Graph. Supply loose captures, notes, existing node hints, tags, people, objects, source handles, and retrieval questions; ORI returns ontology-free nodes, edges, soft clusters, recoverability scoring, retrieval moves, progressive-structure guidance, memory seeds, and Memory/WorkGraph/Continuity/Intent/Procedure hints. Product clients still own durable memory persistence, source storage, permissions, deletion policy, artifact/task updates, and external mutations.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "home" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "home" },
+                  "objective": { "type": "string", "example": "recover context without folders" },
+                  "workspace": { "type": "string", "example": "family logistics" },
+                  "query": { "type": "string", "example": "what school obligations are active?" },
+                  "constraints": { "type": "array", "items": { "type": "string" } },
+                  "captures": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "title": { "type": "string" },
+                        "content": { "type": "string" },
+                        "source": { "type": "string" },
+                        "kind": { "type": "string", "example": "document" },
+                        "time": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } },
+                        "people": { "type": "array", "items": { "type": "string" } },
+                        "objects": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  },
+                  "existing_nodes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "label": { "type": "string" },
+                        "kind": { "type": "string" },
+                        "source": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Semantic memory graph" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/resources/commitment/reason": {
+      "post": {
+        "summary": "Reason about scarce resources against explicit commitments",
+        "description": "Commitment-Aware Resource Reasoner. Supply scarce resource pools, proposed actions, explicit commitments, hidden-obligation context, decision questions, and drift events; ORI returns resource reality, protected commitments, affected commitments, tradeoff options, least-disruptive repair, non-shaming permission language, memory seeds, and Memory/Chronos/WorkGraph/Temporal/Intent/Behavior hints. Product clients still own source-of-truth resource records, payment/bank/account sync, approvals, scheduling, notifications, and regulated financial/legal/tax/debt/investment decisions.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "home" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "surface": { "type": "string", "example": "home" },
+                  "context": { "type": "string", "example": "household monthly plan" },
+                  "decision_question": { "type": "string", "example": "Can we do takeout tonight?" },
+                  "proposed_action": {
+                    "type": "object",
+                    "properties": {
+                      "title": { "type": "string", "example": "Takeout tonight" },
+                      "resource_type": { "type": "string", "example": "money" },
+                      "amount": { "type": "number", "example": 45 },
+                      "capacity": { "type": "integer", "example": 60 },
+                      "due_window": { "type": "string" },
+                      "why": { "type": "string" }
+                    }
+                  },
+                  "resource_pools": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "type": { "type": "string", "example": "money" },
+                        "label": { "type": "string", "example": "discretionary buffer" },
+                        "owner": { "type": "string" },
+                        "amount": { "type": "number" },
+                        "capacity": { "type": "integer" },
+                        "unit": { "type": "string", "example": "usd" },
+                        "confidence": { "type": "number" },
+                        "source": { "type": "string" },
+                        "protected": { "type": "boolean" }
+                      }
+                    }
+                  },
+                  "commitments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "title": { "type": "string", "example": "rent" },
+                        "resource_type": { "type": "string", "example": "money" },
+                        "claim": { "type": "number" },
+                        "capacity": { "type": "integer" },
+                        "due_window": { "type": "string" },
+                        "priority": { "type": "string", "example": "critical" },
+                        "flexibility": { "type": "string", "example": "fixed" },
+                        "owner": { "type": "string" },
+                        "recurrence": { "type": "string" },
+                        "provenance": { "type": "string" },
+                        "emotional_weight": { "type": "string" },
+                        "tags": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  },
+                  "drift_event": {
+                    "type": "object",
+                    "properties": {
+                      "title": { "type": "string", "example": "invoice slipped" },
+                      "resource_type": { "type": "string", "example": "money" },
+                      "amount": { "type": "number" },
+                      "capacity": { "type": "integer" },
+                      "reason": { "type": "string" },
+                      "time": { "type": "string" }
+                    }
+                  },
+                  "preferences": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Commitment-aware resource reasoning plan" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/behavior/event": {
+      "post": {
+        "summary": "Apply a behavioral event and return reinforcement feedback",
+        "description": "Applies completed, missed, deferred, or partially_completed events to supplied behavior state. Misses return recovery-first feedback rather than punishment.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "home" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "behavior_id": { "type": "string", "example": "beh_daily_walk_for_20_minutes" },
+                  "behavior": { "type": "object" },
+                  "event": { "type": "string", "enum": ["completed", "missed", "deferred", "partially_completed"], "example": "missed" },
+                  "context": {
+                    "type": "object",
+                    "properties": {
+                      "energy": { "type": "string", "example": "low" },
+                      "location": { "type": "string" },
+                      "notes": { "type": "string" }
+                    }
+                  },
+                  "prior_state": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Behavior event feedback" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
+    "/behavior/state": {
+      "post": {
+        "summary": "Compute behavioral state from supplied events",
+        "description": "Stateless state computation for a behavior and optional event list. Returns streak, stability score, completion/miss/defer counts, friction pattern, reinforcement tier, and next best action.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Ori-Context", "in": "header", "required": false, "schema": { "type": "string", "example": "dev" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "behavior_id": { "type": "string" },
+                  "behavior": { "type": "object" },
+                  "events": { "type": "array", "items": { "type": "object" } },
+                  "state": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Computed behavior state" },
+          "400": { "description": "Malformed request" },
+          "401": { "description": "Missing or invalid runtime key" },
+          "403": { "description": "Valid key without required runtime scope" }
+        }
+      }
+    },
     "/sovereign/identity": {
       "get": {
         "summary": "Get sovereign identity / active profile",

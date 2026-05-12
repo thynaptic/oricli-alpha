@@ -124,7 +124,7 @@
 | Layer | One sentence |
 |---|---|
 | **Kernel** | The OS — runs agents in sandboxes, routes tasks by bid, manages rings of trust and compute. |
-| **CALI** | The conscience — every response runs through a live critique-revision loop tied to a hard Constitutional charter. |
+| **CALI** | The conscience — requests are shaped by a Constitutional constraint contract before generation, then protected by structural output gates. |
 | **Memory** | The brain's storage — four tiers from nanosecond in-process graph to cold 200 GB PocketBase, with provenance decay. |
 | **Self Layer** | The affect — continuous mood, personality calibration, and loop-detection that shape *how* Oricli thinks, not just *what* it thinks. |
 | **Daemons** | The metabolism — background processes that consolidate memory, self-improve via LoRA, forage knowledge, and provision GPU — all without blocking inference. |

@@ -42,11 +42,11 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/dualprocess"
 	"github.com/thynaptic/oricli-go/pkg/engine"
 	"github.com/thynaptic/oricli-go/pkg/enterprise"
-	"github.com/thynaptic/oricli-go/pkg/epistemics"
 	enterpriseconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors"
 	githubconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/github"
 	notionconn "github.com/thynaptic/oricli-go/pkg/enterprise/connectors/notion"
 	"github.com/thynaptic/oricli-go/pkg/enterprise/rag"
+	"github.com/thynaptic/oricli-go/pkg/epistemics"
 	"github.com/thynaptic/oricli-go/pkg/goal"
 	"github.com/thynaptic/oricli-go/pkg/hopecircuit"
 	"github.com/thynaptic/oricli-go/pkg/ideocapture"
@@ -80,8 +80,8 @@ import (
 	"github.com/thynaptic/oricli-go/pkg/statusbias"
 	"github.com/thynaptic/oricli-go/pkg/stoic"
 	"github.com/thynaptic/oricli-go/pkg/swarm"
-	tcdpkg "github.com/thynaptic/oricli-go/pkg/tcd"
 	"github.com/thynaptic/oricli-go/pkg/tasks"
+	tcdpkg "github.com/thynaptic/oricli-go/pkg/tcd"
 	"github.com/thynaptic/oricli-go/pkg/therapy"
 	"github.com/thynaptic/oricli-go/pkg/thoughtreform"
 	"github.com/thynaptic/oricli-go/pkg/up"
@@ -498,6 +498,68 @@ func (s *ServerV2) setupRoutes() {
 		protected.POST("/tools/execute-plan", s.handleExecuteToolPlan)
 		protected.POST("/mcp", s.handleMCP)
 
+		// Learning substrate — app-neutral material-to-mastery compiler.
+		protected.POST("/learning/mastery/compile", s.handleLearningMasteryCompile)
+
+		// Quest scaffold — goal-to-operating-system transformer.
+		protected.POST("/quest/scaffold", s.handleQuestScaffold)
+
+		// Behavioral reinforcement — shame-safe state feedback substrate.
+		protected.POST("/behavior/create", s.handleBehaviorCreate)
+		protected.POST("/behavior/event", s.handleBehaviorEvent)
+		protected.POST("/behavior/state", s.handleBehaviorState)
+
+		// Context momentum — messy context to future-self packets.
+		protected.POST("/context/momentum", s.handleContextMomentum)
+
+		// Procedure compiler — observed workflow to SOP/skill candidate.
+		protected.POST("/procedure/compile", s.handleProcedureCompile)
+
+		// Workflow grammar — natural-language workflow intent to trigger/action graph.
+		protected.POST("/workflow/grammar/compile", s.handleWorkflowGrammarCompile)
+
+		// Sovereign action gateway — governed provider route planning for external actions.
+		protected.POST("/actions/plan", s.handleActionGatewayPlan)
+
+		// Conversational context harvester — conversation residue to follow-up substrate.
+		protected.POST("/conversation/harvest", s.handleConversationHarvest)
+
+		// Temporal coordination — task pile to attention-aware schedule proposal.
+		protected.POST("/temporal/coordinate", s.handleTemporalCoordinate)
+
+		// Ambient anticipation — upcoming situation to bounded readiness prep.
+		protected.POST("/anticipation/prepare", s.handleAnticipationPrepare)
+
+		// Codebase resident task planning — repo context to scoped work packets.
+		protected.POST("/codebase/task/plan", s.handleCodebaseTaskPlan)
+
+		// Continuity recovery — project residue to compact restart point.
+		protected.POST("/continuity/recover", s.handleContinuityRecover)
+
+		// Execution orchestration — intent and task state to next-best move.
+		protected.POST("/execution/orchestrate", s.handleExecutionOrchestrate)
+
+		// Work graph — messy work context to typed substrate and ambient answers.
+		protected.POST("/workgraph/compile", s.handleWorkGraphCompile)
+		protected.POST("/workgraph/answer", s.handleWorkGraphAnswer)
+
+		// Contextual action fabric — entity/objective evidence to governed action plan.
+		protected.POST("/contextual-action/plan", s.handleContextualActionPlan)
+
+		// Signal opportunity — live signals to timely action opportunities.
+		protected.POST("/signals/opportunities", s.handleSignalOpportunityDetect)
+
+		// Intent timeline — preserve why work changed across artifacts and interruptions.
+		protected.POST("/intent/timeline", s.handleIntentTimelineBuild)
+
+		// Procedural crystallizer — repeated workflow traces to skill/procedure candidates.
+		protected.POST("/procedural/crystallize", s.handleProceduralCrystallize)
+
+		// Semantic memory graph — loose captures to recoverable memory topology.
+		protected.POST("/memory/semantic/graph", s.handleSemanticMemoryGraph)
+
+		// Commitment-aware resource reasoning — scarce resources to explicit tradeoffs.
+		protected.POST("/resources/commitment/reason", s.handleCommitmentResourceReason)
 
 		// Sovereign Identity — active .ori profile editor
 		protected.GET("/sovereign/identity", s.handleGetSovereignIdentity)
@@ -1605,6 +1667,19 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	} else if isCodeAction {
 		msgs[0]["content"] += "\n\n" + reform.NewCodeConstitution().GetSystemPrompt()
 	}
+
+	// SCAI constraint-native generation: plan the safety/product boundary before
+	// inference so the model composes a clean answer natively instead of relying on
+	// visible post-hoc correction.
+	scaiContract := safety.NewConstraintContract(lastMsg, safety.ConstraintOptions{
+		Surface:     surface,
+		CodeContext: isCodeCtx || isCodeAction || remotePWD != "",
+		CanvasMode:  isCanvasMode,
+		Internal:    isInternal,
+	})
+	msgs[0]["content"] += "\n\n" + scaiContract.SystemPrompt()
+	bufferSSEForSCAI := useSSE && (scaiContract.Level == safety.AuditLevelFull || isCanvasMode || isCodeAction)
+
 	// Both SSE and non-SSE use a detached context for generation so that the
 	// 3-second TenantEnricher deadline (used only for DB lookups in middleware)
 	// does not kill long-running model inference. For SSE we layer a separate
@@ -1633,6 +1708,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		RequestedModel:   modelName,
 		Surface:          surface,
 	})
+	useOracleRoute := oracle.AvailableForRoute(oracleDecision.Route)
 
 	// When a remote workspace is active, anchor it in both the system message tail
 	// AND the last user message. Copilot's buildPrompt flattens everything into one
@@ -1661,7 +1737,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		oracleDecision.WorkingDir = os.TempDir()
 	}
 
-	if !oracle.AvailableForRoute(oracleDecision.Route) {
+	if !useOracleRoute {
 		// Short conversational turns — local model is fast enough.
 		var ollamaErr error
 		tokenCh, ollamaErr = s.Agent.GenService.ChatStream(streamCtx, msgs, streamOpts)
@@ -1703,9 +1779,9 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 			if len(round.Calls) > 0 {
 				// Model wants to call tools — return tool_calls in OpenAI format.
 				c.JSON(http.StatusOK, gin.H{
-					"id":      "chatcmpl-" + newID(),
-					"object":  "chat.completion",
-					"model":   oracleDecision.Model,
+					"id":     "chatcmpl-" + newID(),
+					"object": "chat.completion",
+					"model":  oracleDecision.Model,
 					"choices": []gin.H{{
 						"index": 0,
 						"message": gin.H{
@@ -1774,7 +1850,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		case token, ok := <-tokenCh:
 			if !ok {
 				streamDone = true
-				if useSSE {
+				if useSSE && !bufferSSEForSCAI {
 					doneChunk := map[string]interface{}{
 						"id":     chatID,
 						"object": "chat.completion.chunk",
@@ -1790,7 +1866,7 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 				tokenCount++
 				ticker.Reset(15 * time.Second)
 				responseBuilder.WriteString(token)
-				if useSSE {
+				if useSSE && !bufferSSEForSCAI {
 					chunk := map[string]interface{}{
 						"id":     chatID,
 						"object": "chat.completion.chunk",
@@ -1818,15 +1894,53 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 	}
 
 	// Post-stream: async jobs on the full assembled response
-	responseText := responseBuilder.String()
+	rawResponseText := responseBuilder.String()
+	responseText := rawResponseText
 	if isCanvasMode {
 		responseText, _ = s.Agent.SovEngine.AuditCanvasOutput(responseText)
 	} else {
 		responseText, _ = s.Agent.SovEngine.AuditOutput(responseText)
 	}
+	if (!useSSE || bufferSSEForSCAI) && scaiContract.RegenerationAllowed && rawResponseText != "" && responseText != rawResponseText {
+		reason := "the previous draft failed a structural output gate; regenerate without protected or unsafe content"
+		regenCtx, regenCancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 90*time.Second)
+		regenerated, regenErr := s.regenerateWithSCAIContract(regenCtx, lastMsg, msgs, streamOpts, oracleDecision, scopedSessionID, useOracleRoute, scaiContract, reason)
+		regenCancel()
+		if regenErr != nil {
+			log.Printf("[SCAI] regeneration failed, using structurally audited response: %v", regenErr)
+		} else if strings.TrimSpace(regenerated) != "" {
+			if isCanvasMode {
+				responseText, _ = s.Agent.SovEngine.AuditCanvasOutput(regenerated)
+			} else {
+				responseText, _ = s.Agent.SovEngine.AuditOutput(regenerated)
+			}
+			log.Printf("[SCAI] regenerated response under tightened constraint contract")
+		}
+	}
 	if strings.TrimSpace(responseText) == "" {
 		responseText = synthesizeEmptyAssistantFallback(lastMsg, modelName)
 		log.Printf("[OpenAIBridge] empty assistant turn recovered with fallback (model=%s query=%.80q)", modelName, lastMsg)
+	}
+	if useSSE && bufferSSEForSCAI {
+		contentChunk := map[string]interface{}{
+			"id":     chatID,
+			"object": "chat.completion.chunk",
+			"choices": []map[string]interface{}{
+				{"index": 0, "delta": map[string]interface{}{"role": "assistant", "content": responseText}, "finish_reason": nil},
+			},
+		}
+		data, _ := json.Marshal(contentChunk)
+		c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+		doneChunk := map[string]interface{}{
+			"id":     chatID,
+			"object": "chat.completion.chunk",
+			"choices": []map[string]interface{}{
+				{"index": 0, "delta": map[string]interface{}{}, "finish_reason": "stop"},
+			},
+		}
+		data, _ = json.Marshal(doneChunk)
+		c.Writer.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+		c.Writer.Flush()
 	}
 
 	// Log assistant response into session event timeline.
@@ -1855,43 +1969,25 @@ func (s *ServerV2) handleChatCompletions(c *gin.Context) {
 		s.ResponseCache.Put(lastMsg, responseText)
 	}
 
-	// SCAI Critique-Revision loop — fires in background to preserve streaming latency.
-	// If a constitutional violation is detected, a scai_correction WS event is broadcast
-	// so the UI can patch the last assistant message in-place with the revised text.
-	// This also generates an RFAL DPO pair for every violation (learning signal).
-	// Zero impact on the happy path (CLEAR critique → goroutine exits silently).
-	go func(query, response, sid, tid string) {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		corrected, violated := s.Agent.SovEngine.SelfAlign(ctx, query, response)
-		if !violated {
-			// Clean response — write as ProvenanceSolved for CBR future use.
-			// This teaches Oricli what a good answer looks like for this class of problem.
-			if s.MemoryBank != nil && s.MemoryBank.IsEnabled() && len(query) > 20 && len(response) > 50 {
-				words := strings.Fields(query)
-				if len(words) > 5 {
-					words = words[:5]
-				}
-				go s.MemoryBank.Write(service.MemoryFragment{
-					Content:    fmt.Sprintf("Q: %s\n\nA: %s", query, truncateStr(response, 600)),
-					Source:     "solved",
-					Topic:      strings.Join(words, " "),
-					Importance: 0.75,
-					Provenance: service.ProvenanceSolved,
-				})
+	// SCAI now shapes generation before inference. Do not broadcast visible
+	// correction patches; users should receive a native final answer, not a UI scar.
+	if s.MemoryBank != nil && s.MemoryBank.IsEnabled() && len(lastMsg) > 20 && len(responseText) > 50 {
+		query := lastMsg
+		response := responseText
+		go func() {
+			words := strings.Fields(query)
+			if len(words) > 5 {
+				words = words[:5]
 			}
-			return
-		}
-		s.Agent.SovEngine.WSHub.BroadcastEvent("scai_correction", map[string]interface{}{
-			"session_id":       sid,
-			"corrected":        corrected,
-			"original_preview": response[:min(120, len(response))],
-		})
-		// Persist revision to reflection_log for operator audit and DPO learning.
-		if s.MemoryBank != nil && s.MemoryBank.IsEnabled() {
-			s.MemoryBank.SaveSCAIRevision(sid, tid, query, response, corrected, "SCAI constitutional violation")
-		}
-	}(lastMsg, responseText, sessionID, tenantID)
+			s.MemoryBank.Write(service.MemoryFragment{
+				Content:    fmt.Sprintf("Q: %s\n\nA: %s", query, truncateStr(response, 600)),
+				Source:     "solved",
+				Topic:      strings.Join(words, " "),
+				Importance: 0.75,
+				Provenance: service.ProvenanceSolved,
+			})
+		}()
+	}
 
 	// ExploiterLeague — 3 async specialists audit every response post-stream (AlphaStar League).
 	// FactChecker, LogicAuditor, ClarityProbe each fire a ≤128-token LLM probe.
@@ -5172,6 +5268,58 @@ func chanFromString(s string) <-chan string {
 	return ch
 }
 
+func collectTokenStream(ch <-chan string) string {
+	var sb strings.Builder
+	for token := range ch {
+		sb.WriteString(token)
+	}
+	return sb.String()
+}
+
+func cloneChatMsgs(msgs []map[string]string) []map[string]string {
+	out := make([]map[string]string, len(msgs))
+	for i, msg := range msgs {
+		cp := make(map[string]string, len(msg))
+		for k, v := range msg {
+			cp[k] = v
+		}
+		out[i] = cp
+	}
+	return out
+}
+
+func (s *ServerV2) regenerateWithSCAIContract(
+	ctx context.Context,
+	query string,
+	msgs []map[string]string,
+	streamOpts map[string]interface{},
+	decision oracle.Decision,
+	scopedSessionID string,
+	useOracleRoute bool,
+	contract safety.ConstraintContract,
+	auditReason string,
+) (string, error) {
+	if len(msgs) == 0 {
+		return "", fmt.Errorf("missing chat messages")
+	}
+
+	regenMsgs := cloneChatMsgs(msgs)
+	tightened := contract.Tightened(auditReason)
+	regenMsgs[0]["content"] += "\n\n" + tightened.SystemPrompt()
+
+	if useOracleRoute && oracle.AvailableForRoute(decision.Route) {
+		return collectTokenStream(oracle.ChatStreamWithDecision(ctx, oracle.ConvertMsgs(regenMsgs), decision, scopedSessionID)), nil
+	}
+	if s.Agent == nil || s.Agent.GenService == nil {
+		return "", fmt.Errorf("generation service unavailable")
+	}
+	ch, err := s.Agent.GenService.ChatStream(ctx, regenMsgs, streamOpts)
+	if err != nil {
+		return "", err
+	}
+	return collectTokenStream(ch), nil
+}
+
 // reqMsgsToOracle converts model.Messages to oracle.Messages preserving tool_call_id
 // and tool_calls fields that are lost by the map[string]string intermediary path.
 // The system message is prepended from the pre-built systemContent string.
@@ -5222,4 +5370,3 @@ func toStringKeyMap(v any) (map[string]any, error) {
 	}
 	return m, nil
 }
-

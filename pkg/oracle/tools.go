@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// ToolDef is an Anthropic-native tool definition.
+// ToolDef is ORI's internal tool definition.
 type ToolDef struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
@@ -39,26 +39,30 @@ type ChatRound struct {
 	Calls []ToolCall // populated when the model wants to invoke tools
 }
 
-// ChatWithTools performs one non-streaming turn against the Anthropic API with
+type openAIResponseOutputItem struct {
+	ID        string `json:"id,omitempty"`
+	Type      string `json:"type"`
+	CallID    string `json:"call_id,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
+	Content   []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content,omitempty"`
+}
+
+// ChatWithTools performs one non-streaming turn against the OpenAI API with
 // tool use enabled. The caller is responsible for executing any returned tool
 // calls and looping back with results as new messages.
 func ChatWithTools(ctx context.Context, messages []Message, tools []ToolDef, decision Decision) (*ChatRound, error) {
 	if !Available() {
-		return nil, fmt.Errorf("oracle: ANTHROPIC_API_KEY not configured")
+		return nil, fmt.Errorf("oracle: OPENAI_API_KEY not configured")
 	}
 
 	apiMsgs, err := convertMessagesForTools(messages)
 	if err != nil {
 		return nil, fmt.Errorf("oracle: convert messages: %w", err)
 	}
-
-	outputTokens := maxTokens
-	payload := map[string]any{
-		"model":    decision.Model,
-		"messages": apiMsgs,
-	}
-
-	// System prompt with cache_control.
 	systemPrompt := ""
 	for _, m := range messages {
 		if m.Role == "system" {
@@ -66,24 +70,28 @@ func ChatWithTools(ctx context.Context, messages []Message, tools []ToolDef, dec
 			break
 		}
 	}
-	if systemPrompt == "" {
+	if !hasSystemMessage(messages) {
 		systemPrompt = getAgentPrompt(decision.Agent)
 	}
-	if systemPrompt != "" {
-		payload["system"] = []map[string]any{{
-			"type":          "text",
-			"text":          systemPrompt,
-			"cache_control": map[string]any{"type": "ephemeral"},
-		}}
+
+	payload := map[string]any{
+		"model":             decision.Model,
+		"input":             apiMsgs,
+		"store":             false,
+		"max_output_tokens": maxTokens,
+	}
+	if strings.TrimSpace(systemPrompt) != "" {
+		payload["instructions"] = systemPrompt
 	}
 
-	// Tool definitions — converted to Anthropic format.
 	if len(tools) > 0 {
-		payload["tools"] = tools
+		payload["tools"] = toolDefsToOpenAIResponses(tools)
+		payload["tool_choice"] = "auto"
+		payload["parallel_tool_calls"] = true
 	}
-
-	// Extended thinking is incompatible with tool use in the same turn.
-	payload["max_tokens"] = outputTokens
+	if effort := reasoningEffortForRoute(decision.Route); effort != "" {
+		payload["reasoning"] = map[string]any{"effort": effort}
+	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -91,41 +99,42 @@ func ChatWithTools(ctx context.Context, messages []Message, tools []ToolDef, dec
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		anthropicBase+"/messages", bytes.NewReader(body))
+		openAIBase+"/responses", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("oracle: build request: %w", err)
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_KEY"))
-	req.Header.Set("anthropic-version", anthropicVersion)
-	req.Header.Set("anthropic-beta", "prompt-caching-2024-07-31")
+	req.Header.Set("authorization", "Bearer "+os.Getenv("OPENAI_API_KEY"))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("oracle: anthropic request: %w", err)
+		return nil, fmt.Errorf("oracle: openai responses request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("oracle: anthropic status %d: %s", resp.StatusCode, string(raw))
+		return nil, fmt.Errorf("oracle: openai responses status %d: %s", resp.StatusCode, string(raw))
 	}
 
 	return parseToolResponse(raw)
 }
 
-// parseToolResponse decodes an Anthropic messages response into a ChatRound.
+func hasSystemMessage(messages []Message) bool {
+	for _, m := range messages {
+		if m.Role == "system" {
+			return true
+		}
+	}
+	return false
+}
+
+// parseToolResponse decodes an OpenAI Responses API response into a ChatRound.
 func parseToolResponse(raw []byte) (*ChatRound, error) {
 	var result struct {
-		StopReason string `json:"stop_reason"`
-		Content    []struct {
-			Type  string         `json:"type"`
-			Text  string         `json:"text,omitempty"`
-			ID    string         `json:"id,omitempty"`
-			Name  string         `json:"name,omitempty"`
-			Input map[string]any `json:"input,omitempty"`
-		} `json:"content"`
-		Error *struct {
+		OutputText string                     `json:"output_text"`
+		Output     []openAIResponseOutputItem `json:"output"`
+		Error      *struct {
 			Message string `json:"message"`
 		} `json:"error,omitempty"`
 	}
@@ -133,106 +142,88 @@ func parseToolResponse(raw []byte) (*ChatRound, error) {
 		return nil, fmt.Errorf("oracle: decode response: %w", err)
 	}
 	if result.Error != nil {
-		return nil, fmt.Errorf("oracle: anthropic error: %s", result.Error.Message)
+		return nil, fmt.Errorf("oracle: openai error: %s", result.Error.Message)
 	}
 
 	round := &ChatRound{}
-
-	if result.StopReason == "tool_use" {
-		for _, block := range result.Content {
-			if block.Type == "tool_use" {
-				round.Calls = append(round.Calls, ToolCall{
-					ID:    block.ID,
-					Name:  block.Name,
-					Input: block.Input,
-				})
+	for _, item := range result.Output {
+		if item.Type == "function_call" || item.Type == "custom_tool_call" {
+			var input map[string]any
+			if strings.TrimSpace(item.Arguments) != "" {
+				_ = json.Unmarshal([]byte(item.Arguments), &input)
 			}
+			id := item.CallID
+			if id == "" {
+				id = item.ID
+			}
+			round.Calls = append(round.Calls, ToolCall{
+				ID:    id,
+				Name:  item.Name,
+				Input: input,
+			})
 		}
+	}
+	if len(round.Calls) > 0 {
 		log.Printf("[Oracle:Tools] tool_use — %d call(s): %s",
 			len(round.Calls), toolNames(round.Calls))
 		return round, nil
 	}
 
-	// Final text response — collect all text blocks.
-	var sb strings.Builder
-	for _, block := range result.Content {
-		if block.Type == "text" {
-			sb.WriteString(block.Text)
-		}
+	round.Text = strings.TrimSpace(result.OutputText)
+	if round.Text == "" {
+		round.Text = strings.TrimSpace(openAIResponseOutputText(result.Output))
 	}
-	round.Text = strings.TrimSpace(sb.String())
 	return round, nil
 }
 
-// convertMessagesForTools converts Oracle Messages to the Anthropic API format,
-// handling the OpenAI→Anthropic translation for tool-related message types:
-//
-//   - role "tool" (OpenAI) → role "user" with tool_result content block (Anthropic)
-//   - role "assistant" with ToolCalls → role "assistant" with tool_use content blocks
-//   - system messages are extracted separately (handled by the caller)
-//   - all other messages pass through as plain {role, content} objects
-//
-// The returned slice uses map[string]any so content can be either a string or
-// an array of content blocks depending on the message type.
+// convertMessagesForTools converts Oracle Messages to OpenAI Responses input.
 func convertMessagesForTools(messages []Message) ([]map[string]any, error) {
+	return openAIResponseInputFromMessages(messages)
+}
+
+func openAIResponseInputFromMessages(messages []Message) ([]map[string]any, error) {
 	var out []map[string]any
 
 	for _, m := range messages {
 		if m.Role == "system" {
-			continue // handled separately as system prompt
+			continue
 		}
-
-		switch m.Role {
-		case "tool":
-			// OpenAI tool result → Anthropic tool_result content block.
-			// ToolCallID on the Message carries the tool_use_id to match back.
+		if m.Role == "tool" {
 			out = append(out, map[string]any{
-				"role": "user",
-				"content": []map[string]any{{
-					"type":        "tool_result",
-					"tool_use_id": m.ToolCallID,
-					"content":     m.Content,
-				}},
+				"type":    "function_call_output",
+				"call_id": m.ToolCallID,
+				"output":  m.Content,
 			})
-
-		default:
-			// Assistant messages that contain tool_calls need content block format.
-			if m.Role == "assistant" && len(m.ToolCalls) > 0 {
-				var blocks []map[string]any
-				if m.Content != "" {
-					blocks = append(blocks, map[string]any{
-						"type": "text",
-						"text": m.Content,
-					})
-				}
-				for _, tc := range m.ToolCalls {
-					var input map[string]any
-					_ = json.Unmarshal([]byte(tc.Function.Arguments), &input)
-					blocks = append(blocks, map[string]any{
-						"type":  "tool_use",
-						"id":    tc.ID,
-						"name":  tc.Function.Name,
-						"input": input,
-					})
-				}
+			continue
+		}
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			if strings.TrimSpace(m.Content) != "" {
 				out = append(out, map[string]any{
 					"role":    "assistant",
-					"content": blocks,
-				})
-			} else {
-				out = append(out, map[string]any{
-					"role":    m.Role,
 					"content": m.Content,
 				})
 			}
+			for _, tc := range m.ToolCalls {
+				out = append(out, map[string]any{
+					"type":      "function_call",
+					"call_id":   tc.ID,
+					"name":      tc.Function.Name,
+					"arguments": tc.Function.Arguments,
+				})
+			}
+			continue
 		}
+		out = append(out, map[string]any{
+			"role":    m.Role,
+			"content": m.Content,
+		})
 	}
 	return out, nil
 }
 
-// OAIToolDefsToOracle converts OpenAI-format ToolDefinitions to Anthropic-native ToolDefs.
+// OAIToolDefsToOracle converts OpenAI-format ToolDefinitions to ORI ToolDefs.
 // OpenAI wraps function schemas under a "function" key with "parameters";
-// Anthropic uses a flat structure with "input_schema".
+// ORI stores a flat structure with "input_schema".
 func OAIToolDefsToOracle(oaiTools []OAIToolDefinition) []ToolDef {
 	out := make([]ToolDef, 0, len(oaiTools))
 	for _, t := range oaiTools {
@@ -256,7 +247,7 @@ type OAIToolDefinition struct {
 	} `json:"function"`
 }
 
-// ToolCallsToOAI converts Anthropic ToolCalls to OpenAI tool_calls format.
+// ToolCallsToOAI converts ORI ToolCalls to OpenAI tool_calls format.
 func ToolCallsToOAI(calls []ToolCall) []map[string]any {
 	out := make([]map[string]any, 0, len(calls))
 	for _, c := range calls {
@@ -271,6 +262,34 @@ func ToolCallsToOAI(calls []ToolCall) []map[string]any {
 		})
 	}
 	return out
+}
+
+func toolDefsToOpenAIResponses(tools []ToolDef) []map[string]any {
+	out := make([]map[string]any, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, map[string]any{
+			"type":        "function",
+			"name":        t.Name,
+			"description": t.Description,
+			"parameters":  t.InputSchema,
+		})
+	}
+	return out
+}
+
+func openAIResponseOutputText(output []openAIResponseOutputItem) string {
+	var sb strings.Builder
+	for _, item := range output {
+		if item.Type != "message" {
+			continue
+		}
+		for _, part := range item.Content {
+			if part.Type == "output_text" || part.Type == "text" {
+				sb.WriteString(part.Text)
+			}
+		}
+	}
+	return sb.String()
 }
 
 func toolNames(calls []ToolCall) string {

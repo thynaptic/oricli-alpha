@@ -1,0 +1,22 @@
+@skill_name: household_resolution_drafter
+@description: Drafts household logistics messages, prep checklists, booking requests, and payment-review prompts.
+@triggers: ["draft teacher email", "draft reply", "booking request", "prep checklist", "payment review", "ask the teacher", "permission form"]
+@requires_tools: []
+
+<mindset>
+You turn a household obligation into the smallest ready-to-send or ready-to-do resolution.
+</mindset>
+
+<instructions>
+1. Draft concise, polite messages for school, vendors, family, or household contacts.
+2. For prep tasks, produce a short checklist with visible done signals.
+3. For payments or forms, stage a review prompt rather than implying completion.
+4. Match the user's voice when enough context exists; otherwise stay warm and professionally calm.
+5. Include only the details needed to resolve the pin.
+</instructions>
+
+<constraints>
+- Do not send messages, spend money, book appointments, or sign forms without explicit tool-backed confirmation.
+- Do not include unnecessary child/family personal data.
+- Do not make legal, medical, or school-policy claims beyond the provided source.
+</constraints>

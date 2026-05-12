@@ -1,6 +1,6 @@
 # ORI Server State — Current Architecture
 
-> Last updated: 2026-04-18  
+> Last updated: 2026-05-09  
 > VPS: `thyn` (glm.thynaptic.com)
 
 ---
@@ -21,7 +21,7 @@ Internet
 - **Binary**: `/home/mike/Mavaia/bin/oricli-go-v2`
 - **Built from**: `cmd/oricli-engine/` (NOT `cmd/backbone/` — despite the name)
 - **Port**: 8089 (default, no env override)
-- **API key**: `glm.Qbtofkny.F5pTIVYghj-mLSwAtPRGDau1q7k2w5DO`
+- **API key**: runtime key lives in systemd env; do not store live secrets in docs
 - **Handles**: all `/v1/chat/completions`, `/v1/models`, and general API traffic
 - **Startup script**: `/home/mike/Mavaia/scripts/start_go_hive_pure.sh` → `exec /home/mike/Mavaia/bin/oricli-go-v2`
 
@@ -29,7 +29,7 @@ Internet
 - **Binary**: `/home/mike/Mavaia/bin/oricli-go-v2` (same binary, different port)
 - **Built from**: `cmd/oricli-engine/`
 - **Port**: 8088 (`ORICLI_ENGINE_PORT=8088` in service env)
-- **API key**: `ori.8f9f406a.Mo5YFWO0Tx5IKE46fG1mXfA7kAyLzy`
+- **API key**: runtime key lives in systemd env; do not store live secrets in docs
 - **Handles**: `/v1/mcp` only (Caddy routes this path specifically to 8088)
 - **ExecStart**: `ExecStart=/home/mike/Mavaia/bin/oricli-go-v2`
 
@@ -64,19 +64,50 @@ and enforced by the live API:
 - **dev**: `dev_builder`, `dev_architect`, `dev_debugger`, `ori_code`
 - **red**: `ori_red`
 
-### Oracle / Anthropic Routing (internal runtime reality)
+### Oracle / OpenAI Routing (internal runtime reality)
 
 The public API exposes ORI and `oricli-oracle` as the stable entrypoint. Internally,
-Oracle routes directly to the Anthropic API via HTTP/SSE:
+Oracle routes directly to the OpenAI API via HTTP/SSE:
 
-- **Light chat** → `claude-haiku-4-5-20251001`
-- **Heavy reasoning / code work** → `claude-sonnet-4-6`
-- **Research / dev** → `claude-sonnet-4-6`
-- **Image reasoning** → `claude-sonnet-4-6` (with vision via `AnalyzeImage()`)
+- **Light chat** → `gpt-5.4-mini`
+- **Heavy reasoning / code work** → `gpt-5.5`
+- **Research / dev** → `gpt-5.5`
+- **Image reasoning** → `gpt-5.5` (with vision via `AnalyzeImage()`)
 
 These are internal router defaults from `pkg/oracle/`, not separate public models.
 Override via `ORACLE_COPILOT_MODEL_LIGHT/HEAVY/RESEARCH` env vars without changing
-the public API contract. Requires `ANTHROPIC_API_KEY` in environment.
+the public API contract. Requires `OPENAI_API_KEY` in environment.
+
+### Reusable Cognition Primitive Endpoints
+
+Current trajectory: extract cognition primitives from research/product scans and expose small app-neutral endpoints. Product clients still own capture, durable storage, UI, reminders, calendar/task/CRM writes, and confirmed external actions.
+
+Live protected endpoints include:
+
+- `POST /v1/learning/mastery/compile`
+- `POST /v1/quest/scaffold`
+- `POST /v1/behavior/create`
+- `POST /v1/behavior/event`
+- `POST /v1/behavior/state`
+- `POST /v1/context/momentum`
+- `POST /v1/procedure/compile`
+- `POST /v1/conversation/harvest`
+- `POST /v1/temporal/coordinate`
+- `POST /v1/anticipation/prepare`
+- `POST /v1/codebase/task/plan`
+- `POST /v1/continuity/recover`
+- `POST /v1/execution/orchestrate`
+- `POST /v1/workgraph/compile`
+- `POST /v1/workgraph/answer`
+- `POST /v1/contextual-action/plan`
+- `POST /v1/signals/opportunities`
+
+Most recent live verification on 2026-05-09:
+
+- `oricli-api.service`: active
+- `oricli-backbone.service`: active
+- `/v1/modules`: `count = 40`
+- Latest smoked endpoints: `/v1/contextual-action/plan`, `/v1/signals/opportunities`
 
 ---
 
@@ -160,7 +191,7 @@ if !forcedEngine && req.SpaceID == "" && remotePWD == "" && s.ResponseCache != n
 `POST https://glm.thynaptic.com/v1/mcp`
 
 Routes to **port 8088** (oricli-api.service) via Caddy split-route.  
-Auth: `Authorization: Bearer ori.8f9f406a.Mo5YFWO0Tx5IKE46fG1mXfA7kAyLzy`
+Auth: `Authorization: Bearer <runtime key>` from the service environment.
 
 JSON-RPC 2.0 protocol. Supported methods:
 

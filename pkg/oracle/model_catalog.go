@@ -101,6 +101,33 @@ func thinkingBudgetForRoute(route Route) int {
 	}
 }
 
+// reasoningEffortForRoute maps ORI routes onto OpenAI reasoning effort.
+// Override with ORACLE_REASONING_LIGHT/HEAVY/RESEARCH; set to "off" to omit.
+func reasoningEffortForRoute(route Route) string {
+	var key, fallback string
+	switch route {
+	case RouteHeavyReasoning:
+		key, fallback = "ORACLE_REASONING_HEAVY", "medium"
+	case RouteResearch:
+		key, fallback = "ORACLE_REASONING_RESEARCH", "high"
+	default:
+		key, fallback = "ORACLE_REASONING_LIGHT", "low"
+	}
+	v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	if v == "" {
+		v = fallback
+	}
+	if v == "off" || v == "none" || v == "disabled" {
+		return ""
+	}
+	switch v {
+	case "low", "medium", "high":
+		return v
+	default:
+		return fallback
+	}
+}
+
 func envInt(key string, fallback int) int {
 	v := strings.TrimSpace(os.Getenv(key))
 	if v == "" {

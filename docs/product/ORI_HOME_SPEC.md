@@ -87,6 +87,40 @@ Users choose how ORI shows up — not a model, a mode:
 
 Users should feel like they're choosing *how ORI helps*, not configuring a system.
 
+### Planner Intelligence Layers
+
+`home_planner` should lean on reusable ORI planning skills rather than a single app-shaped workflow:
+
+- `planning_decomposer` — turns vague intent and brain dumps into small visible steps.
+- `task_patch_planner` — applies bounded conversational edits to an existing plan.
+- `executive_function_coach` — lowers activation energy and reduces overwhelm before planning more.
+- `focus_session_conductor` — guides one current step, transition, pause, or rescope.
+- `planning_review_rescheduler` — reviews open loops and reschedules without shame.
+
+These layers are not a task database, timer engine, calendar, push service, or sync system. They are the shared planning intelligence that ORI Home and future planner-style clients can call through the normal ORI surface/profile contract.
+
+### Household Logistics Layers
+
+The School Wedge should be implemented as reusable Home logistics intelligence rather than a school-only app workflow:
+
+- `household_context_ingester` — extracts dates, forms, payments, required items, events, contacts, and unclear questions from school flyers, emails, PDFs, and household notes.
+- `active_pin_resolver` — chooses one timely Active Pin and stages the smallest resolution path.
+- `temporal_deadline_guardian` — grounds deadlines, soft conflicts, prep windows, pickup/dropoff timing, and protected-time risks.
+- `household_resolution_drafter` — prepares teacher/vendor messages, booking requests, prep checklists, and payment-review prompts.
+
+These layers support the Present Parent campaign and the "Presence over Productivity" posture. They are not OCR, push notifications, payment execution, calendar mutation, booking execution, or household storage. ORI stages resolutions; product clients execute them with explicit user consent and tool confirmation.
+
+### Reflection Intelligence Layers
+
+`home_companion` and `home_notes` can lean on reusable ORI reflection skills for the yourweek.md / personal recap lane:
+
+- `reflective_journal_companion` — responds to journal entries, vents, and personal processing with a small number of useful follow-up questions.
+- `reflection_prompt_generator` — reduces blank-page friction with short prompts and optional deeper variants.
+- `personal_pattern_synthesizer` — turns repeated signals into gentle pattern snapshots, weekly reflection packets, and follow-up questions.
+- `memory_handoff_curator` — proposes consent-aware memory candidates and next-session handoff notes without assuming storage.
+
+These layers are not a therapy product, clinical workflow, journal database, encryption system, or notification engine. They are shared ORI reflection intelligence for clients that already own capture, storage, sync, privacy controls, and user consent.
+
 ---
 
 ## Messaging Pillars (GTM)

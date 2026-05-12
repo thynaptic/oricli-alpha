@@ -21,16 +21,15 @@ import (
 )
 
 const (
-	anthropicBase    = "https://api.anthropic.com/v1"
-	anthropicVersion = "2023-06-01"
-	sessionTTL       = 30 * time.Minute
-	maxTokens        = 8096
+	openAIBase = "https://api.openai.com/v1"
+	sessionTTL = 30 * time.Minute
+	maxTokens  = 8096
 )
 
 const (
-	defaultLightModel    = "claude-haiku-4-5-20251001"
-	defaultHeavyModel    = "claude-sonnet-4-6"
-	defaultResearchModel = "claude-sonnet-4-6"
+	defaultLightModel    = "gpt-5.4-mini"
+	defaultHeavyModel    = "gpt-5.5"
+	defaultResearchModel = "gpt-5.5"
 )
 
 type sessionEntry struct {
@@ -53,10 +52,10 @@ type agentDef struct {
 }
 
 type Message struct {
-	Role       string       `json:"role"`
-	Content    string       `json:"content"`
-	ToolCallID string       `json:"tool_call_id,omitempty"` // role="tool" result messages
-	ToolCalls  []OAIToolCall `json:"tool_calls,omitempty"`  // assistant messages with tool invocations
+	Role       string        `json:"role"`
+	Content    string        `json:"content"`
+	ToolCallID string        `json:"tool_call_id,omitempty"` // role="tool" result messages
+	ToolCalls  []OAIToolCall `json:"tool_calls,omitempty"`   // assistant messages with tool invocations
 }
 
 // OAIToolCall mirrors OpenAI's tool_call object in assistant messages.
@@ -79,16 +78,16 @@ type Result struct {
 func Init(_ int) {
 	go RefreshModelCatalog()
 	go sessionReaper()
-	log.Printf("[Oracle] Anthropic API ready — light=%s heavy=%s research=%s",
+	log.Printf("[Oracle] OpenAI API ready — light=%s heavy=%s research=%s",
 		modelForRoute(RouteLightChat),
 		modelForRoute(RouteHeavyReasoning),
 		modelForRoute(RouteResearch),
 	)
 }
 
-// Available reports whether the Anthropic API key is configured.
+// Available reports whether the OpenAI API key is configured.
 func Available() bool {
-	return strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")) != ""
+	return strings.TrimSpace(os.Getenv("OPENAI_API_KEY")) != ""
 }
 
 func AvailableForRoute(_ Route) bool { return Available() }
@@ -129,7 +128,7 @@ func QueryWithDecision(stimulus string, decision Decision, sessionID string) *Re
 	if answer == "" {
 		return nil
 	}
-	return &Result{Answer: answer, Source: "anthropic"}
+	return &Result{Answer: answer, Source: "openai"}
 }
 
 func randomSessionID() string {
@@ -138,17 +137,16 @@ func randomSessionID() string {
 	return "stateless-" + hex.EncodeToString(b)
 }
 
-// ChatStreamWithDecision streams a response from the Anthropic API.
+// ChatStreamWithDecision streams a response from the OpenAI API.
 // Empty sessionID = stateless mode: one-shot, never pooled.
 // The caller is expected to pass the full message history in messages —
-// the Anthropic API receives it natively without the system-prompt injection
-// hack that the previous SDK layer required.
+// the OpenAI API receives it natively.
 func ChatStreamWithDecision(ctx context.Context, messages []Message, decision Decision, sessionID string) <-chan string {
 	out := make(chan string, 128)
 
 	if !Available() {
 		go func() {
-			out <- "[Oracle: ANTHROPIC_API_KEY not configured]"
+			out <- "[Oracle: OPENAI_API_KEY not configured]"
 			close(out)
 		}()
 		return out
@@ -193,7 +191,7 @@ func ChatStreamWithDecision(ctx context.Context, messages []Message, decision De
 			}
 		}
 
-		if err := streamAnthropicMessages(ctx, decision.Model, systemPrompt, apiMessages, decision.ThinkingBudget, out); err != nil {
+		if err := streamOpenAIResponses(ctx, decision.Model, systemPrompt, apiMessages, decision.Route, out); err != nil {
 			out <- fmt.Sprintf("[Oracle Error: %v]", err)
 		}
 	}()
@@ -201,49 +199,26 @@ func ChatStreamWithDecision(ctx context.Context, messages []Message, decision De
 	return out
 }
 
-// streamAnthropicMessages calls the Anthropic messages API with SSE streaming.
-// System prompt is sent as a cached content block (prompt caching).
-// When thinkingBudget > 0, extended thinking is enabled for the request and
-// thinking blocks are consumed silently — only text deltas reach the caller.
-func streamAnthropicMessages(ctx context.Context, model, system string, messages []Message, thinkingBudget int, out chan<- string) error {
-	type apiMsg struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
-	apiMsgs := make([]apiMsg, 0, len(messages))
-	for _, m := range messages {
-		apiMsgs = append(apiMsgs, apiMsg{Role: m.Role, Content: m.Content})
+// streamOpenAIResponses calls the OpenAI Responses API with semantic SSE streaming.
+func streamOpenAIResponses(ctx context.Context, model, system string, messages []Message, route Route, out chan<- string) error {
+	input, err := openAIResponseInputFromMessages(messages)
+	if err != nil {
+		return err
 	}
 
-	outputTokens := maxTokens
 	payload := map[string]any{
-		"model":    model,
-		"messages": apiMsgs,
-		"stream":   true,
+		"model":             model,
+		"input":             input,
+		"stream":            true,
+		"store":             false,
+		"max_output_tokens": maxTokens,
 	}
-
-	// System prompt as cached content block — saves tokens on repeated turns.
-	// Anthropic only caches blocks >= 1024 tokens; smaller prompts pass through unchanged.
-	if system != "" {
-		payload["system"] = []map[string]any{{
-			"type":          "text",
-			"text":          system,
-			"cache_control": map[string]any{"type": "ephemeral"},
-		}}
+	if strings.TrimSpace(system) != "" {
+		payload["instructions"] = system
 	}
-
-	// Extended thinking — heavy and research routes only.
-	// temperature must be 1 when thinking is enabled (Anthropic requirement).
-	// max_tokens covers both thinking budget + text output.
-	if thinkingBudget > 0 {
-		payload["thinking"] = map[string]any{
-			"type":         "enabled",
-			"budget_tokens": thinkingBudget,
-		}
-		payload["temperature"] = 1
-		outputTokens = thinkingBudget + maxTokens
+	if effort := reasoningEffortForRoute(route); effort != "" {
+		payload["reasoning"] = map[string]any{"effort": effort}
 	}
-	payload["max_tokens"] = outputTokens
 
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -251,30 +226,23 @@ func streamAnthropicMessages(ctx context.Context, model, system string, messages
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		anthropicBase+"/messages", bytes.NewReader(body))
+		openAIBase+"/responses", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_KEY"))
-	req.Header.Set("anthropic-version", anthropicVersion)
-	// Required header for prompt caching.
-	req.Header.Set("anthropic-beta", "prompt-caching-2024-07-31")
+	req.Header.Set("authorization", "Bearer "+os.Getenv("OPENAI_API_KEY"))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("anthropic request: %w", err)
+		return fmt.Errorf("openai responses request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("anthropic status %d: %s", resp.StatusCode, string(b))
+		return fmt.Errorf("openai responses status %d: %s", resp.StatusCode, string(b))
 	}
-
-	// Track content block types by index so we can route thinking vs text deltas.
-	// thinking blocks are consumed silently; only text_delta events reach the caller.
-	blockTypes := make(map[int]string)
 
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
@@ -288,38 +256,29 @@ func streamAnthropicMessages(ctx context.Context, model, system string, messages
 		}
 
 		var event struct {
-			Type         string `json:"type"`
-			Index        int    `json:"index"`
-			ContentBlock struct {
-				Type string `json:"type"`
-			} `json:"content_block"`
-			Delta struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"delta"`
+			Type  string `json:"type"`
+			Delta string `json:"delta"`
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error,omitempty"`
 		}
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
 			continue
 		}
-
-		switch event.Type {
-		case "content_block_start":
-			blockTypes[event.Index] = event.ContentBlock.Type
-		case "content_block_delta":
-			if blockTypes[event.Index] == "text" && event.Delta.Type == "text_delta" {
-				out <- event.Delta.Text
-			}
-		case "content_block_stop":
-			delete(blockTypes, event.Index)
+		if event.Error != nil {
+			return fmt.Errorf("openai responses error: %s", event.Error.Message)
+		}
+		if event.Type == "response.output_text.delta" && event.Delta != "" {
+			out <- event.Delta
 		}
 	}
 	return scanner.Err()
 }
 
-// AnalyzeImage sends an image to Claude for vision analysis.
+// AnalyzeImage sends an image to OpenAI for vision analysis.
 func AnalyzeImage(ctx context.Context, prompt, imageB64, mimeType string) (string, error) {
 	if !Available() {
-		return "", fmt.Errorf("vision: ANTHROPIC_API_KEY not set")
+		return "", fmt.Errorf("vision: OPENAI_API_KEY not set")
 	}
 	if mimeType == "" {
 		mimeType = "image/png"
@@ -330,47 +289,42 @@ func AnalyzeImage(ctx context.Context, prompt, imageB64, mimeType string) (strin
 	}
 
 	payload := map[string]any{
-		"model":      model,
-		"max_tokens": 1024,
-		"messages": []map[string]any{{
+		"model":             model,
+		"max_output_tokens": 1024,
+		"store":             false,
+		"input": []map[string]any{{
 			"role": "user",
 			"content": []map[string]any{
 				{
-					"type": "image",
-					"source": map[string]any{
-						"type":       "base64",
-						"media_type": mimeType,
-						"data":       imageB64,
-					},
+					"type":      "input_image",
+					"image_url": "data:" + mimeType + ";base64," + imageB64,
+					"detail":    "auto",
 				},
-				{"type": "text", "text": prompt},
+				{"type": "input_text", "text": prompt},
 			},
 		}},
 	}
 
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		anthropicBase+"/messages", bytes.NewReader(body))
+		openAIBase+"/responses", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("vision: build request: %w", err)
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_KEY"))
-	req.Header.Set("anthropic-version", anthropicVersion)
+	req.Header.Set("authorization", "Bearer "+os.Getenv("OPENAI_API_KEY"))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("vision: anthropic call: %w", err)
+		return "", fmt.Errorf("vision: openai call: %w", err)
 	}
 	defer resp.Body.Close()
 
 	b, _ := io.ReadAll(resp.Body)
 	var result struct {
-		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
-		Error *struct {
+		OutputText string                     `json:"output_text"`
+		Output     []openAIResponseOutputItem `json:"output"`
+		Error      *struct {
 			Message string `json:"message"`
 		} `json:"error,omitempty"`
 	}
@@ -378,15 +332,17 @@ func AnalyzeImage(ctx context.Context, prompt, imageB64, mimeType string) (strin
 		return "", fmt.Errorf("vision: decode response: %w", err)
 	}
 	if result.Error != nil {
-		return "", fmt.Errorf("vision: anthropic error: %s", result.Error.Message)
+		return "", fmt.Errorf("vision: openai error: %s", result.Error.Message)
 	}
-	for _, block := range result.Content {
-		if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
-			log.Printf("[Oracle:Vision] analyzed image via %s (%d chars)", model, len(block.Text))
-			return strings.TrimSpace(block.Text), nil
-		}
+	if text := strings.TrimSpace(result.OutputText); text != "" {
+		log.Printf("[Oracle:Vision] analyzed image via %s (%d chars)", model, len(text))
+		return text, nil
 	}
-	return "", fmt.Errorf("vision: empty response from anthropic (status=%d)", resp.StatusCode)
+	if text := strings.TrimSpace(openAIResponseOutputText(result.Output)); text != "" {
+		log.Printf("[Oracle:Vision] analyzed image via %s (%d chars)", model, len(text))
+		return text, nil
+	}
+	return "", fmt.Errorf("vision: empty response from openai (status=%d)", resp.StatusCode)
 }
 
 func getAgentPrompt(name string) string {

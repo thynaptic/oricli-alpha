@@ -11,11 +11,11 @@ Oricli-Alpha has two infrastructure execution surfaces beyond code generation an
 1. **VPS System Exec** — direct shell commands via `pkg/sovereign/exec_tools.go`
 2. **RunPod GPU Compute** — pod lifecycle management via `pkg/service/runpod_manager.go`
 
-The `SelfAlign` / SCAI structural gate governs *generated text* quality (credential leaks, DID checks, injection patterns — pure Go regex, no LLM). The Critique-Revision SLM loop was retired in v11.9.0. This does **not** govern *infrastructure actions*. The Infrastructure Constitution fills that gap with two distinct, enforcement-layer constitutions:
+SCAI governs *generated text* quality in two parts: a pre-generation constraint contract and structural output gates (credential leaks, DID checks, injection patterns — pure Go regex, no LLM). The old visible Critique-Revision SLM loop was retired in v11.9.0 and replaced by constraint-native generation. This does **not** govern *infrastructure actions*. The Infrastructure Constitution fills that gap with two distinct, enforcement-layer constitutions:
 
 | Layer | File | Enforcement Point | Type |
 |---|---|---|---|
-| Text output | `pkg/cognition/sovereign.go` | Post-generation structural scan | Regex/DID (no LLM) |
+| Text output | `pkg/safety/scai.go` + `pkg/cognition/sovereign.go` | Pre-generation contract + post-generation structural scan | Prompt contract + Regex/DID |
 | Code generation | `pkg/reform/canvas_constitution.go` | LLM system prompt injection | Instructional |
 | VPS exec | `pkg/reform/ops_constitution.go` | Pre-exec `Validate()` call | Hard block |
 | RunPod pods | `pkg/reform/runpod_constitution.go` | Pre-`CreatePod()` + post-GPU-select | Hard block |
@@ -159,7 +159,7 @@ This enables accurate responses like:
 ## Summary: Full Constitutional Stack
 
 ```
-Output Text:    SCAI Critique-Revision (async, post-stream) + Constitution system prompt
+Output Text:    SCAI constraint contract pre-generation + structural output gates
 Canvas Code:    CanvasConstitution injected pre-generation
 VPS Exec:       OpsConstitution.Validate() — hard block at exec layer + PB audit
 RunPod Pods:    RunPodConstitution.ValidateCreate() + ValidateBudget() — hard block pre-API

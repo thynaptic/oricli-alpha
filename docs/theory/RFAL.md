@@ -4,11 +4,11 @@
 **Version:** v2.1.0 (Go-native implementation)  
 **Status:** Active  
 
-RFAL is Oricli-Alpha's **autonomous alignment engine**. It captures every instance of self-correction as a structured training signal and feeds it to the JIT Daemon for continuous behavioral improvement — no human labelers, no external pipeline.
+RFAL is Oricli-Alpha's **autonomous alignment engine**. It captures correction, regeneration, and user-teach signals as structured training data for continuous behavioral improvement — no human labelers, no external pipeline.
 
 RFAL operates at two levels:
 
-1. **SCAI-driven RFAL** (primary): Triggered whenever the SCAI Constitutional Auditor revises a response. The violation + correction pair is logged immediately. See [CALI.md](CALI.md) for the Critique-Revision loop.
+1. **SCAI-driven RFAL** (primary): Triggered when structural gates force regeneration, limitation, or operator-visible audit logging. SCAI now prefers constraint-native generation over visible response revision. See [CALI.md](CALI.md) for the current SCAI model.
 2. **Conversational RFAL** (secondary): Triggered by user conflict signals during normal conversation.
 
 ---
@@ -102,4 +102,3 @@ The original `rfal_engine` Python brain module (`oricli_core/brain/modules/`) st
 - **Module Name**: `rfal_engine`
 - **Primary Operation**: `process_feedback`
 - **Dependencies**: `emotional_inference`, `world_knowledge`, `adapter_router`
-

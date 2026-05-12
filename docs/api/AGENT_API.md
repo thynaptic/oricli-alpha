@@ -108,6 +108,7 @@ Current surfaces:
 - `home`
 - `dev`
 - `red`
+- `learn`
 
 The surface tells ORI:
 
@@ -141,6 +142,34 @@ Examples:
 - `home_notes`
 - `home_research`
 
+Useful Home planner skill lanes under `home_planner`:
+
+- `planning_decomposer` for brain dumps, vague goals, checklists, next actions, and low-overwhelm plans
+- `task_patch_planner` for "make this simpler", "split this", "move this", and bounded plan edits
+- `executive_function_coach` for stuck/overwhelmed/time-blind moments where the answer should shrink the task first
+- `focus_session_conductor` for one-step work-session guidance
+- `planning_review_rescheduler` for daily/weekly review, open-loop triage, and rescheduling
+
+These are ORI-wide planning intelligence layers, not app-specific task storage. External planner apps should still own tasks, reminders, sync, notifications, and persistence.
+
+Useful Home logistics skill lanes under `home_planner`:
+
+- `household_context_ingester` for school flyers, household notes, emails, PDFs, dates, forms, payments, and obligations
+- `active_pin_resolver` for choosing the one household Active Pin that deserves attention now
+- `temporal_deadline_guardian` for deadlines, prep windows, soft conflicts, protected time, pickup/dropoff, and school-event timing
+- `household_resolution_drafter` for teacher/vendor replies, booking requests, prep checklists, and payment-review prompts
+
+These are ORI-wide household logistics layers, not OCR, calendars, payment rails, booking systems, reminders, notifications, or storage. External Home clients should still own capture, OCR, calendars, reminders, family data storage, consent, and delivery.
+
+Useful Home reflection skill lanes under `home_companion` and `home_notes`:
+
+- `reflective_journal_companion` for journal entries, vents, personal reflection, and "go deeper" follow-ups
+- `reflection_prompt_generator` for blank-page help, daily prompts, and short reflection rituals
+- `personal_pattern_synthesizer` for recurring themes, weekly insight packets, and gentle review synthesis
+- `memory_handoff_curator` for consent-aware memory candidates, continuity hooks, and next-session handoff notes
+
+These are ORI-wide reflection intelligence layers, not a journal database, therapy product, mobile app, or memory store. External journal clients should still own entry storage, encryption, sync, biometric locks, notifications, and persistence policy.
+
 ### Dev
 
 - `dev_builder`
@@ -150,6 +179,24 @@ Examples:
 ### Red
 
 - `ori_red`
+
+### Learn
+
+- `tutor_agent_profile`
+- `assessment_agent_profile`
+- `study_planner_profile`
+- `socratic_coach_profile`
+- `mastery_agent_profile`
+
+Useful learning substrate skill lanes:
+
+- `material_to_mastery_compiler` for turning supplied material into summaries, concept graphs, flashcards, quizzes, drills, mock assessments, review cadence, and mastery score
+- `adaptive_explanation_layer` for tailoring explanation style to skill level, pacing, misconception history, corpus language, and temporal pressure
+- `guided_completion_mode` for choosing hint, scaffold, verify, complete, simulate, or challenge
+- `user_corpus_grounding` for grounding explanations in the user's notes, team language, repo conventions, household language, or other private corpus language
+- `learning_goal_dag` for competency graphs, prerequisite DAGs, review cadence, readiness checkpoints, and mastery persistence plans
+
+These are ORI-wide learning intelligence layers, not a school app, OCR system, document store, reminder engine, calendar, notification service, or LMS. External clients should supply extracted material and own persistence.
 
 If a profile does not belong to the chosen surface, ORI ignores it and stays on the default baseline.
 

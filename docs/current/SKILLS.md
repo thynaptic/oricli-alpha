@@ -72,6 +72,19 @@ These are the real user-facing profile lanes today.
 - `ori_red`
   - Security review and remediation guidance
 
+### Learn
+
+- `tutor_agent_profile`
+  - Guided teaching
+- `assessment_agent_profile`
+  - Quiz, drill, and mock-assessment generation
+- `study_planner_profile`
+  - Temporal mastery coordination
+- `socratic_coach_profile`
+  - Regulated hint/scaffold/verify/challenge assistance
+- `mastery_agent_profile`
+  - Longitudinal concept, misconception, review, and readiness tracking
+
 ### Internal baseline only
 
 - `ori_core`
@@ -105,6 +118,32 @@ These are the small skill groups each product surface is allowed to lean on.
   - research and decisions
 - `operations_planner`
   - planning and reminders
+- `planning_decomposer`
+  - low-overwhelm decomposition, brain-dump cleanup, next-action planning
+- `task_patch_planner`
+  - conversational edits to plans and task lists through bounded patches
+- `executive_function_coach`
+  - activation-energy support, overwhelm reduction, one-step sequencing
+- `focus_session_conductor`
+  - one-step-at-a-time focus guidance and rescope cues
+- `planning_review_rescheduler`
+  - daily/weekly review, open-loop triage, no-shame rescheduling
+- `household_context_ingester`
+  - converts school flyers, household notes, and fragmented logistics into structured obligations
+- `active_pin_resolver`
+  - chooses the one timely household pin and stages a one-tap resolution
+- `temporal_deadline_guardian`
+  - detects deadlines, soft conflicts, prep windows, and protected-time risk
+- `household_resolution_drafter`
+  - drafts teacher/vendor messages, prep checklists, booking requests, and payment-review prompts
+- `reflective_journal_companion`
+  - dialogic reflection, vents, journaling, and meaning-making without clinical claims
+- `reflection_prompt_generator`
+  - blank-page help, daily prompts, and short reflection rituals
+- `personal_pattern_synthesizer`
+  - gentle recurring-theme synthesis and review packets
+- `memory_handoff_curator`
+  - consent-aware continuity hooks and next-session handoff notes
 - `meeting_intelligence`
   - notes and recap
 - `knowledge_organizer`
@@ -129,6 +168,19 @@ These are the small skill groups each product surface is allowed to lean on.
   - architecture review and trust boundaries
 - `technical_writer`
   - evidence-led reporting and remediation summaries
+
+### Learn
+
+- `material_to_mastery_compiler`
+  - material to summary, concepts, flashcards, drills, quizzes, mocks, review cadence, and mastery score
+- `adaptive_explanation_layer`
+  - explanation strategy shaped by skill level, misconception history, pacing, pressure, and corpus language
+- `guided_completion_mode`
+  - decides whether to explain, hint, verify, scaffold, complete, simulate, or challenge
+- `user_corpus_grounding`
+  - grounds learning in team language, household language, repo conventions, founder language, notes, or personal patterns
+- `learning_goal_dag`
+  - objective to competency graph, prerequisite DAG, review schedule, and readiness checkpoints
 
 ## Internal-Only Skills
 
@@ -191,7 +243,25 @@ These are the main overlap candidates in the current inventory.
   - treat as a shrinking legacy alias, not a peer to the current surfaced lane
 - `sovereign_planner`
   - overlaps with `operations_planner`
-  - treat as a shrinking legacy alias, not a peer to the current surfaced lane
+  - treat as a long-horizon/project planning lane, not the default low-overwhelm Home planner
+- `planning_decomposer`
+  - overlaps with `operations_planner`
+  - prefer it when the task is personal planning, brain-dump import, overwhelm reduction, or next-action sequencing
+- `task_patch_planner`
+  - overlaps with `planning_decomposer`
+  - prefer it when the user asks to edit an existing plan rather than create a new one
+- `reflective_journal_companion`
+  - overlaps with `home_companion` and `home_notes`
+  - prefer it for personal reflection, journaling, venting, and "go deeper" moments
+- `personal_pattern_synthesizer`
+  - overlaps with `knowledge_organizer`
+  - prefer it only for personal reflection patterns, not general knowledge cleanup
+- `household_context_ingester`
+  - overlaps with `knowledge_organizer`
+  - prefer it when the source is a household/school artifact with deadlines or obligations
+- `active_pin_resolver`
+  - overlaps with `planning_decomposer`
+  - prefer it when the user needs one current household action, not a full plan
 - `ui_designer`
   - overlaps with the `canvas_*` artifact builders
 - `senior_python_dev`

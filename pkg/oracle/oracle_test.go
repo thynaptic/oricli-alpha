@@ -1,6 +1,8 @@
 package oracle
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -9,8 +11,8 @@ func TestDecide_ImageReasoningWins(t *testing.T) {
 	if decision.Route != RouteImageReasoning {
 		t.Fatalf("expected image route, got %s", decision.Route)
 	}
-	if decision.Backend != "anthropic" {
-		t.Fatalf("expected anthropic backend, got %s", decision.Backend)
+	if decision.Backend != "openai" {
+		t.Fatalf("expected openai backend, got %s", decision.Backend)
 	}
 }
 
@@ -63,15 +65,87 @@ func TestModelForRoute_Defaults(t *testing.T) {
 }
 
 func TestAvailable_NoKey(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("OPENAI_API_KEY", "")
 	if Available() {
 		t.Fatal("expected Available() false with no API key")
 	}
 }
 
 func TestAvailable_WithKey(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+	t.Setenv("OPENAI_API_KEY", "sk-test")
 	if !Available() {
 		t.Fatal("expected Available() true with API key set")
 	}
+}
+
+func TestParseToolResponse_Text(t *testing.T) {
+	raw := []byte(`{
+		"output":[{"type":"message","content":[{"type":"output_text","text":"hello from responses"}]}]
+	}`)
+	round, err := parseToolResponse(raw)
+	if err != nil {
+		t.Fatalf("parseToolResponse returned error: %v", err)
+	}
+	if round.Text != "hello from responses" {
+		t.Fatalf("unexpected text: %q", round.Text)
+	}
+	if len(round.Calls) != 0 {
+		t.Fatalf("expected no calls, got %+v", round.Calls)
+	}
+}
+
+func TestParseToolResponse_FunctionCall(t *testing.T) {
+	raw := []byte(`{
+		"output":[{
+			"type":"function_call",
+			"call_id":"call_123",
+			"name":"read_file",
+			"arguments":"{\"path\":\"docs/AGLI.md\"}"
+		}]
+	}`)
+	round, err := parseToolResponse(raw)
+	if err != nil {
+		t.Fatalf("parseToolResponse returned error: %v", err)
+	}
+	if len(round.Calls) != 1 {
+		t.Fatalf("expected one call, got %+v", round.Calls)
+	}
+	if round.Calls[0].ID != "call_123" || round.Calls[0].Name != "read_file" {
+		t.Fatalf("unexpected call: %+v", round.Calls[0])
+	}
+	if round.Calls[0].Input["path"] != "docs/AGLI.md" {
+		t.Fatalf("unexpected input: %+v", round.Calls[0].Input)
+	}
+}
+
+func TestOpenAIResponseInputFromMessages_ToolLoop(t *testing.T) {
+	var tc OAIToolCall
+	tc.ID = "call_123"
+	tc.Type = "function"
+	tc.Function.Name = "read_file"
+	tc.Function.Arguments = `{"path":"docs/AGLI.md"}`
+
+	input, err := openAIResponseInputFromMessages([]Message{
+		{Role: "system", Content: "ignored as instructions"},
+		{Role: "user", Content: "read docs"},
+		{Role: "assistant", ToolCalls: []OAIToolCall{tc}},
+		{Role: "tool", ToolCallID: "call_123", Content: "doc text"},
+	})
+	if err != nil {
+		t.Fatalf("openAIResponseInputFromMessages returned error: %v", err)
+	}
+	b, _ := json.Marshal(input)
+	got := string(b)
+	if !containsAll(got, `"type":"function_call"`, `"call_id":"call_123"`, `"type":"function_call_output"`, `"output":"doc text"`) {
+		t.Fatalf("unexpected input conversion: %s", got)
+	}
+}
+
+func containsAll(s string, needles ...string) bool {
+	for _, needle := range needles {
+		if !strings.Contains(s, needle) {
+			return false
+		}
+	}
+	return true
 }

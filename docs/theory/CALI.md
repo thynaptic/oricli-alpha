@@ -11,7 +11,7 @@
 
 ## 1. Abstract
 
-This document defines **CALI** — the Constitutional Alignment framework that governs Oricli-Alpha's internal decision-making, self-regulation, and behavioral alignment. CALI is not a content filter. It is not a disclaimer layer. It is a living governance system embedded at the cognitive level of the sovereign engine, executing a fully autonomous **Critique-Revision-Reinforcement** loop with every inference cycle. CALI is what separates a language model from a trustworthy intelligence.
+This document defines **CALI** — the Constitutional Alignment framework that governs Oricli-Alpha's internal decision-making, self-regulation, and behavioral alignment. CALI is not a content filter. It is not a disclaimer layer. It is a living governance system embedded at the cognitive level of the sovereign engine, executing a constraint-planning, verification, and reinforcement loop around inference. CALI is what separates a language model from a trustworthy intelligence.
 
 ---
 
@@ -72,9 +72,11 @@ Oricli-Alpha is a sovereign intelligence developed by Thynaptic. She operates wi
 
 ## 4. The SCAI Enforcement Engine
 
-The **Sovereign Constitutional AI (SCAI) Auditor** is the runtime enforcement mechanism for the Sovereign Constitution.
+The **Sovereign Constitutional AI (SCAI) layer** is the runtime enforcement mechanism for the Sovereign Constitution.
 
-> **v11.9.0 Update:** The two-pass Critique/Revise SLM loop has been retired. `SovereignEngine.SelfAlign()` now calls `AuditOutput()` directly — structural scanning only (DID checks, credential/path/PEM/JWT leak detection, prompt injection patterns). Behavioral alignment is handled by the frontier model's own constitution (Claude, GPT-4+). The SLM approach made sense when `qwen3:1.7b` was the reasoning backbone; it does not make sense as an auditor over models that already have a stronger constitution than the auditor itself.
+> **v11.9.0 Update:** The two-pass Critique/Revise SLM loop was retired. `SovereignEngine.SelfAlign()` now calls `AuditOutput()` directly — structural scanning only (DID checks, credential/path/PEM/JWT leak detection, prompt injection patterns).
+>
+> **v12 Update:** SCAI is now constraint-native. `pkg/safety/scai.go` builds a request-specific constraint contract before generation so Oracle/local inference composes inside the constitutional boundary from the start. Structural output gates remain as the hard perimeter, and non-streaming responses may regenerate under a tighter contract if those gates alter the draft.
 
 ### 4.1 Structural Audit (Current)
 
@@ -111,17 +113,17 @@ Prior to inference, two sentinel components inspect every inbound request:
 
 ## 5. RFAL — The Self-Improvement Loop
 
-The Critique-Revision cycle generates more than aligned outputs. Every violation that triggers a revision is a **training signal**. CALI closes the loop through **RFAL (Reinforced Feedback Alignment Learning)**.
+The constraint-verification cycle generates more than aligned outputs. Every structural gate hit, regeneration, or user correction is a **training signal**. CALI closes the loop through **RFAL (Reinforced Feedback Alignment Learning)**.
 
 ### 5.1 Lesson Capture
 
-When the SCAI Auditor produces a revised response, the system logs a structured DPO (Direct Preference Optimization) triplet to `.memory/alignment_lessons.jsonl`:
+When SCAI regeneration or operator audit produces a better answer, the system can log a structured DPO (Direct Preference Optimization) triplet to `.memory/alignment_lessons.jsonl`:
 
 ```json
 {
   "prompt":    "<original user query>",
-  "rejected":  "<draft that violated the Constitution>",
-  "chosen":    "<SCAI-revised Constitutional response>",
+  "rejected":  "<draft that violated the contract or structural gates>",
+  "chosen":    "<regenerated Constitutional response>",
   "score":     -1.0,
   "timestamp": "2026-03-21T19:00:00Z"
 }
@@ -144,7 +146,7 @@ A reward below threshold triggers lesson logging. High-confidence lessons are co
 ### 5.3 The Alignment Flywheel
 
 ```
-Inference → SCAI Critique → Violation → SCAI Revision → Output
+Input → SCAI Contract → Generation → Structural Verification → Output
                                 ↓
                       RFAL Lesson Logged
                                 ↓
@@ -152,10 +154,10 @@ Inference → SCAI Critique → Violation → SCAI Revision → Output
                                 ↓
                     Base Model Updated In-Place
                                 ↓
-                   Future Inferences Require Less Revision
+                   Future Inferences Need Fewer Regenerations
 ```
 
-Each alignment correction makes the next one less necessary. The system self-improves toward constitutional compliance without any external training pipeline.
+Each alignment lesson makes the next regeneration less necessary. The system self-improves toward constitutional compliance without exposing correction mechanics to the user.
 
 ---
 

@@ -48,7 +48,9 @@ type ThoughtNode struct {
 }
 
 func (n *ThoughtNode) IDOrDefault() string {
-	if n.ID == "" { return "unknown" }
+	if n.ID == "" {
+		return "unknown"
+	}
 	return n.ID
 }
 
@@ -81,11 +83,11 @@ type MCTSConfig struct {
 	EvalTimeout        time.Duration
 	TotalTimeout       time.Duration
 	Deterministic      bool
-	MaxTableSize int
-	Query string
-	ValueNet *ValueNetConfig
-	RAVEEquivalence float64
-	PolicyNet *PolicyNetConfig
+	MaxTableSize       int
+	Query              string
+	ValueNet           *ValueNetConfig
+	RAVEEquivalence    float64
+	PolicyNet          *PolicyNetConfig
 
 	// Aurora-Tier Parameters (Ported from MCTSModels.swift)
 	MinVisitsForExpansion int     // Minimum visits before expanding children
@@ -154,14 +156,30 @@ type MCTSEngine struct {
 
 func (e *MCTSEngine) normalizedConfig() MCTSConfig {
 	cfg := e.Config
-	if cfg.Iterations <= 0 { cfg.Iterations = 5 }
-	if cfg.BranchFactor <= 0 { cfg.BranchFactor = 3 }
-	if cfg.RolloutDepth <= 0 { cfg.RolloutDepth = 3 }
-	if cfg.UCB1C <= 0 { cfg.UCB1C = defaultUCB1C }
-	if cfg.PruneThreshold <= 0 { cfg.PruneThreshold = defaultPruneThreshold }
-	if cfg.MaxConcurrency <= 0 { cfg.MaxConcurrency = 1 }
-	if cfg.MaxConcurrency > 1 && cfg.VirtualLoss <= 0 { cfg.VirtualLoss = 1.0 }
-	if cfg.DiscountFactor <= 0 { cfg.DiscountFactor = 1.0 }
+	if cfg.Iterations <= 0 {
+		cfg.Iterations = 5
+	}
+	if cfg.BranchFactor <= 0 {
+		cfg.BranchFactor = 3
+	}
+	if cfg.RolloutDepth <= 0 {
+		cfg.RolloutDepth = 3
+	}
+	if cfg.UCB1C <= 0 {
+		cfg.UCB1C = defaultUCB1C
+	}
+	if cfg.PruneThreshold <= 0 {
+		cfg.PruneThreshold = defaultPruneThreshold
+	}
+	if cfg.MaxConcurrency <= 0 {
+		cfg.MaxConcurrency = 1
+	}
+	if cfg.MaxConcurrency > 1 && cfg.VirtualLoss <= 0 {
+		cfg.VirtualLoss = 1.0
+	}
+	if cfg.DiscountFactor <= 0 {
+		cfg.DiscountFactor = 1.0
+	}
 	return cfg
 }
 
@@ -175,7 +193,7 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 	if cfg.Iterations == 5 && cfg.Query != "" {
 		budget := DetermineBudget(cfg.Query)
 		budget.ApplyToConfig(&cfg)
-		log.Printf("[MCTSEngine] Adaptive Optimization: Complexity %.2f -> Iterations %d, Depth %d", 
+		log.Printf("[MCTSEngine] Adaptive Optimization: Complexity %.2f -> Iterations %d, Depth %d",
 			budget.Complexity, cfg.Iterations, cfg.RolloutDepth)
 	}
 
@@ -206,8 +224,8 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 	iterationsRun := 0
 	expandedNodes := 0
 	prunedNodes := 0
-	
-	const convergenceThreshold = 0.95 
+
+	const convergenceThreshold = 0.95
 
 	if cfg.MaxConcurrency > 1 {
 		ba, bs, iters, exp, prun := e.runParallelSearch(ctx, cfg, root)
@@ -221,21 +239,31 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 		var treeMu sync.Mutex
 
 		for iterationsRun < cfg.Iterations {
-			if ctx.Err() != nil { break }
-			if bestScore >= convergenceThreshold { break }
+			if ctx.Err() != nil {
+				break
+			}
+			if bestScore >= convergenceThreshold {
+				break
+			}
 
 			batch := minIntLocal(cfg.MaxConcurrency, cfg.Iterations-iterationsRun)
 			selected := make([]*ThoughtNode, 0, batch)
 			treeMu.Lock()
 			for i := 0; i < batch; i++ {
 				node, expanded := e.selectAndMaybeExpand(ctx, root, cfg, rng)
-				if node == nil { break }
-				if expanded { expandedNodes++ }
+				if node == nil {
+					break
+				}
+				if expanded {
+					expandedNodes++
+				}
 				node.VirtualVisits += int(math.Ceil(maxFloatLocal(cfg.VirtualLoss, 1.0)))
 				selected = append(selected, node)
 			}
 			treeMu.Unlock()
-			if len(selected) == 0 { break }
+			if len(selected) == 0 {
+				break
+			}
 
 			results := make(chan nodeEvalResult, len(selected))
 			var wg sync.WaitGroup
@@ -253,22 +281,48 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 			treeMu.Lock()
 			for r := range results {
 				iterationsRun++
-				if r.node == nil { continue }
-				if r.node.VirtualVisits > 0 { r.node.VirtualVisits-- }
+				if r.node == nil {
+					continue
+				}
+				if r.node.VirtualVisits > 0 {
+					r.node.VirtualVisits--
+				}
 				if r.err != nil {
 					e.backpropagate(r.node, 0.5, cfg.DiscountFactor)
 					continue
 				}
 				r.node.Score = r.score
 				r.node.Confidence = r.confidence
-				if r.terminal { r.node.Terminal = true }
-				if r.prior > 0 { r.node.Prior = clamp01Local(r.prior) }
-				if r.pruned { r.node.Pruned = true; prunedNodes++ }
+				if r.terminal {
+					r.node.Terminal = true
+				}
+				if r.vnHit {
+					e.valueNetHits++
+				}
+				if r.prior > 0 {
+					r.node.Prior = clamp01Local(r.prior)
+				}
+				if r.pruned {
+					r.node.Pruned = true
+					prunedNodes++
+				}
 				e.backpropagate(r.node, r.score, cfg.DiscountFactor)
-				if r.score > bestScore { bestScore = r.score; bestAnswer = r.node.Answer }
+				if r.score > bestScore {
+					bestScore = r.score
+					bestAnswer = r.node.Answer
+				}
 			}
 			treeMu.Unlock()
 		}
+	}
+
+	transpositionHits := 0
+	if e.table != nil {
+		transpositionHits = e.table.hits()
+	}
+	raveTableSize := 0
+	if e.rave != nil {
+		raveTableSize = e.rave.size()
 	}
 
 	return MCTSResult{
@@ -277,8 +331,8 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 		IterationsRun:       iterationsRun,
 		ExpandedNodes:       expandedNodes,
 		PrunedNodes:         prunedNodes,
-		TranspositionHits:   e.table.hits(),
-		RAVETableSize:       e.rave.size(),
+		TranspositionHits:   transpositionHits,
+		RAVETableSize:       raveTableSize,
 		ValueNetHits:        e.valueNetHits,
 		PolicyPriorizations: e.policyPriorizations,
 		Root:                root,
@@ -288,31 +342,46 @@ func (e *MCTSEngine) SearchV2(ctx context.Context, draftAnswer string) (MCTSResu
 func (e *MCTSEngine) selectAndMaybeExpand(ctx context.Context, root *ThoughtNode, cfg MCTSConfig, rng *rand.Rand) (*ThoughtNode, bool) {
 	curr := root
 	for {
-		if curr.Terminal || curr.Depth >= cfg.RolloutDepth { return curr, false }
+		if curr.Terminal || curr.Depth >= cfg.RolloutDepth {
+			return curr, false
+		}
 		if len(curr.Children) < cfg.BranchFactor && (curr.Visits >= cfg.MinVisitsForExpansion || curr == root) {
 			branches, err := e.Callbacks.ProposeBranches(ctx, curr.Answer, cfg.BranchFactor-len(curr.Children))
-			if err != nil || len(branches) == 0 { return curr, false }
+			if err != nil || len(branches) == 0 {
+				return curr, false
+			}
 			for _, b := range branches {
 				child := &ThoughtNode{ID: uuid.New().String()[:8], Answer: b, Depth: curr.Depth + 1, Parent: curr, Prior: 1.0 / float64(cfg.BranchFactor)}
 				curr.Children = append(curr.Children, child)
 			}
 			return curr.Children[0], true
 		}
-		if len(curr.Children) == 0 { return curr, false }
+		if len(curr.Children) == 0 {
+			return curr, false
+		}
 		bestScore := -math.MaxFloat64
 		var bestChild *ThoughtNode
 		for _, child := range curr.Children {
-			if child.Pruned { continue }
+			if child.Pruned {
+				continue
+			}
 			score := e.selectionScore(child, curr, cfg)
-			if score > bestScore { bestScore = score; bestChild = child }
+			if score > bestScore {
+				bestScore = score
+				bestChild = child
+			}
 		}
-		if bestChild == nil { return nil, false }
+		if bestChild == nil {
+			return nil, false
+		}
 		curr = bestChild
 	}
 }
 
 func (e *MCTSEngine) selectionScore(child, parent *ThoughtNode, cfg MCTSConfig) float64 {
-	if child.VirtualVisits > 0 { return -math.MaxFloat64 }
+	if child.VirtualVisits > 0 {
+		return -math.MaxFloat64
+	}
 	n := float64(child.Visits)
 	N := float64(parent.Visits)
 	Q := child.AverageValue()
@@ -324,7 +393,9 @@ func (e *MCTSEngine) selectionScore(child, parent *ThoughtNode, cfg MCTSConfig) 
 		}
 	}
 	if cfg.Strategy == MCTSStrategyUCB1 {
-		if n == 0 { return math.MaxFloat64 }
+		if n == 0 {
+			return math.MaxFloat64
+		}
 		return Q + cfg.UCB1C*math.Sqrt(math.Log(N)/n)
 	}
 	return Q + cfg.PriorWeight*child.Prior*math.Sqrt(N)/(1+n)
@@ -337,6 +408,7 @@ type nodeEvalResult struct {
 	terminal   bool
 	pruned     bool
 	prior      float64
+	vnHit      bool
 	err        error
 }
 
@@ -346,10 +418,37 @@ func (e *MCTSEngine) evaluateNode(ctx context.Context, node *ThoughtNode, cfg MC
 			return nodeEvalResult{node: node, score: entry.score, confidence: entry.confidence, terminal: entry.terminal, pruned: entry.score < cfg.PruneThreshold}
 		}
 	}
+	if cfg.ValueNet != nil && cfg.ValueNet.Network != nil {
+		if vnScore, err := cfg.ValueNet.Network.Estimate(ctx, cfg.Query, node.Answer); err == nil {
+			hi := cfg.ValueNet.escalateAbove()
+			if vnScore < hi {
+				res := nodeEvalResult{
+					node:       node,
+					score:      vnScore,
+					confidence: vnScore,
+					pruned:     vnScore < cfg.PruneThreshold,
+					prior:      node.Prior,
+					vnHit:      true,
+				}
+				if e.table != nil && vnScore >= cfg.ValueNet.acceptBelow() {
+					e.table.put(node.Answer, transpositionEntry{score: res.score, confidence: res.confidence})
+				}
+				return res
+			}
+		}
+	}
 	eval, err := e.Callbacks.EvaluatePath(ctx, node.Answer)
-	if err != nil { return nodeEvalResult{node: node, err: err} }
-	res := nodeEvalResult{node: node, score: eval.Score, confidence: eval.Confidence, terminal: eval.Terminal, pruned: eval.Score < cfg.PruneThreshold, prior: eval.Prior}
-	if e.table != nil { e.table.put(node.Answer, transpositionEntry{score: eval.Score, confidence: eval.Confidence, terminal: eval.Terminal}) }
+	if err != nil {
+		return nodeEvalResult{node: node, err: err}
+	}
+	score := eval.Score
+	if score == 0 && eval.Confidence > 0 {
+		score = eval.Confidence
+	}
+	res := nodeEvalResult{node: node, score: score, confidence: eval.Confidence, terminal: eval.Terminal, pruned: score < cfg.PruneThreshold, prior: eval.Prior}
+	if e.table != nil {
+		e.table.put(node.Answer, transpositionEntry{score: score, confidence: eval.Confidence, terminal: eval.Terminal})
+	}
 	return res
 }
 
@@ -359,34 +458,144 @@ func (e *MCTSEngine) backpropagate(node *ThoughtNode, score float64, discount fl
 	for curr != nil {
 		curr.Visits++
 		curr.ValueSum += val
-		if e.rave != nil { e.rave.update(curr.Answer, val) }
+		if e.rave != nil {
+			e.rave.update(curr.Answer, val)
+		}
 		val *= discount
 		curr = curr.Parent
 	}
 }
 
 func (e *MCTSEngine) runParallelSearch(ctx context.Context, cfg MCTSConfig, root *ThoughtNode) (string, float64, int, int, int) {
-	return root.Answer, 0.5, 0, 0, 0
+	rng := rand.New(rand.NewSource(cfg.Seed))
+	bestAnswer := root.Answer
+	bestScore := 0.0
+	iterationsRun := 0
+	expandedNodes := 0
+	prunedNodes := 0
+
+	for iterationsRun < cfg.Iterations {
+		if ctx.Err() != nil {
+			break
+		}
+		node, expanded := e.selectAndMaybeExpand(ctx, root, cfg, rng)
+		if node == nil {
+			break
+		}
+		if expanded {
+			expandedNodes++
+		}
+		node.VirtualVisits += int(math.Ceil(maxFloatLocal(cfg.VirtualLoss, 1.0)))
+		result := e.evaluateNode(ctx, node, cfg)
+		iterationsRun++
+		if node.VirtualVisits > 0 {
+			node.VirtualVisits--
+		}
+		if result.err != nil {
+			e.backpropagate(node, 0.5, cfg.DiscountFactor)
+			continue
+		}
+		node.Score = result.score
+		node.Confidence = result.confidence
+		if result.terminal {
+			node.Terminal = true
+		}
+		if result.vnHit {
+			e.valueNetHits++
+		}
+		if result.prior > 0 {
+			node.Prior = clamp01Local(result.prior)
+		}
+		if result.pruned {
+			node.Pruned = true
+			prunedNodes++
+		}
+		e.backpropagate(node, result.score, cfg.DiscountFactor)
+		if result.score > bestScore {
+			bestScore = result.score
+			bestAnswer = node.Answer
+		}
+	}
+	return bestAnswer, bestScore, iterationsRun, expandedNodes, prunedNodes
 }
 
-type transpositionEntry struct { score, confidence float64; terminal bool }
-type transpositionTable struct { entries map[uint64]transpositionEntry; mu sync.RWMutex; maxSize int }
-func newTranspositionTable(size int) *transpositionTable { if size <= 0 { size = defaultMaxTableSize }; return &transpositionTable{entries: make(map[uint64]transpositionEntry), maxSize: size} }
-func (t *transpositionTable) hash(s string) uint64 { h := fnv.New64a(); h.Write([]byte(s)); return h.Sum64() }
-func (t *transpositionTable) get(s string) (transpositionEntry, bool) { t.mu.RLock(); defer t.mu.RUnlock(); e, ok := t.entries[t.hash(s)]; return e, ok }
-func (t *transpositionTable) put(s string, e transpositionEntry) { t.mu.Lock(); defer t.mu.Unlock(); if len(t.entries) >= t.maxSize { return }; t.entries[t.hash(s)] = e }
+type transpositionEntry struct {
+	score, confidence float64
+	terminal          bool
+}
+type transpositionTable struct {
+	entries map[uint64]transpositionEntry
+	mu      sync.RWMutex
+	maxSize int
+}
+
+func newTranspositionTable(size int) *transpositionTable {
+	if size <= 0 {
+		size = defaultMaxTableSize
+	}
+	return &transpositionTable{entries: make(map[uint64]transpositionEntry), maxSize: size}
+}
+func (t *transpositionTable) hash(s string) uint64 {
+	h := fnv.New64a()
+	h.Write([]byte(s))
+	return h.Sum64()
+}
+func (t *transpositionTable) get(s string) (transpositionEntry, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	e, ok := t.entries[t.hash(s)]
+	return e, ok
+}
+func (t *transpositionTable) put(s string, e transpositionEntry) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if len(t.entries) >= t.maxSize {
+		return
+	}
+	t.entries[t.hash(s)] = e
+}
 func (t *transpositionTable) hits() int { t.mu.RLock(); defer t.mu.RUnlock(); return len(t.entries) }
 
-type raveTable struct { values map[uint64]float64; counts map[uint64]int; mu sync.RWMutex }
-func newRaveTable() *raveTable { return &raveTable{values: make(map[uint64]float64), counts: make(map[uint64]int)} }
+type raveTable struct {
+	values map[uint64]float64
+	counts map[uint64]int
+	mu     sync.RWMutex
+}
+
+func newRaveTable() *raveTable {
+	return &raveTable{values: make(map[uint64]float64), counts: make(map[uint64]int)}
+}
 func (r *raveTable) hash(s string) uint64 { h := fnv.New64a(); h.Write([]byte(s)); return h.Sum64() }
-func (r *raveTable) update(s string, val float64) { r.mu.Lock(); defer r.mu.Unlock(); h := r.hash(s); r.values[h] += val; r.counts[h]++ }
-func (r *raveTable) get(s string) (float64, int) { r.mu.RLock(); defer r.mu.RUnlock(); h := r.hash(s); if count, ok := r.counts[h]; ok { return r.values[h] / float64(count), count }; return 0, 0 }
+func (r *raveTable) update(s string, val float64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	h := r.hash(s)
+	r.values[h] += val
+	r.counts[h]++
+}
+func (r *raveTable) get(s string) (float64, int) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	h := r.hash(s)
+	if count, ok := r.counts[h]; ok {
+		return r.values[h] / float64(count), count
+	}
+	return 0, 0
+}
 func (r *raveTable) size() int { r.mu.RLock(); defer r.mu.RUnlock(); return len(r.values) }
 
-func minIntLocal(a, b int) int { if a < b { return a }; return b }
-func maxFloatLocal(a, b float64) float64 { if a > b { return a }; return b }
+func minIntLocal(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+func maxFloatLocal(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
+}
 func clamp01Local(v float64) float64 { return math.Max(0, math.Min(1, v)) }
 
-type ValueNetConfig struct{}
 type PolicyNetConfig struct{}

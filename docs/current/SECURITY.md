@@ -7,7 +7,7 @@
 
 ## Overview
 
-Every user message passes through **8 input gates** before Ollama is ever called, and **5 output gates** before any response is returned. All gates run in the Go process — zero network round-trips, zero latency tax from cloud safety APIs.
+Every user message passes through **8 input gates** before inference, then SCAI builds a pre-generation constraint contract so Oracle/local inference composes inside the safety boundary from the start. Structural output gates still run before any response is returned.
 
 ```
 USER MESSAGE
@@ -37,7 +37,10 @@ USER MESSAGE
 [8] Suspicion Check           ← hard-block sessions with accumulated high-risk score
      │
      ▼
-   OLLAMA INFERENCE
+[9] SCAI Constraint Contract  ← surface/risk-aware generation boundary, no visible correction badge
+     │
+     ▼
+   ORACLE / LOCAL INFERENCE
      │
      ▼
 [O1] Adversarial Auditor (output)   ← API key patterns, internal path leaks
@@ -45,6 +48,9 @@ USER MESSAGE
 [O3] Web Injection Guard (output)   ← SSI/XSS/SSTI in prose (code blocks preserved)
 [O4] Canary Scanner (output)        ← honeypot credential detection, canary echo
 [O5] Canvas Guard (output)          ← HTML/JSX: strip <script>, event handlers, external resources
+     │
+     ▼
+[O6] Buffered regeneration           ← if structural gates altered a buffered response, regenerate under tighter SCAI constraints
      │
      ▼
 RESPONSE TO USER
@@ -138,8 +144,19 @@ Session-level risk accumulation with time decay:
 
 | Score | Action |
 |---|---|
-| >20 | WARN — logged, SCAI escalation flagged |
+| >20 | WARN — logged, SCAI constraint level escalated |
 | >50 | HARD_BLOCK — HTTP 429, 30-minute cooldown |
+
+### SCAI Constraint Contract
+
+`pkg/safety/scai.go` plans the generation boundary before inference. It combines the latest user message, product surface (`X-Ori-Context`), code/canvas context, runtime trust level, and the Sovereign Constitution into a compact contract injected into the system prompt.
+
+Runtime behavior:
+
+- Low-risk conversational turns receive a light contract and stream normally.
+- Sensitive/code/canvas turns receive stricter hard-deny and posture rules before generation.
+- User-facing UIs should not show "SCAI corrected" patches. The answer should feel native.
+- Buffered responses that trigger structural output changes may be regenerated once under a tightened contract before return.
 
 ### Output Gates
 

@@ -49,7 +49,7 @@ func DefaultReflectionPolicy(mode string) ReflectionPolicy {
 	if veto < steer {
 		veto = steer
 	}
-	timeoutMS := envIntWithFloor(reflectionTimeoutMSEnv, 3000, 1000)
+	timeoutMS := envIntWithFloor(reflectionTimeoutMSEnv, 3000, 100)
 	cacheTTL := time.Duration(envIntWithFloor(reflectionCacheTTLEnv, 90, 10)) * time.Second
 	cacheMax := envIntWithFloor(reflectionCacheMaxEnv, 512, 64)
 	enf := normalizeReflectionEnforcement(firstNonEmptyEnv(reflectionModeEnv, strings.TrimSpace(mode)))

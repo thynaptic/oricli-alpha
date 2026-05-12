@@ -33,7 +33,7 @@ A sovereign system must be non-weaponizable — and must govern its own infrastr
 
 | Layer | Scope | Enforcement Point |
 |---|---|---|
-| **SCAI** | All text output | Post-generation critique-revision pipeline |
+| **SCAI** | All text output | Pre-generation constraint contract + structural output gates |
 | **Canvas Constitution** | All generated code | Pre-generation system prompt injection |
 | **Ops Constitution** | All VPS exec commands | Hard block before `exec.Command()` |
 | **Remote Compute Constitution** | All GPU session requests | Pre-flight ValidateCreate + budget gate |

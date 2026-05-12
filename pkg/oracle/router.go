@@ -42,7 +42,7 @@ func Decide(query string, hints RouteHints) Decision {
 	if hints.Surface == "mise" {
 		return Decision{
 			Route:   RouteLightChat,
-			Backend: "anthropic",
+			Backend: "openai",
 			Model:   modelForRoute(RouteLightChat),
 			Agent:   "mise-culinary",
 			Reason:  "Mise by ORI culinary surface",
@@ -52,7 +52,7 @@ func Decide(query string, hints RouteHints) Decision {
 	if hints.HasVisualInput || looksLikeImageReasoning(lower) {
 		return Decision{
 			Route:   RouteImageReasoning,
-			Backend: "anthropic",
+			Backend: "openai",
 			Agent:   "ori-multimodal",
 			Reason:  "visual input or image-grounded reasoning request",
 		}
@@ -61,7 +61,7 @@ func Decide(query string, hints RouteHints) Decision {
 	if hints.IsResearchAction {
 		return Decision{
 			Route:          RouteResearch,
-			Backend:        "anthropic",
+			Backend:        "openai",
 			Model:          modelForRoute(RouteResearch),
 			Agent:          "ori-research",
 			Reason:         "research or analysis workflow",
@@ -72,7 +72,7 @@ func Decide(query string, hints RouteHints) Decision {
 	if isConversationalShort(lower) || isSessionIntrospective(lower) {
 		return Decision{
 			Route:   RouteLightChat,
-			Backend: "anthropic",
+			Backend: "openai",
 			Model:   modelForRoute(RouteLightChat),
 			Agent:   "ori-chat-fast",
 			Reason:  "light conversational turn",
@@ -82,7 +82,7 @@ func Decide(query string, hints RouteHints) Decision {
 	if hints.IsCodeAction || requestsHeavyReasoning(lower) || requestsHighEndModel(hints.RequestedModel) {
 		return Decision{
 			Route:          RouteHeavyReasoning,
-			Backend:        "anthropic",
+			Backend:        "openai",
 			Model:          modelForRoute(RouteHeavyReasoning),
 			Agent:          "ori-reasoner",
 			Reason:         "implementation or heavy reasoning request",
@@ -93,7 +93,7 @@ func Decide(query string, hints RouteHints) Decision {
 
 	return Decision{
 		Route:   RouteLightChat,
-		Backend: "anthropic",
+		Backend: "openai",
 		Model:   modelForRoute(RouteLightChat),
 		Agent:   "ori-chat-fast",
 		Reason:  "default conversational route",

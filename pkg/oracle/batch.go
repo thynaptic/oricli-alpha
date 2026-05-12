@@ -13,9 +13,14 @@ import (
 	"time"
 )
 
+const (
+	anthropicBatchBase    = "https://api.anthropic.com/v1"
+	anthropicBatchVersion = "2023-06-01"
+)
+
 // BatchRequest is one item in a batch submission.
 type BatchRequest struct {
-	CustomID string   // caller-assigned ID to correlate results (e.g. jobID)
+	CustomID string // caller-assigned ID to correlate results (e.g. jobID)
 	Messages []Message
 	Tools    []ToolDef
 	Decision Decision
@@ -31,11 +36,11 @@ const (
 
 // Batch represents a submitted Anthropic message batch.
 type Batch struct {
-	ID                string      `json:"id"`
-	Status            BatchStatus `json:"processing_status"`
-	RequestCounts     BatchCounts `json:"request_counts"`
-	CreatedAt         time.Time   `json:"created_at"`
-	ResultsExpiresAt  time.Time   `json:"results_expires_at"`
+	ID               string      `json:"id"`
+	Status           BatchStatus `json:"processing_status"`
+	RequestCounts    BatchCounts `json:"request_counts"`
+	CreatedAt        time.Time   `json:"created_at"`
+	ResultsExpiresAt time.Time   `json:"results_expires_at"`
 }
 
 type BatchCounts struct {
@@ -57,7 +62,7 @@ type BatchResult struct {
 // SubmitBatch sends a batch of requests to the Anthropic batch API.
 // Returns the batch ID immediately — results are retrieved later via PollBatch or FetchResults.
 func SubmitBatch(ctx context.Context, requests []BatchRequest) (string, error) {
-	if !Available() {
+	if strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")) == "" {
 		return "", fmt.Errorf("batch: ANTHROPIC_API_KEY not configured")
 	}
 	if len(requests) == 0 {
@@ -85,7 +90,7 @@ func SubmitBatch(ctx context.Context, requests []BatchRequest) (string, error) {
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		anthropicBase+"/messages/batches", bytes.NewReader(body))
+		anthropicBatchBase+"/messages/batches", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("batch: build request: %w", err)
 	}
@@ -113,12 +118,12 @@ func SubmitBatch(ctx context.Context, requests []BatchRequest) (string, error) {
 
 // GetBatch fetches the current status of a batch without retrieving results.
 func GetBatch(ctx context.Context, batchID string) (*Batch, error) {
-	if !Available() {
+	if strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")) == "" {
 		return nil, fmt.Errorf("batch: ANTHROPIC_API_KEY not configured")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		anthropicBase+"/messages/batches/"+batchID, nil)
+		anthropicBatchBase+"/messages/batches/"+batchID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("batch: build request: %w", err)
 	}
@@ -146,12 +151,12 @@ func GetBatch(ctx context.Context, batchID string) (*Batch, error) {
 // Only call this after GetBatch returns BatchStatusEnded.
 // Results are returned as a map of CustomID → BatchResult.
 func FetchResults(ctx context.Context, batchID string) (map[string]BatchResult, error) {
-	if !Available() {
+	if strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")) == "" {
 		return nil, fmt.Errorf("batch: ANTHROPIC_API_KEY not configured")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		anthropicBase+"/messages/batches/"+batchID+"/results", nil)
+		anthropicBatchBase+"/messages/batches/"+batchID+"/results", nil)
 	if err != nil {
 		return nil, fmt.Errorf("batch: build results request: %w", err)
 	}
@@ -313,6 +318,6 @@ func buildBatchParams(r BatchRequest) (map[string]any, error) {
 func setAnthropicHeaders(req *http.Request) {
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_KEY"))
-	req.Header.Set("anthropic-version", anthropicVersion)
+	req.Header.Set("anthropic-version", anthropicBatchVersion)
 	req.Header.Set("anthropic-beta", "message-batches-2024-09-24,prompt-caching-2024-07-31")
 }

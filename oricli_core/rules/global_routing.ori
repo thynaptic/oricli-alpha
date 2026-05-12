@@ -6,6 +6,19 @@
 <routing_preferences>
 # ── Skill routing (align with triggers in oricli_core/skills/) ──────────────
 - prefer: skill:go_engineer         for go, golang, goroutine, grpc, gin, interface, struct, concurrency
+- prefer: skill:planning_decomposer for brain dump, break down, checklist, next action, overwhelmed, where do i start
+- prefer: skill:task_patch_planner  for make this simpler, split this, reschedule, defer, revise the plan
+- prefer: skill:executive_function_coach for stuck, can't start, too much, time blind, executive function
+- prefer: skill:focus_session_conductor for focus session, timer, walk me through, one step, keep me on track
+- prefer: skill:planning_review_rescheduler for weekly review, daily review, open loops, catch up, plan tomorrow
+- prefer: skill:reflective_journal_companion for journal, journaling, reflect, vent, diary, process this, go deeper
+- prefer: skill:reflection_prompt_generator for journal prompt, blank page, what should i write, daily prompt, morning prompt
+- prefer: skill:personal_pattern_synthesizer for weekly insight, recurring themes, review my journal, emotional pattern
+- prefer: skill:memory_handoff_curator for remember this, memory candidate, handoff, follow up later, long-term memory
+- prefer: skill:household_context_ingester for school flyer, permission slip, school email, fridge note, extract deadlines, field trip
+- prefer: skill:active_pin_resolver for active pin, one tap, what needs attention, resolve this, present parent, mental load
+- prefer: skill:temporal_deadline_guardian for deadline, due tomorrow, spirit day, picture day, pickup, protected time, soft conflict
+- prefer: skill:household_resolution_drafter for draft teacher email, draft reply, booking request, prep checklist, payment review
 - prefer: skill:sovereign_planner   for plan, goal, objective, roadmap, strategy, decompose, track
 - prefer: skill:hive_orchestrator   for orchestrate, swarm, multi-agent, hive, delegate, coordinate, bid
 - prefer: skill:knowledge_curator   for ingest, knowledge_graph, entity, relationship, rag, memory, neo4j
@@ -21,4 +34,3 @@
 - prefer: mcts_reasoning            for deep_search and adversarial_planning
 - prefer: adversarial_sentinel      for security_review before any auto-deployed code
 </routing_preferences>
-
