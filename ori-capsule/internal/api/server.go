@@ -18,6 +18,7 @@ import (
 	"github.com/thynaptic/ori-capsule/internal/reform"
 	"github.com/thynaptic/ori-capsule/internal/safety"
 	"github.com/thynaptic/ori-capsule/internal/skills"
+	"github.com/thynaptic/ori-capsule/internal/tools"
 )
 
 type Server struct {
@@ -28,6 +29,7 @@ type Server struct {
 	gosh     *gosh.Manager
 	rag      *rag.Store
 	skills   *skills.Library
+	tools    *tools.Registry
 }
 
 func New(cfg config.Config) *Server {
@@ -53,8 +55,10 @@ func New(cfg config.Config) *Server {
 		panic(fmt.Sprintf("rag init: %v", err))
 	}
 	skillLib := skills.Open(cfg.SkillsDirs...)
+	reg := tools.NewRegistry()
+	tools.RegisterBuiltins(reg, tools.Deps{Mem: mem, Gosh: goshMgr, RAG: ragStore, Skills: skillLib})
 	r.Use(gin.Recovery(), gin.Logger())
-	s := &Server{cfg: cfg, router: r, pipeline: pipe, mem: mem, gosh: goshMgr, rag: ragStore, skills: skillLib}
+	s := &Server{cfg: cfg, router: r, pipeline: pipe, mem: mem, gosh: goshMgr, rag: ragStore, skills: skillLib, tools: reg}
 	s.routes()
 	return s
 }
@@ -66,6 +70,7 @@ func (s *Server) routes() {
 	protected := v1.Group("/", s.pipeline.RateLimiter.GinMiddleware())
 	protected.GET("/models", s.resolveCreds, s.handleModels)
 	protected.POST("/chat/completions", s.resolveCreds, s.handleChat)
+	protected.GET("/tools", s.resolveCreds, s.handleToolsList)
 
 	// Consumer memory surfaces (local only — no enterprise RAG)
 	protected.GET("/spaces", s.resolveCreds, s.handleSpacesList)
@@ -113,6 +118,7 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"reasoning": true,
 		"reform":    true,
 		"skills":    s.skills.Stats(),
+		"tools":     s.tools.Names(),
 		"stream":    "sanitize",
 		"providers": []string{"openai", "anthropic", "opencode"},
 	})
@@ -267,16 +273,31 @@ func (s *Server) handleChat(c *gin.Context) {
 		return
 	}
 
+	// Preserve client tools / tool history — prepare must not strip tool_calls.
+	savedTools := req.Tools
+	savedChoice := req.ToolChoice
+	toolMode := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Ori-Tools")))
+	autoTools := toolMode == "auto"
+	hasToolPayload := byok.HasToolPayload(req) || autoTools
+
 	// Zero-extra-LLM reasoning prepare (may trim elevated load; never retries).
 	reasonMsgs := make([]reasoning.ChatMessage, len(expanded))
 	for i, m := range expanded {
 		reasonMsgs[i] = reasoning.ChatMessage{Role: m.Role, Content: m.Content}
 	}
 	prepared := reasoning.Prepare(reasonMsgs, lastUser)
-	req.Messages = make([]byok.Message, len(prepared.Messages))
-	for i, m := range prepared.Messages {
-		req.Messages[i] = byok.Message{Role: m.Role, Content: m.Content}
+	if hasToolPayload {
+		// Keep original tool-bearing transcript; only expand via memory already applied
+		// to text turns is skipped here so tool_call_id chains stay valid.
+		req.Messages = append([]byok.Message(nil), req.Messages...)
+	} else {
+		req.Messages = make([]byok.Message, len(prepared.Messages))
+		for i, m := range prepared.Messages {
+			req.Messages[i] = byok.Message{Role: m.Role, Content: m.Content}
+		}
 	}
+	req.Tools = savedTools
+	req.ToolChoice = savedChoice
 
 	surface := c.GetHeader("X-Ori-Surface")
 	if surface == "" {
@@ -320,8 +341,28 @@ func (s *Server) handleChat(c *gin.Context) {
 	if prepared.Meta["needs_search"] == true {
 		c.Header("X-Ori-Needs-Search", "1")
 	}
+	if autoTools {
+		c.Header("X-Ori-Tools", "auto")
+	} else if len(req.Tools) > 0 || hasToolPayload {
+		c.Header("X-Ori-Tools", "passthrough")
+	}
 
 	ctx := c.Request.Context()
+
+	// Auto tool loop is non-stream (executes allowlisted tools server-side).
+	if autoTools {
+		out, err := tools.RunAutoLoop(ctx, cred, req, s.tools, tools.LoopOptions{
+			MaxRounds:     tools.DefaultMaxRounds,
+			InjectSchemas: true,
+		})
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+		s.finalizeChatResponse(c, out, sessionID, lastUser, canvasMode)
+		return
+	}
+
 	if req.Stream {
 		s.writeSSEHeaders(c)
 		collected, err := byok.CollectStream(ctx, cred, req)
@@ -332,11 +373,15 @@ func (s *Server) handleChat(c *gin.Context) {
 		}
 		sanitized, hardBlock := s.pipeline.SanitizeOutput(collected.Content, canvasMode)
 		finish := collected.FinishReason
+		msg := byok.Message{Role: "assistant", Content: sanitized, ToolCalls: collected.ToolCalls}
 		if hardBlock {
 			finish = "stop"
+			msg.ToolCalls = nil
 		}
-		s.mem.AfterReply(sessionID, lastUser, sanitized)
-		if err := byok.WriteChatSSE(c.Writer, collected.ID, collected.Model, sanitized, finish); err != nil {
+		if finish != "tool_calls" {
+			s.mem.AfterReply(sessionID, lastUser, sanitized)
+		}
+		if err := byok.WriteChatSSEMessage(c.Writer, collected.ID, collected.Model, msg, finish); err != nil {
 			fmt.Fprintf(c.Writer, "data: {\"error\":%q}\n\n", err.Error())
 		}
 		return
@@ -347,6 +392,10 @@ func (s *Server) handleChat(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
+	s.finalizeChatResponse(c, out, sessionID, lastUser, canvasMode)
+}
+
+func (s *Server) finalizeChatResponse(c *gin.Context, out *byok.ChatResponse, sessionID, lastUser string, canvasMode bool) {
 	if out.Created == 0 {
 		out.Created = time.Now().Unix()
 	}
@@ -354,14 +403,29 @@ func (s *Server) handleChat(c *gin.Context) {
 		out.Object = "chat.completion"
 	}
 	if len(out.Choices) > 0 {
-		sanitized, hardBlock := s.pipeline.SanitizeOutput(out.Choices[0].Message.Content, canvasMode)
-		out.Choices[0].Message.Content = sanitized
+		msg := &out.Choices[0].Message
+		sanitized, hardBlock := s.pipeline.SanitizeOutput(msg.Content, canvasMode)
+		msg.Content = sanitized
 		if hardBlock {
 			out.Choices[0].FinishReason = "stop"
+			msg.ToolCalls = nil
 		}
-		s.mem.AfterReply(sessionID, lastUser, sanitized)
+		if out.Choices[0].FinishReason != "tool_calls" {
+			s.mem.AfterReply(sessionID, lastUser, sanitized)
+		}
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+func (s *Server) handleToolsList(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"mode": map[string]string{
+			"passthrough": "default — forward tools/tool_calls to BYOK model; client executes",
+			"auto":        "X-Ori-Tools: auto — server executes allowlisted tools and loops",
+		},
+		"tools": s.tools.Schemas(),
+		"names": s.tools.Names(),
+	})
 }
 
 func (s *Server) writeSSEHeaders(c *gin.Context) {

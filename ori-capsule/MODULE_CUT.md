@@ -63,7 +63,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | Agent profiles | `.github/agents` | Mount as config |
 | Epistemics loop | `pkg/epistemics` | Opt-in later only — multi LLM calls; keep off default chat |
 | Lightweight cognition | selected `pkg/cognition/*` | Heuristic pack is **IN**; multi-gen engines stay out |
-| Tools (allowlisted) | `pkg/tools`, forge subset | No free-form host shell |
+| Tools generator / remote toolserver | `pkg/tools` GLM client, forge generator | Capsule allowlist is **IN**; host admin plugins stay out |
 
 ## DEFER
 
