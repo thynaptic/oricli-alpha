@@ -3,6 +3,8 @@
 Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 **Rule:** VPS-era daemons stay out. BYOK chat is the MVP. Everything else is module-by-module.
 
+**Full can / cannot list (repo root):** [`../PORT_INVENTORY.md`](../PORT_INVENTORY.md)
+
 ## Status legend
 
 | Status | Meaning |
