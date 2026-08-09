@@ -299,16 +299,26 @@ type Config struct {
 	ExecTimeout   time.Duration
 }
 
-// Manager opens per-request sessions (no shared daemon state).
+// Manager opens per-request sessions (no shared daemon state across sandboxes).
+// ActionTracker is process-local and keyed by conversation/session id.
 type Manager struct {
-	cfg Config
+	cfg     Config
+	actions *ActionTracker
 }
 
 func NewManager(cfg Config) *Manager {
 	if cfg.ExecTimeout <= 0 {
 		cfg.ExecTimeout = 5 * time.Second
 	}
-	return &Manager{cfg: cfg}
+	return &Manager{cfg: cfg, actions: NewActionTracker(24)}
+}
+
+// Actions returns the shared action / mismatch tracker.
+func (m *Manager) Actions() *ActionTracker {
+	if m == nil {
+		return nil
+	}
+	return m.actions
 }
 
 func (m *Manager) Enabled() bool {
@@ -327,13 +337,15 @@ func (m *Manager) Info() map[string]any {
 			mode = "mem" // fallback
 		}
 	}
-	return map[string]any{
+	info := map[string]any{
 		"enabled":   m.Enabled(),
 		"mode":      mode,
 		"workspace": ws,
 		"timeout_s": m.cfg.ExecTimeout.Seconds(),
 		"builtins":  []string{"cat", "ls", "mkdir", "rm", "pwd", "echo"},
+		"actions":   m.actions.Stats(),
 	}
+	return info
 }
 
 // OpenSession creates a fresh sandbox for one request.
@@ -354,11 +366,13 @@ func (m *Manager) OpenSession() (*Session, error) {
 
 // RunRequest seeds files/tools, runs script and/or Go source, returns results.
 type RunRequest struct {
-	Script  string            `json:"script"`
-	Source  string            `json:"source"` // Yaegi package main
-	Files   map[string]string `json:"files"`
-	Tools   []ToolDef         `json:"tools"`
-	Read    []string          `json:"read"` // paths to return after run
+	Script         string            `json:"script"`
+	Source         string            `json:"source"` // Yaegi package main
+	Files          map[string]string `json:"files"`
+	Tools          []ToolDef         `json:"tools"`
+	Read           []string          `json:"read"` // paths to return after run
+	ExpectedResult string            `json:"expected_result,omitempty"`
+	SessionID      string            `json:"session_id,omitempty"` // groups lessons; also X-Session-ID
 }
 
 type ToolDef struct {
@@ -375,11 +389,20 @@ type RunResult struct {
 	Error      string            `json:"error,omitempty"`
 	Files      map[string]string `json:"files,omitempty"`
 	DurationMs int64             `json:"duration_ms"`
+	Action     *ActionContext    `json:"action,omitempty"`
+	Lessons    string            `json:"lessons,omitempty"`
 }
 
-func (m *Manager) Run(parent context.Context, req RunRequest) RunResult {
+func (m *Manager) Run(parent context.Context, req RunRequest) (out RunResult) {
 	start := time.Now()
-	out := RunResult{ExitOK: false}
+	out.ExitOK = false
+	// Named return so defer can attach DurationMs / Action / Lessons after early returns.
+	defer func() {
+		out.DurationMs = time.Since(start).Milliseconds()
+		if m.Enabled() {
+			m.recordAction(&out, req)
+		}
+	}()
 	if !m.Enabled() {
 		out.Error = "gosh disabled"
 		return out
@@ -398,14 +421,12 @@ func (m *Manager) Run(parent context.Context, req RunRequest) RunResult {
 	for path, content := range req.Files {
 		if err := sess.WriteFile(path, []byte(content)); err != nil {
 			out.Error = "write " + path + ": " + err.Error()
-			out.DurationMs = time.Since(start).Milliseconds()
 			return out
 		}
 	}
 	for _, tool := range req.Tools {
 		if err := sess.RegisterTool(tool.Name, tool.Source); err != nil {
 			out.Error = "tool " + tool.Name + ": " + err.Error()
-			out.DurationMs = time.Since(start).Milliseconds()
 			return out
 		}
 	}
@@ -415,7 +436,6 @@ func (m *Manager) Run(parent context.Context, req RunRequest) RunResult {
 		out.Stdout = stdout
 		if err != nil {
 			out.Error = err.Error()
-			out.DurationMs = time.Since(start).Milliseconds()
 			return out
 		}
 	}
@@ -425,7 +445,6 @@ func (m *Manager) Run(parent context.Context, req RunRequest) RunResult {
 		out.Stderr = stderr
 		if err != nil {
 			out.Error = err.Error()
-			out.DurationMs = time.Since(start).Milliseconds()
 			return out
 		}
 	}
@@ -436,7 +455,6 @@ func (m *Manager) Run(parent context.Context, req RunRequest) RunResult {
 			data, err := sess.ReadFile(path)
 			if err != nil {
 				out.Error = "read " + path + ": " + err.Error()
-				out.DurationMs = time.Since(start).Milliseconds()
 				return out
 			}
 			out.Files[path] = string(data)
@@ -444,6 +462,47 @@ func (m *Manager) Run(parent context.Context, req RunRequest) RunResult {
 	}
 
 	out.ExitOK = true
-	out.DurationMs = time.Since(start).Milliseconds()
 	return out
+}
+
+func (m *Manager) recordAction(out *RunResult, req RunRequest) {
+	if m == nil || m.actions == nil || out == nil {
+		return
+	}
+	actionLabel := strings.TrimSpace(req.Script)
+	if actionLabel == "" {
+		actionLabel = strings.TrimSpace(req.Source)
+	}
+	if actionLabel == "" && len(req.Tools) > 0 {
+		actionLabel = "tools:" + req.Tools[0].Name
+	}
+	if actionLabel == "" {
+		actionLabel = "gosh.run"
+	}
+	actual := strings.TrimSpace(out.Stdout)
+	if actual == "" && out.Error != "" {
+		actual = out.Error
+	}
+	mismatch, correction := InferMismatch(req.ExpectedResult, actual, out.ExitOK, out.Error)
+	ctx := ActionContext{
+		LastAction:     clip(actionLabel, 200),
+		ExpectedResult: req.ExpectedResult,
+		ActualResult:   actual,
+		Mismatch:       mismatch,
+		CorrectionPlan: correction,
+		ConversationID: strings.TrimSpace(req.SessionID),
+		OK:             out.ExitOK && mismatch == "",
+	}
+	m.actions.Record(ctx)
+	cp := ctx
+	out.Action = &cp
+	out.Lessons = m.actions.FormatForPrompt(req.SessionID)
+}
+
+// LessonsFor returns the prompt block for a session (empty if none).
+func (m *Manager) LessonsFor(sessionID string) string {
+	if m == nil || m.actions == nil {
+		return ""
+	}
+	return m.actions.FormatForPrompt(sessionID)
 }

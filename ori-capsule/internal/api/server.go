@@ -14,6 +14,7 @@ import (
 	"github.com/thynaptic/ori-capsule/internal/memory"
 	"github.com/thynaptic/ori-capsule/internal/rag"
 	"github.com/thynaptic/ori-capsule/internal/reasoning"
+	"github.com/thynaptic/ori-capsule/internal/reform"
 	"github.com/thynaptic/ori-capsule/internal/safety"
 )
 
@@ -71,6 +72,7 @@ func (s *Server) routes() {
 
 	// GOSH — per-request docker-friendly sandbox (no shared daemon state)
 	protected.GET("/gosh", s.resolveCreds, s.handleGoshInfo)
+	protected.GET("/gosh/lessons", s.resolveCreds, s.handleGoshLessons)
 	protected.POST("/gosh/run", s.resolveCreds, s.handleGoshRun)
 
 	// Local BM25 RAG (no embeds / chromem / PB) — see RAG.md
@@ -101,6 +103,7 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"gosh":      s.gosh.Info(),
 		"rag":       s.rag.Stats(),
 		"reasoning": true,
+		"reform":    true,
 		"stream":    "sanitize",
 		"providers": []string{"openai", "anthropic", "opencode"},
 	})
@@ -275,11 +278,21 @@ func (s *Server) handleChat(c *gin.Context) {
 		CodeContext: codeCtx,
 		CanvasMode:  canvasMode,
 	})
+	// Reform constitutions (prompt inject only — no ReformDaemon).
+	if reformExtra := reform.PromptForSurface(canvasMode, codeCtx); reformExtra != "" {
+		sysExtra = reformExtra + "\n\n" + sysExtra
+	}
 	if memExtras != "" {
 		sysExtra = memExtras + "\n\n" + sysExtra
 	}
 	if prepared.SystemExtra != "" {
 		sysExtra = prepared.SystemExtra + "\n\n" + sysExtra
+	}
+	// GOSH action lessons (ActionTracker) — keyed by X-Session-ID; empty if none.
+	if sessionID != "" {
+		if lessons := s.gosh.LessonsFor(sessionID); lessons != "" {
+			sysExtra = lessons + "\n\n" + sysExtra
+		}
 	}
 	// Opt-in BM25 context only — default chat path stays free of RAG latency.
 	if strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Ori-RAG")), "bm25") && lastUser != "" {
@@ -423,6 +436,19 @@ func (s *Server) handleGoshInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, s.gosh.Info())
 }
 
+func (s *Server) handleGoshLessons(c *gin.Context) {
+	sessionID := strings.TrimSpace(c.GetHeader("X-Session-ID"))
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(c.Query("session_id"))
+	}
+	lessons := s.gosh.LessonsFor(sessionID)
+	c.JSON(http.StatusOK, gin.H{
+		"session_id": sessionID,
+		"lessons":    lessons,
+		"stats":      s.gosh.Actions().Stats(),
+	})
+}
+
 func (s *Server) handleGoshRun(c *gin.Context) {
 	if !s.gosh.Enabled() {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "gosh disabled"})
@@ -437,6 +463,10 @@ func (s *Server) handleGoshRun(c *gin.Context) {
 		len(req.Files) == 0 && len(req.Tools) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "script, source, files, or tools required"})
 		return
+	}
+	// Prefer body session_id; fall back to X-Session-ID so chat lessons align.
+	if strings.TrimSpace(req.SessionID) == "" {
+		req.SessionID = strings.TrimSpace(c.GetHeader("X-Session-ID"))
 	}
 	res := s.gosh.Run(c.Request.Context(), req)
 	status := http.StatusOK
