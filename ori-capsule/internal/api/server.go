@@ -10,12 +10,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/thynaptic/ori-capsule/internal/byok"
 	"github.com/thynaptic/ori-capsule/internal/config"
+	"github.com/thynaptic/ori-capsule/internal/forge"
 	"github.com/thynaptic/ori-capsule/internal/gosh"
 	"github.com/thynaptic/ori-capsule/internal/memory"
 	"github.com/thynaptic/ori-capsule/internal/rag"
 	"github.com/thynaptic/ori-capsule/internal/reasoning"
 	"github.com/thynaptic/ori-capsule/internal/reform"
 	"github.com/thynaptic/ori-capsule/internal/safety"
+	"github.com/thynaptic/ori-capsule/internal/skills"
 )
 
 type Server struct {
@@ -25,6 +27,7 @@ type Server struct {
 	mem      *memory.Runtime
 	gosh     *gosh.Manager
 	rag      *rag.Store
+	skills   *skills.Library
 }
 
 func New(cfg config.Config) *Server {
@@ -49,8 +52,9 @@ func New(cfg config.Config) *Server {
 	if err != nil {
 		panic(fmt.Sprintf("rag init: %v", err))
 	}
+	skillLib := skills.Open(cfg.SkillsDirs...)
 	r.Use(gin.Recovery(), gin.Logger())
-	s := &Server{cfg: cfg, router: r, pipeline: pipe, mem: mem, gosh: goshMgr, rag: ragStore}
+	s := &Server{cfg: cfg, router: r, pipeline: pipe, mem: mem, gosh: goshMgr, rag: ragStore, skills: skillLib}
 	s.routes()
 	return s
 }
@@ -73,7 +77,11 @@ func (s *Server) routes() {
 	// GOSH — per-request docker-friendly sandbox (no shared daemon state)
 	protected.GET("/gosh", s.resolveCreds, s.handleGoshInfo)
 	protected.GET("/gosh/lessons", s.resolveCreds, s.handleGoshLessons)
+	protected.POST("/gosh/verify", s.resolveCreds, s.handleGoshVerify)
 	protected.POST("/gosh/run", s.resolveCreds, s.handleGoshRun)
+
+	// Skill overlays (.ori) — mount-only prompt inject
+	protected.GET("/skills", s.resolveCreds, s.handleSkillsList)
 
 	// Local BM25 RAG (no embeds / chromem / PB) — see RAG.md
 	protected.GET("/rag", s.resolveCreds, s.handleRagInfo)
@@ -104,6 +112,7 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"rag":       s.rag.Stats(),
 		"reasoning": true,
 		"reform":    true,
+		"skills":    s.skills.Stats(),
 		"stream":    "sanitize",
 		"providers": []string{"openai", "anthropic", "opencode"},
 	})
@@ -282,6 +291,10 @@ func (s *Server) handleChat(c *gin.Context) {
 	if reformExtra := reform.PromptForSurface(canvasMode, codeCtx); reformExtra != "" {
 		sysExtra = reformExtra + "\n\n" + sysExtra
 	}
+	// Skill overlays — first trigger match only (no extra LLM).
+	if skillExtra := s.skills.Match(lastUser); skillExtra != "" {
+		sysExtra = skillExtra + "\n\n" + sysExtra
+	}
 	if memExtras != "" {
 		sysExtra = memExtras + "\n\n" + sysExtra
 	}
@@ -449,6 +462,41 @@ func (s *Server) handleGoshLessons(c *gin.Context) {
 	})
 }
 
+func (s *Server) handleGoshVerify(c *gin.Context) {
+	var req struct {
+		Script     string         `json:"script"`
+		Source     string         `json:"source"`
+		Tools      []gosh.ToolDef `json:"tools"`
+		StrictTool bool           `json:"strict_tool"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	toolSrcs := make([]string, 0, len(req.Tools))
+	for _, t := range req.Tools {
+		toolSrcs = append(toolSrcs, t.Source)
+	}
+	res := forge.VerifyStatic(forge.VerifyRequest{
+		Script:      req.Script,
+		Source:      req.Source,
+		ToolSources: toolSrcs,
+		StrictTool:  req.StrictTool,
+	})
+	status := http.StatusOK
+	if !res.OK {
+		status = http.StatusUnprocessableEntity
+	}
+	c.JSON(status, res)
+}
+
+func (s *Server) handleSkillsList(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"stats":  s.skills.Stats(),
+		"skills": s.skills.List(),
+	})
+}
+
 func (s *Server) handleGoshRun(c *gin.Context) {
 	if !s.gosh.Enabled() {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "gosh disabled"})
@@ -478,13 +526,13 @@ func (s *Server) handleGoshRun(c *gin.Context) {
 
 func (s *Server) handleRagInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"mode":    "bm25",
-		"embeds":  false,
-		"opt_in":  "X-Ori-RAG: bm25",
-		"stats":   s.rag.Stats(),
-		"ingest":  "POST /v1/rag/ingest",
-		"query":   "POST /v1/rag/query",
-		"note":    "VPS MemoryBank/chromem/PB sync RAG stays on the host — not ported",
+		"mode":   "bm25",
+		"embeds": false,
+		"opt_in": "X-Ori-RAG: bm25",
+		"stats":  s.rag.Stats(),
+		"ingest": "POST /v1/rag/ingest",
+		"query":  "POST /v1/rag/query",
+		"note":   "VPS MemoryBank/chromem/PB sync RAG stays on the host — not ported",
 	})
 }
 
@@ -550,7 +598,7 @@ func (s *Server) handleRagQuery(c *gin.Context) {
 
 func (s *Server) handleReasoningInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"mode":    "zero_extra_llm",
+		"mode": "zero_extra_llm",
 		"on_chat": []string{
 			"precompute", "trapcheck", "response_plan", "dualprocess_classify", "cogload_trim",
 			"reframe_inject", "rumination_inject", "mindset_inject", "search_intent", "uncertainty_caution",

@@ -26,6 +26,10 @@ Capability probe (`enabled`, `mode`, `workspace`, builtins, timeout, action stat
 Returns the lessons-learned prompt block for a session. Pass `X-Session-ID`
 (or `?session_id=`). Empty `lessons` when nothing recorded yet.
 
+### `POST /v1/gosh/verify`
+
+Static forge constitution + Go pattern scan (no execute). See `FORGE.md`.
+
 ### `POST /v1/gosh/run`
 
 Per-request sandbox (filesystem/tools are not shared across callers). Action /
@@ -46,7 +50,8 @@ mismatch history is process-local and keyed by session:
 - `session_id` body field, or `X-Session-ID` header (header used when body empty).
 - `expected_result` optional — if stdout does not contain it, a mismatch +
   correction plan is recorded even when exit is OK.
-- Response includes `action` (this run) and `lessons` (session prompt block).
+- Static forge verify runs first (see `FORGE.md`); set `skip_verify: true` only in tests.
+- Response includes `verify`, `action` (this run), and `lessons` (session prompt block).
 
 Allowlisted builtins: `cat`, `ls`, `mkdir`, `rm`, `pwd`, `echo` (+ registered tools).
 Anything else → `restricted: …`.

@@ -32,6 +32,8 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | **Local BM25 RAG** | `internal/rag` — sectioning, manifests, BM25 store; `GET/POST /v1/rag/*`; opt-in chat via `X-Ori-RAG: bm25` (see `RAG.md`) |
 | **Reasoning pack** | `internal/reasoning` — precompute, trapcheck, response plan, S1/S2 classify, cogload trim, reframe/rumination/mindset single-inject, search-intent + uncertainty caution (no fetch), planning / pins / resource APIs (see `REASONING.md`) — **no** multi-gen / retries / SearXNG |
 | **Reform constitutions** | `internal/reform` — Canvas + Code constitution prompt inject on `X-Ori-Surface: canvas\|dev` (see `REFORM.md`) — **no** ReformDaemon / verifier / Ops |
+| **Forge static gate** | `internal/forge` — script/Go constitution before GOSH run; `POST /v1/gosh/verify` (see `FORGE.md`) — **no** generator / PB library |
+| **Skills mount** | `internal/skills` — `.ori` trigger overlays; `GET /v1/skills`; chat inject (see `SKILLS.md`) |
 
 ## VPS-ONLY (do not port)
 
@@ -58,7 +60,6 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | Module | Monorepo path | Docker fit |
 |---|---|---|
 | Auth / tenant API keys | `pkg/core/auth` | Optional capsule gateway key already exists; multi-tenant later |
-| Skills / `.ori` overlays | `pkg/oracle/skills.go`, `oricli_core/skills` | Bake or mount read-only |
 | Agent profiles | `.github/agents` | Mount as config |
 | Epistemics loop | `pkg/epistemics` | Opt-in later only — multi LLM calls; keep off default chat |
 | Lightweight cognition | selected `pkg/cognition/*` | Heuristic pack is **IN**; multi-gen engines stay out |
