@@ -12,8 +12,14 @@ services:
       ORI_MEMORY_DIR: /data/memory
       ORI_MEMORY_ENCRYPTION_KEY: ${ORI_MEMORY_ENCRYPTION_KEY:-}
       ORI_MEMORY_MAX_TURNS: ${ORI_MEMORY_MAX_TURNS:-24}
+      # GOSH: overlay on read-only project mount (falls back to mem if unset/missing)
+      ORI_GOSH_ENABLED: ${ORI_GOSH_ENABLED:-true}
+      ORI_GOSH_WORKSPACE: /workspace
+      ORI_GOSH_TIMEOUT_SEC: ${ORI_GOSH_TIMEOUT_SEC:-5}
     volumes:
       - ori-capsule-memory:/data/memory
+      # Mount a host project read-only for GOSH overlay (override path as needed)
+      - ${ORI_GOSH_HOST_PATH:-.}:/workspace:ro
     restart: unless-stopped
 
 volumes:

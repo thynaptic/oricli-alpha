@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"time"
 )
 
 type Config struct {
@@ -13,6 +14,12 @@ type Config struct {
 	MemoryDir       string
 	MemoryKey       string // base64 32-byte AES key; empty → derived from MemoryDir (dev)
 	MaxSessionTurns int
+
+	// GOSH — docker-friendly shell sandbox
+	GoshEnabled     bool
+	GoshWorkspace   string // container path, e.g. /workspace (overlay); empty → mem-only
+	GoshForceMem    bool
+	GoshExecTimeout time.Duration
 }
 
 func Load() Config {
@@ -40,6 +47,20 @@ func Load() Config {
 			maxTurns = n
 		}
 	}
+
+	goshEnabled := true
+	if v := os.Getenv("ORI_GOSH_ENABLED"); v != "" {
+		goshEnabled = v == "1" || v == "true" || v == "yes"
+	}
+	goshWS := os.Getenv("ORI_GOSH_WORKSPACE")
+	goshForceMem := os.Getenv("ORI_GOSH_FORCE_MEM") == "1" || os.Getenv("ORI_GOSH_FORCE_MEM") == "true"
+	goshTimeout := 5 * time.Second
+	if v := os.Getenv("ORI_GOSH_TIMEOUT_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			goshTimeout = time.Duration(n) * time.Second
+		}
+	}
+
 	return Config{
 		Port:            port,
 		CapsuleKey:      os.Getenv("ORI_CAPSULE_KEY"),
@@ -48,5 +69,9 @@ func Load() Config {
 		MemoryDir:       memDir,
 		MemoryKey:       os.Getenv("ORI_MEMORY_ENCRYPTION_KEY"),
 		MaxSessionTurns: maxTurns,
+		GoshEnabled:     goshEnabled,
+		GoshWorkspace:   goshWS,
+		GoshForceMem:    goshForceMem,
+		GoshExecTimeout: goshTimeout,
 	}
 }

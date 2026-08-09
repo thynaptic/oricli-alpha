@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/thynaptic/ori-capsule/internal/byok"
 	"github.com/thynaptic/ori-capsule/internal/config"
+	"github.com/thynaptic/ori-capsule/internal/gosh"
 	"github.com/thynaptic/ori-capsule/internal/memory"
 	"github.com/thynaptic/ori-capsule/internal/safety"
 )
@@ -19,6 +20,7 @@ type Server struct {
 	router   *gin.Engine
 	pipeline *safety.Pipeline
 	mem      *memory.Runtime
+	gosh     *gosh.Manager
 }
 
 func New(cfg config.Config) *Server {
@@ -33,8 +35,14 @@ func New(cfg config.Config) *Server {
 	if err != nil {
 		panic(fmt.Sprintf("memory init: %v", err))
 	}
+	goshMgr := gosh.NewManager(gosh.Config{
+		Enabled:     cfg.GoshEnabled,
+		Workspace:   cfg.GoshWorkspace,
+		ForceMem:    cfg.GoshForceMem,
+		ExecTimeout: cfg.GoshExecTimeout,
+	})
 	r.Use(gin.Recovery(), gin.Logger())
-	s := &Server{cfg: cfg, router: r, pipeline: pipe, mem: mem}
+	s := &Server{cfg: cfg, router: r, pipeline: pipe, mem: mem, gosh: goshMgr}
 	s.routes()
 	return s
 }
@@ -53,6 +61,10 @@ func (s *Server) routes() {
 	protected.GET("/tasks", s.resolveCreds, s.handleTasksList)
 	protected.POST("/tasks", s.resolveCreds, s.handleTasksAdd)
 	protected.PATCH("/tasks/:id", s.resolveCreds, s.handleTasksDone)
+
+	// GOSH — per-request docker-friendly sandbox (no shared daemon state)
+	protected.GET("/gosh", s.resolveCreds, s.handleGoshInfo)
+	protected.POST("/gosh/run", s.resolveCreds, s.handleGoshRun)
 }
 
 func (s *Server) Run() error {
@@ -67,6 +79,7 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"byok":      true,
 		"safety":    true,
 		"memory":    true,
+		"gosh":      s.gosh.Info(),
 		"stream":    "sanitize",
 		"providers": []string{"openai", "anthropic", "opencode"},
 	})
@@ -362,4 +375,31 @@ func (s *Server) handleTasksDone(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"id": id, "done": req.Done})
+}
+
+func (s *Server) handleGoshInfo(c *gin.Context) {
+	c.JSON(http.StatusOK, s.gosh.Info())
+}
+
+func (s *Server) handleGoshRun(c *gin.Context) {
+	if !s.gosh.Enabled() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "gosh disabled"})
+		return
+	}
+	var req gosh.RunRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if strings.TrimSpace(req.Script) == "" && strings.TrimSpace(req.Source) == "" &&
+		len(req.Files) == 0 && len(req.Tools) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "script, source, files, or tools required"})
+		return
+	}
+	res := s.gosh.Run(c.Request.Context(), req)
+	status := http.StatusOK
+	if !res.ExitOK {
+		status = http.StatusUnprocessableEntity
+	}
+	c.JSON(status, res)
 }

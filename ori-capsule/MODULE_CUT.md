@@ -26,6 +26,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | Docker image | Distroless static binary |
 | **Safety stack** | `internal/safety` — full structural gates + SCAI contracts (see `SAFETY_SIDE.md`) |
 | **Consumer memory** | `internal/memory` — bbolt warm bridge, session turns (`X-Session-ID`), belief, clock, chronos observe, in-mem working graph, L1 cache, spaces, tasks (see `MEMORY.md`) |
+| **GOSH sandbox** | `internal/gosh` — docker-friendly mem/overlay shell; `GET /v1/gosh`, `POST /v1/gosh/run` (see `GOSH.md`) |
 
 ## VPS-ONLY (do not port)
 
