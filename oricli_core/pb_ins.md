@@ -16,9 +16,10 @@ To perform administrative tasks (like creating collections), you must first obta
 ```bash
 curl -X POST https://pocketbase.thynaptic.com/api/admins/auth-with-password \
      -H "Content-Type: application/json" \
-     -d '{"identity":"cass@thynaptic.com", "password":"nFj1VXlle3vMjYX"}'
+     -d '{"identity":"$PB_ADMIN_EMAIL", "password":"$PB_ADMIN_PASSWORD"}'
 ```
 
+Use values from your secret store / EnvironmentFile — never commit admin passwords.
 ### 2. Using the Token
 Include the returned `token` in the `Authorization` header of subsequent requests:
 `Authorization: YOUR_TOKEN_HERE`

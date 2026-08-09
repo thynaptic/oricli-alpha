@@ -5703,7 +5703,14 @@ def ori_ai_assist():
 _INDEX_STATUS_FILE = Path(__file__).parent / ".oricli" / "index_status.json"
 _INDEX_LOCK = threading.Lock()
 _BACKBONE_URL = os.getenv("MAVAIA_BACKBONE_URL", "http://localhost:8089")
-_BACKBONE_KEY = os.getenv("MAVAIA_API_KEY", "glm.8eHruhzb.IPtP2toLOSKATWc5f_KXrRQOO6JcvFBB")
+_BACKBONE_KEY = os.getenv("MAVAIA_API_KEY", "")
+if not _BACKBONE_KEY:
+    # Prefer ORICLI_SEED_API_KEY / generated key file — never ship a live default.
+    _BACKBONE_KEY = os.getenv("ORICLI_SEED_API_KEY", "")
+    if not _BACKBONE_KEY:
+        _key_file = Path(__file__).parent / ".oricli" / "api_key"
+        if _key_file.exists():
+            _BACKBONE_KEY = _key_file.read_text(encoding="utf-8").strip()
 
 # ── Local RAG store ────────────────────────────────────────────────────────────
 _LOCAL_RAG_PATH = Path(__file__).parent / ".oricli" / "rag_docs.json"

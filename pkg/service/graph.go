@@ -25,7 +25,7 @@ func NewGraphService() (*GraphService, error) {
 	}
 	password := os.Getenv("NEO4J_PASSWORD")
 	if password == "" {
-		password = "password"
+		return nil, fmt.Errorf("NEO4J_PASSWORD is required (no hardcoded default)")
 	}
 
 	driver, err := neo4j.NewDriverWithContext(uri, neo4j.BasicAuth(user, password, ""))

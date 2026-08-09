@@ -15,12 +15,15 @@ import json
 import time
 import re
 import sys
+import os
 import requests
 from dataclasses import dataclass, field
 from typing import Optional
 
-API_BASE  = "http://localhost:8089"
-API_KEY   = "glm.Qbtofkny.F5pTIVYghj-mLSwAtPRGDau1q7k2w5DO"
+API_BASE  = os.environ.get("ORI_BASE_URL", "http://localhost:8089")
+API_KEY   = os.environ.get("ORI_API_KEY") or os.environ.get("ORICLI_SEED_API_KEY")
+if not API_KEY:
+    raise SystemExit("Set ORI_API_KEY or ORICLI_SEED_API_KEY (do not hardcode keys)")
 HEADERS   = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 
 # ── Benchmark Questions ────────────────────────────────────────────────────────

@@ -119,12 +119,14 @@ This section is for the Cursor Cloud VM, which differs from the production VPS d
 
 ### Primary service: `oricli-engine`
 
-- Toolchain (pre-installed): Go 1.25, Node 22, Python 3.12. The Go module requires Go >= 1.25.0.
+- Toolchain (pre-installed): Go 1.25+, Node 22, Python 3.12. The Go module requires **Go >= 1.25.12** (`go.mod` / `toolchain go1.25.12` for stdlib CVE patches; `GOTOOLCHAIN=auto` will download it if needed).
 - Build: `go build -o bin/oricli-engine ./cmd/oricli-engine` (the tracked `bin/oricli-engine` is a stale committed binary — rebuild before running; do not commit the rebuilt binary since `bin/` is gitignored).
 - Run: `ORICLI_SEED_API_KEY=<token> ./bin/oricli-engine` — serves the OpenAI-compatible API on `:8089` (`ORICLI_ENGINE_PORT`). Since there is no TTY service manager, start it under `tmux` (or `&`), not systemd.
 - Health (no auth): `curl http://127.0.0.1:8089/v1/health` → `{"status":"ready",...}`.
 - Auth is optional in dev: `MAVAIA_REQUIRE_AUTH` defaults to `false`. `ORICLI_SEED_API_KEY` sets the owner Bearer token; if unset, a key is generated to `.oricli/api_key`.
 - Runtime state (`.oricli/`, `.memory/`, `.memory/tasks.db`) is created under the cwd on boot and is untracked/gitignored — safe to leave.
+- Host shell via VDI (`pkg/vdi.ExecCommand`) is **disabled by default**; set `ORICLI_VDI_EXEC=true` only when intentionally allowing workspace command execution.
+- Debug log/trace endpoints moved to admin-only: `GET /v1/admin/traces`, `GET /v1/admin/loglines` (require owner/admin key).
 
 ### LLM backend is required for real chat output (non-obvious)
 

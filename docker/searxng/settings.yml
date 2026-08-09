@@ -22,7 +22,8 @@ search:
 server:
   port: 8080
   bind_address: "0.0.0.0"
-  secret_key: "oricli-sovereign-search-2025-mavaia-thynaptic"
+  # Prefer SEARXNG_SECRET from the environment / compose overlay — do not commit live secrets.
+  secret_key: "change-me-set-SEARXNG_SECRET"
   base_url: "http://127.0.0.1:8080/"
   image_proxy: false
   http_protocol_version: "1.1"

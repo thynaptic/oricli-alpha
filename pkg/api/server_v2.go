@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -11,7 +12,9 @@ import (
 	"io"
 	"log"
 	"math"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -430,8 +433,6 @@ func (s *ServerV2) setupRoutes() {
 	v1.POST("/flow/trigger", s.handleFlowTrigger)
 	v1.POST("/flow/prompt/dismiss", s.handleFlowDismiss)
 	v1.GET("/ws", s.handleWS)
-	v1.GET("/traces", s.handleGetTraces)
-	v1.GET("/loglines", s.handleLogLines)
 	v1.GET("/modules", s.handleListModules)
 	// App self-registration — no user auth required; protected by shared registration token.
 	// Used by first-party apps (ORI Home, ORI Mobile, etc.) to provision their own GLM key
@@ -584,6 +585,9 @@ func (s *ServerV2) setupRoutes() {
 			admin.POST("/tenants", s.handleAdminCreateTenant)
 			admin.GET("/tenants", s.handleAdminListTenants)
 			admin.POST("/tenants/:id/keys", s.handleAdminCreateAPIKey)
+			// Debug surfaces — previously public; admin-only to prevent log/trace disclosure
+			admin.GET("/traces", s.handleGetTraces)
+			admin.GET("/loglines", s.handleLogLines)
 		}
 
 		// SPP: Sovereign Peer Protocol — swarm management (admin only)
@@ -810,7 +814,7 @@ func (s *ServerV2) handleAppRegister(c *gin.Context) {
 		return
 	}
 
-	if req.RegistrationToken != regToken {
+	if subtle.ConstantTimeCompare([]byte(req.RegistrationToken), []byte(regToken)) != 1 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid registration token"})
 		return
 	}
@@ -2791,6 +2795,10 @@ func (s *ServerV2) handlePutSovereignIdentity(c *gin.Context) {
 	if req.Name == "" {
 		req.Name = "oricli"
 	}
+	if !safeProfileName.MatchString(req.Name) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "profile name must match [a-zA-Z0-9_-]+"})
+		return
+	}
 
 	// Build .ori file content
 	var b strings.Builder
@@ -2821,7 +2829,12 @@ func (s *ServerV2) handlePutSovereignIdentity(c *gin.Context) {
 		b.WriteString("</rules>\n")
 	}
 
-	oriPath := filepath.Join(s.Agent.SovEngine.Profiles.Dir, req.Name+".ori")
+	profilesDir := filepath.Clean(s.Agent.SovEngine.Profiles.Dir)
+	oriPath := filepath.Join(profilesDir, req.Name+".ori")
+	if !strings.HasPrefix(oriPath, profilesDir+string(os.PathSeparator)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile path"})
+		return
+	}
 	if err := os.WriteFile(oriPath, []byte(b.String()), 0644); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to write profile: " + err.Error()})
 		return
@@ -2841,6 +2854,8 @@ func (s *ServerV2) handlePutSovereignIdentity(c *gin.Context) {
 // Used to sanitize content before writing to MemoryBank so highlighted
 // UI output (e.g. <span class="ori-kw">workflow</span>) never poisons RAG.
 var reHTMLTag = regexp.MustCompile(`<[^>]+>`)
+var safeProfileName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+var safeShareID = regexp.MustCompile(`^[a-f0-9]{12}$`)
 
 // OnTenantKeyCreated is called after a tenant API key is issued via the admin endpoint.
 // Set this in main.go to persist keys across restarts.
@@ -3115,19 +3130,19 @@ func (o *oracleVisionAdapter) Analyze(input cognition.VisionInput) (cognition.Vi
 			b64 = input.Base64
 		}
 	case input.FilePath != "":
-		data, err := os.ReadFile(input.FilePath)
-		if err != nil {
-			return cognition.VisionResult{}, fmt.Errorf("vision: read file: %w", err)
-		}
-		b64 = base64.StdEncoding.EncodeToString(data)
-		mimeType = mimeTypeFromPath(input.FilePath)
+		// File-path reads are not exposed on the public API; keep defense-in-depth.
+		return cognition.VisionResult{}, fmt.Errorf("vision: image_path is disabled")
 	case input.URL != "":
-		resp, err := http.Get(input.URL) //nolint:gosec — URL from authenticated caller
+		if err := validatePublicFetchURL(input.URL); err != nil {
+			return cognition.VisionResult{}, fmt.Errorf("vision: unsafe url: %w", err)
+		}
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Get(input.URL)
 		if err != nil {
 			return cognition.VisionResult{}, fmt.Errorf("vision: fetch url: %w", err)
 		}
 		defer resp.Body.Close()
-		data, err := io.ReadAll(resp.Body)
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10 MiB cap
 		if err != nil {
 			return cognition.VisionResult{}, fmt.Errorf("vision: read url body: %w", err)
 		}
@@ -3175,6 +3190,41 @@ func mimeTypeFromPath(path string) string {
 	}
 }
 
+// validatePublicFetchURL rejects non-http(s) schemes and private/link-local/metadata
+// targets after DNS resolution (hostname-only regex checks are insufficient).
+func validatePublicFetchURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid URL")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("only http/https supported")
+	}
+	host := parsed.Hostname()
+	if host == "" {
+		return fmt.Errorf("missing host")
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("dns lookup failed")
+	}
+	if len(ips) == 0 {
+		return fmt.Errorf("no addresses for host")
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("private/internal addresses not allowed")
+		}
+		// IPv6 ULA fc00::/7
+		if ip4 := ip.To4(); ip4 == nil {
+			if len(ip) > 0 && (ip[0]&0xfe) == 0xfc {
+				return fmt.Errorf("private/internal addresses not allowed")
+			}
+		}
+	}
+	return nil
+}
+
 // extractVisionTags derives a small set of concept tags from a description
 // by pulling capitalised nouns and key technical terms (heuristic, no LLM call).
 func extractVisionTags(description string) []string {
@@ -3203,8 +3253,8 @@ func extractVisionTags(description string) []string {
 }
 
 // handleVisionAnalyze handles POST /v1/vision/analyze.
-// Accepts image_url, image_base64, or image_path + optional prompt.
-// Optionally writes result to MemoryBank with ProvenanceSeen tier.
+// Accepts image_url or image_base64 + optional prompt.
+// image_path is rejected on the public API (arbitrary host file read).
 func (s *ServerV2) handleVisionAnalyze(c *gin.Context) {
 	var req struct {
 		ImageURL    string `json:"image_url"`
@@ -3217,6 +3267,10 @@ func (s *ServerV2) handleVisionAnalyze(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
+	if req.ImagePath != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image_path is not supported; use image_url or image_base64"})
+		return
+	}
 
 	va := s.Agent.SovEngine.VisionRef
 	if va == nil {
@@ -3225,10 +3279,9 @@ func (s *ServerV2) handleVisionAnalyze(c *gin.Context) {
 	}
 
 	result, err := va.Analyze(cognition.VisionInput{
-		URL:      req.ImageURL,
-		FilePath: req.ImagePath,
-		Base64:   req.ImageBase64,
-		Prompt:   req.Prompt,
+		URL:    req.ImageURL,
+		Base64: req.ImageBase64,
+		Prompt: req.Prompt,
 	})
 	if err != nil {
 		log.Printf("[Vision] Analysis error: %v", err)

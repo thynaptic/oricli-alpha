@@ -223,5 +223,5 @@ A self-learning system that writes its own memories can develop a synthetic data
 | `PB_ADMIN_EMAIL` | — | Admin auth email (required) |
 | `PB_ADMIN_PASSWORD` | — | Admin auth password (required) |
 | `PB_ORICLI_EMAIL` | `oricli@thynaptic.com` | Oricli's analyst account email |
-| `PB_ORICLI_PASSWORD` | `OricliSovereign2026!` | Oricli's analyst account password |
+| `PB_ORICLI_PASSWORD` | *(required — no default)* | Oricli's analyst account password |
 | `PB_MEMORY_MAX_RECORDS` | `500000` | Recycle threshold for `memories` collection |

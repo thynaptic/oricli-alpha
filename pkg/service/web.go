@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -152,8 +153,23 @@ func (s *WebFetchService) validateURL(target string) error {
 	}
 
 	hostname := parsed.Hostname()
+	if hostname == "" {
+		return fmt.Errorf("missing host")
+	}
 	for _, pattern := range privateIPPatterns {
 		if pattern.MatchString(hostname) {
+			return fmt.Errorf("private/internal URLs not allowed")
+		}
+	}
+
+	// Resolve and re-check — blocks DNS rebinding / CNAME-to-metadata tricks
+	// that hostname regex alone misses.
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return fmt.Errorf("dns lookup failed")
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
 			return fmt.Errorf("private/internal URLs not allowed")
 		}
 	}
