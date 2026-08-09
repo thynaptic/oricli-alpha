@@ -1,0 +1,5 @@
+# Ignore local env and build artifacts inside ori-capsule/
+.env
+/bin/
+/ori-capsule
+*.exe
