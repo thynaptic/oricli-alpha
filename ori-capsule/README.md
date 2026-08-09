@@ -53,9 +53,9 @@ Optional gateway lock: set `ORI_CAPSULE_KEY` so clients auth to the capsule with
 
 ## What's in / out (v0)
 
-**In:** `GET /v1/health`, `POST /v1/chat/completions` (stream + non-stream), `GET /v1/models`, BYOK providers, Docker image.
+**In:** `GET /v1/health`, `POST /v1/chat/completions` (stream + non-stream), `GET /v1/models`, BYOK providers, Docker image, **full structural safety stack** (`internal/safety` — see `SAFETY_SIDE.md` for Swarm Jury etc.).
 
-**Out (VPS-era — revisit module-by-module later):** CuriosityDaemon, DreamDaemon, WorldTraveler, MetacogDaemon, GhostCluster, VDI/Browserless, Swarm/SPP, RunPod, Neo4j, PocketBase cold memory, FineTune, Forge, PAD, TCD, SCL daemons, Studio UI proxy.
+**Out (VPS-era — revisit module-by-module later):** CuriosityDaemon, DreamDaemon, WorldTraveler, MetacogDaemon, GhostCluster, VDI/Browserless, Swarm/SPP (incl. SCAI peer jury), RunPod, Neo4j, PocketBase cold memory, FineTune, Forge, PAD, TCD, SCL daemons, Studio UI proxy.
 
 ## Promote to its own GitHub repo
 

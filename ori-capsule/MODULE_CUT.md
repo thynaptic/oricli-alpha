@@ -11,6 +11,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | **CANDIDATE** | Plausible in Docker — evaluate next |
 | **VPS-ONLY** | Relied on long-lived host / sidecars — do not port |
 | **DEFER** | Product value unclear for capsule; revisit later |
+| **SIDE** | Present as stub / optional — discuss before enabling |
 
 ## IN (v0)
 
@@ -23,6 +24,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | BYOK Anthropic | Bearer/`X-API-Key` → Messages API, response mapped to OpenAI shape |
 | BYOK OpenCode-compatible | `X-Provider: opencode` + `X-Base-URL` (OpenAI chat completions dialect) |
 | Docker image | Distroless static binary |
+| **Safety stack** | `internal/safety` — full structural gates + SCAI contracts (see `SAFETY_SIDE.md`) |
 
 ## VPS-ONLY (do not port)
 
@@ -37,6 +39,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | GhostCluster | (removed / backbone) | RunPod fleet |
 | VDI / Browserless | `pkg/vdi/`, browser modules | Sidecar CDP on host network |
 | Swarm / SPP | `pkg/swarm/` | Multi-node peer protocol |
+| **Safety: Swarm Jury** | `JuryVerifier` / peer SCAI | Multi-node — see `SAFETY_SIDE.md` |
 | RunPod escalation | generation remnants | Burst GPU VPS path |
 | Backbone Studio proxy | `cmd/backbone/` | Full host stack |
 | systemd units | `*.service` | Not applicable in container |
@@ -47,7 +50,6 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 |---|---|---|
 | Session memory (header `X-Session-ID`) | oracle session pool / chronos | In-container LMDB or SQLite volume |
 | Auth / tenant API keys | `pkg/core/auth` | Optional capsule gateway key already exists; multi-tenant later |
-| Safety / rate limit | `pkg/safety` | Stateless middleware |
 | Skills / `.ori` overlays | `pkg/oracle/skills.go`, `oricli_core/skills` | Bake or mount read-only |
 | Agent profiles | `.github/agents` | Mount as config |
 | Epistemics loop | `pkg/epistemics` | Pure compute if BYOK-backed |
