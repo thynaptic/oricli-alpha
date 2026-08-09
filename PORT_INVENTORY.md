@@ -187,13 +187,13 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 
 | Bucket | Count (approx) | Action |
 |---|---|---|
-| **IN** | Safety, memory, GOSH (+ ActionTracker + forge gate), BM25 RAG, reasoning pack, reform constitutions, skills mount, BYOK API | Maintain |
+| **IN** | Safety, memory, GOSH (+ ActionTracker + forge gate), BM25 RAG, reasoning pack, reform, skills, tools+BYOK tool_calls, BYOK API | Maintain |
 | **NO — daemons/sidecars/fleet** | Curiosity/Dream/Metacog/TCD/Science/Curator/SCL, VDI, swarm, RunPod, systemd | Leave on VPS |
 | **NO — clinical** | Entire therapy modality set (~20 pkgs) | Leave on VPS |
 | **NO — enterprise / Studio** | enterprise, sovereign exec, PAD/Goals product, Studio UI | Other surfaces |
 | **NO — sync RAG / heavy DB** | PB, Neo4j, chromem, MemoryBank chat retrieve | BM25 only in capsule |
 | **NO — multi-gen chat** | MCTS/ToT/ARE/Debate, GenService retries, default epistemics | Oracle/BYOK model choice instead |
-| **CAN / OPT next** | tools allowlist+GOSH, deepen tasks DAG, connectors→BM25, bias injectors, agent profiles, core/auth | Pick deliberately |
+| **CAN / OPT next** | connectors→BM25, bias injectors, MCP bridge subset, core/auth | Intentionally deferred |
 
 ---
 

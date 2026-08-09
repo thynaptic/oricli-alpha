@@ -34,6 +34,10 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | **Reform constitutions** | `internal/reform` — Canvas + Code constitution prompt inject on `X-Ori-Surface: canvas\|dev` (see `REFORM.md`) — **no** ReformDaemon / verifier / Ops |
 | **Forge static gate** | `internal/forge` — script/Go constitution before GOSH run; `POST /v1/gosh/verify` (see `FORGE.md`) — **no** generator / PB library |
 | **Skills mount** | `internal/skills` — `.ori` trigger overlays; `GET /v1/skills`; chat inject (see `SKILLS.md`) |
+| **Tools + BYOK tool_calls** | `internal/tools` allowlist + `internal/byok` tools/tool_calls (OpenAI+Anthropic); passthrough default, `X-Ori-Tools: auto` loop (see `TOOLS.md`) |
+| **Agent profiles** | `internal/agents` — `.agent.md` mount; `X-Ori-Agent` / default `ori-chat-fast` (see `AGENT_PROFILES.md`) |
+| **Tasks DAG** | `internal/memory` tasks + steps/deps/ready (see `TASKS.md`) |
+| **Light JIT forge** | In-mem LRU+TTL Yaegi/script tools; `POST /v1/forge/propose\|register` (see `FORGE.md`) — no PB / go build |
 
 ## VPS-ONLY (do not port)
 

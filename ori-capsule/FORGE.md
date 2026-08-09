@@ -1,43 +1,50 @@
-# Forge static verifier in ori-capsule
+# Forge in ori-capsule
 
-Port of monorepo `pkg/forge` **constitution / static gate only** — no generator,
-no POC LLM gate, no PocketBase tool library, no runtime sandbox re-verify loop.
+## Static gate
 
-## What runs
+Port of monorepo `pkg/forge` constitution — no `go fmt` / `go vet` / `go build`.
 
 | Gate | When | Rules |
 |---|---|---|
-| Script constitution | Every `POST /v1/gosh/run` with `script` | Fatal security patterns (rm -rf, /etc, curl\|sh, sudo, restricted binaries, …) |
-| Tool constitution | `strict_tool: true` | Above + stdin/JSON/line-limit contract (JIT tools) |
-| Go source scan | `source` / `tools[].source` | Reform Stage-1 stubs + Yaegi escape hatches (`os/exec`, `net/http`, …) |
+| Script constitution | Every `POST /v1/gosh/run` with `script` | Fatal security patterns |
+| Tool constitution | `strict_tool: true` | + stdin/JSON/line-limit contract |
+| Go source scan | `source` / `tools[].source` | Stubs + Yaegi escape hatches |
 
-No `go fmt` / `go vet` / `go build` subprocesses.
+### `POST /v1/gosh/verify` / `POST /v1/gosh/run`
 
-## API
+Run always verifies first unless `skip_verify: true` (tests).
 
-### `POST /v1/gosh/verify`
+## Light JIT (docker-friendly)
 
-Static-only (does not execute):
+In-memory ephemeral tools — **no PocketBase**, no VPS paths, no subprocess build.
+Prefer **Yaegi** (`kind: yaegi`); scripts use GOSH allowlisted builtins only.
+
+| Env | Default | Role |
+|---|---|---|
+| `ORI_FORGE_MAX_TOOLS` | `16` | LRU cap |
+| `ORI_FORGE_TTL_MIN` | `30` | Expiry minutes |
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/v1/forge/tools` | List live JIT tools |
+| POST | `/v1/forge/propose` | One BYOK chat → JSON tool → VerifyStatic → optional register |
+| POST | `/v1/forge/register` | Client-supplied source (verify + store) |
+| POST | `/v1/forge/tools/:name/invoke` | Run via GOSH |
+| DELETE | `/v1/forge/tools/:name` | Drop |
+
+Propose body:
 
 ```json
 {
-  "script": "echo hi",
-  "source": "package main\nfunc main() {}",
-  "tools": [{"name": "x", "source": "..."}],
-  "strict_tool": false
+  "task": "uppercase a string",
+  "model": "gpt-4.1-mini",
+  "kind": "yaegi",
+  "register": true
 }
 ```
 
-### `POST /v1/gosh/run`
+Registered JIT tools appear in `GET /v1/tools` and are callable under `X-Ori-Tools: auto`.
 
-Always verifies first unless `skip_verify: true` (tests). Failed constitution
-returns `ok: false` with `verify` details — sandbox never opens.
+## Still out
 
-## Out of scope
-
-| Piece | Why |
-|---|---|
-| `ToolGenerator` / `POCGate` LLM | Extra LLM; opt-in later if ever |
-| `ToolLibrary` PB store | Capsule is local-first |
-| Runtime JSON-stdout re-verify | Use GOSH run + ActionTracker instead |
-| Admin `/v1/forge/*` | Host admin surface |
+POCGate LLM scoring, PB library, host admin forge stats, bash/`python3` host tools.

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/thynaptic/ori-capsule/internal/agents"
 	"github.com/thynaptic/ori-capsule/internal/byok"
 	"github.com/thynaptic/ori-capsule/internal/config"
 	"github.com/thynaptic/ori-capsule/internal/forge"
@@ -29,7 +30,9 @@ type Server struct {
 	gosh     *gosh.Manager
 	rag      *rag.Store
 	skills   *skills.Library
+	agents   *agents.Library
 	tools    *tools.Registry
+	forgeLib *forge.MemoryLibrary
 }
 
 func New(cfg config.Config) *Server {
@@ -55,10 +58,58 @@ func New(cfg config.Config) *Server {
 		panic(fmt.Sprintf("rag init: %v", err))
 	}
 	skillLib := skills.Open(cfg.SkillsDirs...)
+	agentLib := agents.Open(cfg.AgentsDirs...)
+	forgeLib := forge.NewMemoryLibrary(cfg.ForgeMaxTools, cfg.ForgeTTL)
 	reg := tools.NewRegistry()
 	tools.RegisterBuiltins(reg, tools.Deps{Mem: mem, Gosh: goshMgr, RAG: ragStore, Skills: skillLib})
+	reg.SetDynamic(
+		func(name string) (byok.ToolDefinition, tools.Handler, bool) {
+			tool, ok := forgeLib.Get(name)
+			if !ok {
+				return byok.ToolDefinition{}, nil, false
+			}
+			params := tool.Parameters
+			if params == nil {
+				params = map[string]any{"type": "object", "properties": map[string]any{
+					"input": map[string]any{"type": "string"},
+				}}
+			}
+			def := byok.ToolDefinition{
+				Type: "function",
+				Function: byok.ToolFunction{
+					Name:        tool.Name,
+					Description: tool.Description,
+					Parameters:  params,
+				},
+			}
+			handler := func(args map[string]any) (string, error) {
+				return tools.InvokeJIT(nil, goshMgr, tool, args)
+			}
+			return def, handler, true
+		},
+		func() []byok.ToolDefinition {
+			list := forgeLib.List()
+			out := make([]byok.ToolDefinition, 0, len(list))
+			for _, tool := range list {
+				params := tool.Parameters
+				if params == nil {
+					params = map[string]any{"type": "object", "properties": map[string]any{}}
+				}
+				out = append(out, byok.ToolDefinition{
+					Type: "function",
+					Function: byok.ToolFunction{
+						Name: tool.Name, Description: tool.Description, Parameters: params,
+					},
+				})
+			}
+			return out
+		},
+	)
 	r.Use(gin.Recovery(), gin.Logger())
-	s := &Server{cfg: cfg, router: r, pipeline: pipe, mem: mem, gosh: goshMgr, rag: ragStore, skills: skillLib, tools: reg}
+	s := &Server{
+		cfg: cfg, router: r, pipeline: pipe, mem: mem, gosh: goshMgr, rag: ragStore,
+		skills: skillLib, agents: agentLib, tools: reg, forgeLib: forgeLib,
+	}
 	s.routes()
 	return s
 }
@@ -77,7 +128,11 @@ func (s *Server) routes() {
 	protected.POST("/spaces", s.resolveCreds, s.handleSpacesUpsert)
 	protected.GET("/tasks", s.resolveCreds, s.handleTasksList)
 	protected.POST("/tasks", s.resolveCreds, s.handleTasksAdd)
-	protected.PATCH("/tasks/:id", s.resolveCreds, s.handleTasksDone)
+	protected.GET("/tasks/:id", s.resolveCreds, s.handleTasksGet)
+	protected.PATCH("/tasks/:id", s.resolveCreds, s.handleTasksPatch)
+	protected.POST("/tasks/:id/steps", s.resolveCreds, s.handleTasksAddStep)
+	protected.PATCH("/tasks/:id/steps/:sid", s.resolveCreds, s.handleTasksPatchStep)
+	protected.GET("/tasks/:id/ready", s.resolveCreds, s.handleTasksReady)
 
 	// GOSH — per-request docker-friendly sandbox (no shared daemon state)
 	protected.GET("/gosh", s.resolveCreds, s.handleGoshInfo)
@@ -85,8 +140,16 @@ func (s *Server) routes() {
 	protected.POST("/gosh/verify", s.resolveCreds, s.handleGoshVerify)
 	protected.POST("/gosh/run", s.resolveCreds, s.handleGoshRun)
 
-	// Skill overlays (.ori) — mount-only prompt inject
+	// Skill / agent overlays — mount-only prompt inject
 	protected.GET("/skills", s.resolveCreds, s.handleSkillsList)
+	protected.GET("/agents", s.resolveCreds, s.handleAgentsList)
+
+	// Light in-memory JIT forge (no PB / no go build)
+	protected.GET("/forge/tools", s.resolveCreds, s.handleForgeList)
+	protected.POST("/forge/propose", s.resolveCreds, s.handleForgePropose)
+	protected.POST("/forge/register", s.resolveCreds, s.handleForgeRegister)
+	protected.POST("/forge/tools/:name/invoke", s.resolveCreds, s.handleForgeInvoke)
+	protected.DELETE("/forge/tools/:name", s.resolveCreds, s.handleForgeDelete)
 
 	// Local BM25 RAG (no embeds / chromem / PB) — see RAG.md
 	protected.GET("/rag", s.resolveCreds, s.handleRagInfo)
@@ -118,7 +181,9 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"reasoning": true,
 		"reform":    true,
 		"skills":    s.skills.Stats(),
+		"agents":    s.agents.Stats(),
 		"tools":     s.tools.Names(),
+		"forge":     s.forgeLib.Stats(),
 		"stream":    "sanitize",
 		"providers": []string{"openai", "anthropic", "opencode"},
 	})
@@ -308,6 +373,13 @@ func (s *Server) handleChat(c *gin.Context) {
 		CodeContext: codeCtx,
 		CanvasMode:  canvasMode,
 	})
+	// Agent profile — X-Ori-Agent explicit, else default ori-chat-fast when mounted.
+	if agent, ok := s.agents.Resolve(c.GetHeader("X-Ori-Agent")); ok {
+		if block := agents.PromptBlock(agent); block != "" {
+			sysExtra = block + "\n\n" + sysExtra
+			c.Header("X-Ori-Agent", agent.Name)
+		}
+	}
 	// Reform constitutions (prompt inject only — no ReformDaemon).
 	if reformExtra := reform.PromptForSurface(canvasMode, codeCtx); reformExtra != "" {
 		sysExtra = reformExtra + "\n\n" + sysExtra
@@ -468,7 +540,8 @@ func (s *Server) handleSpacesUpsert(c *gin.Context) {
 }
 
 func (s *Server) handleTasksList(c *gin.Context) {
-	tasks, err := s.mem.Tasks.List(50)
+	status := strings.TrimSpace(c.Query("status"))
+	tasks, err := s.mem.Tasks.ListFilter(50, status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -478,13 +551,16 @@ func (s *Server) handleTasksList(c *gin.Context) {
 
 func (s *Server) handleTasksAdd(c *gin.Context) {
 	var req struct {
-		Title string `json:"title"`
+		Title       string             `json:"title"`
+		Description string             `json:"description"`
+		Priority    int                `json:"priority"`
+		Steps       []memory.StepInput `json:"steps"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Title) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "title required"})
 		return
 	}
-	task, err := s.mem.Tasks.Add(strings.TrimSpace(req.Title))
+	task, err := s.mem.Tasks.AddFull(strings.TrimSpace(req.Title), req.Description, req.Priority, req.Steps)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -492,21 +568,106 @@ func (s *Server) handleTasksAdd(c *gin.Context) {
 	c.JSON(http.StatusOK, task)
 }
 
-func (s *Server) handleTasksDone(c *gin.Context) {
+func (s *Server) handleTasksGet(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	task, err := s.mem.Tasks.Get(id, true)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, task)
+}
+
+func (s *Server) handleTasksPatch(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 	var req struct {
-		Done bool `json:"done"`
+		Done   *bool   `json:"done"`
+		Status *string `json:"status"`
 	}
-	_ = c.ShouldBindJSON(&req)
-	if err := s.mem.Tasks.SetDone(id, req.Done); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	switch {
+	case req.Status != nil:
+		if err := s.mem.Tasks.SetStatus(id, memory.TaskStatus(*req.Status)); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+	case req.Done != nil:
+		if err := s.mem.Tasks.SetDone(id, *req.Done); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "done or status required"})
+		return
+	}
+	task, _ := s.mem.Tasks.Get(id, true)
+	c.JSON(http.StatusOK, task)
+}
+
+func (s *Server) handleTasksAddStep(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	var req memory.StepInput
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Title) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "title required"})
+		return
+	}
+	step, err := s.mem.Tasks.AddStep(id, req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, step)
+}
+
+func (s *Server) handleTasksPatchStep(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	var req struct {
+		Status string `json:"status"`
+		Result string `json:"result"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Status == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "status required"})
+		return
+	}
+	step, err := s.mem.Tasks.SetStepStatus(id, c.Param("sid"), memory.TaskStatus(req.Status), req.Result)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"id": id, "done": req.Done})
+	c.JSON(http.StatusOK, step)
+}
+
+func (s *Server) handleTasksReady(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	ready, err := s.mem.Tasks.ReadySteps(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"task_id": id, "ready": ready})
 }
 
 func (s *Server) handleGoshInfo(c *gin.Context) {
@@ -559,6 +720,82 @@ func (s *Server) handleSkillsList(c *gin.Context) {
 		"stats":  s.skills.Stats(),
 		"skills": s.skills.List(),
 	})
+}
+
+func (s *Server) handleAgentsList(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"stats":  s.agents.Stats(),
+		"agents": s.agents.List(),
+	})
+}
+
+func (s *Server) handleForgeList(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"stats": s.forgeLib.Stats(),
+		"tools": s.forgeLib.List(),
+	})
+}
+
+func (s *Server) handleForgePropose(c *gin.Context) {
+	cred := c.MustGet("byok").(byok.Credentials)
+	var req forge.ProposeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = strings.TrimSpace(c.GetHeader("X-Ori-Model"))
+	}
+	if model == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model required (body.model or X-Ori-Model)"})
+		return
+	}
+	res, err := forge.Propose(c.Request.Context(), cred, model, req, s.forgeLib)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error(), "result": res})
+		return
+	}
+	c.JSON(http.StatusOK, res)
+}
+
+func (s *Server) handleForgeRegister(c *gin.Context) {
+	var tool forge.JITTool
+	if err := c.ShouldBindJSON(&tool); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	stored, err := s.forgeLib.Put(tool)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, stored)
+}
+
+func (s *Server) handleForgeInvoke(c *gin.Context) {
+	name := c.Param("name")
+	tool, ok := s.forgeLib.Get(name)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "tool not found or expired"})
+		return
+	}
+	var args map[string]any
+	_ = c.ShouldBindJSON(&args)
+	out, err := tools.InvokeJIT(c.Request.Context(), s.gosh, tool, args)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error(), "result": out})
+		return
+	}
+	c.Data(http.StatusOK, "application/json", []byte(out))
+}
+
+func (s *Server) handleForgeDelete(c *gin.Context) {
+	if !s.forgeLib.Delete(c.Param("name")) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": c.Param("name")})
 }
 
 func (s *Server) handleGoshRun(c *gin.Context) {

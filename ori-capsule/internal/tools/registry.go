@@ -18,14 +18,33 @@ type entry struct {
 	handler Handler
 }
 
+// DynamicLookup resolves ephemeral JIT tools (name → OpenAI schema + handler).
+type DynamicLookup func(name string) (def byok.ToolDefinition, handler Handler, ok bool)
+
+// DynamicSchemas lists ephemeral tool schemas (JIT library).
+type DynamicSchemas func() []byok.ToolDefinition
+
 // Registry is an allowlist of callable tools for BYOK auto mode / schema inject.
 type Registry struct {
-	mu     sync.RWMutex
-	byName map[string]entry
+	mu        sync.RWMutex
+	byName    map[string]entry
+	dynamic   DynamicLookup
+	dynSchema DynamicSchemas
 }
 
 func NewRegistry() *Registry {
 	return &Registry{byName: make(map[string]entry)}
+}
+
+// SetDynamic attaches ephemeral JIT lookup (optional).
+func (r *Registry) SetDynamic(lookup DynamicLookup, schemas DynamicSchemas) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.dynamic = lookup
+	r.dynSchema = schemas
+	r.mu.Unlock()
 }
 
 // Register adds or replaces a tool. Name must be a non-empty function name.
@@ -47,7 +66,7 @@ func (r *Registry) Register(def byok.ToolDefinition, h Handler) error {
 	return nil
 }
 
-// Schemas returns OpenAI tool definitions sorted by name.
+// Schemas returns OpenAI tool definitions sorted by name (builtins + JIT).
 func (r *Registry) Schemas() []byok.ToolDefinition {
 	if r == nil {
 		return nil
@@ -63,6 +82,9 @@ func (r *Registry) Schemas() []byok.ToolDefinition {
 	for _, n := range names {
 		out = append(out, r.byName[n].def)
 	}
+	if r.dynSchema != nil {
+		out = append(out, r.dynSchema()...)
+	}
 	return out
 }
 
@@ -76,21 +98,30 @@ func (r *Registry) Names() []string {
 	return out
 }
 
-// Has reports whether name is allowlisted.
+// Has reports whether name is allowlisted (builtin or live JIT).
 func (r *Registry) Has(name string) bool {
 	if r == nil {
 		return false
 	}
+	name = strings.TrimSpace(name)
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-	_, ok := r.byName[strings.TrimSpace(name)]
-	return ok
+	_, ok := r.byName[name]
+	dyn := r.dynamic
+	r.mu.RUnlock()
+	if ok {
+		return true
+	}
+	if dyn != nil {
+		_, _, ok = dyn(name)
+		return ok
+	}
+	return false
 }
 
 // Execute runs an allowlisted tool. Unknown names return a structured error string (not panic).
 func (r *Registry) Execute(name string, argsJSON string) string {
 	name = strings.TrimSpace(name)
-	if r == nil || !r.Has(name) {
+	if r == nil {
 		return errJSON("unknown_tool", "tool %q is not in the capsule allowlist", name)
 	}
 	args, err := byok.ParseToolArguments(argsJSON)
@@ -98,9 +129,21 @@ func (r *Registry) Execute(name string, argsJSON string) string {
 		return errJSON("bad_arguments", "invalid JSON arguments: %v", err)
 	}
 	r.mu.RLock()
-	ent := r.byName[name]
+	ent, ok := r.byName[name]
+	dyn := r.dynamic
 	r.mu.RUnlock()
-	out, err := ent.handler(args)
+	handler := ent.handler
+	if !ok {
+		if dyn == nil {
+			return errJSON("unknown_tool", "tool %q is not in the capsule allowlist", name)
+		}
+		_, h, dok := dyn(name)
+		if !dok || h == nil {
+			return errJSON("unknown_tool", "tool %q is not in the capsule allowlist", name)
+		}
+		handler = h
+	}
+	out, err := handler(args)
 	if err != nil {
 		return errJSON("exec_error", "%v", err)
 	}
