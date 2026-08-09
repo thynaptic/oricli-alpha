@@ -289,6 +289,10 @@ func (s *Server) handleChat(c *gin.Context) {
 	req.Messages = injectSystem(req.Messages, sysExtra)
 	c.Header("X-Ori-Reasoning-Hint", fmt.Sprint(prepared.Meta["reasoning_hint"]))
 	c.Header("X-Ori-Process-Tier", fmt.Sprint(prepared.Meta["process_tier"]))
+	c.Header("X-Ori-Search-Intent", fmt.Sprint(prepared.Meta["search_intent"]))
+	if prepared.Meta["needs_search"] == true {
+		c.Header("X-Ori-Needs-Search", "1")
+	}
 
 	ctx := c.Request.Context()
 	if req.Stream {
@@ -516,10 +520,13 @@ func (s *Server) handleRagQuery(c *gin.Context) {
 func (s *Server) handleReasoningInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"mode":    "zero_extra_llm",
-		"on_chat": []string{"precompute", "trapcheck", "response_plan", "dualprocess_classify", "cogload_trim", "reframe_inject", "rumination_inject"},
+		"on_chat": []string{
+			"precompute", "trapcheck", "response_plan", "dualprocess_classify", "cogload_trim",
+			"reframe_inject", "rumination_inject", "mindset_inject", "search_intent", "uncertainty_caution",
+		},
 		"apis":    []string{"POST /v1/reasoning/plan", "POST /v1/reasoning/resources", "POST /v1/reasoning/filter"},
-		"skipped": []string{"epistemics_multi_pass", "cot_tot_mcts", "debate_are_retry", "therapy"},
-		"note":    "Heuristics + single system inject only — no chat-path retries or multi-gen engines",
+		"skipped": []string{"epistemics_multi_pass", "cot_tot_mcts", "debate_are_retry", "therapy", "searxng_fetch"},
+		"note":    "Heuristics + single system inject only — no chat-path retries, multi-gen, or live web fetch",
 	})
 }
 

@@ -16,8 +16,11 @@ Capsule cognition that **never** adds an LLM round-trip on the chat path. No CoT
 | Cogload meter + trim | Elevated/critical → drop old assistant turns (fewer tokens) |
 | Reframe inject | Socratic / stoic / narrative-style **single** system line |
 | Rumination inject | Low-velocity topic loop → single prefix |
+| Mindset inject | Fixed-language user turns → growth “not yet” hint |
+| Search intent | Classify definition/factual/technical/… (metadata) |
+| Uncertainty caution | If lookup-shaped → factual caution inject (**no** SearXNG fetch) |
 
-Response headers: `X-Ori-Reasoning-Hint`, `X-Ori-Process-Tier`.
+Response headers: `X-Ori-Reasoning-Hint`, `X-Ori-Process-Tier`, `X-Ori-Search-Intent`, `X-Ori-Needs-Search` (when set).
 
 ## APIs (deterministic)
 

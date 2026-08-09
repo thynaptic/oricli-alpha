@@ -29,7 +29,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 | `internal/memory` | `pkg/memory` + bridge ideas | bbolt, sessions, belief, clock, chronos observe, L1, spaces, tasks |
 | `internal/gosh` | `pkg/gosh` | Mem/overlay sandbox; no Dream/Metacog/Reform wiring |
 | `internal/rag` | `pkg/rag` helpers + BM25 | Local BM25; opt-in chat `X-Ori-RAG: bm25` |
-| `internal/reasoning` | `precompute`, `trapcheck`, `cogload`, dualprocess classify, planning/resources/filter, reframe injects | Zero-extra-LLM pack |
+| `internal/reasoning` | `precompute`, `trapcheck`, `cogload`, dualprocess classify, planning/resources/filter, reframe injects, `searchintent`, uncertainty caution (no fetch), `mindset` inject | Zero-extra-LLM pack |
 | `cmd/ori-capsule` + Dockerfile | — | Distroless static binary |
 
 ---
@@ -143,14 +143,14 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 | Path | What | Notes |
 |---|---|---|
 | `pkg/envload/` | `.env` autoload | Utility |
-| `pkg/searchintent/` | Search-intent classify | No SearXNG required |
+| `pkg/searchintent/` | Search-intent classify | **IN** reasoning (classify only; no SearXNG) |
+| `pkg/cognition/confidence.go` | Web-lookup need detector | **IN** reasoning (caution inject; no fetch) |
+| `pkg/mindset/` | Growth-language reframe | **IN** inject only (no tracker/persist) |
 | `pkg/state/` | Tool/action mismatch tracking | Pair with GOSH |
 | `pkg/reform/` constitutions (not daemon) | Canvas/code constitutions | Inject on surface |
 | `pkg/forge/` verifier / CodeConstitution | Static script rules | With GOSH only |
 | `pkg/tasks/` | Task DAG | Deepen existing `/v1/tasks` |
-| `pkg/cognition/home_logistics_intelligence.go` | Active Pin extraction | App-neutral API |
-| `pkg/cognition/confidence.go` | Web-lookup need detector | Heuristic |
-| `pkg/mindset/` | Growth-language reframe | Single inject pattern |
+| `pkg/cognition/home_logistics_intelligence.go` | Active Pin extraction | App-neutral API — **next** |
 | `pkg/arousal/`, `pkg/coalition/`, `pkg/conformity/`, `pkg/statusbias/`, `pkg/ideocapture/`, `pkg/interference/` | Bias / load injectors | Optional single-line; watch tone/noise |
 | `pkg/chronos` observe-only | Temporal snapshot | Observe already IN; no seeder |
 
