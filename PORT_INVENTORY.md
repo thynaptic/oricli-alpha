@@ -146,7 +146,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 | `pkg/searchintent/` | Search-intent classify | **IN** reasoning (classify only; no SearXNG) |
 | `pkg/cognition/confidence.go` | Web-lookup need detector | **IN** reasoning (caution inject; no fetch) |
 | `pkg/mindset/` | Growth-language reframe | **IN** inject only (no tracker/persist) |
-| `pkg/state/` | Tool/action mismatch tracking | Pair with GOSH |
+| `pkg/state/` ActionTracker only | Tool/action mismatch tracking | **IN** GOSH (`internal/gosh` + chat lessons); rest of `pkg/state` stays out |
 | `pkg/reform/` constitutions (not daemon) | Canvas/code constitutions | Inject on surface |
 | `pkg/forge/` verifier / CodeConstitution | Static script rules | With GOSH only |
 | `pkg/tasks/` | Task DAG | Deepen existing `/v1/tasks` |
