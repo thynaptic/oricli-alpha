@@ -31,6 +31,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | **GOSH sandbox** | `internal/gosh` — docker-friendly mem/overlay shell + ActionTracker lessons; `GET /v1/gosh`, `GET /v1/gosh/lessons`, `POST /v1/gosh/run`; chat inject via `X-Session-ID` (see `GOSH.md`) |
 | **Local BM25 RAG** | `internal/rag` — sectioning, manifests, BM25 store; `GET/POST /v1/rag/*`; opt-in chat via `X-Ori-RAG: bm25` (see `RAG.md`) |
 | **Reasoning pack** | `internal/reasoning` — precompute, trapcheck, response plan, S1/S2 classify, cogload trim, reframe/rumination/mindset single-inject, search-intent + uncertainty caution (no fetch), planning / pins / resource APIs (see `REASONING.md`) — **no** multi-gen / retries / SearXNG |
+| **Reform constitutions** | `internal/reform` — Canvas + Code constitution prompt inject on `X-Ori-Surface: canvas\|dev` (see `REFORM.md`) — **no** ReformDaemon / verifier / Ops |
 
 ## VPS-ONLY (do not port)
 

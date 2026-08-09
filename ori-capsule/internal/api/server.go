@@ -14,6 +14,7 @@ import (
 	"github.com/thynaptic/ori-capsule/internal/memory"
 	"github.com/thynaptic/ori-capsule/internal/rag"
 	"github.com/thynaptic/ori-capsule/internal/reasoning"
+	"github.com/thynaptic/ori-capsule/internal/reform"
 	"github.com/thynaptic/ori-capsule/internal/safety"
 )
 
@@ -102,6 +103,7 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"gosh":      s.gosh.Info(),
 		"rag":       s.rag.Stats(),
 		"reasoning": true,
+		"reform":    true,
 		"stream":    "sanitize",
 		"providers": []string{"openai", "anthropic", "opencode"},
 	})
@@ -276,6 +278,10 @@ func (s *Server) handleChat(c *gin.Context) {
 		CodeContext: codeCtx,
 		CanvasMode:  canvasMode,
 	})
+	// Reform constitutions (prompt inject only — no ReformDaemon).
+	if reformExtra := reform.PromptForSurface(canvasMode, codeCtx); reformExtra != "" {
+		sysExtra = reformExtra + "\n\n" + sysExtra
+	}
 	if memExtras != "" {
 		sysExtra = memExtras + "\n\n" + sysExtra
 	}

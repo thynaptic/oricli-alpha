@@ -147,7 +147,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 | `pkg/cognition/confidence.go` | Web-lookup need detector | **IN** reasoning (caution inject; no fetch) |
 | `pkg/mindset/` | Growth-language reframe | **IN** inject only (no tracker/persist) |
 | `pkg/state/` ActionTracker only | Tool/action mismatch tracking | **IN** GOSH (`internal/gosh` + chat lessons); rest of `pkg/state` stays out |
-| `pkg/reform/` constitutions (not daemon) | Canvas/code constitutions | Inject on surface |
+| `pkg/reform/` constitutions (not daemon) | Canvas/code constitutions | **IN** `internal/reform` + chat inject on `X-Ori-Surface`; no daemon/verifier/Ops |
 | `pkg/forge/` verifier / CodeConstitution | Static script rules | With GOSH only |
 | `pkg/tasks/` | Task DAG | Deepen existing `/v1/tasks` |
 | `pkg/cognition/home_logistics_intelligence.go` | Active Pin extraction | **IN** via `POST /v1/reasoning/pins` |
@@ -187,7 +187,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 
 | Bucket | Count (approx) | Action |
 |---|---|---|
-| **IN** | Safety, memory, GOSH, BM25 RAG, reasoning pack, BYOK API | Maintain |
+| **IN** | Safety, memory, GOSH (+ ActionTracker), BM25 RAG, reasoning pack, reform constitutions, BYOK API | Maintain |
 | **NO — daemons/sidecars/fleet** | Curiosity/Dream/Metacog/TCD/Science/Curator/SCL, VDI, swarm, RunPod, systemd | Leave on VPS |
 | **NO — clinical** | Entire therapy modality set (~20 pkgs) | Leave on VPS |
 | **NO — enterprise / Studio** | enterprise, sovereign exec, PAD/Goals product, Studio UI | Other surfaces |
