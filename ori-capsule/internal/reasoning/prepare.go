@@ -55,6 +55,16 @@ func Prepare(msgs []ChatMessage, lastUser string) PrepareResult {
 	if r := CollectRuminationInject(maps); r != "" {
 		blocks = append(blocks, r)
 	}
+	mindset := CollectMindsetInject(lastUser)
+	if mindset != "" {
+		blocks = append(blocks, mindset)
+	}
+
+	searchIntent := ClassifySearchIntent(lastUser)
+	needsSearch, searchQ := DetectUncertainty(lastUser)
+	if h := FormatUncertaintyHint(needsSearch, searchQ); h != "" {
+		blocks = append(blocks, h)
+	}
 
 	meta := map[string]any{
 		"response_plan": map[string]string{
@@ -68,6 +78,10 @@ func Prepare(msgs []ChatMessage, lastUser string) PrepareResult {
 		"surgery_removed": surgery.RemovedMsgs,
 		"precompute":      len(pre),
 		"traps":           len(traps),
+		"search_intent":   string(searchIntent),
+		"needs_search":    needsSearch,
+		"search_topic":    searchQ.RawTopic,
+		"mindset_inject":  mindset != "",
 	}
 
 	return PrepareResult{

@@ -69,3 +69,25 @@ func TestReframeInject(t *testing.T) {
 		t.Fatal("expected pseudo-certainty reframe")
 	}
 }
+
+func TestSearchIntentAndUncertainty(t *testing.T) {
+	if got := reasoning.ClassifySearchIntent("what is recursion"); got != reasoning.IntentDefinition {
+		t.Fatalf("intent=%s want definition", got)
+	}
+	needs, q := reasoning.DetectUncertainty("what is the capital of France?")
+	if !needs || q.RawTopic == "" {
+		t.Fatalf("expected needs_search topic, got needs=%v q=%+v", needs, q)
+	}
+	if needs, _ := reasoning.DetectUncertainty("hello"); needs {
+		t.Fatal("greeting should not need search")
+	}
+}
+
+func TestMindsetInject(t *testing.T) {
+	if inj := reasoning.CollectMindsetInject("I can't figure this out at all"); inj == "" {
+		t.Fatal("expected growth inject")
+	}
+	if inj := reasoning.CollectMindsetInject("Explain Docker networking"); inj != "" {
+		t.Fatalf("unexpected inject: %s", inj)
+	}
+}
