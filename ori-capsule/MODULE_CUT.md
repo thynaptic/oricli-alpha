@@ -27,6 +27,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | **Safety stack** | `internal/safety` — full structural gates + SCAI contracts (see `SAFETY_SIDE.md`) |
 | **Consumer memory** | `internal/memory` — bbolt warm bridge, session turns (`X-Session-ID`), belief, clock, chronos observe, in-mem working graph, L1 cache, spaces, tasks (see `MEMORY.md`) |
 | **GOSH sandbox** | `internal/gosh` — docker-friendly mem/overlay shell; `GET /v1/gosh`, `POST /v1/gosh/run` (see `GOSH.md`) |
+| **Local BM25 RAG** | `internal/rag` — sectioning, manifests, BM25 store; `GET/POST /v1/rag/*`; opt-in chat via `X-Ori-RAG: bm25` (see `RAG.md`) |
 
 ## VPS-ONLY (do not port)
 
@@ -42,6 +43,8 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | VDI / Browserless | `pkg/vdi/`, browser modules | Sidecar CDP on host network |
 | Swarm / SPP | `pkg/swarm/` | Multi-node peer protocol |
 | Swarm Jury / TG webhooks / LLM Critique | former `pkg/safety` extras | Dropped — see `SAFETY_SIDE.md` |
+| MemoryBank / PB sync RAG (≤8s chat path) | monorepo retrieval | Stays on VPS — capsule uses BM25 only |
+| Spaces chromem + Ollama query embeds | monorepo spaces knowledge | Sync embed lag — not for capsule chat |
 | RunPod escalation | generation remnants | Burst GPU VPS path |
 | Backbone Studio proxy | `cmd/backbone/` | Full host stack |
 | systemd units | `*.service` | Not applicable in container |
@@ -64,7 +67,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | PocketBase cold memory | External SaaS; capsule stays local-first |
 | Neo4j graph | Heavy sidecar; optional compose profile later |
 | PAD / Goals | Operator surfaces — out of consumer capsule |
-| chromem / embed RAG | Sync Ollama embeds add reply lag — revisit with budgeted BYOK embed |
+| chromem / embed RAG | Sync Ollama embeds add reply lag — revisit with budgeted BYOK embed (BM25 is IN) |
 | Enterprise RAG / twins | Consumer capsule — not in scope |
 | Therapy / clinical modules | Product-specific |
 | ORI Studio UI | Separate frontend image later |
@@ -78,5 +81,6 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | `X-Provider` | `openai` \| `anthropic` \| `opencode` |
 | `X-Base-URL` | Override upstream base (required-ish for opencode) |
 | `X-Session-ID` | Session turn memory + belief/clock/graph scope |
+| `X-Ori-RAG` | Set to `bm25` to inject local BM25 context into chat (default: off) |
 
 Not an OpenAI-forwarding-only gateway: Anthropic is first-class; OpenCode is any OpenAI-compatible endpoint.
