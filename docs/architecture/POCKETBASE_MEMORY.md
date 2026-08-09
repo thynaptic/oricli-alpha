@@ -233,7 +233,7 @@ Tokens are cached and refreshed automatically after 50 minutes. On 401, the clie
 | `PB_ADMIN_EMAIL` | — | ✓ | Admin authentication email |
 | `PB_ADMIN_PASSWORD` | — | ✓ | Admin authentication password |
 | `PB_ORICLI_EMAIL` | `oricli@thynaptic.com` | — | Oricli's analyst account email |
-| `PB_ORICLI_PASSWORD` | `OricliSovereign2026!` | — | Oricli's analyst account password |
+| `PB_ORICLI_PASSWORD` | *(required — no default)* | — | Oricli's analyst account password |
 | `PB_MEMORY_MAX_RECORDS` | `500000` | — | Recycle threshold for `memories` |
 
 If `PB_BASE_URL` is unset, `MemoryBank` operates in disabled no-op mode — all writes are silently dropped, reads return empty. The system functions normally without PocketBase; it simply lacks cross-session recall.

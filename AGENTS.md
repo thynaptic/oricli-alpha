@@ -119,12 +119,20 @@ This section is for the Cursor Cloud VM, which differs from the production VPS d
 
 ### Primary service: `oricli-engine`
 
-- Toolchain (pre-installed): Go 1.25, Node 22, Python 3.12. The Go module requires Go >= 1.25.0.
+- Toolchain (pre-installed): Go 1.25+, Node 22, Python 3.12. The Go module requires **Go >= 1.25.12** (`go.mod` / `toolchain go1.25.12` for stdlib CVE patches; `GOTOOLCHAIN=auto` will download it if needed).
 - Build: `go build -o bin/oricli-engine ./cmd/oricli-engine` (the tracked `bin/oricli-engine` is a stale committed binary — rebuild before running; do not commit the rebuilt binary since `bin/` is gitignored).
 - Run: `ORICLI_SEED_API_KEY=<token> ./bin/oricli-engine` — serves the OpenAI-compatible API on `:8089` (`ORICLI_ENGINE_PORT`). Since there is no TTY service manager, start it under `tmux` (or `&`), not systemd.
 - Health (no auth): `curl http://127.0.0.1:8089/v1/health` → `{"status":"ready",...}`.
 - Auth is optional in dev: `MAVAIA_REQUIRE_AUTH` defaults to `false`. `ORICLI_SEED_API_KEY` sets the owner Bearer token; if unset, a key is generated to `.oricli/api_key`.
 - Runtime state (`.oricli/`, `.memory/`, `.memory/tasks.db`) is created under the cwd on boot and is untracked/gitignored — safe to leave.
+- Host shell via VDI (`pkg/vdi.ExecCommand`) is **disabled by default**; set `ORICLI_VDI_EXEC=true` only when intentionally allowing workspace command execution.
+- Debug log/trace endpoints moved to admin-only: `GET /v1/admin/traces`, `GET /v1/admin/loglines` (require owner/admin key).
+
+### Secrets / deployment direction (important)
+
+- Historical VPS secrets (PocketBase admin, MinIO/Grafana defaults, old `glm.*` seed keys in docs/systemd) are **not needed for ongoing Cloud Agent / local-first work**. The prior isolated-VPS deployment model is being retired; do not block setup on rotating those credentials or requesting them as secrets.
+- For local `oricli-engine` runs, use a disposable `ORICLI_SEED_API_KEY` (e.g. `glm.dev.smoke`) or let the engine mint `.oricli/api_key`. Optional cloud LLM keys (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) and Ollama remain the only runtime credentials that matter for chat.
+- Planned follow-on (not this branch): a smaller **dockerized** deployment of ORI. Prefer keeping the engine local-first (LMDB, no PocketBase required) so that image stays thin.
 
 ### LLM backend is required for real chat output (non-obvious)
 

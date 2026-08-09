@@ -69,8 +69,8 @@ func (s *ServerV2) handleCreateShare(c *gin.Context) {
 // GET /share/:id  — no auth required
 func (s *ServerV2) handleGetShare(c *gin.Context) {
 	shareID := c.Param("id")
-	if shareID == "" {
-		c.String(http.StatusBadRequest, "missing share id")
+	if !safeShareID.MatchString(shareID) {
+		c.String(http.StatusBadRequest, "invalid share id")
 		return
 	}
 
@@ -91,12 +91,16 @@ func (s *ServerV2) handleGetShare(c *gin.Context) {
 		return
 	}
 
+	// Public shares: sandbox CSP; never execute untrusted HTML/JS.
+	c.Header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline' https://cdn.jsdelivr.net; script-src https://cdn.jsdelivr.net; img-src data: https:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+	c.Header("X-Content-Type-Options", "nosniff")
+
 	switch docType {
 	case "html":
-		c.Header("Content-Type", "text/html; charset=utf-8")
+		// Serve as text to avoid stored XSS from attacker-authored HTML shares.
+		c.Header("Content-Type", "text/plain; charset=utf-8")
 		c.String(http.StatusOK, content)
 	case "markdown":
-		// Wrap in a minimal HTML page with readable styling
 		title, _ := record["title"].(string)
 		if title == "" {
 			title = "Shared Document"
@@ -104,7 +108,6 @@ func (s *ServerV2) handleGetShare(c *gin.Context) {
 		c.Header("Content-Type", "text/html; charset=utf-8")
 		c.String(http.StatusOK, markdownSharePage(title, content))
 	default:
-		// Plain text / code — wrap in a styled code page
 		title, _ := record["title"].(string)
 		lang, _ := record["language"].(string)
 		c.Header("Content-Type", "text/html; charset=utf-8")

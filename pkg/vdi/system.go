@@ -50,16 +50,28 @@ func (m *Manager) WriteFile(path string, content string) (string, error) {
 }
 
 // ExecCommand runs a bash command on the host.
+// Disabled by default — set ORICLI_VDI_EXEC=true to enable. Free-form shell
+// from LLM-planned workspace steps is otherwise host RCE.
 func (m *Manager) ExecCommand(command string) (string, error) {
-	// Security: Simple blocklist for highly destructive commands
+	if os.Getenv("ORICLI_VDI_EXEC") != "true" {
+		return "", fmt.Errorf("security violation: host command execution disabled (set ORICLI_VDI_EXEC=true to enable)")
+	}
+
 	lower := strings.ToLower(command)
-	if strings.Contains(lower, "rm -rf /") || strings.Contains(lower, "mkfs") {
-		return "", fmt.Errorf("security violation: command blocked by VDI safeguard")
+	blocked := []string{
+		"rm -rf /", "mkfs", "dd if=", ":(){", "shutdown", "reboot",
+		"curl ", "wget ", "nc ", "ncat ", "python -c", "perl -e",
+		"/etc/passwd", "/etc/shadow", ".oricli/api_key", ".env",
+	}
+	for _, b := range blocked {
+		if strings.Contains(lower, b) {
+			return "", fmt.Errorf("security violation: command blocked by VDI safeguard")
+		}
 	}
 
 	cmd := exec.Command("bash", "-c", command)
 	out, err := cmd.CombinedOutput()
-	
+
 	result := string(out)
 	if len(result) > 5000 {
 		result = result[:5000] + "... (truncated output)"
