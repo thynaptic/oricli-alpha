@@ -30,6 +30,9 @@ type Config struct {
 	// Light JIT forge (in-memory only)
 	ForgeMaxTools int
 	ForgeTTL      time.Duration
+
+	// CORS — empty disables; "*" or comma-separated origins
+	CORSOrigins []string
 }
 
 func Load() Config {
@@ -104,6 +107,9 @@ func Load() Config {
 		}
 	}
 
+	// Comma-separated only — origins contain "://" so colon splitting breaks URLs.
+	corsOrigins := splitCSV(os.Getenv("ORI_CORS_ORIGINS"))
+
 	return Config{
 		Port:            port,
 		CapsuleKey:      os.Getenv("ORI_CAPSULE_KEY"),
@@ -120,6 +126,7 @@ func Load() Config {
 		AgentsDirs:      agentsDirs,
 		ForgeMaxTools:   forgeMax,
 		ForgeTTL:        forgeTTL,
+		CORSOrigins:     corsOrigins,
 	}
 }
 
@@ -128,6 +135,21 @@ func splitDirs(v string) []string {
 		return nil
 	}
 	parts := strings.Split(v, ":")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func splitCSV(v string) []string {
+	if strings.TrimSpace(v) == "" {
+		return nil
+	}
+	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)

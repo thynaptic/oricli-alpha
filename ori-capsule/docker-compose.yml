@@ -16,10 +16,22 @@ services:
       ORI_GOSH_ENABLED: ${ORI_GOSH_ENABLED:-true}
       ORI_GOSH_WORKSPACE: /workspace
       ORI_GOSH_TIMEOUT_SEC: ${ORI_GOSH_TIMEOUT_SEC:-5}
+      # Mount-only overlays (read-only)
+      ORI_SKILLS_DIR: /skills
+      ORI_AGENTS_DIR: /agents
+      # Light JIT forge (ephemeral — not on the memory volume)
+      ORI_FORGE_MAX_TOOLS: ${ORI_FORGE_MAX_TOOLS:-16}
+      ORI_FORGE_TTL_MIN: ${ORI_FORGE_TTL_MIN:-30}
+      # CORS — empty disables; "*" or comma-separated origins
+      ORI_CORS_ORIGINS: ${ORI_CORS_ORIGINS:-}
     volumes:
+      # Durable: sessions, spaces, tasks, BM25 RAG
       - ori-capsule-memory:/data/memory
-      # Mount a host project read-only for GOSH overlay (override path as needed)
+      # GOSH host project (read-only overlay)
       - ${ORI_GOSH_HOST_PATH:-.}:/workspace:ro
+      # Skills / agents (override host paths as needed)
+      - ${ORI_SKILLS_HOST_PATH:-../oricli_core/skills}:/skills:ro
+      - ${ORI_AGENTS_HOST_PATH:-../.github/agents}:/agents:ro
     restart: unless-stopped
 
 volumes:

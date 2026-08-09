@@ -10,6 +10,7 @@ Those VPS paths (including the ≤8s MemoryBank retrieve) stay on the host. Caps
 |---|---|
 | `GET /v1/rag` | Stats + contract |
 | `POST /v1/rag/ingest` | Index `text` or local `path` |
+| `POST /v1/rag/ingest/file` | Multipart upload (`file`, optional `source` / `metadata` JSON); 2 MiB max |
 | `POST /v1/rag/query` | BM25 hits + formatted context |
 
 Chat inject is **opt-in** so default TTFT stays unchanged:
@@ -30,6 +31,16 @@ curl -s http://localhost:8089/v1/rag/ingest \
 ```
 
 Or `{"path":"/absolute/or/container/path.txt"}`. Content is scanned with `RagContentGuard` before indexing. Chunks live under `$ORI_MEMORY_DIR/rag/chunks.json`.
+
+### Multipart file
+
+```bash
+curl -s http://localhost:8089/v1/rag/ingest/file \
+  -H "Authorization: Bearer $KEY" \
+  -F "file=@./notes.md" \
+  -F "source=notes.md" \
+  -F 'metadata={"kind":"doc"}'
+```
 
 ## Query
 

@@ -1,8 +1,12 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -106,6 +110,9 @@ func New(cfg config.Config) *Server {
 		},
 	)
 	r.Use(gin.Recovery(), gin.Logger())
+	if len(cfg.CORSOrigins) > 0 {
+		r.Use(corsMiddleware(cfg.CORSOrigins))
+	}
 	s := &Server{
 		cfg: cfg, router: r, pipeline: pipe, mem: mem, gosh: goshMgr, rag: ragStore,
 		skills: skillLib, agents: agentLib, tools: reg, forgeLib: forgeLib,
@@ -114,9 +121,49 @@ func New(cfg config.Config) *Server {
 	return s
 }
 
+func corsMiddleware(origins []string) gin.HandlerFunc {
+	allowAll := false
+	set := map[string]bool{}
+	for _, o := range origins {
+		o = strings.TrimSpace(o)
+		if o == "*" {
+			allowAll = true
+		}
+		if o != "" {
+			set[o] = true
+		}
+	}
+	return func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		allow := ""
+		switch {
+		case allowAll && origin != "":
+			allow = origin
+		case set[origin]:
+			allow = origin
+		case allowAll:
+			allow = "*"
+		}
+		if allow != "" {
+			c.Header("Access-Control-Allow-Origin", allow)
+			c.Header("Vary", "Origin")
+			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-API-Key, X-Provider, X-Base-URL, X-Session-ID, X-Ori-Surface, X-Ori-RAG, X-Ori-Tools, X-Ori-Agent, X-Ori-Model")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Credentials", "true")
+		}
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
+}
+
 func (s *Server) routes() {
 	v1 := s.router.Group("/v1")
 	v1.GET("/health", s.handleHealth)
+	v1.GET("/ready", s.handleReady)
+	v1.GET("/capabilities", s.handleCapabilities)
 
 	protected := v1.Group("/", s.pipeline.RateLimiter.GinMiddleware())
 	protected.GET("/models", s.resolveCreds, s.handleModels)
@@ -154,6 +201,7 @@ func (s *Server) routes() {
 	// Local BM25 RAG (no embeds / chromem / PB) — see RAG.md
 	protected.GET("/rag", s.resolveCreds, s.handleRagInfo)
 	protected.POST("/rag/ingest", s.resolveCreds, s.handleRagIngest)
+	protected.POST("/rag/ingest/file", s.resolveCreds, s.handleRagIngestFile)
 	protected.POST("/rag/query", s.resolveCreds, s.handleRagQuery)
 
 	// Zero-extra-LLM reasoning pack — see REASONING.md
@@ -170,7 +218,37 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) handleHealth(c *gin.Context) {
+	c.JSON(http.StatusOK, s.capabilitiesPayload())
+}
+
+func (s *Server) handleReady(c *gin.Context) {
+	dir := s.cfg.MemoryDir
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "error": err.Error()})
+		return
+	}
+	probe := filepath.Join(dir, ".ready")
+	if err := os.WriteFile(probe, []byte(time.Now().UTC().Format(time.RFC3339)), 0o600); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "error": "memory dir not writable: " + err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
+		"status":     "ready",
+		"memory_dir": dir,
+		"persistence": gin.H{
+			"memory_tasks_rag": "volume (" + dir + ")",
+			"jit_tools":        "ephemeral (process memory, TTL)",
+			"skills_agents":    "mount read-only",
+		},
+	})
+}
+
+func (s *Server) handleCapabilities(c *gin.Context) {
+	c.JSON(http.StatusOK, s.capabilitiesPayload())
+}
+
+func (s *Server) capabilitiesPayload() gin.H {
+	return gin.H{
 		"status":    "ready",
 		"system":    "ori-capsule",
 		"byok":      true,
@@ -186,7 +264,26 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"forge":     s.forgeLib.Stats(),
 		"stream":    "sanitize",
 		"providers": []string{"openai", "anthropic", "opencode"},
-	})
+		"headers": gin.H{
+			"X-Provider":    "openai|anthropic|opencode",
+			"X-Session-ID":  "session memory + gosh lessons",
+			"X-Ori-Surface": "canvas|dev",
+			"X-Ori-RAG":     "bm25",
+			"X-Ori-Tools":   "passthrough|auto",
+			"X-Ori-Agent":   "agent profile name",
+		},
+		"persistence": gin.H{
+			"durable":   []string{"memory", "tasks", "spaces", "rag"},
+			"ephemeral": []string{"forge_jit", "gosh_action_tracker"},
+			"mounted":   []string{"skills", "agents", "gosh_workspace"},
+		},
+		"endpoints": []string{
+			"/v1/health", "/v1/ready", "/v1/capabilities",
+			"/v1/models", "/v1/chat/completions", "/v1/tools",
+			"/v1/tasks", "/v1/spaces", "/v1/gosh", "/v1/rag",
+			"/v1/skills", "/v1/agents", "/v1/forge/tools", "/v1/reasoning",
+		},
+	}
 }
 
 func (s *Server) resolveCreds(c *gin.Context) {
@@ -242,13 +339,16 @@ func (s *Server) resolveCreds(c *gin.Context) {
 
 func (s *Server) handleModels(c *gin.Context) {
 	cred := c.MustGet("byok").(byok.Credentials)
-	c.JSON(http.StatusOK, gin.H{
-		"object": "list",
-		"data": []gin.H{
-			{"id": "passthrough", "object": "model", "owned_by": string(cred.Provider)},
-		},
-		"note": "ori-capsule is BYOK — pass the upstream model id on chat/completions",
-	})
+	list, err := byok.ListModels(c.Request.Context(), cred)
+	if err != nil {
+		if byok.IsCanceled(err) {
+			c.Status(http.StatusRequestTimeout)
+			return
+		}
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, list)
 }
 
 func (s *Server) handleChat(c *gin.Context) {
@@ -428,6 +528,10 @@ func (s *Server) handleChat(c *gin.Context) {
 			InjectSchemas: true,
 		})
 		if err != nil {
+			if byok.IsCanceled(err) {
+				c.Status(499) // client closed request
+				return
+			}
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
@@ -439,8 +543,14 @@ func (s *Server) handleChat(c *gin.Context) {
 		s.writeSSEHeaders(c)
 		collected, err := byok.CollectStream(ctx, cred, req)
 		if err != nil {
+			if byok.IsCanceled(err) || ctx.Err() != nil {
+				return // client gone — stop quietly
+			}
 			fmt.Fprintf(c.Writer, "data: {\"error\":%q}\n\n", err.Error())
 			fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
+			return
+		}
+		if ctx.Err() != nil {
 			return
 		}
 		sanitized, hardBlock := s.pipeline.SanitizeOutput(collected.Content, canvasMode)
@@ -454,6 +564,9 @@ func (s *Server) handleChat(c *gin.Context) {
 			s.mem.AfterReply(sessionID, lastUser, sanitized)
 		}
 		if err := byok.WriteChatSSEMessage(c.Writer, collected.ID, collected.Model, msg, finish); err != nil {
+			if byok.IsCanceled(err) || ctx.Err() != nil {
+				return
+			}
 			fmt.Fprintf(c.Writer, "data: {\"error\":%q}\n\n", err.Error())
 		}
 		return
@@ -461,6 +574,10 @@ func (s *Server) handleChat(c *gin.Context) {
 
 	out, err := byok.ChatNonStream(ctx, cred, req)
 	if err != nil {
+		if byok.IsCanceled(err) {
+			c.Status(499)
+			return
+		}
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
@@ -870,6 +987,55 @@ func (s *Server) handleRagIngest(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"added": n, "stats": s.rag.Stats()})
+}
+
+// handleRagIngestFile accepts multipart file upload → BM25 (no embeds).
+// Form fields: file (required), source (optional), metadata JSON (optional).
+func (s *Server) handleRagIngestFile(c *gin.Context) {
+	fh, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "multipart field 'file' required"})
+		return
+	}
+	const maxUpload = 2 << 20 // 2 MiB
+	if fh.Size > maxUpload {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file exceeds 2 MiB limit"})
+		return
+	}
+	f, err := fh.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxUpload+1))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(data) > maxUpload {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file exceeds 2 MiB limit"})
+		return
+	}
+	src := strings.TrimSpace(c.PostForm("source"))
+	if src == "" {
+		src = fh.Filename
+	}
+	meta := map[string]string{"filename": fh.Filename}
+	if raw := strings.TrimSpace(c.PostForm("metadata")); raw != "" {
+		var extra map[string]string
+		if jsonErr := json.Unmarshal([]byte(raw), &extra); jsonErr == nil {
+			for k, v := range extra {
+				meta[k] = v
+			}
+		}
+	}
+	n, err := s.rag.IngestText(src, string(data), meta)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"added": n, "source": src, "stats": s.rag.Stats()})
 }
 
 func (s *Server) handleRagQuery(c *gin.Context) {

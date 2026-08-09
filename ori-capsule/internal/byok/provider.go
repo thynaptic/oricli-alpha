@@ -287,6 +287,10 @@ func collectOpenAICompatStream(ctx context.Context, cred Credentials, req ChatRe
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
+		if err := ctx.Err(); err != nil {
+			_ = resp.Body.Close()
+			return nil, err
+		}
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
 			continue
@@ -520,6 +524,10 @@ func collectAnthropicStream(ctx context.Context, cred Credentials, req ChatReque
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
+		if err := ctx.Err(); err != nil {
+			_ = resp.Body.Close()
+			return nil, err
+		}
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
 			continue
