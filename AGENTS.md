@@ -151,14 +151,17 @@ This section is for the Cursor Cloud VM, which differs from the production VPS d
 - `ui_sovereignclaw/` — React 19 + Vite web client (ORI Studio): `npm install && npm run dev` (Vite `:5173`); set `VITE_API_BASE=http://localhost:8089`.
 - `browserd/` — Node + Playwright browser-automation sidecar (`:7791`): `npm install && npx playwright install && npm run dev`.
 
-### ori-capsule (dockerized BYOK secondary surface)
+### Keep (self-hosted cognition runtime — submodule)
 
-Working name for the slim Docker runtime living in `ori-capsule/` (extractable to its own GitHub repo via `git subtree split -P ori-capsule`).
+Working name **Keep** lives at [`genoventures-labs/Keep`](https://github.com/genoventures-labs/Keep) and is connected here as the `keep/` git submodule (formerly in-tree `ori-capsule/`).
+
+```bash
+git submodule update --init --recursive keep
+cd keep && docker compose up --build   # :8089
+# or: cd keep && go run ./cmd/keep
+```
 
 - **Not** the VPS stack: no Curiosity/Dream/WorldTraveler/Metacog/Swarm/VDI daemons.
-- **BYOK** inference: `X-Provider: openai|anthropic|opencode` + Bearer (or `ORI_CAPSULE_KEY` + `X-API-Key`). OpenCode = any OpenAI-compatible `X-Base-URL`.
-- Run: `cd ori-capsule && docker compose up --build` → `:8089`. See `ori-capsule/README.md` and `MODULE_CUT.md` for the module-by-module port plan.
-- Local binary: `cd ori-capsule && go run ./cmd/ori-capsule`.
-- **Local BM25 RAG** (`ori-capsule/RAG.md`): `POST /v1/rag/ingest` + `/v1/rag/query`. Chat inject only with `X-Ori-RAG: bm25` — default chat path stays free of RAG. VPS MemoryBank/chromem/PB sync RAG is intentionally not ported.
-- **Reasoning pack** (`ori-capsule/REASONING.md`): heuristics + single system inject on every chat (precompute/trapcheck/plan/S2 hint/cogload trim/reframes/mindset/search-intent). No multi-gen, no therapy, no epistemics multi-pass, no SearXNG fetch on default chat. Deterministic APIs: `/v1/reasoning/plan`, `/pins`, `/resources`, `/filter`.
-- **Port inventory:** repo-root `PORT_INVENTORY.md` — full can/cannot list for monorepo → capsule (use this instead of browsing `pkg/` ad hoc).
+- **BYOK** inference: `X-Provider: openai|anthropic|opencode` + Bearer (or `KEEP_KEY` + `X-API-Key`). Legacy `ORI_*` env names still work as fallbacks.
+- Docs in the Keep repo: `README.md`, `BRANDING.md`, `ORIGIN.md`, `MODULE_CUT.md`, `RAG.md`, `REASONING.md`.
+- **Port inventory:** repo-root `PORT_INVENTORY.md` — can/cannot list for monorepo → Keep.

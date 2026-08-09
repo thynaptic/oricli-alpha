@@ -202,7 +202,7 @@ The root repo is the shared ORI platform. Product clients currently live alongsi
 - `mise-by-ori/` — Mise by ORI culinary product (sibling repo next to this clone; see [`docs/PRODUCTS.md`](docs/PRODUCTS.md))
 - `ori-code/` — ORI-Code terminal coding agent (Bun + Ink TUI; sibling repo; `ori-code` CLI)
 - `cmd/oricli-cli/` — primary Go CLI (`oricli`)
-- `ori-capsule/` — **working name** for the dockerized BYOK ORI runtime (OpenAI / Anthropic / OpenCode-compatible). No VPS daemons. See [`ori-capsule/README.md`](ori-capsule/README.md) and [`ori-capsule/MODULE_CUT.md`](ori-capsule/MODULE_CUT.md). Split-ready for its own GitHub repo.
+- `keep/` — **git submodule** → [`genoventures-labs/Keep`](https://github.com/genoventures-labs/Keep) (working name **Keep**: self-hosted cognition runtime). Formerly in-tree as `ori-capsule/`.
 
 ORI-Code note:
 - The sibling `ori-code` repo is the terminal coding-agent product surface.

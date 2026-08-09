@@ -1,10 +1,10 @@
-# Port inventory — monorepo → ori-capsule
+# Port inventory — monorepo → Keep
 
 **Audience:** human decision list outside the capsule tree.  
-**Target:** `ori-capsule/` — dockerized, BYOK, consumer runtime (`CGO_ENABLED=0`, distroless).  
+**Target:** [`genoventures-labs/Keep`](https://github.com/genoventures-labs/Keep) (submodule `keep/`; formerly `ori-capsule/`) — dockerized, BYOK, consumer runtime (`CGO_ENABLED=0`, distroless).  
 **Rule:** VPS daemons, sync-embed chat lag, enterprise, and clinical product stay out. Everything else is module-by-module.
 
-Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.md`.
+Companion cut-log (status of what’s already shipped): `keep/MODULE_CUT.md`.
 
 ---
 
@@ -12,7 +12,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 
 | Tag | Meaning |
 |---|---|
-| **IN** | Already shipped in `ori-capsule` |
+| **IN** | Already shipped in Keep |
 | **CAN** | Portable as-is or with light reshape (no extra LLM on default chat) |
 | **OPT** | Valuable if opt-in / adapted (header, offline API, mount) |
 | **NO** | Do not port into the consumer capsule |
@@ -30,7 +30,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 | `internal/gosh` | `pkg/gosh` | Mem/overlay sandbox; no Dream/Metacog/Reform wiring |
 | `internal/rag` | `pkg/rag` helpers + BM25 | Local BM25; opt-in chat `X-Ori-RAG: bm25` |
 | `internal/reasoning` | `precompute`, `trapcheck`, `cogload`, dualprocess classify, planning/resources/filter, reframe injects, `searchintent`, uncertainty caution (no fetch), `mindset` inject | Zero-extra-LLM pack |
-| `cmd/ori-capsule` + Dockerfile | — | Distroless static binary |
+| `keep` (`cmd/keep` + Dockerfile) | — | Distroless static binary |
 
 ---
 
@@ -132,7 +132,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 | `cmd/backbone` | VPS full stack |
 | `cmd/oricli-cli` | VPS client (reshape later → capsule) |
 | `cmd/kernel*`, `cmd/gen_dataset`, `cmd/bench`, `cmd/*_demo` | VPS / research / demos |
-| `ori-capsule/cmd/ori-capsule` | **Capsule** |
+| `keep/cmd/keep` | **Keep** |
 
 ---
 
