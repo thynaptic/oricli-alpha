@@ -112,3 +112,33 @@ Keep the interfaces app-neutral. Clients still own capture, OCR, storage, sync, 
 - For UI changes, build and visually verify when a browser/dev server is practical.
 - For live-bound changes, finish the loop: smoke test, verify the expected behavior, then restart/deploy the relevant service.
 - Test runs can append to `pkg/cognition/.memory/*_audit.jsonl`; remove only generated test-run lines before finishing.
+
+## Cursor Cloud specific instructions
+
+This section is for the Cursor Cloud VM, which differs from the production VPS described above. The repo root here is `/workspace` (not `/home/mike/Mavaia`), and there is **no systemd** — the production `systemctl restart oricli-api/oricli-backbone` and `.new` binary-swap flow do not apply. Build and run directly from `/workspace`.
+
+### Primary service: `oricli-engine`
+
+- Toolchain (pre-installed): Go 1.25, Node 22, Python 3.12. The Go module requires Go >= 1.25.0.
+- Build: `go build -o bin/oricli-engine ./cmd/oricli-engine` (the tracked `bin/oricli-engine` is a stale committed binary — rebuild before running; do not commit the rebuilt binary since `bin/` is gitignored).
+- Run: `ORICLI_SEED_API_KEY=<token> ./bin/oricli-engine` — serves the OpenAI-compatible API on `:8089` (`ORICLI_ENGINE_PORT`). Since there is no TTY service manager, start it under `tmux` (or `&`), not systemd.
+- Health (no auth): `curl http://127.0.0.1:8089/v1/health` → `{"status":"ready",...}`.
+- Auth is optional in dev: `MAVAIA_REQUIRE_AUTH` defaults to `false`. `ORICLI_SEED_API_KEY` sets the owner Bearer token; if unset, a key is generated to `.oricli/api_key`.
+- Runtime state (`.oricli/`, `.memory/`, `.memory/tasks.db`) is created under the cwd on boot and is untracked/gitignored — safe to leave.
+
+### LLM backend is required for real chat output (non-obvious)
+
+- `/v1/health` works with no LLM, but `POST /v1/chat/completions` needs a generation backend. Without one it returns a `dial tcp 127.0.0.1:11434: connect: connection refused` error.
+- Ollama is **not** pre-installed and is intentionally **not** in the update script (system-level service, not a repo dependency). To get real chat responses locally: install Ollama (`curl -fsSL https://ollama.com/install.sh | sh` — the installer needs `zstd`, so `sudo apt-get install -y zstd` first), then run `ollama serve` (no systemd, so start it manually/tmux) and `ollama pull qwen3:0.6b`.
+- Point the engine at the pulled model with `OLLAMA_MODEL=qwen3:0.6b` (the `GenerationService` default is otherwise `llama3.2:latest`). Alternatively, provide a cloud key instead of Ollama; note `pkg/oracle/oracle.go` checks `OPENAI_API_KEY` in `Available()` while batch/docs reference `ANTHROPIC_API_KEY`.
+- On CPU-only VMs a tiny model like `qwen3:0.6b` keeps first-token latency reasonable (chat completions ~5-9s).
+
+### Lint / test
+
+- `go vet ./cmd/oricli-engine/...` reports a pre-existing "the cancel function returned by context.WithCancel should be called" warning in `main.go` (inside the opt-in `ORICLI_SWARM_ENABLED` block). It is not a build blocker; the binary builds and runs.
+- Focused tests are fast and green, e.g. `go test ./pkg/oracle/... ./pkg/mindset/... ./pkg/coalition/...`. A full `go test ./...` covers 137+ packages and is slow — prefer focused runs.
+
+### Optional client surfaces (not needed for API E2E)
+
+- `ui_sovereignclaw/` — React 19 + Vite web client (ORI Studio): `npm install && npm run dev` (Vite `:5173`); set `VITE_API_BASE=http://localhost:8089`.
+- `browserd/` — Node + Playwright browser-automation sidecar (`:7791`): `npm install && npx playwright install && npm run dev`.
