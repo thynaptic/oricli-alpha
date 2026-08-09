@@ -6,7 +6,7 @@ Working name for the **dockerized, BYOK** ORI runtime — a slim secondary surfa
 |---|---|---|
 | Deploy | Isolated VPS + systemd daemons | Single Docker container |
 | Inference | Ollama + process-env Oracle keys | **BYOK** — OpenAI, Anthropic, OpenCode-compatible |
-| Scope | Full Sovereign stack | Chat API MVP; modules opt-in later |
+| Scope | Full Sovereign stack | Consumer ORI in one container |
 | Daemons | Curiosity, Dream, WorldTraveler, Metacog, Swarm, VDI, … | **None** (not plausible in Docker) |
 
 ## Quick start
@@ -16,6 +16,8 @@ cd ori-capsule
 cp .env.example .env
 docker compose up --build
 curl -s http://localhost:8089/v1/health
+curl -s http://localhost:8089/v1/capabilities
+curl -s http://localhost:8089/v1/ready
 ```
 
 ### BYOK chat (OpenAI-compatible)
@@ -51,11 +53,36 @@ curl -s http://localhost:8089/v1/chat/completions \
 
 Optional gateway lock: set `ORI_CAPSULE_KEY` so clients auth to the capsule with that Bearer, and pass the LLM key via `X-API-Key`.
 
-## What's in / out (v0)
+Client disconnect cancels the upstream BYOK request (stream and non-stream).
 
-**In:** `GET /v1/health`, `POST /v1/chat/completions` (stream + non-stream with full output sanitize), `GET /v1/models`, BYOK providers, Docker image, **structural safety**, **consumer memory** (see `MEMORY.md`), **GOSH** sandbox (`GET /v1/gosh`, `POST /v1/gosh/run` — see `GOSH.md`), **local BM25 RAG** (`GET/POST /v1/rag/*`, opt-in `X-Ori-RAG: bm25` — see `RAG.md`), **zero-extra-LLM reasoning pack** (see `REASONING.md`).
+## Persistence contract
 
-**Out (VPS-era — revisit module-by-module later):** CuriosityDaemon, DreamDaemon, WorldTraveler, MetacogDaemon, GhostCluster, VDI/Browserless, Swarm/SPP, RunPod, Neo4j, PocketBase cold memory / MemoryBank sync RAG, chromem embeds, CoT/ToT/MCTS multi-gen engines, therapy/clinical kits, FineTune, Forge, PAD, TCD, SCL daemons, Studio UI proxy, enterprise RAG. Swarm Jury, Telegram alert hooks, and LLM Critique/Revise are dropped (see `SAFETY_SIDE.md`). GOSH daemon *wiring* (Dream/Metacog/Reform) stays out — core sandbox is in.
+| Kind | What | Where |
+|---|---|---|
+| **Durable** | Sessions, spaces, tasks DAG, BM25 RAG | `ORI_MEMORY_DIR` volume (`/data/memory` in compose) |
+| **Mounted RO** | Skills (`.ori`), agents (`.agent.md`), GOSH workspace | Compose binds; override `ORI_*_HOST_PATH` |
+| **Ephemeral** | Light JIT forge tools | Process memory + TTL (`ORI_FORGE_*`); lost on restart |
+
+`GET /v1/ready` probes memory-dir writability and echoes this contract. `GET /v1/capabilities` lists flags, headers, and endpoints.
+
+## Volumes (compose)
+
+```
+ori-capsule-memory  →  /data/memory          # durable
+ORI_GOSH_HOST_PATH  →  /workspace (ro)       # GOSH overlay
+ORI_SKILLS_HOST_PATH → /skills (ro)
+ORI_AGENTS_HOST_PATH → /agents (ro)
+```
+
+Optional: `ORI_CORS_ORIGINS=*` or comma-separated origins for browser clients.
+
+## What's in / out
+
+**In:** health / ready / capabilities, BYOK chat + models passthrough, structural safety, consumer memory + tasks DAG, GOSH (+ forge static gate + ActionTracker lessons), BM25 RAG (JSON + multipart file ingest), reasoning pack, reform constitutions, skills + agent profiles, tools allowlist + BYOK `tool_calls`, light in-memory JIT forge.
+
+Docs: `MEMORY.md`, `TASKS.md`, `GOSH.md`, `RAG.md`, `REASONING.md`, `REFORM.md`, `SKILLS.md`, `AGENT_PROFILES.md`, `TOOLS.md`, `FORGE.md`, `SAFETY_SIDE.md`, `MODULE_CUT.md`.
+
+**Out (leave on VPS / other surfaces):** Curiosity/Dream/WorldTraveler/Metacog/Ghost/VDI/Swarm daemons, RunPod, Neo4j, PocketBase MemoryBank / chromem embeds, therapy/clinical kits, multi-tenant auth, connectors, MCP bridge, bias injectors, CoT/ToT/MCTS multi-gen on default chat, Studio UI proxy, enterprise RAG.
 
 ## Promote to its own GitHub repo
 

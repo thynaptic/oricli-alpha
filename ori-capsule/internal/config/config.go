@@ -24,6 +24,15 @@ type Config struct {
 
 	// Skills — read-only .ori overlays (colon-separated dirs)
 	SkillsDirs []string
+	// Agents — read-only .agent.md profiles
+	AgentsDirs []string
+
+	// Light JIT forge (in-memory only)
+	ForgeMaxTools int
+	ForgeTTL      time.Duration
+
+	// CORS — empty disables; "*" or comma-separated origins
+	CORSOrigins []string
 }
 
 func Load() Config {
@@ -75,6 +84,31 @@ func Load() Config {
 			}
 		}
 	}
+	agentsDirs := splitDirs(os.Getenv("ORI_AGENTS_DIR"))
+	if len(agentsDirs) == 0 {
+		for _, cand := range []string{".github/agents", "../.github/agents"} {
+			if st, err := os.Stat(cand); err == nil && st.IsDir() {
+				agentsDirs = []string{cand}
+				break
+			}
+		}
+	}
+
+	forgeMax := 16
+	if v := os.Getenv("ORI_FORGE_MAX_TOOLS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			forgeMax = n
+		}
+	}
+	forgeTTL := 30 * time.Minute
+	if v := os.Getenv("ORI_FORGE_TTL_MIN"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			forgeTTL = time.Duration(n) * time.Minute
+		}
+	}
+
+	// Comma-separated only — origins contain "://" so colon splitting breaks URLs.
+	corsOrigins := splitCSV(os.Getenv("ORI_CORS_ORIGINS"))
 
 	return Config{
 		Port:            port,
@@ -89,6 +123,10 @@ func Load() Config {
 		GoshForceMem:    goshForceMem,
 		GoshExecTimeout: goshTimeout,
 		SkillsDirs:      skillsDirs,
+		AgentsDirs:      agentsDirs,
+		ForgeMaxTools:   forgeMax,
+		ForgeTTL:        forgeTTL,
+		CORSOrigins:     corsOrigins,
 	}
 }
 
@@ -97,6 +135,21 @@ func splitDirs(v string) []string {
 		return nil
 	}
 	parts := strings.Split(v, ":")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func splitCSV(v string) []string {
+	if strings.TrimSpace(v) == "" {
+		return nil
+	}
+	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)

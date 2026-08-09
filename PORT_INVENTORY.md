@@ -149,7 +149,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 | `pkg/state/` ActionTracker only | Tool/action mismatch tracking | **IN** GOSH (`internal/gosh` + chat lessons); rest of `pkg/state` stays out |
 | `pkg/reform/` constitutions (not daemon) | Canvas/code constitutions | **IN** `internal/reform` + chat inject on `X-Ori-Surface`; no daemon/verifier/Ops |
 | `pkg/forge/` constitution (static) | Static script rules | **IN** `internal/forge` + GOSH verify/run; generator/PB library stay out |
-| `pkg/tasks/` | Task DAG | Deepen existing `/v1/tasks` |
+| `pkg/tasks/` | Task DAG | **IN** capsule steps/deps/ready (no host executor) |
 | `pkg/cognition/home_logistics_intelligence.go` | Active Pin extraction | **IN** via `POST /v1/reasoning/pins` |
 | `pkg/arousal/`, `pkg/coalition/`, `pkg/conformity/`, `pkg/statusbias/`, `pkg/ideocapture/`, `pkg/interference/` | Bias / load injectors | Optional single-line; watch tone/noise |
 | `pkg/chronos` observe-only | Temporal snapshot | Observe already IN; no seeder |
@@ -161,7 +161,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 | `pkg/core/auth` + memory store | API keys / tenants | Gateway key exists; multi-tenant later; no PB |
 | `pkg/epistemics/` | Multi-pass explanation | **Opt-in only**; never default chat |
 | `pkg/tools/` + MCP bridge subset | Tool registry | **IN** capsule allowlist + BYOK tool_calls (`TOOLS.md`); no host admin/MCP bridge yet |
-| `pkg/forge/` generator | Dynamic tools | Stay out — static forge gate is IN; generator opt-in later |
+| `pkg/forge/` generator | Dynamic tools | **IN** light in-mem JIT (`/v1/forge/*`); no PB/POCGate/go build |
 | `pkg/connectors/*` except PocketBase | GitHub/Notion/Google/… fetch | Ingest → BM25; no sync embeds on chat |
 | `pkg/llm/` | HTTP LLM helper | Prefer capsule BYOK; or thin wrapper |
 | Oracle **patterns** (skills, tool format) — not wholesale `pkg/oracle` | Skill overlays / tool_calls | Reimplement on BYOK |
@@ -177,7 +177,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 |---|---|
 | `oricli_core/skills/*.ori` | Skill library — **IN** via `ORI_SKILLS_DIR` / `internal/skills` |
 | `oricli_core/profiles/`, `rules/`, `examples/` | Profiles / rules |
-| `.github/agents/*.agent.md` | Agent system prompts |
+| `.github/agents/*.agent.md` | Agent system prompts — **IN** via `ORI_AGENTS_DIR` / `internal/agents` |
 | `.github/skills/` | Extra overlays |
 | `constitution.example.ori` | Sample constitution |
 
@@ -187,13 +187,13 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 
 | Bucket | Count (approx) | Action |
 |---|---|---|
-| **IN** | Safety, memory, GOSH (+ ActionTracker + forge gate), BM25 RAG, reasoning pack, reform constitutions, skills mount, BYOK API | Maintain |
+| **IN** | Safety, memory, GOSH, BM25 RAG, reasoning, reform, skills, agents, tools+BYOK tool_calls, tasks DAG, light JIT, BYOK API, harness (capabilities/ready/CORS/cancel/multipart RAG/models) | Maintain |
 | **NO — daemons/sidecars/fleet** | Curiosity/Dream/Metacog/TCD/Science/Curator/SCL, VDI, swarm, RunPod, systemd | Leave on VPS |
 | **NO — clinical** | Entire therapy modality set (~20 pkgs) | Leave on VPS |
 | **NO — enterprise / Studio** | enterprise, sovereign exec, PAD/Goals product, Studio UI | Other surfaces |
 | **NO — sync RAG / heavy DB** | PB, Neo4j, chromem, MemoryBank chat retrieve | BM25 only in capsule |
 | **NO — multi-gen chat** | MCTS/ToT/ARE/Debate, GenService retries, default epistemics | Oracle/BYOK model choice instead |
-| **CAN / OPT next** | tools allowlist+GOSH, deepen tasks DAG, connectors→BM25, bias injectors, agent profiles, core/auth | Pick deliberately |
+| **CAN / OPT next** | connectors→BM25, bias injectors, MCP bridge subset, core/auth | Intentionally deferred |
 
 ---
 
