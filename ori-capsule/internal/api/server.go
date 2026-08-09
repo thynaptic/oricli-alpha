@@ -13,6 +13,7 @@ import (
 	"github.com/thynaptic/ori-capsule/internal/gosh"
 	"github.com/thynaptic/ori-capsule/internal/memory"
 	"github.com/thynaptic/ori-capsule/internal/rag"
+	"github.com/thynaptic/ori-capsule/internal/reasoning"
 	"github.com/thynaptic/ori-capsule/internal/safety"
 )
 
@@ -76,6 +77,12 @@ func (s *Server) routes() {
 	protected.GET("/rag", s.resolveCreds, s.handleRagInfo)
 	protected.POST("/rag/ingest", s.resolveCreds, s.handleRagIngest)
 	protected.POST("/rag/query", s.resolveCreds, s.handleRagQuery)
+
+	// Zero-extra-LLM reasoning pack — see REASONING.md
+	protected.GET("/reasoning", s.resolveCreds, s.handleReasoningInfo)
+	protected.POST("/reasoning/plan", s.resolveCreds, s.handleReasoningPlan)
+	protected.POST("/reasoning/resources", s.resolveCreds, s.handleReasoningResources)
+	protected.POST("/reasoning/filter", s.resolveCreds, s.handleReasoningFilter)
 }
 
 func (s *Server) Run() error {
@@ -92,6 +99,7 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"memory":    true,
 		"gosh":      s.gosh.Info(),
 		"rag":       s.rag.Stats(),
+		"reasoning": true,
 		"stream":    "sanitize",
 		"providers": []string{"openai", "anthropic", "opencode"},
 	})
@@ -246,8 +254,14 @@ func (s *Server) handleChat(c *gin.Context) {
 		return
 	}
 
-	req.Messages = make([]byok.Message, len(expanded))
+	// Zero-extra-LLM reasoning prepare (may trim elevated load; never retries).
+	reasonMsgs := make([]reasoning.ChatMessage, len(expanded))
 	for i, m := range expanded {
+		reasonMsgs[i] = reasoning.ChatMessage{Role: m.Role, Content: m.Content}
+	}
+	prepared := reasoning.Prepare(reasonMsgs, lastUser)
+	req.Messages = make([]byok.Message, len(prepared.Messages))
+	for i, m := range prepared.Messages {
 		req.Messages[i] = byok.Message{Role: m.Role, Content: m.Content}
 	}
 
@@ -263,6 +277,9 @@ func (s *Server) handleChat(c *gin.Context) {
 	if memExtras != "" {
 		sysExtra = memExtras + "\n\n" + sysExtra
 	}
+	if prepared.SystemExtra != "" {
+		sysExtra = prepared.SystemExtra + "\n\n" + sysExtra
+	}
 	// Opt-in BM25 context only — default chat path stays free of RAG latency.
 	if strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Ori-RAG")), "bm25") && lastUser != "" {
 		if ctx := s.rag.FormatContext(lastUser, rag.DefaultTopK, rag.DefaultMaxContextRunes); ctx != "" {
@@ -270,6 +287,8 @@ func (s *Server) handleChat(c *gin.Context) {
 		}
 	}
 	req.Messages = injectSystem(req.Messages, sysExtra)
+	c.Header("X-Ori-Reasoning-Hint", fmt.Sprint(prepared.Meta["reasoning_hint"]))
+	c.Header("X-Ori-Process-Tier", fmt.Sprint(prepared.Meta["process_tier"]))
 
 	ctx := c.Request.Context()
 	if req.Stream {
@@ -492,4 +511,49 @@ func (s *Server) handleRagQuery(c *gin.Context) {
 		"hits":    out,
 		"context": s.rag.FormatContext(req.Query, req.TopK, rag.DefaultMaxContextRunes),
 	})
+}
+
+func (s *Server) handleReasoningInfo(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"mode":    "zero_extra_llm",
+		"on_chat": []string{"precompute", "trapcheck", "response_plan", "dualprocess_classify", "cogload_trim", "reframe_inject", "rumination_inject"},
+		"apis":    []string{"POST /v1/reasoning/plan", "POST /v1/reasoning/resources", "POST /v1/reasoning/filter"},
+		"skipped": []string{"epistemics_multi_pass", "cot_tot_mcts", "debate_are_retry", "therapy"},
+		"note":    "Heuristics + single system inject only — no chat-path retries or multi-gen engines",
+	})
+}
+
+func (s *Server) handleReasoningPlan(c *gin.Context) {
+	var req reasoning.PlanningRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if strings.TrimSpace(req.Goal) == "" && strings.TrimSpace(req.Notes) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "goal or notes required"})
+		return
+	}
+	c.JSON(http.StatusOK, reasoning.BuildPlanningPlan(req))
+}
+
+func (s *Server) handleReasoningResources(c *gin.Context) {
+	var req reasoning.CommitmentResourceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, reasoning.ReasonAboutCommitmentResources(req))
+}
+
+func (s *Server) handleReasoningFilter(c *gin.Context) {
+	var req struct {
+		Topic string `json:"topic"`
+		Text  string `json:"text"`
+		URL   string `json:"url"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Text) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "text required"})
+		return
+	}
+	c.JSON(http.StatusOK, reasoning.EpistemicFilter(req.Topic, req.Text, req.URL))
 }

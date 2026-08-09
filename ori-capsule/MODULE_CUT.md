@@ -28,6 +28,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | **Consumer memory** | `internal/memory` — bbolt warm bridge, session turns (`X-Session-ID`), belief, clock, chronos observe, in-mem working graph, L1 cache, spaces, tasks (see `MEMORY.md`) |
 | **GOSH sandbox** | `internal/gosh` — docker-friendly mem/overlay shell; `GET /v1/gosh`, `POST /v1/gosh/run` (see `GOSH.md`) |
 | **Local BM25 RAG** | `internal/rag` — sectioning, manifests, BM25 store; `GET/POST /v1/rag/*`; opt-in chat via `X-Ori-RAG: bm25` (see `RAG.md`) |
+| **Reasoning pack** | `internal/reasoning` — precompute, trapcheck, response plan, S1/S2 classify, cogload trim, reframe/rumination single-inject, planning + resource APIs (see `REASONING.md`) — **no** multi-gen / retries |
 
 ## VPS-ONLY (do not port)
 
@@ -56,8 +57,8 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | Auth / tenant API keys | `pkg/core/auth` | Optional capsule gateway key already exists; multi-tenant later |
 | Skills / `.ori` overlays | `pkg/oracle/skills.go`, `oricli_core/skills` | Bake or mount read-only |
 | Agent profiles | `.github/agents` | Mount as config |
-| Epistemics loop | `pkg/epistemics` | Pure compute if BYOK-backed |
-| Lightweight cognition | selected `pkg/cognition/*` | Per-module review — no daemon loops |
+| Epistemics loop | `pkg/epistemics` | Opt-in later only — multi LLM calls; keep off default chat |
+| Lightweight cognition | selected `pkg/cognition/*` | Heuristic pack is **IN**; multi-gen engines stay out |
 | Tools (allowlisted) | `pkg/tools`, forge subset | No free-form host shell |
 
 ## DEFER
