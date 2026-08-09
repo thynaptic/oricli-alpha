@@ -3,12 +3,14 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/thynaptic/ori-capsule/internal/byok"
 	"github.com/thynaptic/ori-capsule/internal/config"
+	"github.com/thynaptic/ori-capsule/internal/memory"
 	"github.com/thynaptic/ori-capsule/internal/safety"
 )
 
@@ -16,14 +18,23 @@ type Server struct {
 	cfg      config.Config
 	router   *gin.Engine
 	pipeline *safety.Pipeline
+	mem      *memory.Runtime
 }
 
 func New(cfg config.Config) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	pipe := safety.NewPipeline()
+	mem, err := memory.Open(memory.OpenOptions{
+		Dir:             cfg.MemoryDir,
+		EncryptionKey:   cfg.MemoryKey,
+		MaxSessionTurns: cfg.MaxSessionTurns,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("memory init: %v", err))
+	}
 	r.Use(gin.Recovery(), gin.Logger())
-	s := &Server{cfg: cfg, router: r, pipeline: pipe}
+	s := &Server{cfg: cfg, router: r, pipeline: pipe, mem: mem}
 	s.routes()
 	return s
 }
@@ -35,6 +46,13 @@ func (s *Server) routes() {
 	protected := v1.Group("/", s.pipeline.RateLimiter.GinMiddleware())
 	protected.GET("/models", s.resolveCreds, s.handleModels)
 	protected.POST("/chat/completions", s.resolveCreds, s.handleChat)
+
+	// Consumer memory surfaces (local only — no enterprise RAG)
+	protected.GET("/spaces", s.resolveCreds, s.handleSpacesList)
+	protected.POST("/spaces", s.resolveCreds, s.handleSpacesUpsert)
+	protected.GET("/tasks", s.resolveCreds, s.handleTasksList)
+	protected.POST("/tasks", s.resolveCreds, s.handleTasksAdd)
+	protected.PATCH("/tasks/:id", s.resolveCreds, s.handleTasksDone)
 }
 
 func (s *Server) Run() error {
@@ -48,6 +66,7 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"system":    "ori-capsule",
 		"byok":      true,
 		"safety":    true,
+		"memory":    true,
 		"stream":    "sanitize",
 		"providers": []string{"openai", "anthropic", "opencode"},
 	})
@@ -132,8 +151,9 @@ func (s *Server) handleChat(c *gin.Context) {
 	}
 
 	sessionID := c.GetHeader("X-Session-ID")
-	if sessionID == "" {
-		sessionID = c.ClientIP()
+	safetyKey := sessionID
+	if safetyKey == "" {
+		safetyKey = c.ClientIP()
 	}
 
 	turns := make([]safety.ChatTurn, 0, len(req.Messages))
@@ -149,8 +169,8 @@ func (s *Server) handleChat(c *gin.Context) {
 		strings.Contains(strings.ToLower(lastUser), "canvas")
 	codeCtx := canvasMode || strings.EqualFold(c.GetHeader("X-Ori-Surface"), "dev")
 
-	if blocked, refusal := s.pipeline.CheckInputWithHistory(turns, sessionID, codeCtx); blocked {
-		s.pipeline.RateLimiter.RecordBlock(sessionID, "injection")
+	if blocked, refusal := s.pipeline.CheckInputWithHistory(turns, safetyKey, codeCtx); blocked {
+		s.pipeline.RateLimiter.RecordBlock(safetyKey, "injection")
 		if req.Stream {
 			s.writeSSEHeaders(c)
 			_ = byok.WriteChatSSE(c.Writer,
@@ -172,6 +192,40 @@ func (s *Server) handleChat(c *gin.Context) {
 		return
 	}
 
+	// Memory prepare: session merge + belief/clock/graph (no embeds).
+	memMsgs := make([]memory.ChatMessage, len(req.Messages))
+	for i, m := range req.Messages {
+		memMsgs[i] = memory.ChatMessage{Role: m.Role, Content: m.Content}
+	}
+	expanded, memExtras, cacheHit := s.mem.PrepareChat(sessionID, memMsgs)
+	if cacheHit != "" && !req.Stream {
+		c.JSON(http.StatusOK, gin.H{
+			"id":      fmt.Sprintf("chatcmpl-cache-%d", time.Now().UnixNano()),
+			"object":  "chat.completion",
+			"created": time.Now().Unix(),
+			"model":   req.Model,
+			"choices": []gin.H{{
+				"index":         0,
+				"finish_reason": "stop",
+				"message":       gin.H{"role": "assistant", "content": cacheHit},
+			}},
+			"ori_cache": "l1",
+		})
+		return
+	}
+	if cacheHit != "" && req.Stream {
+		s.writeSSEHeaders(c)
+		_ = byok.WriteChatSSE(c.Writer,
+			fmt.Sprintf("chatcmpl-cache-%d", time.Now().UnixNano()),
+			req.Model, cacheHit, "stop")
+		return
+	}
+
+	req.Messages = make([]byok.Message, len(expanded))
+	for i, m := range expanded {
+		req.Messages[i] = byok.Message{Role: m.Role, Content: m.Content}
+	}
+
 	surface := c.GetHeader("X-Ori-Surface")
 	if surface == "" {
 		surface = "default"
@@ -181,6 +235,9 @@ func (s *Server) handleChat(c *gin.Context) {
 		CodeContext: codeCtx,
 		CanvasMode:  canvasMode,
 	})
+	if memExtras != "" {
+		sysExtra = memExtras + "\n\n" + sysExtra
+	}
 	req.Messages = injectSystem(req.Messages, sysExtra)
 
 	ctx := c.Request.Context()
@@ -197,6 +254,7 @@ func (s *Server) handleChat(c *gin.Context) {
 		if hardBlock {
 			finish = "stop"
 		}
+		s.mem.AfterReply(sessionID, lastUser, sanitized)
 		if err := byok.WriteChatSSE(c.Writer, collected.ID, collected.Model, sanitized, finish); err != nil {
 			fmt.Fprintf(c.Writer, "data: {\"error\":%q}\n\n", err.Error())
 		}
@@ -220,6 +278,7 @@ func (s *Server) handleChat(c *gin.Context) {
 		if hardBlock {
 			out.Choices[0].FinishReason = "stop"
 		}
+		s.mem.AfterReply(sessionID, lastUser, sanitized)
 	}
 	c.JSON(http.StatusOK, out)
 }
@@ -245,4 +304,62 @@ func injectSystem(msgs []byok.Message, extra string) []byok.Message {
 	out = append(out, byok.Message{Role: "system", Content: extra})
 	out = append(out, msgs...)
 	return out
+}
+
+func (s *Server) handleSpacesList(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"spaces": s.mem.Spaces.List()})
+}
+
+func (s *Server) handleSpacesUpsert(c *gin.Context) {
+	var req struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.ID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
+		return
+	}
+	c.JSON(http.StatusOK, s.mem.Spaces.Upsert(req.ID, req.Name))
+}
+
+func (s *Server) handleTasksList(c *gin.Context) {
+	tasks, err := s.mem.Tasks.List(50)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tasks": tasks})
+}
+
+func (s *Server) handleTasksAdd(c *gin.Context) {
+	var req struct {
+		Title string `json:"title"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Title) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "title required"})
+		return
+	}
+	task, err := s.mem.Tasks.Add(strings.TrimSpace(req.Title))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, task)
+}
+
+func (s *Server) handleTasksDone(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	var req struct {
+		Done bool `json:"done"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	if err := s.mem.Tasks.SetDone(id, req.Done); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"id": id, "done": req.Done})
 }

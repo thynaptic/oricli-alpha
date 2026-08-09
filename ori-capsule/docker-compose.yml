@@ -8,6 +8,13 @@ services:
       ORI_CAPSULE_PORT: "8089"
       ORI_DEFAULT_PROVIDER: ${ORI_DEFAULT_PROVIDER:-openai}
       ORI_OPENCODE_BASE_URL: ${ORI_OPENCODE_BASE_URL:-https://opencode.ai/zen/v1}
-      # Optional gateway lock — leave empty for pure BYOK (Bearer = provider key)
       ORI_CAPSULE_KEY: ${ORI_CAPSULE_KEY:-}
+      ORI_MEMORY_DIR: /data/memory
+      ORI_MEMORY_ENCRYPTION_KEY: ${ORI_MEMORY_ENCRYPTION_KEY:-}
+      ORI_MEMORY_MAX_TURNS: ${ORI_MEMORY_MAX_TURNS:-24}
+    volumes:
+      - ori-capsule-memory:/data/memory
     restart: unless-stopped
+
+volumes:
+  ori-capsule-memory:
