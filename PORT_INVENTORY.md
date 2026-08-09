@@ -142,7 +142,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 
 | Path | What | Notes |
 |---|---|---|
-| `pkg/envload/` | `.env` autoload | Utility |
+| `pkg/envload/` | `.env` autoload | Skip — capsule already uses `godotenv`; upstream hardcodes VPS `OLLAMA_HOST` |
 | `pkg/searchintent/` | Search-intent classify | **IN** reasoning (classify only; no SearXNG) |
 | `pkg/cognition/confidence.go` | Web-lookup need detector | **IN** reasoning (caution inject; no fetch) |
 | `pkg/mindset/` | Growth-language reframe | **IN** inject only (no tracker/persist) |
@@ -150,7 +150,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 | `pkg/reform/` constitutions (not daemon) | Canvas/code constitutions | Inject on surface |
 | `pkg/forge/` verifier / CodeConstitution | Static script rules | With GOSH only |
 | `pkg/tasks/` | Task DAG | Deepen existing `/v1/tasks` |
-| `pkg/cognition/home_logistics_intelligence.go` | Active Pin extraction | App-neutral API — **next** |
+| `pkg/cognition/home_logistics_intelligence.go` | Active Pin extraction | **IN** via `POST /v1/reasoning/pins` |
 | `pkg/arousal/`, `pkg/coalition/`, `pkg/conformity/`, `pkg/statusbias/`, `pkg/ideocapture/`, `pkg/interference/` | Bias / load injectors | Optional single-line; watch tone/noise |
 | `pkg/chronos` observe-only | Temporal snapshot | Observe already IN; no seeder |
 

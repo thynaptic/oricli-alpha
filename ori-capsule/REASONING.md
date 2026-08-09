@@ -28,8 +28,20 @@ Response headers: `X-Ori-Reasoning-Hint`, `X-Ori-Process-Tier`, `X-Ori-Search-In
 |---|---|
 | `GET /v1/reasoning` | Contract |
 | `POST /v1/reasoning/plan` | App-neutral planning draft (`BuildPlanningPlan`) |
+| `POST /v1/reasoning/pins` | Household Active Pin extraction (`BuildHomeLogisticsPlan`) |
 | `POST /v1/reasoning/resources` | Commitment / resource tradeoff reasoning |
 | `POST /v1/reasoning/filter` | EpistemicFilter for retrieved text (BM25/URL) |
+
+### Pins example
+
+```bash
+curl -s http://localhost:8089/v1/reasoning/pins \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"source":"Permission slip due Monday. Pay field trip fee tomorrow.","preferences":{"max_pins":3,"low_noise_mode":true}}'
+```
+
+Clients own calendars, reminders, storage, and consent — this API only stages pins.
 
 ## Explicitly not here
 

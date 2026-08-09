@@ -30,7 +30,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | **Consumer memory** | `internal/memory` — bbolt warm bridge, session turns (`X-Session-ID`), belief, clock, chronos observe, in-mem working graph, L1 cache, spaces, tasks (see `MEMORY.md`) |
 | **GOSH sandbox** | `internal/gosh` — docker-friendly mem/overlay shell; `GET /v1/gosh`, `POST /v1/gosh/run` (see `GOSH.md`) |
 | **Local BM25 RAG** | `internal/rag` — sectioning, manifests, BM25 store; `GET/POST /v1/rag/*`; opt-in chat via `X-Ori-RAG: bm25` (see `RAG.md`) |
-| **Reasoning pack** | `internal/reasoning` — precompute, trapcheck, response plan, S1/S2 classify, cogload trim, reframe/rumination/mindset single-inject, search-intent + uncertainty caution (no fetch), planning + resource APIs (see `REASONING.md`) — **no** multi-gen / retries / SearXNG |
+| **Reasoning pack** | `internal/reasoning` — precompute, trapcheck, response plan, S1/S2 classify, cogload trim, reframe/rumination/mindset single-inject, search-intent + uncertainty caution (no fetch), planning / pins / resource APIs (see `REASONING.md`) — **no** multi-gen / retries / SearXNG |
 
 ## VPS-ONLY (do not port)
 

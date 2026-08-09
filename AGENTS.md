@@ -160,5 +160,5 @@ Working name for the slim Docker runtime living in `ori-capsule/` (extractable t
 - Run: `cd ori-capsule && docker compose up --build` → `:8089`. See `ori-capsule/README.md` and `MODULE_CUT.md` for the module-by-module port plan.
 - Local binary: `cd ori-capsule && go run ./cmd/ori-capsule`.
 - **Local BM25 RAG** (`ori-capsule/RAG.md`): `POST /v1/rag/ingest` + `/v1/rag/query`. Chat inject only with `X-Ori-RAG: bm25` — default chat path stays free of RAG. VPS MemoryBank/chromem/PB sync RAG is intentionally not ported.
-- **Reasoning pack** (`ori-capsule/REASONING.md`): heuristics + single system inject on every chat (precompute/trapcheck/plan/S2 hint/cogload trim/reframes). No multi-gen, no therapy, no epistemics multi-pass on default chat. Deterministic APIs: `/v1/reasoning/plan`, `/resources`, `/filter`.
+- **Reasoning pack** (`ori-capsule/REASONING.md`): heuristics + single system inject on every chat (precompute/trapcheck/plan/S2 hint/cogload trim/reframes/mindset/search-intent). No multi-gen, no therapy, no epistemics multi-pass, no SearXNG fetch on default chat. Deterministic APIs: `/v1/reasoning/plan`, `/pins`, `/resources`, `/filter`.
 - **Port inventory:** repo-root `PORT_INVENTORY.md` — full can/cannot list for monorepo → capsule (use this instead of browsing `pkg/` ad hoc).
