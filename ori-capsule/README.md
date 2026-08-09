@@ -53,9 +53,9 @@ Optional gateway lock: set `ORI_CAPSULE_KEY` so clients auth to the capsule with
 
 ## What's in / out (v0)
 
-**In:** `GET /v1/health`, `POST /v1/chat/completions` (stream + non-stream with full output sanitize), `GET /v1/models`, BYOK providers, Docker image, **structural safety**, **consumer memory** (see `MEMORY.md`), **GOSH** sandbox (`GET /v1/gosh`, `POST /v1/gosh/run` — see `GOSH.md`), **local BM25 RAG** (`GET/POST /v1/rag/*`, opt-in `X-Ori-RAG: bm25` — see `RAG.md`).
+**In:** `GET /v1/health`, `POST /v1/chat/completions` (stream + non-stream with full output sanitize), `GET /v1/models`, BYOK providers, Docker image, **structural safety**, **consumer memory** (see `MEMORY.md`), **GOSH** sandbox (`GET /v1/gosh`, `POST /v1/gosh/run` — see `GOSH.md`), **local BM25 RAG** (`GET/POST /v1/rag/*`, opt-in `X-Ori-RAG: bm25` — see `RAG.md`), **zero-extra-LLM reasoning pack** (see `REASONING.md`).
 
-**Out (VPS-era — revisit module-by-module later):** CuriosityDaemon, DreamDaemon, WorldTraveler, MetacogDaemon, GhostCluster, VDI/Browserless, Swarm/SPP, RunPod, Neo4j, PocketBase cold memory / MemoryBank sync RAG, chromem embeds, FineTune, Forge, PAD, TCD, SCL daemons, Studio UI proxy, enterprise RAG. Swarm Jury, Telegram alert hooks, and LLM Critique/Revise are dropped (see `SAFETY_SIDE.md`). GOSH daemon *wiring* (Dream/Metacog/Reform) stays out — core sandbox is in.
+**Out (VPS-era — revisit module-by-module later):** CuriosityDaemon, DreamDaemon, WorldTraveler, MetacogDaemon, GhostCluster, VDI/Browserless, Swarm/SPP, RunPod, Neo4j, PocketBase cold memory / MemoryBank sync RAG, chromem embeds, CoT/ToT/MCTS multi-gen engines, therapy/clinical kits, FineTune, Forge, PAD, TCD, SCL daemons, Studio UI proxy, enterprise RAG. Swarm Jury, Telegram alert hooks, and LLM Critique/Revise are dropped (see `SAFETY_SIDE.md`). GOSH daemon *wiring* (Dream/Metacog/Reform) stays out — core sandbox is in.
 
 ## Promote to its own GitHub repo
 
