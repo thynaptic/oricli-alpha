@@ -1,0 +1,78 @@
+# Module cut — monorepo → ori-capsule
+
+Decision log for what moves from `oricli-alpha` into the dockerized capsule.
+**Rule:** VPS-era daemons stay out. BYOK chat is the MVP. Everything else is module-by-module.
+
+## Status legend
+
+| Status | Meaning |
+|---|---|
+| **IN (v0)** | Shipped in ori-capsule now |
+| **CANDIDATE** | Plausible in Docker — evaluate next |
+| **VPS-ONLY** | Relied on long-lived host / sidecars — do not port |
+| **DEFER** | Product value unclear for capsule; revisit later |
+
+## IN (v0)
+
+| Capability | Notes |
+|---|---|
+| HTTP `/v1/health` | Capsule readiness |
+| HTTP `/v1/chat/completions` | OpenAI-shaped; stream + non-stream |
+| HTTP `/v1/models` | Stub list — real models come from BYOK upstream |
+| BYOK OpenAI | Bearer key → `api.openai.com/v1/chat/completions` |
+| BYOK Anthropic | Bearer/`X-API-Key` → Messages API, response mapped to OpenAI shape |
+| BYOK OpenCode-compatible | `X-Provider: opencode` + `X-Base-URL` (OpenAI chat completions dialect) |
+| Docker image | Distroless static binary |
+
+## VPS-ONLY (do not port)
+
+| Module / daemon | Monorepo path | Why |
+|---|---|---|
+| CuriosityDaemon | `pkg/service/curiosity_daemon.go` | Long-lived forage + SearXNG |
+| DreamDaemon | `pkg/service/daemon.go` | Nightly consolidation on host |
+| MetacogDaemon | `pkg/metacog/`, `pkg/service/daemon.go` | Host WS anomaly loop |
+| WorldTraveler | `pkg/service/world_traveler.go` | Periodic host forage |
+| ReformDaemon | `pkg/service/reform_daemon.go` | Trace→constitution on host |
+| TCD | `pkg/tcd/` | Temporal curriculum daemon |
+| GhostCluster | (removed / backbone) | RunPod fleet |
+| VDI / Browserless | `pkg/vdi/`, browser modules | Sidecar CDP on host network |
+| Swarm / SPP | `pkg/swarm/` | Multi-node peer protocol |
+| RunPod escalation | generation remnants | Burst GPU VPS path |
+| Backbone Studio proxy | `cmd/backbone/` | Full host stack |
+| systemd units | `*.service` | Not applicable in container |
+
+## CANDIDATE (evaluate next)
+
+| Module | Monorepo path | Docker fit |
+|---|---|---|
+| Session memory (header `X-Session-ID`) | oracle session pool / chronos | In-container LMDB or SQLite volume |
+| Auth / tenant API keys | `pkg/core/auth` | Optional capsule gateway key already exists; multi-tenant later |
+| Safety / rate limit | `pkg/safety` | Stateless middleware |
+| Skills / `.ori` overlays | `pkg/oracle/skills.go`, `oricli_core/skills` | Bake or mount read-only |
+| Agent profiles | `.github/agents` | Mount as config |
+| Epistemics loop | `pkg/epistemics` | Pure compute if BYOK-backed |
+| Lightweight cognition | selected `pkg/cognition/*` | Per-module review — no daemon loops |
+| Tools (allowlisted) | `pkg/tools`, forge subset | No free-form host shell |
+
+## DEFER
+
+| Module | Notes |
+|---|---|
+| PocketBase cold memory | External SaaS; capsule stays local-first |
+| Neo4j graph | Heavy sidecar; optional compose profile later |
+| PAD / Goals / Tasks | Product surfaces — after chat MVP solid |
+| Enterprise RAG | After storage story |
+| Therapy / clinical modules | Product-specific |
+| ORI Studio UI | Separate frontend image later |
+
+## BYOK contract (stable)
+
+| Header | Role |
+|---|---|
+| `Authorization: Bearer …` | Capsule key **or** provider key (see `ORI_CAPSULE_KEY`) |
+| `X-API-Key` | Provider key when capsule gateway lock is on |
+| `X-Provider` | `openai` \| `anthropic` \| `opencode` |
+| `X-Base-URL` | Override upstream base (required-ish for opencode) |
+| `X-Session-ID` | Reserved for future capsule memory |
+
+Not an OpenAI-forwarding-only gateway: Anthropic is first-class; OpenCode is any OpenAI-compatible endpoint.

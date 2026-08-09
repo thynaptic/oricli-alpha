@@ -142,3 +142,12 @@ This section is for the Cursor Cloud VM, which differs from the production VPS d
 
 - `ui_sovereignclaw/` — React 19 + Vite web client (ORI Studio): `npm install && npm run dev` (Vite `:5173`); set `VITE_API_BASE=http://localhost:8089`.
 - `browserd/` — Node + Playwright browser-automation sidecar (`:7791`): `npm install && npx playwright install && npm run dev`.
+
+### ori-capsule (dockerized BYOK secondary surface)
+
+Working name for the slim Docker runtime living in `ori-capsule/` (extractable to its own GitHub repo via `git subtree split -P ori-capsule`).
+
+- **Not** the VPS stack: no Curiosity/Dream/WorldTraveler/Metacog/Swarm/VDI daemons.
+- **BYOK** inference: `X-Provider: openai|anthropic|opencode` + Bearer (or `ORI_CAPSULE_KEY` + `X-API-Key`). OpenCode = any OpenAI-compatible `X-Base-URL`.
+- Run: `cd ori-capsule && docker compose up --build` → `:8089`. See `ori-capsule/README.md` and `MODULE_CUT.md` for the module-by-module port plan.
+- Local binary: `cd ori-capsule && go run ./cmd/ori-capsule`.
