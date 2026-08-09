@@ -25,6 +25,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | BYOK OpenCode-compatible | `X-Provider: opencode` + `X-Base-URL` (OpenAI chat completions dialect) |
 | Docker image | Distroless static binary |
 | **Safety stack** | `internal/safety` — full structural gates + SCAI contracts (see `SAFETY_SIDE.md`) |
+| **Consumer memory** | `internal/memory` — bbolt warm bridge, session turns (`X-Session-ID`), belief, clock, chronos observe, in-mem working graph, L1 cache, spaces, tasks (see `MEMORY.md`) |
 
 ## VPS-ONLY (do not port)
 
@@ -48,7 +49,6 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 
 | Module | Monorepo path | Docker fit |
 |---|---|---|
-| Session memory (header `X-Session-ID`) | oracle session pool / chronos | In-container LMDB or SQLite volume |
 | Auth / tenant API keys | `pkg/core/auth` | Optional capsule gateway key already exists; multi-tenant later |
 | Skills / `.ori` overlays | `pkg/oracle/skills.go`, `oricli_core/skills` | Bake or mount read-only |
 | Agent profiles | `.github/agents` | Mount as config |
@@ -62,8 +62,9 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 |---|---|
 | PocketBase cold memory | External SaaS; capsule stays local-first |
 | Neo4j graph | Heavy sidecar; optional compose profile later |
-| PAD / Goals / Tasks | Product surfaces — after chat MVP solid |
-| Enterprise RAG | After storage story |
+| PAD / Goals | Operator surfaces — out of consumer capsule |
+| chromem / embed RAG | Sync Ollama embeds add reply lag — revisit with budgeted BYOK embed |
+| Enterprise RAG / twins | Consumer capsule — not in scope |
 | Therapy / clinical modules | Product-specific |
 | ORI Studio UI | Separate frontend image later |
 
@@ -75,6 +76,6 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | `X-API-Key` | Provider key when capsule gateway lock is on |
 | `X-Provider` | `openai` \| `anthropic` \| `opencode` |
 | `X-Base-URL` | Override upstream base (required-ish for opencode) |
-| `X-Session-ID` | Reserved for future capsule memory |
+| `X-Session-ID` | Session turn memory + belief/clock/graph scope |
 
 Not an OpenAI-forwarding-only gateway: Anthropic is first-class; OpenCode is any OpenAI-compatible endpoint.

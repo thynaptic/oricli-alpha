@@ -6,10 +6,13 @@ import (
 )
 
 type Config struct {
-	Port              int
-	CapsuleKey        string // optional gateway lock
-	DefaultProvider   string
-	OpenCodeBaseURL   string
+	Port            int
+	CapsuleKey      string
+	DefaultProvider string
+	OpenCodeBaseURL string
+	MemoryDir       string
+	MemoryKey       string // base64 32-byte AES key; empty → derived from MemoryDir (dev)
+	MaxSessionTurns int
 }
 
 func Load() Config {
@@ -27,10 +30,23 @@ func Load() Config {
 	if ocBase == "" {
 		ocBase = "https://opencode.ai/zen/v1"
 	}
+	memDir := os.Getenv("ORI_MEMORY_DIR")
+	if memDir == "" {
+		memDir = ".memory"
+	}
+	maxTurns := 24
+	if v := os.Getenv("ORI_MEMORY_MAX_TURNS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxTurns = n
+		}
+	}
 	return Config{
 		Port:            port,
 		CapsuleKey:      os.Getenv("ORI_CAPSULE_KEY"),
 		DefaultProvider: defProv,
 		OpenCodeBaseURL: ocBase,
+		MemoryDir:       memDir,
+		MemoryKey:       os.Getenv("ORI_MEMORY_ENCRYPTION_KEY"),
+		MaxSessionTurns: maxTurns,
 	}
 }
