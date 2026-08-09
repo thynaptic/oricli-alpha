@@ -200,7 +200,7 @@ Heavy ML modules are opt-in (`MAVAIA_ENABLE_HEAVY_MODULES=true`).
 
 ```bash
 # API auth
-ORICLI_SEED_API_KEY=glm.Qbtofkny.F5pTIVYghj-mLSwAtPRGDau1q7k2w5DO
+ORICLI_SEED_API_KEY=glm.<prefix>.<secret>
 
 # Inference routing
 RUNPOD_PRIMARY=false             # was true — caused ALL requests to hit RunPod; fixed

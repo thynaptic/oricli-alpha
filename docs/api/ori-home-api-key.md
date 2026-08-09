@@ -1,20 +1,24 @@
 # ORI Home API Key
 
-Generated: 2026-04-10
-
 ## Key
 
-```
-glm.SVqzMhu2.rJUGN2mQvYkaXd6FKhGM8r7oJ5LIp7E3
+Provision a tenant key via the admin API or app registration — **do not commit live keys**.
+
+```bash
+# Owner/admin key from ORICLI_SEED_API_KEY / .oricli/api_key
+curl -s -X POST https://glm.thynaptic.com/v1/admin/tenants/app:ori-home/keys \
+  -H "Authorization: Bearer $ORICLI_SEED_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"scopes":["runtime:chat","runtime:email:send","runtime:models","runtime:spaces","runtime:workspaces"]}'
 ```
 
-## Details
+Or on first boot use `POST /v1/app/register` with `ORI_APP_REG_TOKEN` to mint a per-device key.
 
 | Field | Value |
 |---|---|
 | Base URL | `https://glm.thynaptic.com/v1` |
 | Tenant ID | `app:ori-home:ori-home-desktop-v1` |
-| Format | `Authorization: Bearer glm.SVqzMhu2.rJUGN2mQvYkaXd6FKhGM8r7oJ5LIp7E3` |
+| Format | `Authorization: Bearer glm.<prefix>.<secret>` |
 
 ## Scopes
 
@@ -26,5 +30,5 @@ glm.SVqzMhu2.rJUGN2mQvYkaXd6FKhGM8r7oJ5LIp7E3
 
 ## Notes
 
-- Re-register on first boot via `POST /v1/app/register` with `ORI_APP_REG_TOKEN` if you need a per-device key (change `device_id`).
-- Session history is surface-isolated
+- Any previously committed key material in this file has been revoked/rotated — treat historical copies as compromised.
+- Session history is surface-isolated.

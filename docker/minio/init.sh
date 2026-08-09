@@ -3,9 +3,9 @@
 # Run after oricli-minio.service is healthy.
 set -euo pipefail
 
-MINIO_URL="http://localhost:9000"
-MINIO_USER="oricli-admin"
-MINIO_PASS="oricli-sovereign-2025"
+MINIO_URL="${MINIO_URL:-http://localhost:9000}"
+MINIO_USER="${MINIO_ROOT_USER:-oricli-admin}"
+MINIO_PASS="${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}"
 ALIAS="oricli-local"
 
 echo "[MinIO Init] Waiting for MinIO to be ready..."

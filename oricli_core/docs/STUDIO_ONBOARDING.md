@@ -68,7 +68,7 @@ Copy or create `.env` in `/home/mike/Mavaia/`:
 ```bash
 # Go backbone
 MAVAIA_API_BASE=http://localhost:8089
-MAVAIA_API_KEY=glm.8eHruhzb...   # from .oricli/api_key
+MAVAIA_API_KEY=glm.<prefix>.<secret>   # from .oricli/api_key or ORICLI_SEED_API_KEY
 
 # Flask server
 MAVAIA_UI_PORT=5001

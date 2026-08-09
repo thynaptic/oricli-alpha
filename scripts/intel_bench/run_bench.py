@@ -7,6 +7,7 @@ Saves results JSON for judge scoring.
 
 import json
 import sys
+import os
 import time
 import argparse
 import urllib.request
@@ -14,11 +15,13 @@ import urllib.error
 from datetime import datetime
 from pathlib import Path
 
-ORI_BASE      = "http://localhost:8089"
-ORI_API_KEY   = "glm.Qbtofkny.F5pTIVYghj-mLSwAtPRGDau1q7k2w5DO"
-OLLAMA_BASE   = "http://localhost:11434"
-CHAT_MODEL    = "gemma3:1b"
-CODE_MODEL    = "qwen3:1.7b"
+ORI_BASE      = os.environ.get("ORI_BASE_URL", "http://localhost:8089")
+ORI_API_KEY   = os.environ.get("ORI_API_KEY") or os.environ.get("ORICLI_SEED_API_KEY")
+if not ORI_API_KEY:
+    raise SystemExit("Set ORI_API_KEY or ORICLI_SEED_API_KEY (do not hardcode keys)")
+OLLAMA_BASE   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+CHAT_MODEL    = os.environ.get("CHAT_MODEL", "gemma3:1b")
+CODE_MODEL    = os.environ.get("CODE_MODEL", "qwen3:1.7b")
 
 SCRIPT_DIR = Path(__file__).parent
 QUESTIONS  = SCRIPT_DIR / "questions.json"

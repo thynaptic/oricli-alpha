@@ -105,11 +105,11 @@ mc cp model.tar oricli-local/oricli-models/  # upload
 mc ls oricli-local/oricli-state/          # inspect state
 ```
 
-**Env vars set in `oricli-backbone.service`:**
+**Env vars set in `oricli-backbone.service` / `/etc/oricli/backbone.env`:**
 ```
 MAVAIA_S3_ENDPOINT=http://localhost:9000
 AWS_ACCESS_KEY_ID=oricli-admin
-AWS_SECRET_ACCESS_KEY=oricli-sovereign-2025
+AWS_SECRET_ACCESS_KEY=<set via EnvironmentFile — never commit>
 AWS_BUCKET_NAME=oricli-state
 AWS_DEFAULT_REGION=us-east-1
 ```
@@ -131,7 +131,7 @@ Scrapes metrics every 15 seconds from:
 Config: `docker/observability/prometheus/prometheus.yml`
 
 ### Grafana (`:9093`)
-Pre-provisioned with the Prometheus datasource. Login: `oricli-admin / oricli-sovereign-2025`.
+Pre-provisioned with the Prometheus datasource. Login credentials come from `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD` (required env vars — never commit).
 
 Add dashboards:
 - Import cAdvisor dashboard: ID `14282`

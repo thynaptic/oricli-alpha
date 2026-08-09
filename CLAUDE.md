@@ -204,5 +204,5 @@ When adding or removing API routes, update `dev-portal/llms.txt` to match.
 - **`bin/oricli-go-v2` is the live binary** — `oricli-go`, `oricli-go-pure`, etc. are older builds.
 - **Both services must stop before replacing binary** — same file held open by both processes.
 - **Mise API key** — stored in `/home/mike/thynaptic/mise/.env.local` as `ORI_API_KEY`. If ORI is restarted and key is rejected (401), issue a new one: `curl -X POST http://localhost:8089/v1/admin/tenants/mise/keys -H "Authorization: Bearer <ORICLI_SEED_API_KEY>" -d '{"scopes":["runtime:chat"]}'`
-- **ORI Code key** — service uses `glm.Qbtofkny.*` seed key (in `/etc/systemd/system/oricli-backbone.service`), not the `.oricli/api_key` file key.
+- **ORI Code key** — service uses the seed key from systemd/EnvironmentFile (`ORICLI_SEED_API_KEY`), not the `.oricli/api_key` file key.
 - The `ORI-Home` directory was removed from this repo and now lives at `/home/mike/thynaptic/ori-home/`.

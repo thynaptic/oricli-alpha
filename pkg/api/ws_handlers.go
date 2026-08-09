@@ -3,6 +3,8 @@ package api
 import (
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +22,34 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // In production, refine this to allowed origins
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			// Non-browser clients (CLI, curl) may omit Origin.
+			return true
+		}
+		allowed := []string{
+			"http://localhost:5173",
+			"http://127.0.0.1:5173",
+			"http://localhost:8089",
+			"https://oristudio.thynaptic.com",
+			"https://docs.thynaptic.com",
+			"https://glm.thynaptic.com",
+		}
+		if raw := os.Getenv("ORICLI_WS_ORIGINS"); raw != "" {
+			for _, o := range strings.Split(raw, ",") {
+				o = strings.TrimSpace(o)
+				if o != "" {
+					allowed = append(allowed, o)
+				}
+			}
+		}
+		for _, a := range allowed {
+			if origin == a {
+				return true
+			}
+		}
+		log.Printf("[WebSocket] rejected origin %q", origin)
+		return false
 	},
 }
 

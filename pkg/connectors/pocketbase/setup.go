@@ -41,16 +41,12 @@ func Bootstrap(ctx context.Context, c *Client) error {
 		log.Printf("[pb-bootstrap] epistemic migration warning: %v", err)
 	}
 
-	// Ensure Oricli's analyst account exists
-	email := os.Getenv("PB_ORICLI_EMAIL")
-	if email == "" {
-		email = "oricli@thynaptic.com"
-	}
-	password := os.Getenv("PB_ORICLI_PASSWORD")
+	// Ensure Oricli's analyst account exists — fail closed without password.
+	email := OricliUserEmail()
+	password := OricliUserPassword()
 	if password == "" {
-		password = "OricliSovereign2026!"
-	}
-	if err := CreateOricliUser(ctx, c, email, password); err != nil {
+		log.Printf("[pb-bootstrap] PB_ORICLI_PASSWORD not set — skipping Oricli user bootstrap")
+	} else if err := CreateOricliUser(ctx, c, email, password); err != nil {
 		log.Printf("[pb-bootstrap] Oricli user setup warning: %v", err)
 	}
 
@@ -90,8 +86,8 @@ func CreateOricliUser(ctx context.Context, adminClient *Client, email, password 
 	return nil
 }
 
-// OricliUserEnabled returns true if PB_ORICLI_EMAIL/PASSWORD are configured,
-// or uses the default credentials if env vars are absent.
+// OricliUserEmail returns the configured analyst email, or a local-dev default.
+// The password has no hardcoded fallback — see OricliUserPassword.
 func OricliUserEmail() string {
 	if v := os.Getenv("PB_ORICLI_EMAIL"); v != "" {
 		return v
@@ -99,11 +95,10 @@ func OricliUserEmail() string {
 	return "oricli@thynaptic.com"
 }
 
+// OricliUserPassword returns PB_ORICLI_PASSWORD. Empty when unset — callers
+// must fail closed rather than fall back to a committed default password.
 func OricliUserPassword() string {
-	if v := os.Getenv("PB_ORICLI_PASSWORD"); v != "" {
-		return v
-	}
-	return "OricliSovereign2026!"
+	return os.Getenv("PB_ORICLI_PASSWORD")
 }
 
 // ─── Collection Schemas ───────────────────────────────────────────────────────

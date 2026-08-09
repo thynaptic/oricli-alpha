@@ -144,11 +144,16 @@ func NewMemoryBank() *MemoryBank {
 		return &MemoryBank{adminClient: adminClient, maxRecs: maxRecs, enabled: false}
 	}
 
-	// Create Oricli's user-scoped client (analyst account)
+	// Create Oricli's user-scoped client (analyst account) when password is set.
 	baseURL := strings.TrimRight(os.Getenv("PB_BASE_URL"), "/")
 	oricliEmail := pb.OricliUserEmail()
 	oricliPassword := pb.OricliUserPassword()
-	oricliClient := pb.NewUserClient(baseURL, oricliEmail, oricliPassword)
+	var oricliClient *pb.Client
+	if oricliPassword == "" {
+		log.Println("[memory-bank] PB_ORICLI_PASSWORD not set — analyst client disabled")
+	} else {
+		oricliClient = pb.NewUserClient(baseURL, oricliEmail, oricliPassword)
+	}
 
 	return &MemoryBank{
 		adminClient:  adminClient,
