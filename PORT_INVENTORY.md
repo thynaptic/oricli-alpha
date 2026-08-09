@@ -160,8 +160,8 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 |---|---|---|
 | `pkg/core/auth` + memory store | API keys / tenants | Gateway key exists; multi-tenant later; no PB |
 | `pkg/epistemics/` | Multi-pass explanation | **Opt-in only**; never default chat |
-| `pkg/tools/` + MCP bridge subset | Tool registry | Allowlist + GOSH; no host admin plugins |
-| `pkg/forge/` generator | Dynamic tools | Constitution → GOSH only |
+| `pkg/tools/` + MCP bridge subset | Tool registry | **IN** capsule allowlist + BYOK tool_calls (`TOOLS.md`); no host admin/MCP bridge yet |
+| `pkg/forge/` generator | Dynamic tools | Stay out — static forge gate is IN; generator opt-in later |
 | `pkg/connectors/*` except PocketBase | GitHub/Notion/Google/… fetch | Ingest → BM25; no sync embeds on chat |
 | `pkg/llm/` | HTTP LLM helper | Prefer capsule BYOK; or thin wrapper |
 | Oracle **patterns** (skills, tool format) — not wholesale `pkg/oracle` | Skill overlays / tool_calls | Reimplement on BYOK |

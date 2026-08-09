@@ -27,14 +27,21 @@ type Credentials struct {
 }
 
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content,omitempty"`
+	Name       string     `json:"name,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 }
 
 type ChatRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Stream   bool      `json:"stream,omitempty"`
+	Model       string           `json:"model"`
+	Messages    []Message        `json:"messages"`
+	Tools       []ToolDefinition `json:"tools,omitempty"`
+	ToolChoice  any              `json:"tool_choice,omitempty"`
+	Stream      bool             `json:"stream,omitempty"`
+	MaxTokens   *int             `json:"max_tokens,omitempty"`
+	Temperature *float64         `json:"temperature,omitempty"`
 }
 
 type ChatResponse struct {
@@ -56,6 +63,7 @@ type StreamResult struct {
 	Model        string
 	Content      string
 	FinishReason string
+	ToolCalls    []ToolCall
 }
 
 var httpClient = &http.Client{Timeout: 120 * time.Second}
@@ -102,6 +110,11 @@ func CollectStream(ctx context.Context, cred Credentials, req ChatRequest) (*Str
 // WriteChatSSE emits an OpenAI-compatible chat.completion.chunk SSE sequence
 // for already-sanitized content, then data: [DONE].
 func WriteChatSSE(w io.Writer, id, model, content, finishReason string) error {
+	return WriteChatSSEMessage(w, id, model, Message{Role: "assistant", Content: content}, finishReason)
+}
+
+// WriteChatSSEMessage emits SSE for an assistant message that may include tool_calls.
+func WriteChatSSEMessage(w io.Writer, id, model string, msg Message, finishReason string) error {
 	if id == "" {
 		id = fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
 	}
@@ -109,7 +122,11 @@ func WriteChatSSE(w io.Writer, id, model, content, finishReason string) error {
 		model = "passthrough"
 	}
 	if finishReason == "" {
-		finishReason = "stop"
+		if len(msg.ToolCalls) > 0 {
+			finishReason = "tool_calls"
+		} else {
+			finishReason = "stop"
+		}
 	}
 	created := time.Now().Unix()
 	flusher, _ := w.(http.Flusher)
@@ -147,15 +164,13 @@ func WriteChatSSE(w io.Writer, id, model, content, finishReason string) error {
 	if err := writeChunk(map[string]any{"role": "assistant"}, nil); err != nil {
 		return err
 	}
-	// Emit content in reasonable chunks so clients still see progressive SSE,
-	// after the full text has already been safety-sanitized.
+	content := msg.Content
 	const chunkSize = 48
 	for i := 0; i < len(content); {
 		j := i + chunkSize
 		if j > len(content) {
 			j = len(content)
 		}
-		// Prefer breaking on rune boundaries for UTF-8 safety.
 		for j < len(content) && j > i && !utf8Start(content[j]) {
 			j--
 		}
@@ -169,6 +184,22 @@ func WriteChatSSE(w io.Writer, id, model, content, finishReason string) error {
 			return err
 		}
 		i = j
+	}
+	for i, tc := range msg.ToolCalls {
+		delta := map[string]any{
+			"tool_calls": []map[string]any{{
+				"index": i,
+				"id":    tc.ID,
+				"type":  tc.Type,
+				"function": map[string]any{
+					"name":      tc.Function.Name,
+					"arguments": tc.Function.Arguments,
+				},
+			}},
+		}
+		if err := writeChunk(delta, nil); err != nil {
+			return err
+		}
 	}
 	fr := finishReason
 	if err := writeChunk(map[string]any{}, &fr); err != nil {
@@ -252,6 +283,7 @@ func collectOpenAICompatStream(ctx context.Context, cred Credentials, req ChatRe
 		FinishReason: "stop",
 	}
 	var content strings.Builder
+	toolAcc := map[int]*ToolCall{}
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
@@ -268,7 +300,16 @@ func collectOpenAICompatStream(ctx context.Context, cred Credentials, req ChatRe
 			Model   string `json:"model"`
 			Choices []struct {
 				Delta struct {
-					Content string `json:"content"`
+					Content   string `json:"content"`
+					ToolCalls []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Type     string `json:"type"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
 				} `json:"delta"`
 				FinishReason *string `json:"finish_reason"`
 			} `json:"choices"`
@@ -284,6 +325,23 @@ func collectOpenAICompatStream(ctx context.Context, cred Credentials, req ChatRe
 		}
 		if len(ev.Choices) > 0 {
 			content.WriteString(ev.Choices[0].Delta.Content)
+			for _, tc := range ev.Choices[0].Delta.ToolCalls {
+				cur, ok := toolAcc[tc.Index]
+				if !ok {
+					cur = &ToolCall{Type: "function"}
+					toolAcc[tc.Index] = cur
+				}
+				if tc.ID != "" {
+					cur.ID = tc.ID
+				}
+				if tc.Type != "" {
+					cur.Type = tc.Type
+				}
+				if tc.Function.Name != "" {
+					cur.Function.Name = tc.Function.Name
+				}
+				cur.Function.Arguments += tc.Function.Arguments
+			}
 			if ev.Choices[0].FinishReason != nil && *ev.Choices[0].FinishReason != "" {
 				result.FinishReason = *ev.Choices[0].FinishReason
 			}
@@ -293,48 +351,53 @@ func collectOpenAICompatStream(ctx context.Context, cred Credentials, req ChatRe
 		return nil, err
 	}
 	result.Content = content.String()
+	if len(toolAcc) > 0 {
+		idxs := make([]int, 0, len(toolAcc))
+		for i := range toolAcc {
+			idxs = append(idxs, i)
+		}
+		// insertion order not guaranteed — sort by index
+		for i := 0; i < len(idxs); i++ {
+			for j := i + 1; j < len(idxs); j++ {
+				if idxs[j] < idxs[i] {
+					idxs[i], idxs[j] = idxs[j], idxs[i]
+				}
+			}
+		}
+		for _, i := range idxs {
+			result.ToolCalls = append(result.ToolCalls, *toolAcc[i])
+		}
+		result.ToolCalls = ensureToolCallIDs(result.ToolCalls)
+		if result.FinishReason == "stop" && len(result.ToolCalls) > 0 {
+			result.FinishReason = "tool_calls"
+		}
+	}
 	return result, nil
 }
 
 // --- Anthropic Messages API → OpenAI-shaped response ---
 
 type anthropicReq struct {
-	Model     string             `json:"model"`
-	MaxTokens int                `json:"max_tokens"`
-	System    string             `json:"system,omitempty"`
-	Messages  []anthropicMessage `json:"messages"`
-	Stream    bool               `json:"stream,omitempty"`
-}
-
-type anthropicMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-func splitSystem(msgs []Message) (system string, rest []anthropicMessage) {
-	for _, m := range msgs {
-		switch m.Role {
-		case "system":
-			if system != "" {
-				system += "\n"
-			}
-			system += m.Content
-		case "assistant", "user":
-			rest = append(rest, anthropicMessage{Role: m.Role, Content: m.Content})
-		default:
-			rest = append(rest, anthropicMessage{Role: "user", Content: m.Content})
-		}
-	}
-	return system, rest
+	Model      string             `json:"model"`
+	MaxTokens  int                `json:"max_tokens"`
+	System     string             `json:"system,omitempty"`
+	Messages   []anthropicMsg     `json:"messages"`
+	Tools      []anthropicToolDef `json:"tools,omitempty"`
+	ToolChoice any                `json:"tool_choice,omitempty"`
+	Stream     bool               `json:"stream,omitempty"`
 }
 
 func anthropicChat(ctx context.Context, cred Credentials, req ChatRequest) (*ChatResponse, error) {
-	sys, msgs := splitSystem(req.Messages)
+	sys, msgs := msgsToAnthropic(req.Messages)
 	payload := anthropicReq{
 		Model:     req.Model,
-		MaxTokens: 4096,
+		MaxTokens: maxTokensOr(req, 4096),
 		System:    sys,
 		Messages:  msgs,
+	}
+	if len(req.Tools) > 0 {
+		payload.Tools = oaiToolsToAnthropic(req.Tools)
+		payload.ToolChoice = oaiToolChoiceToAnthropic(req.ToolChoice)
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -361,37 +424,31 @@ func anthropicChat(ctx context.Context, cred Credentials, req ChatRequest) (*Cha
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("upstream %s: %s", resp.Status, truncate(string(raw), 500))
 	}
-	var ar struct {
-		ID         string `json:"id"`
-		Model      string `json:"model"`
-		StopReason string `json:"stop_reason"`
-		Content    []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
+	var meta struct {
+		ID    string `json:"id"`
+		Model string `json:"model"`
 		Usage struct {
 			InputTokens  int `json:"input_tokens"`
 			OutputTokens int `json:"output_tokens"`
 		} `json:"usage"`
 	}
-	if err := json.Unmarshal(raw, &ar); err != nil {
+	if err := json.Unmarshal(raw, &meta); err != nil {
 		return nil, err
 	}
-	var text strings.Builder
-	for _, c := range ar.Content {
-		if c.Type == "text" {
-			text.WriteString(c.Text)
-		}
+	text, calls, stopReason, err := parseAnthropicContent(raw)
+	if err != nil {
+		return nil, err
 	}
+	calls = ensureToolCallIDs(calls)
 	out := &ChatResponse{
-		ID:      ar.ID,
+		ID:      meta.ID,
 		Object:  "chat.completion",
 		Created: time.Now().Unix(),
-		Model:   ar.Model,
+		Model:   meta.Model,
 		Usage: map[string]int{
-			"prompt_tokens":     ar.Usage.InputTokens,
-			"completion_tokens": ar.Usage.OutputTokens,
-			"total_tokens":      ar.Usage.InputTokens + ar.Usage.OutputTokens,
+			"prompt_tokens":     meta.Usage.InputTokens,
+			"completion_tokens": meta.Usage.OutputTokens,
+			"total_tokens":      meta.Usage.InputTokens + meta.Usage.OutputTokens,
 		},
 	}
 	out.Choices = []struct {
@@ -399,21 +456,29 @@ func anthropicChat(ctx context.Context, cred Credentials, req ChatRequest) (*Cha
 		Message      Message `json:"message"`
 		FinishReason string  `json:"finish_reason"`
 	}{{
-		Index:        0,
-		Message:      Message{Role: "assistant", Content: text.String()},
-		FinishReason: mapAnthropicStop(ar.StopReason),
+		Index: 0,
+		Message: Message{
+			Role:      "assistant",
+			Content:   text,
+			ToolCalls: calls,
+		},
+		FinishReason: mapAnthropicStopReason(stopReason),
 	}}
 	return out, nil
 }
 
 func collectAnthropicStream(ctx context.Context, cred Credentials, req ChatRequest) (*StreamResult, error) {
-	sys, msgs := splitSystem(req.Messages)
+	sys, msgs := msgsToAnthropic(req.Messages)
 	payload := anthropicReq{
 		Model:     req.Model,
-		MaxTokens: 4096,
+		MaxTokens: maxTokensOr(req, 4096),
 		System:    sys,
 		Messages:  msgs,
 		Stream:    true,
+	}
+	if len(req.Tools) > 0 {
+		payload.Tools = oaiToolsToAnthropic(req.Tools)
+		payload.ToolChoice = oaiToolChoiceToAnthropic(req.ToolChoice)
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -448,6 +513,10 @@ func collectAnthropicStream(ctx context.Context, cred Credentials, req ChatReque
 		FinishReason: "stop",
 	}
 	var content strings.Builder
+	type toolBlock struct {
+		id, name, args string
+	}
+	blocks := map[int]*toolBlock{}
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
@@ -460,16 +529,23 @@ func collectAnthropicStream(ctx context.Context, cred Credentials, req ChatReque
 			break
 		}
 		var ev struct {
-			Type  string `json:"type"`
-			Delta struct {
+			Type         string `json:"type"`
+			Index        int    `json:"index"`
+			ContentBlock struct {
 				Type string `json:"type"`
-				Text string `json:"text"`
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"content_block"`
+			Delta struct {
+				Type        string `json:"type"`
+				Text        string `json:"text"`
+				PartialJSON string `json:"partial_json"`
+				StopReason  string `json:"stop_reason"`
 			} `json:"delta"`
 			Message struct {
 				ID    string `json:"id"`
 				Model string `json:"model"`
 			} `json:"message"`
-			StopReason string `json:"stop_reason"`
 		}
 		if err := json.Unmarshal([]byte(payload), &ev); err != nil {
 			continue
@@ -482,13 +558,22 @@ func collectAnthropicStream(ctx context.Context, cred Credentials, req ChatReque
 			if ev.Message.Model != "" {
 				result.Model = ev.Message.Model
 			}
+		case "content_block_start":
+			if ev.ContentBlock.Type == "tool_use" {
+				blocks[ev.Index] = &toolBlock{id: ev.ContentBlock.ID, name: ev.ContentBlock.Name}
+			}
 		case "content_block_delta":
 			if ev.Delta.Text != "" {
 				content.WriteString(ev.Delta.Text)
 			}
+			if ev.Delta.PartialJSON != "" {
+				if b := blocks[ev.Index]; b != nil {
+					b.args += ev.Delta.PartialJSON
+				}
+			}
 		case "message_delta":
-			if ev.StopReason != "" {
-				result.FinishReason = mapAnthropicStop(ev.StopReason)
+			if ev.Delta.StopReason != "" {
+				result.FinishReason = mapAnthropicStopReason(ev.Delta.StopReason)
 			}
 		}
 	}
@@ -496,21 +581,39 @@ func collectAnthropicStream(ctx context.Context, cred Credentials, req ChatReque
 		return nil, err
 	}
 	result.Content = content.String()
-	return result, nil
-}
-
-func mapAnthropicStop(s string) string {
-	switch s {
-	case "end_turn", "stop_sequence":
-		return "stop"
-	case "max_tokens":
-		return "length"
-	default:
-		if s == "" {
-			return "stop"
+	if len(blocks) > 0 {
+		idxs := make([]int, 0, len(blocks))
+		for i := range blocks {
+			idxs = append(idxs, i)
 		}
-		return s
+		for i := 0; i < len(idxs); i++ {
+			for j := i + 1; j < len(idxs); j++ {
+				if idxs[j] < idxs[i] {
+					idxs[i], idxs[j] = idxs[j], idxs[i]
+				}
+			}
+		}
+		for _, i := range idxs {
+			b := blocks[i]
+			args := b.args
+			if args == "" {
+				args = "{}"
+			}
+			result.ToolCalls = append(result.ToolCalls, ToolCall{
+				ID:   b.id,
+				Type: "function",
+				Function: ToolFunctionCall{
+					Name:      b.name,
+					Arguments: args,
+				},
+			})
+		}
+		result.ToolCalls = ensureToolCallIDs(result.ToolCalls)
+		if result.FinishReason == "stop" {
+			result.FinishReason = "tool_calls"
+		}
 	}
+	return result, nil
 }
 
 func truncate(s string, n int) string {
