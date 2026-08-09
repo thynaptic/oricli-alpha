@@ -19,6 +19,7 @@ import (
 	"unicode"
 
 	"github.com/spf13/afero"
+	"github.com/thynaptic/ori-capsule/internal/forge"
 	"github.com/traefik/yaegi/interp"
 	"github.com/traefik/yaegi/stdlib"
 	"mvdan.cc/sh/v3/expand"
@@ -293,10 +294,10 @@ func (s *Session) RunGoSource(ctx context.Context, source string) (stdout, stder
 
 // Config for the capsule GOSH surface.
 type Config struct {
-	Enabled       bool
-	Workspace     string        // empty → mem-only; else overlay if dir exists
-	ForceMem      bool          // ignore workspace even if set
-	ExecTimeout   time.Duration
+	Enabled     bool
+	Workspace   string // empty → mem-only; else overlay if dir exists
+	ForceMem    bool   // ignore workspace even if set
+	ExecTimeout time.Duration
 }
 
 // Manager opens per-request sessions (no shared daemon state across sandboxes).
@@ -372,7 +373,9 @@ type RunRequest struct {
 	Tools          []ToolDef         `json:"tools"`
 	Read           []string          `json:"read"` // paths to return after run
 	ExpectedResult string            `json:"expected_result,omitempty"`
-	SessionID      string            `json:"session_id,omitempty"` // groups lessons; also X-Session-ID
+	SessionID      string            `json:"session_id,omitempty"`  // groups lessons; also X-Session-ID
+	SkipVerify     bool              `json:"skip_verify,omitempty"` // tests only — default always verify
+	StrictTool     bool              `json:"strict_tool,omitempty"` // full JIT tool contract on script
 }
 
 type ToolDef struct {
@@ -381,16 +384,17 @@ type ToolDef struct {
 }
 
 type RunResult struct {
-	Mode       string            `json:"mode"`
-	Workspace  string            `json:"workspace,omitempty"`
-	Stdout     string            `json:"stdout,omitempty"`
-	Stderr     string            `json:"stderr,omitempty"`
-	ExitOK     bool              `json:"ok"`
-	Error      string            `json:"error,omitempty"`
-	Files      map[string]string `json:"files,omitempty"`
-	DurationMs int64             `json:"duration_ms"`
-	Action     *ActionContext    `json:"action,omitempty"`
-	Lessons    string            `json:"lessons,omitempty"`
+	Mode       string              `json:"mode"`
+	Workspace  string              `json:"workspace,omitempty"`
+	Stdout     string              `json:"stdout,omitempty"`
+	Stderr     string              `json:"stderr,omitempty"`
+	ExitOK     bool                `json:"ok"`
+	Error      string              `json:"error,omitempty"`
+	Files      map[string]string   `json:"files,omitempty"`
+	DurationMs int64               `json:"duration_ms"`
+	Action     *ActionContext      `json:"action,omitempty"`
+	Lessons    string              `json:"lessons,omitempty"`
+	Verify     *forge.VerifyResult `json:"verify,omitempty"`
 }
 
 func (m *Manager) Run(parent context.Context, req RunRequest) (out RunResult) {
@@ -406,6 +410,23 @@ func (m *Manager) Run(parent context.Context, req RunRequest) (out RunResult) {
 	if !m.Enabled() {
 		out.Error = "gosh disabled"
 		return out
+	}
+	if !req.SkipVerify {
+		toolSrcs := make([]string, 0, len(req.Tools))
+		for _, t := range req.Tools {
+			toolSrcs = append(toolSrcs, t.Source)
+		}
+		vr := forge.VerifyStatic(forge.VerifyRequest{
+			Script:      req.Script,
+			Source:      req.Source,
+			ToolSources: toolSrcs,
+			StrictTool:  req.StrictTool,
+		})
+		out.Verify = &vr
+		if !vr.OK {
+			out.Error = "constitution: " + vr.Summary
+			return out
+		}
 	}
 	sess, err := m.OpenSession()
 	if err != nil {

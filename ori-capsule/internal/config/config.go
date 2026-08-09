@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,9 @@ type Config struct {
 	GoshWorkspace   string // container path, e.g. /workspace (overlay); empty → mem-only
 	GoshForceMem    bool
 	GoshExecTimeout time.Duration
+
+	// Skills — read-only .ori overlays (colon-separated dirs)
+	SkillsDirs []string
 }
 
 func Load() Config {
@@ -61,6 +65,17 @@ func Load() Config {
 		}
 	}
 
+	skillsDirs := splitDirs(os.Getenv("ORI_SKILLS_DIR"))
+	if len(skillsDirs) == 0 {
+		// Dev-friendly default when running from monorepo root or ori-capsule/.
+		for _, cand := range []string{"oricli_core/skills", "../oricli_core/skills"} {
+			if st, err := os.Stat(cand); err == nil && st.IsDir() {
+				skillsDirs = []string{cand}
+				break
+			}
+		}
+	}
+
 	return Config{
 		Port:            port,
 		CapsuleKey:      os.Getenv("ORI_CAPSULE_KEY"),
@@ -73,5 +88,21 @@ func Load() Config {
 		GoshWorkspace:   goshWS,
 		GoshForceMem:    goshForceMem,
 		GoshExecTimeout: goshTimeout,
+		SkillsDirs:      skillsDirs,
 	}
+}
+
+func splitDirs(v string) []string {
+	if strings.TrimSpace(v) == "" {
+		return nil
+	}
+	parts := strings.Split(v, ":")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

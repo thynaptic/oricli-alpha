@@ -148,7 +148,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 | `pkg/mindset/` | Growth-language reframe | **IN** inject only (no tracker/persist) |
 | `pkg/state/` ActionTracker only | Tool/action mismatch tracking | **IN** GOSH (`internal/gosh` + chat lessons); rest of `pkg/state` stays out |
 | `pkg/reform/` constitutions (not daemon) | Canvas/code constitutions | **IN** `internal/reform` + chat inject on `X-Ori-Surface`; no daemon/verifier/Ops |
-| `pkg/forge/` verifier / CodeConstitution | Static script rules | With GOSH only |
+| `pkg/forge/` constitution (static) | Static script rules | **IN** `internal/forge` + GOSH verify/run; generator/PB library stay out |
 | `pkg/tasks/` | Task DAG | Deepen existing `/v1/tasks` |
 | `pkg/cognition/home_logistics_intelligence.go` | Active Pin extraction | **IN** via `POST /v1/reasoning/pins` |
 | `pkg/arousal/`, `pkg/coalition/`, `pkg/conformity/`, `pkg/statusbias/`, `pkg/ideocapture/`, `pkg/interference/` | Bias / load injectors | Optional single-line; watch tone/noise |
@@ -175,7 +175,7 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 
 | Path | What |
 |---|---|
-| `oricli_core/skills/*.ori` | Skill library |
+| `oricli_core/skills/*.ori` | Skill library — **IN** via `ORI_SKILLS_DIR` / `internal/skills` |
 | `oricli_core/profiles/`, `rules/`, `examples/` | Profiles / rules |
 | `.github/agents/*.agent.md` | Agent system prompts |
 | `.github/skills/` | Extra overlays |
@@ -187,13 +187,13 @@ Companion cut-log (status of what’s already shipped): `ori-capsule/MODULE_CUT.
 
 | Bucket | Count (approx) | Action |
 |---|---|---|
-| **IN** | Safety, memory, GOSH (+ ActionTracker), BM25 RAG, reasoning pack, reform constitutions, BYOK API | Maintain |
+| **IN** | Safety, memory, GOSH (+ ActionTracker + forge gate), BM25 RAG, reasoning pack, reform constitutions, skills mount, BYOK API | Maintain |
 | **NO — daemons/sidecars/fleet** | Curiosity/Dream/Metacog/TCD/Science/Curator/SCL, VDI, swarm, RunPod, systemd | Leave on VPS |
 | **NO — clinical** | Entire therapy modality set (~20 pkgs) | Leave on VPS |
 | **NO — enterprise / Studio** | enterprise, sovereign exec, PAD/Goals product, Studio UI | Other surfaces |
 | **NO — sync RAG / heavy DB** | PB, Neo4j, chromem, MemoryBank chat retrieve | BM25 only in capsule |
 | **NO — multi-gen chat** | MCTS/ToT/ARE/Debate, GenService retries, default epistemics | Oracle/BYOK model choice instead |
-| **CAN / OPT next** | skills mount, tools+GOSH, connectors→BM25, home logistics API, bias injectors, core/auth | Pick deliberately |
+| **CAN / OPT next** | tools allowlist+GOSH, deepen tasks DAG, connectors→BM25, bias injectors, agent profiles, core/auth | Pick deliberately |
 
 ---
 
