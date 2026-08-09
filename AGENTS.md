@@ -159,3 +159,4 @@ Working name for the slim Docker runtime living in `ori-capsule/` (extractable t
 - **BYOK** inference: `X-Provider: openai|anthropic|opencode` + Bearer (or `ORI_CAPSULE_KEY` + `X-API-Key`). OpenCode = any OpenAI-compatible `X-Base-URL`.
 - Run: `cd ori-capsule && docker compose up --build` → `:8089`. See `ori-capsule/README.md` and `MODULE_CUT.md` for the module-by-module port plan.
 - Local binary: `cd ori-capsule && go run ./cmd/ori-capsule`.
+- **Local BM25 RAG** (`ori-capsule/RAG.md`): `POST /v1/rag/ingest` + `/v1/rag/query`. Chat inject only with `X-Ori-RAG: bm25` — default chat path stays free of RAG. VPS MemoryBank/chromem/PB sync RAG is intentionally not ported.

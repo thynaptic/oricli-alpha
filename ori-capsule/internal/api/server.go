@@ -12,6 +12,7 @@ import (
 	"github.com/thynaptic/ori-capsule/internal/config"
 	"github.com/thynaptic/ori-capsule/internal/gosh"
 	"github.com/thynaptic/ori-capsule/internal/memory"
+	"github.com/thynaptic/ori-capsule/internal/rag"
 	"github.com/thynaptic/ori-capsule/internal/safety"
 )
 
@@ -21,6 +22,7 @@ type Server struct {
 	pipeline *safety.Pipeline
 	mem      *memory.Runtime
 	gosh     *gosh.Manager
+	rag      *rag.Store
 }
 
 func New(cfg config.Config) *Server {
@@ -41,8 +43,12 @@ func New(cfg config.Config) *Server {
 		ForceMem:    cfg.GoshForceMem,
 		ExecTimeout: cfg.GoshExecTimeout,
 	})
+	ragStore, err := rag.Open(cfg.MemoryDir)
+	if err != nil {
+		panic(fmt.Sprintf("rag init: %v", err))
+	}
 	r.Use(gin.Recovery(), gin.Logger())
-	s := &Server{cfg: cfg, router: r, pipeline: pipe, mem: mem, gosh: goshMgr}
+	s := &Server{cfg: cfg, router: r, pipeline: pipe, mem: mem, gosh: goshMgr, rag: ragStore}
 	s.routes()
 	return s
 }
@@ -65,6 +71,11 @@ func (s *Server) routes() {
 	// GOSH — per-request docker-friendly sandbox (no shared daemon state)
 	protected.GET("/gosh", s.resolveCreds, s.handleGoshInfo)
 	protected.POST("/gosh/run", s.resolveCreds, s.handleGoshRun)
+
+	// Local BM25 RAG (no embeds / chromem / PB) — see RAG.md
+	protected.GET("/rag", s.resolveCreds, s.handleRagInfo)
+	protected.POST("/rag/ingest", s.resolveCreds, s.handleRagIngest)
+	protected.POST("/rag/query", s.resolveCreds, s.handleRagQuery)
 }
 
 func (s *Server) Run() error {
@@ -80,6 +91,7 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"safety":    true,
 		"memory":    true,
 		"gosh":      s.gosh.Info(),
+		"rag":       s.rag.Stats(),
 		"stream":    "sanitize",
 		"providers": []string{"openai", "anthropic", "opencode"},
 	})
@@ -251,6 +263,12 @@ func (s *Server) handleChat(c *gin.Context) {
 	if memExtras != "" {
 		sysExtra = memExtras + "\n\n" + sysExtra
 	}
+	// Opt-in BM25 context only — default chat path stays free of RAG latency.
+	if strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Ori-RAG")), "bm25") && lastUser != "" {
+		if ctx := s.rag.FormatContext(lastUser, rag.DefaultTopK, rag.DefaultMaxContextRunes); ctx != "" {
+			sysExtra = ctx + "\n\n" + sysExtra
+		}
+	}
 	req.Messages = injectSystem(req.Messages, sysExtra)
 
 	ctx := c.Request.Context()
@@ -402,4 +420,76 @@ func (s *Server) handleGoshRun(c *gin.Context) {
 		status = http.StatusUnprocessableEntity
 	}
 	c.JSON(status, res)
+}
+
+func (s *Server) handleRagInfo(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"mode":    "bm25",
+		"embeds":  false,
+		"opt_in":  "X-Ori-RAG: bm25",
+		"stats":   s.rag.Stats(),
+		"ingest":  "POST /v1/rag/ingest",
+		"query":   "POST /v1/rag/query",
+		"note":    "VPS MemoryBank/chromem/PB sync RAG stays on the host — not ported",
+	})
+}
+
+func (s *Server) handleRagIngest(c *gin.Context) {
+	var req struct {
+		Source   string            `json:"source"`
+		Text     string            `json:"text"`
+		Path     string            `json:"path"`
+		Metadata map[string]string `json:"metadata"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	var (
+		n   int
+		err error
+	)
+	switch {
+	case strings.TrimSpace(req.Text) != "":
+		src := req.Source
+		if src == "" {
+			src = "inline"
+		}
+		n, err = s.rag.IngestText(src, req.Text, req.Metadata)
+	case strings.TrimSpace(req.Path) != "":
+		n, err = s.rag.IngestFile(req.Path, req.Metadata)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "text or path required"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"added": n, "stats": s.rag.Stats()})
+}
+
+func (s *Server) handleRagQuery(c *gin.Context) {
+	var req struct {
+		Query string `json:"query"`
+		TopK  int    `json:"top_k"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Query) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query required"})
+		return
+	}
+	hits := s.rag.Query(req.Query, req.TopK)
+	out := make([]gin.H, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, gin.H{
+			"id":       h.ID,
+			"score":    h.Score,
+			"content":  h.Content,
+			"metadata": h.Metadata,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"hits":    out,
+		"context": s.rag.FormatContext(req.Query, req.TopK, rag.DefaultMaxContextRunes),
+	})
 }
