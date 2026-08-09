@@ -39,7 +39,7 @@ Decision log for what moves from `oricli-alpha` into the dockerized capsule.
 | GhostCluster | (removed / backbone) | RunPod fleet |
 | VDI / Browserless | `pkg/vdi/`, browser modules | Sidecar CDP on host network |
 | Swarm / SPP | `pkg/swarm/` | Multi-node peer protocol |
-| **Safety: Swarm Jury** | `JuryVerifier` / peer SCAI | Multi-node — see `SAFETY_SIDE.md` |
+| Swarm Jury / TG webhooks / LLM Critique | former `pkg/safety` extras | Dropped — see `SAFETY_SIDE.md` |
 | RunPod escalation | generation remnants | Burst GPU VPS path |
 | Backbone Studio proxy | `cmd/backbone/` | Full host stack |
 | systemd units | `*.service` | Not applicable in container |

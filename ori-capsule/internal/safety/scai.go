@@ -1,30 +1,22 @@
 package safety
 
 import (
-	"context"
 	"fmt"
 	"strings"
 )
 
-// --- Pillar 40: Sovereign Constitutional AI (SCAI) ---
-// SCAI is the constraint-native generation layer. The primary runtime path builds
-// a compact constraint contract before generation so the model composes inside
-// the boundary instead of generating freely and being visibly corrected later.
+// --- Sovereign Constitutional AI (SCAI) ---
+// Primary runtime path: inject a compact ConstraintContract before generation so
+// the model composes inside the boundary. Capsule does not run LLM Critique/Revise
+// or Swarm Jury (VPS-era); structural output gates handle post-checks.
 
-// ChatClient is the optional LLM backend for deprecated Critique/Revise paths.
-// Capsule wires this via BYOK; when nil, Critique/Revise return unavailable.
-type ChatClient interface {
-	Available() bool
-	Chat(ctx context.Context, system, user string) (string, error)
-}
-
-// AuditLevel controls how deeply SCAI audits a response.
+// AuditLevel controls how deep local SCAI planning goes for a request.
 type AuditLevel int
 
 const (
-	AuditLevelNone  AuditLevel = iota // greetings / vibe — skip LLM audit entirely
-	AuditLevelLight                   // technical requests — local gates only, no LLM round-trip
-	AuditLevelFull                    // sensitive ops — full Critique + Revise loop
+	AuditLevelNone  AuditLevel = iota // greetings / vibe — minimal contract
+	AuditLevelLight                   // typical requests — standard contract
+	AuditLevelFull                    // sensitive ops — tightened contract
 )
 
 // ConstraintOptions describes request context SCAI uses when planning the
@@ -37,8 +29,6 @@ type ConstraintOptions struct {
 }
 
 // ConstraintContract is the compact instruction plan injected before generation.
-// It is intentionally plain text friendly: the model should treat it as a
-// composition boundary, not as a second user request.
 type ConstraintContract struct {
 	Level                 AuditLevel `json:"level"`
 	Surface               string     `json:"surface"`
@@ -230,20 +220,12 @@ func ClassifyAuditLevel(query string) AuditLevel {
 	return AuditLevelLight
 }
 
+// SCAIAuditor holds constitution + model label for contract planning.
+// Capsule uses ConstraintContract injection only (no LLM critique loop).
 type SCAIAuditor struct {
 	Constitution      *Constitution
 	Model             string
 	SeverityThreshold float64
-	Chat              ChatClient // optional BYOK-backed client for Critique/Revise
-	// Jury is intentionally unused in ori-capsule (swarm/VPS-only). Interface
-	// retained for API parity; see SAFETY_SIDE.md.
-	Jury JuryVerifier
-}
-
-// JuryVerifier is satisfied by swarm.JuryClient in the monorepo.
-// Capsule does not wire a jury — multi-node SCAI is VPS/swarm territory.
-type JuryVerifier interface {
-	RequestVerification(ctx context.Context, sessionID, query, draft string) (bool, []string, error)
 }
 
 func NewSCAIAuditor(c *Constitution, model string) *SCAIAuditor {
@@ -262,67 +244,4 @@ func (a *SCAIAuditor) SetSeverityThreshold(t float64) {
 		t = 1
 	}
 	a.SeverityThreshold = t
-}
-
-func (a *SCAIAuditor) Critique(ctx context.Context, query, response string) (string, bool, error) {
-	if a.Chat == nil || !a.Chat.Available() {
-		return "", false, fmt.Errorf("llm unavailable")
-	}
-	system := a.Constitution.GetSystemPrompt()
-	user := fmt.Sprintf(`Draft Response to audit:
----
-%s
----
-
-Task: Identify any violations of the Sovereign Constitution in the draft above.
-If there are no violations, respond with "CLEAR".
-If there are violations, list them specifically and explain why they violate the principles.`, response)
-
-	critiqueStr, err := a.Chat.Chat(ctx, system, user)
-	if err != nil {
-		return "", false, err
-	}
-	critiqueStr = strings.TrimSpace(critiqueStr)
-	isViolated := !strings.Contains(strings.ToUpper(critiqueStr), "CLEAR") && len(critiqueStr) > 10
-	return critiqueStr, isViolated, nil
-}
-
-// CritiqueWithJury — swarm jury path. In capsule, Jury is always nil so this
-// equals Critique(). Kept for API parity; see SAFETY_SIDE.md.
-func (a *SCAIAuditor) CritiqueWithJury(ctx context.Context, query, response string, level AuditLevel) (string, bool, error) {
-	critique, isViolated, err := a.Critique(ctx, query, response)
-	if err != nil || level != AuditLevelFull || a.Jury == nil {
-		return critique, isViolated, err
-	}
-	if !isViolated {
-		juryPass, verdicts, juryErr := a.Jury.RequestVerification(ctx, "", query, response)
-		if juryErr != nil {
-			return critique, isViolated, nil
-		}
-		if !juryPass {
-			combined := strings.Join(verdicts, "; ")
-			return "Peer jury flagged: " + combined, true, nil
-		}
-	}
-	return critique, isViolated, nil
-}
-
-func (a *SCAIAuditor) Revise(ctx context.Context, query, response, critique string) (string, error) {
-	if a.Chat == nil || !a.Chat.Available() {
-		return "", fmt.Errorf("llm unavailable")
-	}
-	system := a.Constitution.GetSystemPrompt()
-	user := fmt.Sprintf(`Original User Query: %s
-Draft Response: %s
-Critique of Draft: %s
-
-Task: Rewrite the Draft Response to fully comply with the Sovereign Constitution while maintaining technical utility.
-Preserve the user's intent but remove any violations.
-Return ONLY the revised response text.`, query, response, critique)
-
-	revised, err := a.Chat.Chat(ctx, system, user)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(revised), nil
 }

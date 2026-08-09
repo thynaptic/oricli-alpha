@@ -1,5 +1,3 @@
-// Package byok implements Bring-Your-Own-Key LLM providers for ori-capsule.
-// Supported: openai, anthropic, opencode (OpenAI-compatible base URL).
 package byok
 
 import (
@@ -52,6 +50,14 @@ type ChatResponse struct {
 	Usage map[string]int `json:"usage,omitempty"`
 }
 
+// StreamResult is the fully collected assistant text from an upstream stream.
+type StreamResult struct {
+	ID           string
+	Model        string
+	Content      string
+	FinishReason string
+}
+
 var httpClient = &http.Client{Timeout: 120 * time.Second}
 
 func ParseProvider(s string) (Provider, error) {
@@ -79,17 +85,106 @@ func ChatNonStream(ctx context.Context, cred Credentials, req ChatRequest) (*Cha
 	}
 }
 
-// ChatStream writes OpenAI SSE chunks to w (data: {...}\n\n) and ends with data: [DONE].
-func ChatStream(ctx context.Context, cred Credentials, req ChatRequest, w io.Writer) error {
+// CollectStream reads the upstream SSE (or Anthropic stream), accumulates the
+// full assistant text, and returns it for post-inference safety sanitization.
+func CollectStream(ctx context.Context, cred Credentials, req ChatRequest) (*StreamResult, error) {
 	req.Stream = true
 	switch cred.Provider {
 	case ProviderAnthropic:
-		return anthropicStream(ctx, cred, req, w)
+		return collectAnthropicStream(ctx, cred, req)
 	case ProviderOpenAI, ProviderOpenCode:
-		return openAICompatStream(ctx, cred, req, w)
+		return collectOpenAICompatStream(ctx, cred, req)
 	default:
-		return fmt.Errorf("unsupported provider %q", cred.Provider)
+		return nil, fmt.Errorf("unsupported provider %q", cred.Provider)
 	}
+}
+
+// WriteChatSSE emits an OpenAI-compatible chat.completion.chunk SSE sequence
+// for already-sanitized content, then data: [DONE].
+func WriteChatSSE(w io.Writer, id, model, content, finishReason string) error {
+	if id == "" {
+		id = fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
+	}
+	if model == "" {
+		model = "passthrough"
+	}
+	if finishReason == "" {
+		finishReason = "stop"
+	}
+	created := time.Now().Unix()
+	flusher, _ := w.(http.Flusher)
+
+	writeChunk := func(delta map[string]any, finish *string) error {
+		choice := map[string]any{
+			"index": 0,
+			"delta": delta,
+		}
+		if finish != nil {
+			choice["finish_reason"] = *finish
+		} else {
+			choice["finish_reason"] = nil
+		}
+		chunk := map[string]any{
+			"id":      id,
+			"object":  "chat.completion.chunk",
+			"created": created,
+			"model":   model,
+			"choices": []map[string]any{choice},
+		}
+		b, err := json.Marshal(chunk)
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", b); err != nil {
+			return err
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return nil
+	}
+
+	if err := writeChunk(map[string]any{"role": "assistant"}, nil); err != nil {
+		return err
+	}
+	// Emit content in reasonable chunks so clients still see progressive SSE,
+	// after the full text has already been safety-sanitized.
+	const chunkSize = 48
+	for i := 0; i < len(content); {
+		j := i + chunkSize
+		if j > len(content) {
+			j = len(content)
+		}
+		// Prefer breaking on rune boundaries for UTF-8 safety.
+		for j < len(content) && j > i && !utf8Start(content[j]) {
+			j--
+		}
+		if j == i {
+			j = i + 1
+			for j < len(content) && !utf8Start(content[j]) {
+				j++
+			}
+		}
+		if err := writeChunk(map[string]any{"content": content[i:j]}, nil); err != nil {
+			return err
+		}
+		i = j
+	}
+	fr := finishReason
+	if err := writeChunk(map[string]any{}, &fr); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "data: [DONE]\n\n"); err != nil {
+		return err
+	}
+	if flusher != nil {
+		flusher.Flush()
+	}
+	return nil
+}
+
+func utf8Start(b byte) bool {
+	return b&0xC0 != 0x80
 }
 
 func openAIBase(cred Credentials) string {
@@ -128,14 +223,14 @@ func openAICompatChat(ctx context.Context, cred Credentials, req ChatRequest) (*
 	return &out, nil
 }
 
-func openAICompatStream(ctx context.Context, cred Credentials, req ChatRequest, w io.Writer) error {
+func collectOpenAICompatStream(ctx context.Context, cred Credentials, req ChatRequest) (*StreamResult, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, openAIBase(cred)+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+cred.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -143,15 +238,62 @@ func openAICompatStream(ctx context.Context, cred Credentials, req ChatRequest, 
 
 	resp, err := httpClient.Do(httpReq)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return fmt.Errorf("upstream %s: %s", resp.Status, truncate(string(raw), 500))
+		return nil, fmt.Errorf("upstream %s: %s", resp.Status, truncate(string(raw), 500))
 	}
-	_, err = io.Copy(w, resp.Body)
-	return err
+
+	result := &StreamResult{
+		ID:           fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+		Model:        req.Model,
+		FinishReason: "stop",
+	}
+	var content strings.Builder
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		payload := strings.TrimPrefix(line, "data: ")
+		if payload == "[DONE]" {
+			break
+		}
+		var ev struct {
+			ID      string `json:"id"`
+			Model   string `json:"model"`
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+				FinishReason *string `json:"finish_reason"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(payload), &ev); err != nil {
+			continue
+		}
+		if ev.ID != "" {
+			result.ID = ev.ID
+		}
+		if ev.Model != "" {
+			result.Model = ev.Model
+		}
+		if len(ev.Choices) > 0 {
+			content.WriteString(ev.Choices[0].Delta.Content)
+			if ev.Choices[0].FinishReason != nil && *ev.Choices[0].FinishReason != "" {
+				result.FinishReason = *ev.Choices[0].FinishReason
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	result.Content = content.String()
+	return result, nil
 }
 
 // --- Anthropic Messages API → OpenAI-shaped response ---
@@ -180,7 +322,6 @@ func splitSystem(msgs []Message) (system string, rest []anthropicMessage) {
 		case "assistant", "user":
 			rest = append(rest, anthropicMessage{Role: m.Role, Content: m.Content})
 		default:
-			// tool / other → treat as user context for MVP
 			rest = append(rest, anthropicMessage{Role: "user", Content: m.Content})
 		}
 	}
@@ -265,7 +406,7 @@ func anthropicChat(ctx context.Context, cred Credentials, req ChatRequest) (*Cha
 	return out, nil
 }
 
-func anthropicStream(ctx context.Context, cred Credentials, req ChatRequest, w io.Writer) error {
+func collectAnthropicStream(ctx context.Context, cred Credentials, req ChatRequest) (*StreamResult, error) {
 	sys, msgs := splitSystem(req.Messages)
 	payload := anthropicReq{
 		Model:     req.Model,
@@ -276,7 +417,7 @@ func anthropicStream(ctx context.Context, cred Credentials, req ChatRequest, w i
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	base := strings.TrimRight(cred.BaseURL, "/")
 	if base == "" {
@@ -284,7 +425,7 @@ func anthropicStream(ctx context.Context, cred Credentials, req ChatRequest, w i
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/messages", bytes.NewReader(body))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	httpReq.Header.Set("x-api-key", cred.APIKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
@@ -293,16 +434,20 @@ func anthropicStream(ctx context.Context, cred Credentials, req ChatRequest, w i
 
 	resp, err := httpClient.Do(httpReq)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return fmt.Errorf("upstream %s: %s", resp.Status, truncate(string(raw), 500))
+		return nil, fmt.Errorf("upstream %s: %s", resp.Status, truncate(string(raw), 500))
 	}
 
-	id := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
-	flusher, _ := w.(http.Flusher)
+	result := &StreamResult{
+		ID:           fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+		Model:        req.Model,
+		FinishReason: "stop",
+	}
+	var content strings.Builder
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
@@ -320,34 +465,38 @@ func anthropicStream(ctx context.Context, cred Credentials, req ChatRequest, w i
 				Type string `json:"type"`
 				Text string `json:"text"`
 			} `json:"delta"`
+			Message struct {
+				ID    string `json:"id"`
+				Model string `json:"model"`
+			} `json:"message"`
+			StopReason string `json:"stop_reason"`
 		}
 		if err := json.Unmarshal([]byte(payload), &ev); err != nil {
 			continue
 		}
-		if ev.Type != "content_block_delta" || ev.Delta.Text == "" {
-			continue
-		}
-		chunk := map[string]any{
-			"id":      id,
-			"object":  "chat.completion.chunk",
-			"created": time.Now().Unix(),
-			"model":   req.Model,
-			"choices": []map[string]any{{
-				"index": 0,
-				"delta": map[string]string{"content": ev.Delta.Text},
-			}},
-		}
-		b, _ := json.Marshal(chunk)
-		fmt.Fprintf(w, "data: %s\n\n", b)
-		if flusher != nil {
-			flusher.Flush()
+		switch ev.Type {
+		case "message_start":
+			if ev.Message.ID != "" {
+				result.ID = "chatcmpl-" + ev.Message.ID
+			}
+			if ev.Message.Model != "" {
+				result.Model = ev.Message.Model
+			}
+		case "content_block_delta":
+			if ev.Delta.Text != "" {
+				content.WriteString(ev.Delta.Text)
+			}
+		case "message_delta":
+			if ev.StopReason != "" {
+				result.FinishReason = mapAnthropicStop(ev.StopReason)
+			}
 		}
 	}
-	fmt.Fprintf(w, "data: [DONE]\n\n")
-	if flusher != nil {
-		flusher.Flush()
+	if err := scanner.Err(); err != nil {
+		return nil, err
 	}
-	return scanner.Err()
+	result.Content = content.String()
+	return result, nil
 }
 
 func mapAnthropicStop(s string) string {

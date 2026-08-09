@@ -48,6 +48,7 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"system":    "ori-capsule",
 		"byok":      true,
 		"safety":    true,
+		"stream":    "sanitize",
 		"providers": []string{"openai", "anthropic", "opencode"},
 	})
 }
@@ -150,6 +151,13 @@ func (s *Server) handleChat(c *gin.Context) {
 
 	if blocked, refusal := s.pipeline.CheckInputWithHistory(turns, sessionID, codeCtx); blocked {
 		s.pipeline.RateLimiter.RecordBlock(sessionID, "injection")
+		if req.Stream {
+			s.writeSSEHeaders(c)
+			_ = byok.WriteChatSSE(c.Writer,
+				fmt.Sprintf("chatcmpl-blocked-%d", time.Now().UnixNano()),
+				req.Model, refusal, "stop")
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"id":      fmt.Sprintf("chatcmpl-blocked-%d", time.Now().UnixNano()),
 			"object":  "chat.completion",
@@ -177,13 +185,19 @@ func (s *Server) handleChat(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	if req.Stream {
-		// Input gates + constraint prompt applied; SSE output sanitization is
-		// deferred (buffering) — see SAFETY_SIDE.md.
-		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
-		c.Header("Connection", "keep-alive")
-		c.Status(http.StatusOK)
-		if err := byok.ChatStream(ctx, cred, req, c.Writer); err != nil {
+		s.writeSSEHeaders(c)
+		collected, err := byok.CollectStream(ctx, cred, req)
+		if err != nil {
+			fmt.Fprintf(c.Writer, "data: {\"error\":%q}\n\n", err.Error())
+			fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
+			return
+		}
+		sanitized, hardBlock := s.pipeline.SanitizeOutput(collected.Content, canvasMode)
+		finish := collected.FinishReason
+		if hardBlock {
+			finish = "stop"
+		}
+		if err := byok.WriteChatSSE(c.Writer, collected.ID, collected.Model, sanitized, finish); err != nil {
 			fmt.Fprintf(c.Writer, "data: {\"error\":%q}\n\n", err.Error())
 		}
 		return
@@ -208,6 +222,14 @@ func (s *Server) handleChat(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+func (s *Server) writeSSEHeaders(c *gin.Context) {
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
 }
 
 func injectSystem(msgs []byok.Message, extra string) []byok.Message {

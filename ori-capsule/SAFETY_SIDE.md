@@ -1,26 +1,21 @@
-# Safety — VPS-only leftovers (discuss later)
+# Safety — intentionally not in ori-capsule
 
-Moved into `ori-capsule/internal/safety` from `pkg/safety`. Everything structural
-runs in-process with no host daemons. Items below are **side-parked** — API
-surface may still exist, but capsule does **not** wire them.
+Structural gates from `pkg/safety` live in `internal/safety` and are wired on
+every chat turn (including stream). The following are **dropped**, not deferred:
 
-| Item | Why VPS / side | Capsule stance |
-|---|---|---|
-| **Swarm Jury** (`JuryVerifier`, `CritiqueWithJury` peer path) | Needs multi-node SPP / `pkg/swarm` peers on the VPS network | Interface kept for parity; `Jury` always `nil` in capsule |
-| **LLM Critique/Revise via process `OPENAI_API_KEY`** (`pkg/llm`) | Monorepo helper assumed host env Oracle key | Replaced with `safety.ChatClient` interface — wire via BYOK later if we want post-hoc critique; primary path is ConstraintContract injection (no extra round-trip) |
-| **Webhook alerts to Telegram/ops** (`ORICLI_ALERT_WEBHOOK`) | Often pointed at VPS-local alert bots | Optional; also accepts `ORI_CAPSULE_ALERT_WEBHOOK`. Off by default |
-| Host-path leak patterns (`/home/mike/Mavaia`, `oricli-neo4j`, …) | Detection strings for old VPS layout | **Kept** — they still catch accidental infra disclosure; harmless in Docker |
+| Item | Reason |
+|---|---|
+| Swarm Jury / peer SCAI | VPS multi-node only — removed from capsule |
+| Telegram / alert webhooks | No longer used — canary alerts are structured logs only |
+| LLM Critique / Revise loop | Extra BYOK round-trip; ConstraintContract + structural output gates are the capsule path |
 
-## Not VPS-only (moved)
+Host-path leak detectors (`/home/mike/Mavaia`, etc.) remain as harmless disclosure patterns.
 
-Sentinel, Adversarial, Disclosure (DID), WebInjection, Canary/honeypot, MultiTurn,
-Suspicion, CanvasGuard, RagContentGuard, Refinement, RateLimiter, SupportEngine,
-Constitution, SCAI ConstraintContract + ClassifyAuditLevel, Pipeline orchestrator.
-
-## Wire points in capsule
+## Wire points
 
 - Gin rate limit middleware on protected routes
 - Pre-chat: `Pipeline.CheckInputWithHistory`
 - System prompt: `Pipeline.ConstraintPrompt` (constitution + SCAI contract + canary)
 - Post-chat (non-stream): `Pipeline.SanitizeOutput`
-- Stream: input gates + constraint prompt; output sanitization deferred (SSE) — discuss if we should buffer-then-sanitize for Full audit
+- Post-chat (stream): `byok.CollectStream` → `SanitizeOutput` → `byok.WriteChatSSE`  
+  Upstream SSE is fully buffered so output gates see the complete assistant text (parity with non-stream). Client still receives OpenAI-shaped SSE chunks after sanitize.
